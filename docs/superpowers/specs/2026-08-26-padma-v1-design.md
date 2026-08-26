@@ -25,6 +25,7 @@ Platform v1: **website**. Mobile menjadi kemungkinan fase berikutnya — arsitek
 | 7 | QRIS | Level 1: QRIS statis (tampilkan gambar QR merchant, verifikasi mutasi manual). Gateway/QRIS dinamis = fase 2 |
 | 8 | Landing | Satu halaman: hero, 5 lini layanan, alur, CTA skrining + WA |
 | 9 | Stack | Next.js (App Router, TypeScript, Tailwind) + Supabase (Postgres, Auth, Storage), deploy Vercel |
+| 10 | Proteksi materi | Materi TIDAK dapat diunduh — hanya diakses di dalam aplikasi. E-book disimpan per-bab di database dan dirender in-app (bukan file PDF); video via embed terkunci domain (Vimeo) atau playback token berumur pendek (Cloudflare Stream), bukan YouTube unlisted. Setiap tampilan materi diberi watermark nama + PADMA ID klien agar kebocoran bisa dilacak. Catatan jujur: screenshot tidak bisa dicegah di platform mana pun — watermark adalah deterrent-nya |
 
 ## 3. Yang Sengaja Dipangkas dari Mockup/Poster (v1)
 
@@ -67,7 +68,7 @@ Prinsip: **uang dipisah secara struktural**. Tabel operasional tidak punya kolom
 - `client_packages` — id, client_id, package_id, tanggal_mulai, status (aktif|selesai|berhenti).
 - `sessions` — id, client_id, service_id, client_package_id (nullable), partner_id, tanggal, status (`terjadwal`|`selesai`|`batal`), catatan (text), rekomendasi (text), created_at, updated_at. **Tanpa kolom uang.**
 - `screenings` — id, kode (`PDM-…`, digenerate server), nama, no_hp, fase_skrining, jawaban (jsonb: id pertanyaan → ya/tidak), hasil (`hijau`|`merah`), flags (jsonb), status_tindak_lanjut (`baru`|`dihubungi`|`jadi_klien`|`ditolak`), client_id (nullable), created_at. Catatan: skrining hanya menawarkan 4 fase (prekonsepsi, kehamilan, nifas, menopause) sesuai mockup — fase Shishu tidak diskrining tersendiri karena yang diskrining adalah ibunya (masuk fase Nifas).
-- `materials` — id, judul, tipe (`ebook`|`video`), service_id, file_path (Storage, untuk ebook) / video_url (YouTube unlisted), aktif.
+- `materials` — id, judul, tipe (`ebook`|`video`), service_id, deskripsi, aktif. E-book: konten terstruktur per-bab di tabel `material_chapters` (id, material_id, urutan, judul, isi) — bukan file. Video: `video_url` penyedia terproteksi (Vimeo domain-locked / Cloudflare Stream).
 
 ### Tabel uang (hanya owner)
 
@@ -85,14 +86,14 @@ Prinsip: **uang dipisah secara struktural**. Tabel operasional tidak punya kolom
 1. **Skrining → calon klien.** Pengunjung isi nama + no. HP → pilih fase → jawab pertanyaan universal + per-fase (level `urgent` menghentikan skrining seketika, `review` menandai) → hasil Hijau/Merah tersimpan ke `screenings` → tombol WA membuka chat berisi kode skrining. Admin menemukan entri di inbox, memverifikasi jawaban asli, memperbarui status tindak lanjut. Hasil Merah dengan flag urgent tetap menampilkan blok darurat 119 seperti mockup.
 2. **Siklus sesi.** Admin membuat sesi `terjadwal` → setelah kunjungan, bidan lapor via WA → admin set `selesai` + isi catatan & rekomendasi → efek berantai otomatis: muncul di passport, progres paket bertambah, badge terbit, materi layanan terbuka, masuk rekap owner. Sesi `batal` tidak dihitung apa pun.
 3. **Rekap owner.** Per pekan per mitra: jumlah sesi selesai × honor (tarif historis) → total dibayar Sabtu; margin = Σharga − Σhonor. "Tandai dibayar" mengisi `honor_marks`.
-4. **Materi bonus.** Klien melihat materi dari layanan yang punya sesi `selesai` saja (materi tidak bocor sebelum layanan berjalan). E-book via signed URL berumur pendek; video sebagai embed YouTube.
+4. **Materi bonus.** Klien melihat materi dari layanan yang punya sesi `selesai` saja (materi tidak bocor sebelum layanan berjalan). Semua materi **hanya bisa diakses di dalam aplikasi — tanpa unduhan**: e-book dirender per-bab dari database lewat endpoint terautentikasi (tidak ada file/URL yang bisa disebar), video diputar via embed terkunci domain atau playback token berumur pendek. Setiap tampilan diberi watermark identitas klien; teks reader dibuat non-selectable sebagai deterrent tambahan.
 
 ## 7. Keamanan
 
 - RLS di semua tabel. Klien: hanya baris miliknya (via `user_id`). Admin: CRUD tabel operasional; `service_rates` & `honor_marks` ditolak di level DB. Owner: penuh.
 - Data skrining = data kesehatan (relevan UU PDP): koleksi minimal, akses hanya admin/owner, tidak tampil di URL/log.
 - Endpoint skrining publik: validasi Zod + rate limit sederhana.
-- E-book di bucket Storage privat, akses via signed URL.
+- Proteksi materi (keputusan #10): tidak ada file materi yang bisa diunduh/disebar — e-book per-bab dari DB via endpoint terautentikasi, video via penyedia terproteksi, watermark identitas klien di setiap tampilan, teks non-selectable + blokir klik-kanan sebagai deterrent. Bila kelak ditemukan bocoran, watermark mengidentifikasi akun sumbernya.
 - Kunci service-role hanya di server. Semua mutasi lewat server (route handler / server action), bukan langsung dari browser dengan anon key untuk tabel sensitif.
 
 ## 8. Error Handling & Empty State

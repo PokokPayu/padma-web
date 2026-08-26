@@ -548,6 +548,27 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 .materi-card:not(.locked){cursor:pointer; transition:.15s}
 .materi-card:not(.locked):hover{border-color:var(--gold); transform:translateY(-2px)}
 
+/* ---------- reader in-app & pelindung materi ---------- */
+.reader{position:relative; overflow:hidden}
+.reader h3{font-size:18px}
+.reader p{font-size:14px; color:#3C4C42; line-height:1.8}
+.no-copy{-webkit-user-select:none; user-select:none}
+.wmark{
+  position:absolute; inset:-40px; pointer-events:none; z-index:1;
+  display:flex; flex-wrap:wrap; gap:64px 46px; align-items:center; justify-content:center;
+  transform:rotate(-24deg); opacity:.075; font-family:var(--ff-mono); font-size:12.5px;
+  color:var(--night); white-space:nowrap;
+}
+.reader > :not(.wmark){position:relative; z-index:2}
+.md-row.clickable{cursor:pointer; transition:.12s}
+.md-row.clickable:hover{color:var(--night); padding-left:8px}
+.md-row .go{margin-left:auto; color:var(--gold); flex:0 0 auto}
+.guard-note{
+  display:flex; gap:9px; align-items:flex-start; font-size:12px; color:var(--ink-soft);
+  background:var(--paper); border:1px dashed var(--line); border-radius:10px; padding:11px 13px; margin-top:14px;
+}
+.guard-note svg{width:14px; height:14px; flex:0 0 auto; margin-top:2px; color:var(--gold)}
+
 /* ---------- permintaan jadwal (admin) ---------- */
 .book-req{border:1.6px dashed var(--gold); background:#FDFAF1; border-radius:var(--r-md); padding:14px 16px; margin-bottom:12px}
 
@@ -1048,6 +1069,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
       <div class="pp-page" id="secMateri">
         <h3>Materi Panduan Anda <small>terbuka sesuai layanan yang Anda jalani</small></h3>
         <div class="materi-grid" id="materiGrid"></div>
+        <div class="guard-note"><svg><use href="#ic-lock"/></svg>Semua materi eksklusif untuk klien PADMA — hanya bisa dibaca &amp; ditonton di dalam aplikasi, tanpa unduhan. Setiap halaman ditandai identitas akun Anda.</div>
       </div>
       </div>
 
@@ -1471,7 +1493,7 @@ function renderPassport(){
   $("materiGrid").innerHTML = MATERI.map((m,i)=>{
     const buka = svcSelesai.has(m.svc);
     const ic = `<svg><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg>`;
-    if(buka) return `<div class="materi-card" onclick="bukaMateri(${i})" role="button" tabindex="0"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${SVC[m.svc].nama} · <u>buka</u></span></div></div>`;
+    if(buka) return `<div class="materi-card" onclick="bukaMateri(${i})" role="button" tabindex="0"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · baca di aplikasi":"Video · tonton di aplikasi"} · ${SVC[m.svc].nama}</span></div></div>`;
     return `<div class="materi-card locked"><div class="materi-ic"><svg><use href="#ic-lock"/></svg></div><div><b>${m.judul}</b><span>${m.lockNote || "Terbuka setelah layanan terkait selesai"}</span></div></div>`;
   }).join("");
   // sesi berikutnya & permintaan jadwal (beranda)
@@ -1515,35 +1537,58 @@ function kirimBooking(){
   renderPassport();
   window.scrollTo({top:0, behavior:"smooth"});
 }
+function wmarkHtml(){
+  return `<div class="wmark" aria-hidden="true">${Array.from({length:14},()=>"<span>Ananda Putri · PAD-2607-0012</span>").join("")}</div>`;
+}
 function bukaMateri(i){
   const m = MATERI[i];
   if(!m || m.lockNote) return;
   const svcNama = SVC[m.svc].nama;
   let body;
   if(m.tipe === "video"){
-    body = `<div class="pp-page">
-      <div class="player-mock" id="playerMock" onclick="this.querySelector('.pm-label').textContent='▶ Memutar… (simulasi — di produk asli: embed YouTube unlisted)'">
-        <div class="pm-play">▶</div><div class="pm-label">${m.durasi} · ketuk untuk memutar</div>
+    body = `<div class="pp-page reader no-copy">
+      ${wmarkHtml()}
+      <div class="player-mock" id="playerMock" onclick="this.querySelector('.pm-label').textContent='▶ Memutar… (simulasi — di produk asli: playback token terproteksi, hanya berputar di aplikasi PADMA)'">
+        <div class="pm-play">▶</div><div class="pm-label">${m.durasi} · diputar di aplikasi</div>
       </div>
-      <p style="font-size:13.5px; color:#3C4C42">${m.desc}</p>
-      <p style="font-size:12px; color:var(--ink-soft); margin:0">Video panduan · ${svcNama}</p>
+      <p style="font-size:13.5px">${m.desc}</p>
+      <div class="guard-note"><svg><use href="#ic-lock"/></svg>Video diputar dengan tautan terproteksi berumur pendek — tidak ada URL yang bisa disalin atau disebar ke luar aplikasi.</div>
     </div>`;
   } else {
     body = `<div class="pp-page">
-      <h3 style="font-size:16px">Daftar Isi</h3>
-      ${m.bab.map((b,j)=>`<div class="md-row"><span class="no">0${j+1}</span>${b}</div>`).join("")}
-      <button class="btn btn-night" style="width:100%; margin-top:16px"
-        onclick="this.textContent='✓ PDF tersimpan (simulasi — di produk asli: unduhan aman via tautan berbatas waktu)'; this.disabled=true">Unduh PDF</button>
+      <h3 style="font-size:16px">Daftar Isi <small style="font-family:var(--ff-body); font-size:11.5px; color:var(--ink-soft); font-weight:600">ketuk bab untuk membaca</small></h3>
+      ${m.bab.map((b,j)=>`<div class="md-row clickable" onclick="bacaBab(${i},${j})" role="button" tabindex="0"><span class="no">0${j+1}</span>${b}<span class="go">→</span></div>`).join("")}
+      <div class="guard-note"><svg><use href="#ic-lock"/></svg>E-book ini hanya dapat dibaca di dalam aplikasi — tidak ada berkas PDF yang bisa diunduh atau diteruskan. Setiap halaman ditandai identitas Anda.</div>
     </div>`;
   }
   $("materiDetail").innerHTML = `
     <div class="md-hero">
       <div class="mh-ic"><svg><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg></div>
-      <div><h3>${m.judul}</h3><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${svcNama}</span></div>
+      <div><h3>${m.judul}</h3><span>${m.tipe==="ebook"?"E-Book · baca di aplikasi":"Video · tonton di aplikasi"} · ${svcNama}</span></div>
     </div>
     ${m.tipe==="ebook" ? `<div class="pp-page"><p style="font-size:13.5px; color:#3C4C42; margin:0">${m.desc}</p></div>` : ""}
     ${body}`;
   ppGo("materi-detail");
+}
+function bacaBab(i, j){
+  const m = MATERI[i], bab = m.bab[j];
+  $("materiDetail").innerHTML = `
+    <div class="md-hero">
+      <div class="mh-ic"><svg><use href="#ic-book"/></svg></div>
+      <div><h3>${bab}</h3><span>Bab ${j+1} dari ${m.bab.length} · ${m.judul}</span></div>
+    </div>
+    <div class="pp-page reader no-copy" oncontextmenu="return false">
+      ${wmarkHtml()}
+      <p>Memahami tubuh Anda adalah langkah pertama dari setiap perjalanan. Pada bab ini, tim PADMA menguraikan hal-hal yang paling sering ditanyakan klien — dengan bahasa sehari-hari, bukan istilah medis yang rumit.</p>
+      <p>Ikuti panduannya perlahan, dan bawa catatan Anda ke sesi berikutnya untuk didiskusikan bersama bidan. Bila ada yang terasa tidak sesuai dengan kondisi Anda, sampaikan kepada tim PADMA — setiap tubuh punya ritmenya sendiri.</p>
+      <p class="muted" style="font-size:12px; font-style:italic">— cuplikan konten contoh untuk prototipe —</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:8px">
+        ${j>0 ? `<button class="btn btn-outline btn-sm" onclick="bacaBab(${i},${j-1})">← Bab sebelumnya</button>` : ""}
+        ${j<m.bab.length-1 ? `<button class="btn btn-night btn-sm" onclick="bacaBab(${i},${j+1})">Bab berikutnya →</button>` : ""}
+        <button class="linklike" onclick="bukaMateri(${i})">Daftar isi</button>
+      </div>
+    </div>`;
+  window.scrollTo({top:0, behavior:"smooth"});
 }
 function gambarQris(){
   const el = $("qrisSvg"); if(el.childNodes.length) return;
