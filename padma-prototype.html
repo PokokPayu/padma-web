@@ -216,7 +216,7 @@ img,svg{max-width:100%}
 .how-step .num{font-family:var(--ff-mono); font-size:12px; color:var(--gold); font-weight:500; margin-bottom:14px; display:block}
 .how-step h3{font-size:19px; margin-bottom:8px}
 .how-step p{font-size:13.5px; color:var(--ink-soft)}
-.teaser{display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center}
+.teaser{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:60px; align-items:center}
 .teaser-copy h2{font-size:clamp(28px,3.4vw,38px)}
 .teaser-copy ul{list-style:none; margin:22px 0 30px; padding:0; display:grid; gap:13px}
 .teaser-copy li{display:flex; gap:12px; font-size:14.5px; color:#3C4C42}
@@ -224,7 +224,7 @@ img,svg{max-width:100%}
 .mini-pass{
   background:linear-gradient(150deg,#12392A,#0A2B1F 70%); border-radius:22px; padding:34px 30px 22px;
   color:#EFE6CE; box-shadow:var(--shadow-deep); border:1px solid var(--gold-line);
-  max-width:400px; margin:0 auto; transform:rotate(-1.6deg); position:relative;
+  max-width:400px; margin:0 auto; transform:rotate(-1.6deg); position:relative; min-width:0;
 }
 .mini-pass .lotus{width:46px; color:var(--gold-bright); margin:0 auto 16px; display:block}
 .mini-pass .mp-kind{text-align:center; font-size:10px; letter-spacing:.34em; text-transform:uppercase; color:var(--gold-bright); font-weight:700; margin-bottom:6px}
@@ -233,10 +233,11 @@ img,svg{max-width:100%}
 .mini-pass .mp-row{display:flex; justify-content:space-between; font-size:12.5px; padding:9px 2px; border-top:1px solid rgba(217,179,106,.16)}
 .mini-pass .mp-row b{color:var(--gold-pale); font-weight:600}
 .mrz{
-  margin-top:18px; background:rgba(6,24,17,.75); border-radius:10px; padding:10px 12px;
-  font-family:var(--ff-mono); font-size:10.5px; letter-spacing:.14em; color:#9FB79E; line-height:1.75;
-  overflow:hidden; white-space:nowrap;
+  margin-top:18px; background:rgba(6,24,17,.75); border-radius:10px; padding:11px 14px;
+  font-family:var(--ff-mono); font-size:11px; letter-spacing:.22em; color:#C9BE9A; line-height:1.7;
+  overflow:hidden; white-space:nowrap; text-align:center; text-transform:uppercase;
 }
+.mrz .sep{color:#6E8271; margin:0 4px}
 .footer{background:var(--night); color:#9DB09E; padding:54px 24px 40px}
 .footer-inner{max-width:1120px; margin:0 auto; display:flex; justify-content:space-between; gap:30px; flex-wrap:wrap; align-items:flex-start}
 .footer .wordmark span{font-size:16px}
@@ -489,12 +490,44 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 .rate-val{font-family:var(--ff-mono); font-size:12.5px}
 .rate-edit{border:none; background:none; color:var(--gold); font-size:12px; font-weight:800; text-decoration:underline; text-underline-offset:3px; padding:2px 4px}
 
+/* ---------- ikon ---------- */
+.nav-ic{width:16px; height:16px; flex:0 0 auto; vertical-align:-3px}
+.side-link .ic{display:inline-flex; align-items:center}
+.side-link .ic svg{width:17px; height:17px}
+.materi-ic svg{width:20px; height:20px}
+.mi-inline{width:13px; height:13px; vertical-align:-2px; margin-right:3px}
+
+/* ---------- pembanding landing ---------- */
+.vs-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px}
+.vs-card{background:var(--paper-warm); border:1px solid var(--line); border-radius:var(--r-lg); padding:26px 24px}
+.vs-card h3{font-size:20px; margin-bottom:16px}
+.vs-card ul{list-style:none; margin:0; padding:0; display:grid; gap:11px}
+.vs-card li{display:flex; gap:11px; font-size:13.5px; color:#4A594F; line-height:1.5}
+.vs-card li .x{color:#B08573; font-weight:800}
+.vs-card li .v{color:var(--gold-bright); font-weight:800}
+.vs-card.gold-side{border-color:var(--gold-line); background:linear-gradient(150deg,#12392A,#0A2B1F)}
+.vs-card.gold-side h3{color:#F5EEDC}
+.vs-card.gold-side li{color:#C2CFC1}
+.quote-band{margin-top:22px; background:var(--night); border:1px solid var(--gold-line); border-radius:18px; padding:26px 28px 24px; text-align:center; color:#F0E6CC; font-family:var(--ff-display); font-size:clamp(17px,2.6vw,22px)}
+.quote-band .lotus{width:32px; color:var(--gold-bright); display:block; margin:0 auto 10px}
+
+/* ---------- appbar (rasa aplikasi di mobile) ---------- */
+.appbar{display:none}
+
 /* ---------- animasi ---------- */
 @keyframes rise{from{opacity:0; transform:translateY(18px)}to{opacity:1; transform:none}}
 @keyframes hl{0%{background:#F6E9C8}100%{background:#FDF9EE}}
+@keyframes draw{to{stroke-dashoffset:0}}
 .anim-rise{animation:rise .7s ease both}
+.cover-lotus path{stroke-dasharray:150; stroke-dashoffset:150; animation:draw 1.5s cubic-bezier(.4,0,.2,1) forwards}
+.cover-lotus path:nth-of-type(2){animation-delay:.18s}
+.cover-lotus path:nth-of-type(3){animation-delay:.32s}
+.cover-lotus path:nth-of-type(4){animation-delay:.5s}
+.cover-lotus path:nth-of-type(5){animation-delay:.66s}
+.cover-lotus path:nth-of-type(6){animation-delay:.9s}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important; transition:none!important; scroll-behavior:auto!important}
+  .cover-lotus path{stroke-dashoffset:0}
 }
 
 /* ---------- responsif ---------- */
@@ -503,7 +536,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
   .phase-card p{min-height:0}
   .how-steps{grid-template-columns:1fr 1fr; border-left:none}
   .how-step{border-left:1px solid var(--line); margin-bottom:26px}
-  .teaser{grid-template-columns:1fr; gap:40px}
+  .teaser{grid-template-columns:minmax(0,1fr); gap:40px}
   .app{grid-template-columns:1fr}
   .side{flex-direction:row; flex-wrap:wrap; align-items:center; padding:10px; gap:6px; position:sticky; top:54px; z-index:40}
   .side-title,.side-foot{display:none}
@@ -526,7 +559,46 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
   .wiz-card{padding:24px 18px}
   .pp-cover{padding:30px 20px 18px}
   .pp-page{padding:20px 16px}
+  .mrz{font-size:9.5px; letter-spacing:.14em; white-space:normal}
+  .mini-pass{transform:none}
   .fab-next{right:12px; bottom:12px; padding:11px 16px; font-size:12.5px}
+  .vs-grid{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ---------- mode aplikasi (HP): bottom tab bar ---------- */
+@media (max-width:620px){
+  .appbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:56;
+    display:flex; justify-content:space-around; align-items:flex-start;
+    background:rgba(8,32,23,.97); backdrop-filter:blur(10px);
+    border-top:1px solid var(--gold-line);
+    padding:9px 4px calc(9px + env(safe-area-inset-bottom));
+  }
+  .appbar button{
+    background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px;
+    color:#9DB09E; font-size:10px; font-weight:700; padding:2px 10px; border-radius:10px;
+  }
+  .appbar button svg{width:21px; height:21px}
+  .appbar button.active{color:var(--gold-bright)}
+  .pp-stage{padding-bottom:140px}
+  .pp-page,.pp-cover{scroll-margin-top:64px}
+  .app .side{
+    position:fixed; top:auto; bottom:0; left:0; right:0; z-index:56;
+    background:rgba(8,32,23,.97); backdrop-filter:blur(10px);
+    border-top:1px solid var(--gold-line);
+    padding:9px 4px calc(9px + env(safe-area-inset-bottom));
+    justify-content:space-around; gap:0; flex-wrap:nowrap;
+  }
+  .app .side-link{
+    flex-direction:column; gap:4px; font-size:10px; padding:2px 6px;
+    border-radius:10px; position:relative; color:#9DB09E; flex:1; min-width:0; text-align:center;
+  }
+  .app .side-link .lbl{max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .app .side-link .ic svg{width:21px; height:21px}
+  .app .side-link.active{background:none; color:var(--gold-bright); font-weight:800}
+  .app .side-link .cnt{position:absolute; top:-3px; right:calc(50% - 24px)}
+  .app .main{padding-bottom:160px}
+  .fab-next{right:12px; bottom:calc(70px + env(safe-area-inset-bottom)); padding:11px 16px; font-size:12.5px}
 }
 </style>
 </head>
@@ -543,6 +615,17 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
       <path d="M57 21 C47.5 21.5 37.5 26.5 32 32 C41.5 34.5 52.5 30 57 21Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
       <path d="M14 36 C20 39.5 26 40.5 32 40.5 C38 40.5 44 39.5 50 36" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
     </g>
+    <symbol id="ic-inbox" viewBox="0 0 24 24"><path d="M5 5h14l2.5 8v5.5a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5V13z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M2.5 13h5.3c.3 1.9 2 3.2 4.2 3.2s3.9-1.3 4.2-3.2h5.3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="ic-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="ic-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 10h17M8 2.8v3.7M16 2.8v3.7" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="ic-mitra" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.8 19.5c1-3.2 3.4-4.8 6.2-4.8s5.2 1.6 6.2 4.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15.4 5.3a3.1 3.1 0 1 1 1.7 5.9M16.9 14.9c2.4.4 4 2 4.6 4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="ic-leaf" viewBox="0 0 24 24"><path d="M5 19C5 9 12 4.5 20.5 4.5 20.5 14.5 14 19.5 5 19z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M5 19c3-5.2 7.2-8.7 11.5-10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="ic-chart" viewBox="0 0 24 24"><path d="M5 20v-7M11 20V5.5M17 20v-10M21.5 20H2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="ic-card" viewBox="0 0 24 24"><rect x="2.8" y="5.5" width="18.4" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.8 10h18.4M6.5 14.8h4.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></symbol>
+    <symbol id="ic-book" viewBox="0 0 24 24"><path d="M12 6.5C10 4.8 7 4.3 3.5 4.5v14c3.5-.2 6.5.3 8.5 2 2-1.7 5-2.2 8.5-2v-14C17 4.3 14 4.8 12 6.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 6.5v13.6" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="ic-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 8.6l5.8 3.4-5.8 3.4z" fill="currentColor"/></symbol>
+    <symbol id="ic-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="ic-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 14h3v3h-3zM20 14v6h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
 
@@ -557,7 +640,14 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 <section class="screen active" id="scr-cover">
   <div class="cover-inner">
     <div class="cover-frame">
-      <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+      <svg class="lotus cover-lotus" viewBox="0 0 64 46" aria-hidden="true">
+        <path d="M32 6 C37.5 13 37.5 23 32 32 C26.5 23 26.5 13 32 6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M19 12 C27 15.5 30.5 23.5 32 32 C24 30.5 17.5 22.5 19 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M45 12 C37 15.5 33.5 23.5 32 32 C40 30.5 46.5 22.5 45 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M7 21 C16.5 21.5 26.5 26.5 32 32 C22.5 34.5 11.5 30 7 21Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M57 21 C47.5 21.5 37.5 26.5 32 32 C41.5 34.5 52.5 30 57 21Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M14 36 C20 39.5 26 40.5 32 40.5 C38 40.5 44 39.5 50 36" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
       <div class="cover-title">PADMA</div>
       <div class="cover-sub">Premium Women's Wellness Homecare</div>
       <hr class="hairline">
@@ -679,7 +769,39 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <div class="mp-row"><span>Fase perjalanan</span><b>Sankalpa · Promil</b></div>
         <div class="mp-row"><span>Paket aktif</span><b>Sankalpa Prima · 8 sesi</b></div>
         <div class="mp-row"><span>Progres</span><b>6 dari 8 sesi</b></div>
-        <div class="mrz">P&lt;PADMA&lt;&lt;ANANDA&lt;PUTRI&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>PAD26070012&lt;SANKALPA&lt;PRIMA&lt;6OF8&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+        <div class="mrz">PAD-2607-0012<span class="sep">·</span>Sankalpa Prima<span class="sep">·</span>Sesi 6/8</div>
+      </div>
+    </div>
+
+    <div class="how">
+      <div class="section">
+        <div class="section-head">
+          <div class="eyebrow">Pembeda PADMA</div>
+          <h2>Homecare biasa, atau sebuah journey?</h2>
+        </div>
+        <div class="vs-grid">
+          <div class="vs-card">
+            <h3>Homecare biasa</h3>
+            <ul>
+              <li><span class="x">✕</span>Datang, treatment selesai, lalu selesai begitu saja</li>
+              <li><span class="x">✕</span>Edukasi sering tidak terdokumentasi</li>
+              <li><span class="x">✕</span>Klien sulit melihat perjalanan care secara utuh</li>
+            </ul>
+          </div>
+          <div class="vs-card gold-side">
+            <h3>Dengan Digital Care Passport</h3>
+            <ul>
+              <li><span class="v">✓</span>Layanan terasa lebih eksklusif dan personal</li>
+              <li><span class="v">✓</span>Ada continuity of care dari sesi ke sesi</li>
+              <li><span class="v">✓</span>Bonus edukasi tersimpan rapi dalam satu tempat</li>
+              <li><span class="v">✓</span>Klien merasa dipandu, lebih tenang, dan lebih dihargai</li>
+            </ul>
+          </div>
+        </div>
+        <div class="quote-band">
+          <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+          &ldquo;PADMA tidak hanya memberi layanan, tetapi membangun journey.&rdquo;
+        </div>
       </div>
     </div>
 
@@ -797,6 +919,9 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
           <p>Akun dibuat oleh tim PADMA saat Anda menjadi klien. Masuk dengan email yang terdaftar.</p>
           <div class="formfield"><label for="lEmail">Email</label><input type="email" id="lEmail" placeholder="nama@email.com" autocomplete="email"></div>
           <div class="formfield"><label for="lPass">Kata sandi</label><input type="password" id="lPass" placeholder="••••••••" autocomplete="current-password"></div>
+          <div style="text-align:right; margin:-6px 0 10px">
+            <button class="linklike" style="font-size:12.5px" onclick="this.outerHTML='<span style=&quot;font-size:12px;color:var(--leaf);font-weight:700&quot;>✓ Tautan reset terkirim ke email Anda (simulasi)</span>'">Lupa kata sandi?</button>
+          </div>
           <button class="btn btn-night" style="width:100%" onclick="go('passport')">Masuk</button>
           <div class="divider">atau</div>
           <button class="btn-google" onclick="go('passport')">
@@ -833,7 +958,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
           <span class="m">Fase <b>SANKALPA · PROMIL</b></span>
           <span class="m">Sejak <b>JUL 2026</b></span>
         </div>
-        <div class="mrz">P&lt;PADMA&lt;&lt;ANANDA&lt;PUTRI&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>PAD26070012&lt;SANKALPA&lt;PRIMA&lt;<span id="mrzProg">6OF8</span>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+        <div class="mrz">PAD-2607-0012<span class="sep">·</span>Sankalpa Prima<span class="sep">·</span>Sesi <span id="mrzProg">6/8</span></div>
       </div>
 
       <div class="pp-page">
@@ -842,12 +967,12 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <div class="prog-cap"><span id="ppProgText"></span><b id="ppProgPct"></b></div>
       </div>
 
-      <div class="pp-page">
+      <div class="pp-page" id="secSesi">
         <h3>Riwayat Sesi <small>ketuk untuk membaca catatan bidan</small></h3>
         <div class="visa-list" id="visaList"></div>
       </div>
 
-      <div class="pp-page">
+      <div class="pp-page" id="secMateri">
         <h3>Materi Panduan Anda <small>terbuka sesuai layanan yang Anda jalani</small></h3>
         <div class="materi-grid" id="materiGrid"></div>
       </div>
@@ -857,7 +982,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <div class="badge-row" id="badgeRow"></div>
       </div>
 
-      <div class="pp-page">
+      <div class="pp-page" id="secBayar">
         <h3>Cara Pembayaran</h3>
         <div class="qris-box">
           <svg class="qris-svg" id="qrisSvg" viewBox="0 0 25 25" aria-label="QRIS contoh"></svg>
@@ -868,7 +993,26 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
           </div>
         </div>
       </div>
+
+      <div class="pp-page" id="secProfil">
+        <h3>Profil</h3>
+        <div class="kv"><span class="muted">Nama lengkap</span><b>Ananda Putri</b></div>
+        <div class="kv"><span class="muted">PADMA ID</span><b class="mono" style="font-weight:500">PAD-2607-0012</b></div>
+        <div class="kv"><span class="muted">Email</span><b>ananda.putri@gmail.com</b></div>
+        <div class="kv"><span class="muted">No. WhatsApp</span><b>0812-3456-7890</b></div>
+        <div class="kv"><span class="muted">Fase perjalanan</span><b>Sankalpa · Prekonsepsi / Promil</b></div>
+        <p style="font-size:12px; color:var(--ink-soft); margin:14px 0">Ada data yang berubah? Hubungi tim PADMA via WhatsApp — demi keamanan, perubahan data dilakukan oleh admin.</p>
+        <button class="btn btn-outline btn-sm" onclick="go('login')">Keluar dari akun</button>
+      </div>
     </div>
+
+    <nav class="appbar" id="ppAppbar" aria-label="Navigasi passport">
+      <button class="active" onclick="ppNav('top',this)"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg>Passport</button>
+      <button onclick="ppNav('secSesi',this)"><svg viewBox="0 0 24 24"><use href="#ic-cal"/></svg>Sesi</button>
+      <button onclick="ppNav('secMateri',this)"><svg viewBox="0 0 24 24"><use href="#ic-book"/></svg>Materi</button>
+      <button onclick="ppNav('secBayar',this)"><svg viewBox="0 0 24 24"><use href="#ic-qr"/></svg>Bayar</button>
+      <button onclick="ppNav('secProfil',this)"><svg viewBox="0 0 24 24"><use href="#ic-user"/></svg>Profil</button>
+    </nav>
   </div>
 </section>
 
@@ -878,12 +1022,12 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
     <div class="app">
       <aside class="side">
         <div class="side-title">Panel Admin</div>
-        <button class="side-link active" data-v="inbox" onclick="adminView('inbox')">📥 Inbox Skrining <span class="cnt" id="cntInbox">2</span></button>
-        <button class="side-link" data-v="klien" onclick="adminView('klien')">👤 Klien</button>
-        <button class="side-link" data-v="sesi" onclick="adminView('sesi')">📅 Sesi</button>
-        <button class="side-link" data-v="mitra" onclick="adminView('mitra')">🤝 Mitra</button>
-        <button class="side-link" data-v="layanan" onclick="adminView('layanan')">🌿 Layanan &amp; Materi</button>
-        <div class="side-foot">🔒 <b style="color:#C9D4C8">Money firewall</b> — tidak ada harga atau honor di panel ini. Angka uang hanya hidup di panel Owner.</div>
+        <button class="side-link active" data-v="inbox" onclick="adminView('inbox')"><span class="ic"><svg><use href="#ic-inbox"/></svg></span><span class="lbl">Inbox</span> <span class="cnt" id="cntInbox">2</span></button>
+        <button class="side-link" data-v="klien" onclick="adminView('klien')"><span class="ic"><svg><use href="#ic-user"/></svg></span><span class="lbl">Klien</span></button>
+        <button class="side-link" data-v="sesi" onclick="adminView('sesi')"><span class="ic"><svg><use href="#ic-cal"/></svg></span><span class="lbl">Sesi</span></button>
+        <button class="side-link" data-v="mitra" onclick="adminView('mitra')"><span class="ic"><svg><use href="#ic-mitra"/></svg></span><span class="lbl">Mitra</span></button>
+        <button class="side-link" data-v="layanan" onclick="adminView('layanan')"><span class="ic"><svg><use href="#ic-leaf"/></svg></span><span class="lbl">Layanan</span></button>
+        <div class="side-foot"><svg class="nav-ic"><use href="#ic-lock"/></svg> <b style="color:#C9D4C8">Money firewall</b> — tidak ada harga atau honor di panel ini. Angka uang hanya hidup di panel Owner.</div>
       </aside>
       <div class="main" id="adminMain"></div>
     </div>
@@ -896,9 +1040,9 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
     <div class="app">
       <aside class="side">
         <div class="side-title">Panel Owner</div>
-        <button class="side-link active" data-v="rekap" onclick="ownerView('rekap')">📊 Rekap &amp; Honor</button>
-        <button class="side-link" data-v="rate" onclick="ownerView('rate')">💛 Rate Card</button>
-        <div class="side-foot">🔒 Halaman ini <b style="color:#C9D4C8">hanya terlihat oleh Owner</b>. Admin dan klien tidak pernah melihat angka di sini — ditolak di level database.</div>
+        <button class="side-link active" data-v="rekap" onclick="ownerView('rekap')"><span class="ic"><svg><use href="#ic-chart"/></svg></span><span class="lbl">Rekap &amp; Honor</span></button>
+        <button class="side-link" data-v="rate" onclick="ownerView('rate')"><span class="ic"><svg><use href="#ic-card"/></svg></span><span class="lbl">Rate Card</span></button>
+        <div class="side-foot"><svg class="nav-ic"><use href="#ic-lock"/></svg> Halaman ini <b style="color:#C9D4C8">hanya terlihat oleh Owner</b>. Admin dan klien tidak pernah melihat angka di sini — ditolak di level database.</div>
       </aside>
       <div class="main" id="ownerMain"></div>
     </div>
@@ -1182,7 +1326,7 @@ function renderPassport(){
   const pct = Math.round(done.length/paket.total*100);
   $("ppProgText").textContent = done.length + " dari " + paket.total + " sesi selesai" + (nextUp ? " · berikutnya " + tglID(nextUp.tgl) : "");
   $("ppProgPct").textContent = pct + "%";
-  $("mrzProg").textContent = done.length + "OF" + paket.total;
+  $("mrzProg").textContent = done.length + "/" + paket.total;
   // riwayat visa
   const semua = sesiAnanda().slice().sort((a,b)=>a.tgl<b.tgl?1:-1);
   $("visaList").innerHTML = semua.map(s=>{
@@ -1206,15 +1350,20 @@ function renderPassport(){
   const svcSelesai = new Set(sesiAnanda().filter(s=>s.status==="selesai").map(s=>s.svc));
   $("materiGrid").innerHTML = MATERI.map(m=>{
     const buka = svcSelesai.has(m.svc);
-    const ic = m.tipe==="ebook" ? "📖" : "▶";
+    const ic = `<svg><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg>`;
     if(buka) return `<div class="materi-card"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${SVC[m.svc].nama}</span></div></div>`;
-    return `<div class="materi-card locked"><div class="materi-ic">🔒</div><div><b>${m.judul}</b><span>${m.lockNote || "Terbuka setelah layanan terkait selesai"}</span></div></div>`;
+    return `<div class="materi-card locked"><div class="materi-ic"><svg><use href="#ic-lock"/></svg></div><div><b>${m.judul}</b><span>${m.lockNote || "Terbuka setelah layanan terkait selesai"}</span></div></div>`;
   }).join("");
   // badge
   $("badgeRow").innerHTML = [...svcSelesai].map(k=>
     `<div class="badge-coin"><div class="coin"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg></div>${SVC[k].nama.replace(" · Prekonsepsi","")}</div>`).join("")
     || '<p class="muted" style="font-size:13px">Badge pertama terbit saat sesi pertama selesai.</p>';
   gambarQris();
+}
+function ppNav(sec, btn){
+  document.querySelectorAll("#ppAppbar button").forEach(b=>b.classList.toggle("active", b===btn));
+  if(sec==="top") window.scrollTo({top:0, behavior:"smooth"});
+  else $(sec).scrollIntoView({behavior:"smooth", block:"start"});
 }
 function gambarQris(){
   const el = $("qrisSvg"); if(el.childNodes.length) return;
@@ -1264,25 +1413,49 @@ function vInbox(){
     </div></td></tr>`).join("");
   return `<div class="panel-head"><div><h2>Inbox Skrining</h2>
       <p>Saat pesan WhatsApp masuk, cocokkan kodenya di sini untuk melihat jawaban asli — bukan sekadar percaya isi pesan.</p></div></div>
-    <div class="note-lock">💡 Coba isi skrining di layar <b>Skrining</b> — hasilnya langsung muncul di daftar ini.</div>
+    <div class="note-lock">✦ Coba isi skrining di layar <b>Skrining</b> — hasilnya langsung muncul di daftar ini.</div>
     <div class="tablecard"><div class="tscroll"><table>
       <thead><tr><th>Kode</th><th>Calon klien</th><th>Hasil</th><th>Tindak lanjut</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div></div>`;
 }
+let klienFormOpen = false;
 function vKlien(){
   const rows = DATA.klien.map(k=>{
     const tot = DATA.sesi.filter(s=>s.klien===k.id && s.status==="selesai").length;
-    return `<tr><td><span class="mono" style="font-size:12px">${k.padma}</span></td>
+    return `<tr class="${k.baru?"rowhl":""}"><td><span class="mono" style="font-size:12px">${k.padma}</span></td>
       <td><b>${k.nama}</b><span class="rowsub">${k.email}</span></td>
       <td>${FASE[k.fase]}</td>
       <td>${k.paket ? k.paket.nama+" · "+k.paket.total+" sesi" : '<span class="muted">Sesi lepas</span>'}</td>
       <td class="mono">${tot}</td></tr>`;
   }).join("");
+  const form = klienFormOpen ? `<div class="mini-form" style="margin-bottom:16px">
+      <h4>Klien baru — setelah disimpan, kirim teks sambutan via WhatsApp</h4>
+      <div class="grid2">
+        <div class="formfield"><label>Nama lengkap</label><input type="text" id="nkNama" placeholder="mis. Sari Utami"></div>
+        <div class="formfield"><label>Email (untuk login)</label><input type="email" id="nkEmail" placeholder="nama@gmail.com"></div>
+      </div>
+      <div class="grid2">
+        <div class="formfield"><label>No. WhatsApp</label><input type="tel" id="nkHp" placeholder="08xx"></div>
+        <div class="formfield"><label>Fase</label><select id="nkFase">${Object.keys(FASE).map(f=>`<option value="${f}">${FASE[f]}</option>`).join("")}</select></div>
+      </div>
+      <div style="display:flex; gap:10px">
+        <button class="btn btn-night btn-sm" onclick="simpanKlien()">Simpan klien</button>
+        <button class="btn btn-outline btn-sm" onclick="klienFormOpen=false; adminView('klien')">Batal</button>
+      </div></div>` : "";
   return `<div class="panel-head"><div><h2>Klien</h2><p>Akun klien dibuat di sini — klien lalu login dengan email yang sama dan otomatis terhubung ke passport-nya.</p></div>
-      <button class="btn btn-night btn-sm" onclick="alert('Di produk asli: formulir klien baru (nama, email, no. HP, fase, paket).')">+ Klien baru</button></div>
+      <button class="btn btn-night btn-sm" onclick="klienFormOpen=true; adminView('klien')">+ Klien baru</button></div>
+    ${form}
     <div class="tablecard"><div class="tscroll"><table>
       <thead><tr><th>PADMA ID</th><th>Nama</th><th>Fase</th><th>Paket</th><th>Sesi selesai</th></tr></thead>
       <tbody>${rows}</tbody></table></div></div>`;
+}
+function simpanKlien(){
+  const nama = $("nkNama").value.trim(), email = $("nkEmail").value.trim();
+  if(!nama || !email){ $("nkNama").focus(); return; }
+  const k = {id:"k"+DATA.klien.length, padma:"PAD-2608-00"+(20+DATA.klien.length), nama, email,
+    fase:$("nkFase").value, paket:null, baru:true};
+  DATA.klien.push(k); klienFormOpen = false; adminView("klien");
+  setTimeout(()=>{ delete k.baru; }, 2600);
 }
 function vSesi(){
   const rows = DATA.sesi.slice().sort((a,b)=>a.tgl<b.tgl?1:-1).map(s=>{
@@ -1306,11 +1479,34 @@ function vSesi(){
       <td>${SVC[s.svc].nama}<span class="rowsub">${tglID(s.tgl)}${s.paket?" · paket":""}</span></td>
       <td>${MITRA[s.mitra]}</td><td>${pill}</td><td>${aksi}</td></tr>${form}${cat}`;
   }).join("");
+  const formBaru = sesiNewOpen ? `<div class="mini-form" style="margin-bottom:16px">
+      <h4>Jadwalkan sesi baru</h4>
+      <div class="grid2">
+        <div class="formfield"><label>Klien</label><select id="nsKlien">${DATA.klien.map(k=>`<option value="${k.id}">${k.nama} (${k.padma})</option>`).join("")}</select></div>
+        <div class="formfield"><label>Layanan</label><select id="nsSvc">${Object.keys(SVC).map(k=>`<option value="${k}">${SVC[k].nama}</option>`).join("")}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="formfield"><label>Tanggal</label><input type="date" id="nsTgl" value="2026-08-29"></div>
+        <div class="formfield"><label>Mitra</label><select id="nsMitra">${Object.keys(MITRA).map(m=>`<option value="${m}">${MITRA[m]}</option>`).join("")}</select></div>
+      </div>
+      <label class="declare" style="margin:4px 0 12px"><input type="checkbox" id="nsPaket"><span>Hitung ke paket aktif klien (bila ada)</span></label>
+      <div style="display:flex; gap:10px">
+        <button class="btn btn-night btn-sm" onclick="simpanSesiBaru()">Simpan jadwal</button>
+        <button class="btn btn-outline btn-sm" onclick="sesiNewOpen=false; adminView('sesi')">Batal</button>
+      </div></div>` : "";
   return `<div class="panel-head"><div><h2>Sesi</h2><p>Menandai <b>Selesai</b> + mengisi catatan akan langsung memperbarui Passport klien dan rekap Owner. Coba, lalu buka layar Passport.</p></div>
-      <button class="btn btn-night btn-sm" onclick="alert('Di produk asli: formulir jadwal sesi baru (klien, layanan, tanggal, mitra).')">+ Jadwalkan sesi</button></div>
+      <button class="btn btn-night btn-sm" onclick="sesiNewOpen=true; adminView('sesi')">+ Jadwalkan sesi</button></div>
+    ${formBaru}
     <div class="tablecard"><div class="tscroll"><table>
       <thead><tr><th>Klien</th><th>Layanan</th><th>Mitra</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div></div>`;
+}
+let sesiNewOpen = false;
+function simpanSesiBaru(){
+  DATA.sesi.push({id:DATA.nextSesiId++, klien:$("nsKlien").value, svc:$("nsSvc").value,
+    tgl:$("nsTgl").value || "2026-08-29", mitra:$("nsMitra").value,
+    status:"terjadwal", paket:$("nsPaket").checked, catatan:"", rek:""});
+  sesiNewOpen = false; adminView("sesi");
 }
 function bukaFormSesi(id){ sesiFormOpen = id; adminView("sesi");
   setTimeout(()=>{ const f=$("fCat"); if(f) f.focus(); },50); }
@@ -1337,7 +1533,7 @@ function vLayanan(){
     <div class="week-card"><h3>${FASE[f]}</h3>
       ${byFase[f].map(k=>{
         const mat = MATERI.filter(m=>m.svc===k);
-        return `<div class="kv"><span class="who"><b>${SVC[k].nama}</b><br><span>${mat.length? mat.map(m=>(m.tipe==="ebook"?"📖 ":"▶ ")+m.judul).join(" · ") : "belum ada materi"}</span></span><span class="pill green">Aktif</span></div>`;
+        return `<div class="kv"><span class="who"><b>${SVC[k].nama}</b><br><span>${mat.length? mat.map(m=>`<svg class="mi-inline"><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg>`+m.judul).join(" · ") : "belum ada materi"}</span></span><span class="pill green">Aktif</span></div>`;
       }).join("")}
     </div>`).join("");
   return `<div class="panel-head"><div><h2>Layanan &amp; Materi</h2><p>Nama layanan dan materi bonusnya. Perhatikan: tidak ada satu pun angka harga di sini — itu wilayah Owner.</p></div></div>${blok}`;
