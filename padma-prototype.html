@@ -511,6 +511,46 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 .quote-band{margin-top:22px; background:var(--night); border:1px solid var(--gold-line); border-radius:18px; padding:26px 28px 24px; text-align:center; color:#F0E6CC; font-family:var(--ff-display); font-size:clamp(17px,2.6vw,22px)}
 .quote-band .lotus{width:32px; color:var(--gold-bright); display:block; margin:0 auto 10px}
 
+/* ---------- passport: tab & multi-view ---------- */
+.pp-tabs{display:flex; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:5px; margin-bottom:18px}
+.pp-tabs button{flex:1; display:flex; align-items:center; justify-content:center; gap:7px; border:none; background:none; padding:10px 8px; border-radius:10px; font-size:13px; font-weight:700; color:var(--ink-soft); transition:.14s}
+.pp-tabs button svg{width:16px; height:16px}
+.pp-tabs button:hover{color:var(--night)}
+.pp-tabs button.active{background:var(--night); color:var(--gold-pale)}
+.pp-view{display:none}
+.pp-view.active{display:block; animation:rise .3s ease}
+.qa-row{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px}
+.next-card{border:1.6px dashed var(--gold); background:#FDFAF1; border-radius:var(--r-md); padding:16px 18px; display:flex; gap:14px; align-items:center; margin-bottom:14px}
+.next-card .nc-ic{width:42px; height:42px; border-radius:12px; background:var(--night); color:var(--gold-bright); display:flex; align-items:center; justify-content:center; flex:0 0 auto}
+.next-card .nc-ic svg{width:20px; height:20px}
+.next-card b{display:block; font-size:14px}
+.next-card span{font-size:12.5px; color:var(--ink-soft)}
+.chips3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px}
+.chips3 .chip-choice{padding:12px 6px; min-height:44px; font-size:13px}
+.ok-panel{text-align:center}
+.ok-panel .okic{width:58px; height:58px; border-radius:50%; background:var(--ok-bg); border:1px solid var(--ok-line); color:var(--ok); font-size:26px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px}
+.ok-panel h3{justify-content:center}
+
+/* ---------- detail materi ---------- */
+.md-back{margin-bottom:14px}
+.md-hero{background:linear-gradient(150deg,#12392A,#0A2B1F); border:1px solid var(--gold-line); border-radius:var(--r-lg); color:#EFE6CE; padding:28px 24px; margin-bottom:16px; display:flex; gap:18px; align-items:center}
+.md-hero .mh-ic{width:56px; height:56px; border-radius:16px; background:rgba(217,179,106,.15); color:var(--gold-bright); display:flex; align-items:center; justify-content:center; flex:0 0 auto}
+.md-hero .mh-ic svg{width:26px; height:26px}
+.md-hero h3{color:#F5EEDC; font-size:21px; margin:0 0 4px}
+.md-hero span{font-size:12.5px; color:#A9BBAA}
+.md-row{display:flex; align-items:center; gap:12px; padding:12px 4px; border-bottom:1px dashed var(--line); font-size:13.5px; color:#3C4C42}
+.md-row:last-child{border-bottom:none}
+.md-row .no{font-family:var(--ff-mono); color:var(--gold); font-size:11px; width:22px; flex:0 0 auto}
+.player-mock{position:relative; aspect-ratio:16/9; background:linear-gradient(150deg,#12392A,#081F16); border-radius:var(--r-md); display:flex; align-items:center; justify-content:center; margin-bottom:14px; border:1px solid var(--gold-line); cursor:pointer; overflow:hidden}
+.player-mock .pm-play{width:62px; height:62px; border-radius:50%; background:rgba(217,179,106,.92); color:#132518; display:flex; align-items:center; justify-content:center; font-size:22px; transition:.15s}
+.player-mock:hover .pm-play{transform:scale(1.08)}
+.player-mock .pm-label{position:absolute; bottom:12px; left:14px; font-size:11.5px; color:#C9D4C8}
+.materi-card:not(.locked){cursor:pointer; transition:.15s}
+.materi-card:not(.locked):hover{border-color:var(--gold); transform:translateY(-2px)}
+
+/* ---------- permintaan jadwal (admin) ---------- */
+.book-req{border:1.6px dashed var(--gold); background:#FDFAF1; border-radius:var(--r-md); padding:14px 16px; margin-bottom:12px}
+
 /* ---------- appbar (rasa aplikasi di mobile) ---------- */
 .appbar{display:none}
 
@@ -518,7 +558,9 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 @keyframes rise{from{opacity:0; transform:translateY(18px)}to{opacity:1; transform:none}}
 @keyframes hl{0%{background:#F6E9C8}100%{background:#FDF9EE}}
 @keyframes draw{to{stroke-dashoffset:0}}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
 .anim-rise{animation:rise .7s ease both}
+.cover-lotus{animation:breathe 5.5s ease-in-out 2.4s infinite}
 .cover-lotus path{stroke-dasharray:150; stroke-dashoffset:150; animation:draw 1.5s cubic-bezier(.4,0,.2,1) forwards}
 .cover-lotus path:nth-of-type(2){animation-delay:.18s}
 .cover-lotus path:nth-of-type(3){animation-delay:.32s}
@@ -580,6 +622,8 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
   }
   .appbar button svg{width:21px; height:21px}
   .appbar button.active{color:var(--gold-bright)}
+  .pp-tabs{display:none}
+  .qa-row{grid-template-columns:1fr}
   .pp-stage{padding-bottom:140px}
   .pp-page,.pp-cover{scroll-margin-top:64px}
   .app .side{
@@ -949,6 +993,16 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <button class="linklike" onclick="go('login')">Keluar</button>
       </div>
 
+      <nav class="pp-tabs" id="ppTabs" aria-label="Menu passport">
+        <button class="active" data-view="home" onclick="ppGo('home')"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg>Beranda</button>
+        <button data-view="sesi" onclick="ppGo('sesi')"><svg viewBox="0 0 24 24"><use href="#ic-cal"/></svg>Sesi</button>
+        <button data-view="materi" onclick="ppGo('materi')"><svg viewBox="0 0 24 24"><use href="#ic-book"/></svg>Materi</button>
+        <button data-view="bayar" onclick="ppGo('bayar')"><svg viewBox="0 0 24 24"><use href="#ic-qr"/></svg>Bayar</button>
+        <button data-view="profil" onclick="ppGo('profil')"><svg viewBox="0 0 24 24"><use href="#ic-user"/></svg>Profil</button>
+      </nav>
+
+      <!-- ── VIEW: BERANDA ── -->
+      <div class="pp-view active" id="ppv-home">
       <div class="pp-cover anim-rise">
         <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
         <div class="pp-kind">Digital Care Passport</div>
@@ -967,21 +1021,71 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <div class="prog-cap"><span id="ppProgText"></span><b id="ppProgPct"></b></div>
       </div>
 
-      <div class="pp-page" id="secSesi">
-        <h3>Riwayat Sesi <small>ketuk untuk membaca catatan bidan</small></h3>
-        <div class="visa-list" id="visaList"></div>
-      </div>
+      <div id="nextCard"></div>
 
-      <div class="pp-page" id="secMateri">
-        <h3>Materi Panduan Anda <small>terbuka sesuai layanan yang Anda jalani</small></h3>
-        <div class="materi-grid" id="materiGrid"></div>
+      <div class="qa-row">
+        <button class="btn btn-gold" onclick="ppGo('booking')">+ Ajukan Jadwal</button>
+        <button class="btn btn-outline" onclick="ppGo('materi')">Materi Saya</button>
       </div>
 
       <div class="pp-page">
         <h3>Pencapaian</h3>
         <div class="badge-row" id="badgeRow"></div>
       </div>
+      </div>
 
+      <!-- ── VIEW: SESI ── -->
+      <div class="pp-view" id="ppv-sesi">
+      <div class="pp-page">
+        <h3>Riwayat Sesi <small>ketuk untuk membaca catatan bidan</small></h3>
+        <div class="visa-list" id="visaList"></div>
+      </div>
+      <button class="btn btn-gold" style="width:100%" onclick="ppGo('booking')">+ Ajukan Jadwal Baru</button>
+      </div>
+
+      <!-- ── VIEW: MATERI ── -->
+      <div class="pp-view" id="ppv-materi">
+      <div class="pp-page" id="secMateri">
+        <h3>Materi Panduan Anda <small>terbuka sesuai layanan yang Anda jalani</small></h3>
+        <div class="materi-grid" id="materiGrid"></div>
+      </div>
+      </div>
+
+      <!-- ── VIEW: DETAIL MATERI ── -->
+      <div class="pp-view" id="ppv-materi-detail">
+        <button class="btn btn-outline btn-sm md-back" onclick="ppGo('materi')">← Kembali ke Materi</button>
+        <div id="materiDetail"></div>
+      </div>
+
+      <!-- ── VIEW: AJUKAN JADWAL ── -->
+      <div class="pp-view" id="ppv-booking">
+      <div class="pp-page" id="bookingForm">
+        <h3>Ajukan Jadwal <small>tim PADMA mengonfirmasi via WhatsApp</small></h3>
+        <div class="formfield"><label>Layanan</label><select id="bkSvc"></select></div>
+        <div class="grid2">
+          <div class="formfield"><label>Tanggal yang diinginkan</label><input type="date" id="bkTgl" min="2026-08-27" value="2026-09-02"></div>
+          <div class="formfield"><label>Preferensi waktu</label>
+            <div class="chips3" id="bkWaktuChips">
+              <button class="chip-choice sel" onclick="pilihWaktu(this,'Pagi')">Pagi</button>
+              <button class="chip-choice" onclick="pilihWaktu(this,'Siang')">Siang</button>
+              <button class="chip-choice" onclick="pilihWaktu(this,'Sore')">Sore</button>
+            </div>
+          </div>
+        </div>
+        <div class="formfield"><label>Catatan (opsional)</label><textarea id="bkNote" rows="2" placeholder="mis. tolong dengan Bidan Sri seperti biasa"></textarea></div>
+        <button class="btn btn-gold" style="width:100%" onclick="kirimBooking()">Kirim Permintaan Jadwal</button>
+        <p style="font-size:12px; color:var(--ink-soft); text-align:center; margin:12px 0 0">Ini permintaan, bukan booking final — jadwal pasti dikonfirmasi tim PADMA bersama Anda via WhatsApp.</p>
+      </div>
+      <div class="pp-page ok-panel" id="bookingOk" hidden>
+        <div class="okic">✓</div>
+        <h3 style="justify-content:center">Permintaan terkirim</h3>
+        <p style="font-size:13.5px; color:#415247; max-width:26em; margin:0 auto 16px">Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan bidan yang datang.</p>
+        <button class="btn btn-outline btn-sm" onclick="ppGo('home')">Kembali ke Beranda</button>
+      </div>
+      </div>
+
+      <!-- ── VIEW: BAYAR ── -->
+      <div class="pp-view" id="ppv-bayar">
       <div class="pp-page" id="secBayar">
         <h3>Cara Pembayaran</h3>
         <div class="qris-box">
@@ -993,7 +1097,16 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
           </div>
         </div>
       </div>
+      <div class="pp-page">
+        <h3>Langkah pembayaran</h3>
+        <div class="md-row"><span class="no">01</span>Scan QRIS di atas, atau transfer sesuai arahan admin</div>
+        <div class="md-row"><span class="no">02</span>Kirim bukti pembayaran ke WhatsApp PADMA</div>
+        <div class="md-row"><span class="no">03</span>Tim memverifikasi &amp; jadwal Anda terkunci</div>
+      </div>
+      </div>
 
+      <!-- ── VIEW: PROFIL ── -->
+      <div class="pp-view" id="ppv-profil">
       <div class="pp-page" id="secProfil">
         <h3>Profil</h3>
         <div class="kv"><span class="muted">Nama lengkap</span><b>Ananda Putri</b></div>
@@ -1004,14 +1117,15 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <p style="font-size:12px; color:var(--ink-soft); margin:14px 0">Ada data yang berubah? Hubungi tim PADMA via WhatsApp — demi keamanan, perubahan data dilakukan oleh admin.</p>
         <button class="btn btn-outline btn-sm" onclick="go('login')">Keluar dari akun</button>
       </div>
+      </div>
     </div>
 
     <nav class="appbar" id="ppAppbar" aria-label="Navigasi passport">
-      <button class="active" onclick="ppNav('top',this)"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg>Passport</button>
-      <button onclick="ppNav('secSesi',this)"><svg viewBox="0 0 24 24"><use href="#ic-cal"/></svg>Sesi</button>
-      <button onclick="ppNav('secMateri',this)"><svg viewBox="0 0 24 24"><use href="#ic-book"/></svg>Materi</button>
-      <button onclick="ppNav('secBayar',this)"><svg viewBox="0 0 24 24"><use href="#ic-qr"/></svg>Bayar</button>
-      <button onclick="ppNav('secProfil',this)"><svg viewBox="0 0 24 24"><use href="#ic-user"/></svg>Profil</button>
+      <button class="active" data-view="home" onclick="ppGo('home')"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg>Beranda</button>
+      <button data-view="sesi" onclick="ppGo('sesi')"><svg viewBox="0 0 24 24"><use href="#ic-cal"/></svg>Sesi</button>
+      <button data-view="materi" onclick="ppGo('materi')"><svg viewBox="0 0 24 24"><use href="#ic-book"/></svg>Materi</button>
+      <button data-view="bayar" onclick="ppGo('bayar')"><svg viewBox="0 0 24 24"><use href="#ic-qr"/></svg>Bayar</button>
+      <button data-view="profil" onclick="ppGo('profil')"><svg viewBox="0 0 24 24"><use href="#ic-user"/></svg>Profil</button>
     </nav>
   </div>
 </section>
@@ -1024,7 +1138,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <div class="side-title">Panel Admin</div>
         <button class="side-link active" data-v="inbox" onclick="adminView('inbox')"><span class="ic"><svg><use href="#ic-inbox"/></svg></span><span class="lbl">Inbox</span> <span class="cnt" id="cntInbox">2</span></button>
         <button class="side-link" data-v="klien" onclick="adminView('klien')"><span class="ic"><svg><use href="#ic-user"/></svg></span><span class="lbl">Klien</span></button>
-        <button class="side-link" data-v="sesi" onclick="adminView('sesi')"><span class="ic"><svg><use href="#ic-cal"/></svg></span><span class="lbl">Sesi</span></button>
+        <button class="side-link" data-v="sesi" onclick="adminView('sesi')"><span class="ic"><svg><use href="#ic-cal"/></svg></span><span class="lbl">Sesi</span> <span class="cnt" id="cntSesi" style="display:none"></span></button>
         <button class="side-link" data-v="mitra" onclick="adminView('mitra')"><span class="ic"><svg><use href="#ic-mitra"/></svg></span><span class="lbl">Mitra</span></button>
         <button class="side-link" data-v="layanan" onclick="adminView('layanan')"><span class="ic"><svg><use href="#ic-leaf"/></svg></span><span class="lbl">Layanan</span></button>
         <div class="side-foot"><svg class="nav-ic"><use href="#ic-lock"/></svg> <b style="color:#C9D4C8">Money firewall</b> — tidak ada harga atau honor di panel ini. Angka uang hanya hidup di panel Owner.</div>
@@ -1088,9 +1202,14 @@ const RATES = {
 };
 const MITRA = { sri:"Bidan Sri Wahyuni", dewi:"Bidan Dewi Lestari" };
 const MATERI = [
-  {svc:"SANK_MASSAGE", tipe:"ebook", judul:"Memahami Masa Subur & Siklus Anda"},
-  {svc:"SANK_YOGA", tipe:"video", judul:"Flow Yoga Prekonsepsi — 15 Menit"},
-  {svc:"SANK_NUTRISI", tipe:"ebook", judul:"Panduan Nutrisi Prekonsepsi"},
+  {svc:"SANK_MASSAGE", tipe:"ebook", judul:"Memahami Masa Subur & Siklus Anda",
+    desc:"Panduan praktis mengenali jendela subur Anda — ditulis tim PADMA dengan bahasa yang mudah, bukan jurnal medis.",
+    bab:["Mengenal siklus & ovulasi","Tanda-tanda masa subur","Cara mencatat siklus dengan benar","Kapan waktunya berkonsultasi"]},
+  {svc:"SANK_YOGA", tipe:"video", judul:"Flow Yoga Prekonsepsi — 15 Menit", durasi:"15:24",
+    desc:"Rangkaian gerakan lembut untuk relaksasi hormon dan sirkulasi — ikuti 3× sepekan sesuai rekomendasi bidan Anda."},
+  {svc:"SANK_NUTRISI", tipe:"ebook", judul:"Panduan Nutrisi Prekonsepsi",
+    desc:"Menu contoh 7 hari dan daftar asupan penting masa promil, disusun bersama konsultan gizi PADMA.",
+    bab:["Asam folat, protein & zat besi","Menu contoh 7 hari","Yang sebaiknya dikurangi","Suplemen: perlu atau tidak?"]},
   {svc:"GAR_RELIEF", tipe:"ebook", judul:"Relaksasi Kehamilan", lockNote:"Terbuka saat perjalanan Anda memasuki fase Garbha"},
 ];
 const DATA = {
@@ -1129,6 +1248,7 @@ const DATA = {
       flags:["Sakit kepala berat/menetap atau pandangan kabur"], status:"dihubungi", tgl:"2026-08-23"},
   ],
   honorMark:{},   // "sri|2026-08-17" -> tanggal dibayar
+  bookings:[],    // permintaan jadwal dari klien
   nextSesiId: 10,
 };
 
@@ -1348,22 +1468,82 @@ function renderPassport(){
   }).join("");
   // materi
   const svcSelesai = new Set(sesiAnanda().filter(s=>s.status==="selesai").map(s=>s.svc));
-  $("materiGrid").innerHTML = MATERI.map(m=>{
+  $("materiGrid").innerHTML = MATERI.map((m,i)=>{
     const buka = svcSelesai.has(m.svc);
     const ic = `<svg><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg>`;
-    if(buka) return `<div class="materi-card"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${SVC[m.svc].nama}</span></div></div>`;
+    if(buka) return `<div class="materi-card" onclick="bukaMateri(${i})" role="button" tabindex="0"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${SVC[m.svc].nama} · <u>buka</u></span></div></div>`;
     return `<div class="materi-card locked"><div class="materi-ic"><svg><use href="#ic-lock"/></svg></div><div><b>${m.judul}</b><span>${m.lockNote || "Terbuka setelah layanan terkait selesai"}</span></div></div>`;
   }).join("");
+  // sesi berikutnya & permintaan jadwal (beranda)
+  const next = sesiAnanda().filter(s=>s.status==="terjadwal").sort((a,b)=>a.tgl<b.tgl?-1:1)[0];
+  const pend = DATA.bookings.filter(b=>b.status==="menunggu");
+  let nc = "";
+  if(next) nc += `<div class="next-card"><div class="nc-ic"><svg><use href="#ic-cal"/></svg></div>
+    <div><b>Sesi berikutnya: ${SVC[next.svc].nama}</b><span>${tglID(next.tgl)} · ${MITRA[next.mitra]} · datang ke rumah Anda</span></div></div>`;
+  pend.forEach(b=>{ nc += `<div class="next-card" style="border-style:dotted"><div class="nc-ic"><svg><use href="#ic-inbox"/></svg></div>
+    <div><b>Permintaan jadwal: ${SVC[b.svc].nama}</b><span>${tglID(b.tgl)} · ${b.waktu} · menunggu konfirmasi tim PADMA</span></div></div>`; });
+  if(!nc) nc = `<div class="next-card"><div class="nc-ic"><svg><use href="#ic-cal"/></svg></div>
+    <div><b>Belum ada jadwal berikutnya</b><span>Ajukan jadwal — tim PADMA mengonfirmasi via WhatsApp.</span></div></div>`;
+  $("nextCard").innerHTML = nc;
+  if(!$("bkSvc").options.length)
+    $("bkSvc").innerHTML = Object.keys(SVC).map(k=>`<option value="${k}">${SVC[k].nama} — ${FASE[SVC[k].fase]}</option>`).join("");
   // badge
   $("badgeRow").innerHTML = [...svcSelesai].map(k=>
     `<div class="badge-coin"><div class="coin"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg></div>${SVC[k].nama.replace(" · Prekonsepsi","")}</div>`).join("")
     || '<p class="muted" style="font-size:13px">Badge pertama terbit saat sesi pertama selesai.</p>';
   gambarQris();
 }
-function ppNav(sec, btn){
-  document.querySelectorAll("#ppAppbar button").forEach(b=>b.classList.toggle("active", b===btn));
-  if(sec==="top") window.scrollTo({top:0, behavior:"smooth"});
-  else $(sec).scrollIntoView({behavior:"smooth", block:"start"});
+function ppGo(v){
+  const tabKey = v==="materi-detail" ? "materi" : v==="booking" ? "home" : v;
+  document.querySelectorAll(".pp-view").forEach(x=>x.classList.toggle("active", x.id==="ppv-"+v));
+  document.querySelectorAll("#ppTabs button, #ppAppbar button").forEach(b=>b.classList.toggle("active", b.dataset.view===tabKey));
+  if(v==="booking"){ $("bookingForm").hidden = false; $("bookingOk").hidden = true; }
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+let bkWaktu = "Pagi";
+function pilihWaktu(btn, w){
+  bkWaktu = w;
+  document.querySelectorAll("#bkWaktuChips .chip-choice").forEach(b=>b.classList.toggle("sel", b===btn));
+}
+function kirimBooking(){
+  const tgl = $("bkTgl").value;
+  if(!tgl){ $("bkTgl").focus(); return; }
+  DATA.bookings.push({id:DATA.bookings.length+1, svc:$("bkSvc").value, tgl, waktu:bkWaktu,
+    catatan:$("bkNote").value.trim(), status:"menunggu"});
+  $("bkNote").value = "";
+  $("bookingForm").hidden = true; $("bookingOk").hidden = false;
+  renderPassport();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function bukaMateri(i){
+  const m = MATERI[i];
+  if(!m || m.lockNote) return;
+  const svcNama = SVC[m.svc].nama;
+  let body;
+  if(m.tipe === "video"){
+    body = `<div class="pp-page">
+      <div class="player-mock" id="playerMock" onclick="this.querySelector('.pm-label').textContent='▶ Memutar… (simulasi — di produk asli: embed YouTube unlisted)'">
+        <div class="pm-play">▶</div><div class="pm-label">${m.durasi} · ketuk untuk memutar</div>
+      </div>
+      <p style="font-size:13.5px; color:#3C4C42">${m.desc}</p>
+      <p style="font-size:12px; color:var(--ink-soft); margin:0">Video panduan · ${svcNama}</p>
+    </div>`;
+  } else {
+    body = `<div class="pp-page">
+      <h3 style="font-size:16px">Daftar Isi</h3>
+      ${m.bab.map((b,j)=>`<div class="md-row"><span class="no">0${j+1}</span>${b}</div>`).join("")}
+      <button class="btn btn-night" style="width:100%; margin-top:16px"
+        onclick="this.textContent='✓ PDF tersimpan (simulasi — di produk asli: unduhan aman via tautan berbatas waktu)'; this.disabled=true">Unduh PDF</button>
+    </div>`;
+  }
+  $("materiDetail").innerHTML = `
+    <div class="md-hero">
+      <div class="mh-ic"><svg><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg></div>
+      <div><h3>${m.judul}</h3><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${svcNama}</span></div>
+    </div>
+    ${m.tipe==="ebook" ? `<div class="pp-page"><p style="font-size:13.5px; color:#3C4C42; margin:0">${m.desc}</p></div>` : ""}
+    ${body}`;
+  ppGo("materi-detail");
 }
 function gambarQris(){
   const el = $("qrisSvg"); if(el.childNodes.length) return;
@@ -1395,6 +1575,18 @@ function adminView(v){
   if(v==="mitra") M.innerHTML = vMitra();
   if(v==="layanan") M.innerHTML = vLayanan();
   $("cntInbox").textContent = DATA.skrining.filter(s=>s.status==="baru").length;
+  const nReq = DATA.bookings.filter(b=>b.status==="menunggu").length;
+  $("cntSesi").textContent = nReq;
+  $("cntSesi").style.display = nReq ? "" : "none";
+}
+function konfirmasiBooking(id){
+  const b = DATA.bookings.find(x=>x.id===id);
+  if(!b) return;
+  DATA.sesi.push({id:DATA.nextSesiId++, klien:"ananda", svc:b.svc, tgl:b.tgl,
+    mitra:$("bm"+id).value, status:"terjadwal", paket:SVC[b.svc].fase==="prekonsepsi",
+    catatan:"", rek:""});
+  b.status = "dikonfirmasi";
+  adminView("sesi");
 }
 function vInbox(){
   const rows = DATA.skrining.map((s,i)=>`
@@ -1494,8 +1686,19 @@ function vSesi(){
         <button class="btn btn-night btn-sm" onclick="simpanSesiBaru()">Simpan jadwal</button>
         <button class="btn btn-outline btn-sm" onclick="sesiNewOpen=false; adminView('sesi')">Batal</button>
       </div></div>` : "";
+  const reqs = DATA.bookings.filter(b=>b.status==="menunggu");
+  const reqHtml = reqs.map(b=>`<div class="book-req">
+    <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center">
+      <div><b>Permintaan jadwal — Ananda Putri</b>
+        <span class="rowsub">${SVC[b.svc].nama} · ${tglID(b.tgl)} · ${b.waktu}${b.catatan ? " · &ldquo;"+b.catatan+"&rdquo;" : ""}</span></div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <select class="select-inline" id="bm${b.id}">${Object.keys(MITRA).map(m=>`<option value="${m}">${MITRA[m]}</option>`).join("")}</select>
+        <button class="btn btn-gold btn-sm" onclick="konfirmasiBooking(${b.id})">Konfirmasi</button>
+      </div>
+    </div></div>`).join("");
   return `<div class="panel-head"><div><h2>Sesi</h2><p>Menandai <b>Selesai</b> + mengisi catatan akan langsung memperbarui Passport klien dan rekap Owner. Coba, lalu buka layar Passport.</p></div>
       <button class="btn btn-night btn-sm" onclick="sesiNewOpen=true; adminView('sesi')">+ Jadwalkan sesi</button></div>
+    ${reqHtml ? reqHtml + '<p style="font-size:12px; color:var(--ink-soft); margin:2px 0 14px">Konfirmasi mengubah permintaan menjadi sesi Terjadwal — kabari juga klien via WhatsApp.</p>' : ""}
     ${formBaru}
     <div class="tablecard"><div class="tscroll"><table>
       <thead><tr><th>Klien</th><th>Layanan</th><th>Mitra</th><th>Status</th><th></th></tr></thead>
