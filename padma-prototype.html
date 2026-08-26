@@ -1,0 +1,1428 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A2B1F">
+<title>PADMA — Prototipe Interaktif</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PADMA — Prototipe Interaktif v1
+   Palet: night/leaf/gold/paper/clay · Type: Marcellus + Plus Jakarta Sans + IBM Plex Mono
+   ============================================================ */
+:root{
+  --night:#0A2B1F; --pine:#11382A; --leaf:#2F6A48; --leaf-soft:#E9F1E9;
+  --gold:#B58A3C; --gold-bright:#D9B36A; --gold-pale:#F0E3C3; --gold-line:rgba(217,179,106,.28);
+  --paper:#FBF8F0; --paper-warm:#F5EFE1; --card:#FFFFFF;
+  --ink:#1F2E26; --ink-soft:#5D6C61; --line:#E4DECB;
+  --clay:#A6472F; --clay-bg:#F8EAE3; --clay-line:#E5C4B5;
+  --ok:#2F6A48; --ok-bg:#E9F1E9; --ok-line:#C8DCC8;
+  --warn:#8A6A1B; --warn-bg:#F7EDD3;
+  --wa:#1FAF57;
+  --ff-display:'Marcellus', Georgia, 'Times New Roman', serif;
+  --ff-body:'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ff-mono:'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --shadow-soft:0 10px 34px rgba(16,42,31,.10);
+  --shadow-deep:0 24px 70px rgba(5,20,14,.35);
+  --r-lg:20px; --r-md:14px; --r-sm:9px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--ff-body); font-size:15.5px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+h1,h2,h3,h4{font-family:var(--ff-display); font-weight:400; color:var(--ink); margin:0 0 .4em; line-height:1.18}
+p{margin:0 0 1em}
+a{color:var(--leaf)}
+button{font-family:inherit; cursor:pointer}
+img,svg{max-width:100%}
+:focus-visible{outline:2.5px solid var(--gold); outline-offset:2px; border-radius:4px}
+
+/* ---------- utilitas ---------- */
+.mono{font-family:var(--ff-mono)}
+.muted{color:var(--ink-soft)}
+.eyebrow{
+  font-size:11.5px; letter-spacing:.24em; text-transform:uppercase; font-weight:700;
+  color:var(--gold); margin-bottom:14px; display:flex; align-items:center; gap:10px;
+}
+.eyebrow::before{content:""; width:26px; height:1px; background:var(--gold); display:inline-block}
+.on-dark .eyebrow{color:var(--gold-bright)}
+.hairline{width:56px; height:1px; background:var(--gold); border:0; margin:18px auto}
+.tag{
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.06em;
+  padding:4px 11px; border-radius:999px; border:1px solid var(--line);
+  background:var(--paper); color:var(--ink-soft);
+}
+.note-lock{
+  display:flex; gap:10px; align-items:flex-start;
+  background:var(--leaf-soft); border:1px solid var(--ok-line); border-radius:var(--r-md);
+  padding:12px 15px; font-size:13px; color:#2C5540; margin:0 0 18px;
+}
+.pill{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; padding:4px 11px; border-radius:999px; white-space:nowrap}
+.pill.done{background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok-line)}
+.pill.plan{background:var(--warn-bg); color:var(--warn); border:1px solid #E9D9A8}
+.pill.off{background:#EFEDE4; color:var(--ink-soft); border:1px solid var(--line)}
+.pill.red{background:var(--clay-bg); color:var(--clay); border:1px solid var(--clay-line)}
+.pill.green{background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok-line)}
+
+/* ---------- tombol ---------- */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:9px;
+  border:none; border-radius:12px; padding:14px 26px;
+  font-size:14.5px; font-weight:700; letter-spacing:.01em; text-decoration:none;
+  transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
+  min-height:48px;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn-gold{background:linear-gradient(140deg,#C89A48,#B58A3C 55%,#9C7430); color:#FFF8EA; box-shadow:0 8px 22px rgba(156,116,48,.35)}
+.btn-gold:hover{box-shadow:0 12px 28px rgba(156,116,48,.45)}
+.btn-night{background:var(--night); color:var(--gold-pale)}
+.btn-ghost{background:transparent; color:var(--gold-pale); border:1.5px solid var(--gold-line)}
+.btn-ghost:hover{border-color:var(--gold-bright); color:#FFF}
+.btn-outline{background:var(--card); color:var(--night); border:1.5px solid var(--line)}
+.btn-outline:hover{border-color:var(--gold)}
+.btn-wa{background:var(--wa); color:#fff; box-shadow:0 8px 22px rgba(31,175,87,.30)}
+.btn-sm{padding:9px 16px; min-height:38px; font-size:13px; border-radius:10px}
+.btn[disabled]{opacity:.45; cursor:not-allowed; transform:none; box-shadow:none}
+.linklike{border:none; background:none; color:var(--leaf); font-weight:700; font-size:13.5px; padding:6px 2px; text-decoration:underline; text-underline-offset:3px}
+
+/* ============================================================
+   SHELL PROTOTIPE (bar alur demo)
+   ============================================================ */
+.shell{
+  position:fixed; top:0; left:0; right:0; z-index:60;
+  background:rgba(8,32,23,.97); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--gold-line);
+  display:flex; align-items:center; gap:14px; padding:0 14px;
+  height:54px; color:var(--gold-pale);
+}
+.shell.hidden{display:none}
+.shell-brand{font-family:var(--ff-display); letter-spacing:.32em; font-size:15px; color:#F3EAD3; white-space:nowrap; display:flex; align-items:center; gap:9px}
+.shell-brand small{font-family:var(--ff-body); letter-spacing:.08em; font-size:10px; color:var(--gold-bright); font-weight:700; text-transform:uppercase}
+.shell-steps{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; flex:1; padding:6px 2px}
+.shell-steps::-webkit-scrollbar{display:none}
+.step-pill{
+  display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
+  border:1px solid rgba(217,179,106,.22); background:transparent; color:#C9CFC4;
+  border-radius:999px; padding:6px 13px 6px 7px; font-size:12px; font-weight:600;
+  transition:.15s;
+}
+.step-pill b{
+  width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+  background:rgba(217,179,106,.14); color:var(--gold-bright); font-size:10.5px; font-family:var(--ff-mono); font-weight:500;
+}
+.step-pill:hover{border-color:var(--gold-bright); color:#fff}
+.step-pill.active{background:var(--gold); border-color:var(--gold); color:#0E2418}
+.step-pill.active b{background:rgba(10,43,31,.25); color:#0E2418}
+.fab-next{
+  position:fixed; right:18px; bottom:18px; z-index:59;
+  display:inline-flex; align-items:center; gap:10px;
+  background:var(--night); color:var(--gold-pale); border:1px solid var(--gold-line);
+  border-radius:999px; padding:13px 20px; font-size:13.5px; font-weight:700;
+  box-shadow:var(--shadow-deep); transition:.16s;
+}
+.fab-next:hover{border-color:var(--gold-bright); transform:translateY(-2px)}
+.fab-next .arr{color:var(--gold-bright)}
+.fab-next.hidden{display:none}
+
+/* ---------- layar / router ---------- */
+.screen{display:none; min-height:100vh}
+.screen.active{display:block}
+.screen-pad{padding-top:54px}
+
+/* ============================================================
+   SAMPUL (cover)
+   ============================================================ */
+#scr-cover{
+  background:
+    radial-gradient(1200px 700px at 50% -10%, rgba(47,106,72,.55), transparent 60%),
+    radial-gradient(900px 500px at 50% 115%, rgba(181,138,60,.18), transparent 60%),
+    var(--night);
+  text-align:center; padding:32px 20px;
+}
+#scr-cover.active{display:flex; align-items:center; justify-content:center}
+.cover-inner{max-width:560px; animation:rise .9s ease both}
+.cover-frame{
+  border:1px solid var(--gold-line); border-radius:26px; padding:56px 34px 44px; position:relative;
+  box-shadow:inset 0 0 0 6px rgba(10,43,31,.6), inset 0 0 0 7px rgba(217,179,106,.25);
+}
+.cover-inner .lotus{width:84px; margin:0 auto 26px; display:block; color:var(--gold-bright)}
+.cover-title{font-family:var(--ff-display); font-size:clamp(42px,9vw,64px); letter-spacing:.3em; color:#F5ECD8; margin:0 0 6px; padding-left:.3em}
+.cover-sub{font-size:11.5px; letter-spacing:.34em; text-transform:uppercase; color:var(--gold-bright); font-weight:700; margin-bottom:24px}
+.cover-kind{font-family:var(--ff-display); font-size:19px; color:#DCE6DC; margin-bottom:6px}
+.cover-note{font-size:13px; color:#9FB2A3; margin-bottom:30px}
+.cover-foot{margin-top:26px; font-size:11.5px; color:#7E937F}
+.cover-foot .mono{color:var(--gold-bright)}
+
+/* ============================================================
+   LANDING
+   ============================================================ */
+.site-nav{
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  max-width:1120px; margin:0 auto; padding:18px 24px;
+}
+.wordmark{display:flex; align-items:center; gap:11px; text-decoration:none}
+.wordmark .lotus{width:34px; color:var(--gold-bright)}
+.wordmark span{font-family:var(--ff-display); letter-spacing:.26em; font-size:19px; color:#F3EAD3}
+.site-links{display:flex; gap:26px; align-items:center}
+.site-links a{color:#C9D4C8; text-decoration:none; font-size:13.5px; font-weight:600}
+.site-links a:hover{color:var(--gold-bright)}
+.hero{
+  background:
+    radial-gradient(1100px 600px at 82% -20%, rgba(47,106,72,.6), transparent 62%),
+    radial-gradient(700px 420px at -10% 110%, rgba(181,138,60,.14), transparent 60%),
+    var(--night);
+  color:#E9EFE7; position:relative; overflow:hidden;
+}
+.hero-lotus-bg{position:absolute; right:-60px; bottom:-40px; width:420px; opacity:.10; color:var(--gold-bright); pointer-events:none}
+.hero-inner{max-width:1120px; margin:0 auto; padding:64px 24px 84px; position:relative}
+.hero h1{
+  font-size:clamp(34px,5.4vw,58px); color:#F7F1E2; max-width:14em; line-height:1.14; margin-bottom:20px;
+}
+.hero h1 em{font-style:normal; color:var(--gold-bright)}
+.hero .lead{font-size:17px; color:#BFCDBE; max-width:34em; margin-bottom:32px}
+.hero-cta{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:44px}
+.trust-row{display:flex; gap:26px; flex-wrap:wrap; border-top:1px solid rgba(217,179,106,.18); padding-top:22px}
+.trust-item{display:flex; gap:10px; align-items:flex-start; font-size:13px; color:#A9BBAA; max-width:230px}
+.trust-item b{color:#E5DFC8; font-weight:700}
+.trust-item .tick{color:var(--gold-bright); font-size:15px; line-height:1.4}
+.section{max-width:1120px; margin:0 auto; padding:84px 24px}
+.section-head{max-width:640px; margin-bottom:44px}
+.section-head h2{font-size:clamp(28px,3.6vw,40px)}
+.section-head p{color:var(--ink-soft); font-size:16px}
+.phase-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:14px}
+.phase-card{
+  background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg);
+  padding:26px 20px 22px; position:relative; overflow:hidden;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.phase-card:hover{transform:translateY(-4px); box-shadow:var(--shadow-soft); border-color:var(--gold-line)}
+.phase-card .glyph{font-family:var(--ff-display); font-size:15px; color:var(--gold); letter-spacing:.14em; margin-bottom:14px; display:flex; align-items:center; gap:8px}
+.phase-card .glyph::after{content:""; height:1px; flex:1; background:var(--line)}
+.phase-card h3{font-size:21px; margin-bottom:2px}
+.phase-card .fase-id{font-size:12px; color:var(--ink-soft); font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px}
+.phase-card p{font-size:13px; color:var(--ink-soft); margin-bottom:14px; min-height:3.2em}
+.phase-card .svc{display:flex; flex-wrap:wrap; gap:6px}
+.phase-card .svc span{font-size:11px; background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:3px 9px; color:#4E6154; font-weight:600}
+.how{background:var(--paper-warm); border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+.how-steps{display:grid; grid-template-columns:repeat(4,1fr); gap:0; counter-reset:langkah; border-left:1px solid var(--line)}
+.how-step{border-right:1px solid var(--line); padding:8px 26px 6px; position:relative}
+.how-step .num{font-family:var(--ff-mono); font-size:12px; color:var(--gold); font-weight:500; margin-bottom:14px; display:block}
+.how-step h3{font-size:19px; margin-bottom:8px}
+.how-step p{font-size:13.5px; color:var(--ink-soft)}
+.teaser{display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center}
+.teaser-copy h2{font-size:clamp(28px,3.4vw,38px)}
+.teaser-copy ul{list-style:none; margin:22px 0 30px; padding:0; display:grid; gap:13px}
+.teaser-copy li{display:flex; gap:12px; font-size:14.5px; color:#3C4C42}
+.teaser-copy li .tick{color:var(--gold); font-weight:800}
+.mini-pass{
+  background:linear-gradient(150deg,#12392A,#0A2B1F 70%); border-radius:22px; padding:34px 30px 22px;
+  color:#EFE6CE; box-shadow:var(--shadow-deep); border:1px solid var(--gold-line);
+  max-width:400px; margin:0 auto; transform:rotate(-1.6deg); position:relative;
+}
+.mini-pass .lotus{width:46px; color:var(--gold-bright); margin:0 auto 16px; display:block}
+.mini-pass .mp-kind{text-align:center; font-size:10px; letter-spacing:.34em; text-transform:uppercase; color:var(--gold-bright); font-weight:700; margin-bottom:6px}
+.mini-pass .mp-name{text-align:center; font-family:var(--ff-display); font-size:24px; color:#F7F0DD; margin-bottom:2px}
+.mini-pass .mp-id{text-align:center; font-family:var(--ff-mono); font-size:12px; color:#B9C6B4; margin-bottom:20px}
+.mini-pass .mp-row{display:flex; justify-content:space-between; font-size:12.5px; padding:9px 2px; border-top:1px solid rgba(217,179,106,.16)}
+.mini-pass .mp-row b{color:var(--gold-pale); font-weight:600}
+.mrz{
+  margin-top:18px; background:rgba(6,24,17,.75); border-radius:10px; padding:10px 12px;
+  font-family:var(--ff-mono); font-size:10.5px; letter-spacing:.14em; color:#9FB79E; line-height:1.75;
+  overflow:hidden; white-space:nowrap;
+}
+.footer{background:var(--night); color:#9DB09E; padding:54px 24px 40px}
+.footer-inner{max-width:1120px; margin:0 auto; display:flex; justify-content:space-between; gap:30px; flex-wrap:wrap; align-items:flex-start}
+.footer .wordmark span{font-size:16px}
+.footer p{font-size:12.5px; max-width:300px}
+.footer .fine{border-top:1px solid rgba(217,179,106,.14); margin-top:34px; padding-top:18px; font-size:11.5px; color:#6E8271; max-width:1120px; margin-left:auto; margin-right:auto}
+
+/* ============================================================
+   WIZARD SKRINING
+   ============================================================ */
+.wiz-wrap{max-width:640px; margin:0 auto; padding:40px 18px 90px}
+.wiz-brandtop{text-align:center; margin-bottom:26px}
+.wiz-brandtop .lotus{width:44px; color:var(--gold); margin:0 auto 10px; display:block}
+.wiz-brandtop h2{font-size:26px; margin-bottom:4px}
+.wiz-brandtop p{font-size:13.5px; color:var(--ink-soft)}
+.wiz-card{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:30px 28px; box-shadow:var(--shadow-soft)}
+.formfield{margin-bottom:16px}
+.formfield label{display:block; font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:7px}
+.formfield input[type=text],.formfield input[type=tel],.formfield input[type=email],.formfield input[type=password],.formfield input[type=date],.formfield select,.formfield textarea{
+  width:100%; padding:13px 14px; border:1.5px solid var(--line); border-radius:11px;
+  font-size:15px; font-family:inherit; color:var(--ink); background:#FFFDF8; transition:border-color .14s;
+}
+.formfield input:focus,.formfield select:focus,.formfield textarea:focus{border-color:var(--gold); outline:none}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.choice-chips{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.chip-choice{
+  border:1.5px solid var(--line); background:#FFFDF8; border-radius:12px; padding:15px 10px;
+  font-size:14.5px; font-weight:600; color:var(--ink); text-align:center; transition:.14s; min-height:52px;
+}
+.chip-choice:hover{border-color:var(--gold)}
+.chip-choice.sel{border-color:var(--night); background:var(--leaf-soft); color:var(--night); font-weight:800; box-shadow:inset 0 0 0 1px var(--night)}
+.disc{background:var(--paper); border:1px solid var(--line); border-radius:var(--r-md); padding:13px 15px; font-size:13px; color:#43544A; margin:16px 0}
+.disc.good{background:var(--ok-bg); border-color:var(--ok-line); color:#28513C}
+.declare{display:flex; gap:11px; align-items:flex-start; background:var(--paper-warm); border:1px solid var(--line); border-radius:var(--r-md); padding:14px 15px; margin:18px 0 8px; font-size:13px; color:#43544A}
+.declare input{width:19px; height:19px; margin-top:2px; accent-color:var(--night); flex:0 0 auto}
+.progressbar{height:6px; background:#EDE9DB; border-radius:999px; overflow:hidden; margin-bottom:8px}
+.progressbar i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--gold),var(--gold-bright)); transition:width .3s ease}
+.prog-row{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-soft); margin-bottom:16px}
+.qtag{display:inline-block; background:var(--paper); border:1px solid var(--line); color:var(--ink-soft); border-radius:999px; padding:5px 12px; font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; margin-bottom:16px}
+.qtext{font-family:var(--ff-display); font-size:21.5px; line-height:1.4; color:var(--ink); margin-bottom:6px}
+.qhint{font-size:13px; color:var(--ink-soft); min-height:1.4em; margin-bottom:18px}
+.ans-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.ans{min-height:56px; border:1.5px solid var(--line); border-radius:12px; background:#FFFDF8; font-size:15.5px; font-weight:800; color:var(--ink); transition:.13s}
+.ans.ya:hover,.ans.ya:focus{border-color:var(--clay); background:var(--clay-bg); color:var(--clay)}
+.ans.tidak:hover,.ans.tidak:focus{border-color:var(--leaf); background:var(--ok-bg); color:var(--leaf)}
+.backrow{display:flex; justify-content:space-between; align-items:center; margin-top:16px}
+
+/* hasil skrining: stempel */
+.stamp-result{text-align:center; padding:6px 0 2px}
+.stamp-seal{
+  display:inline-block; font-family:var(--ff-display); letter-spacing:.14em; text-transform:uppercase;
+  border:2.5px solid currentColor; border-radius:10px; padding:12px 22px; font-size:16px;
+  transform:rotate(-4deg); margin:8px 0 18px; position:relative;
+}
+.stamp-seal::after{content:""; position:absolute; inset:3px; border:1px solid currentColor; border-radius:7px; opacity:.5}
+.stamp-seal.g{color:var(--ok)}
+.stamp-seal.r{color:var(--clay)}
+.saved-chip{
+  display:inline-flex; align-items:center; gap:8px; background:var(--paper); border:1px dashed var(--gold);
+  border-radius:999px; padding:7px 15px; font-size:12px; color:#6B5A2E; font-weight:600; margin:4px 0 18px;
+}
+.flags{margin:18px 0 4px; border:1px solid var(--line); border-radius:var(--r-md); padding:15px 17px; background:var(--paper); text-align:left}
+.flags h4{font-family:var(--ff-body); font-weight:800; font-size:13px; margin-bottom:8px}
+.flags ul{margin:0; padding-left:18px; font-size:13px; color:#54463C}
+.flags li+li{margin-top:6px}
+.alert-urgent{border-left:4px solid var(--clay); background:#FDF3EF; border-radius:8px; padding:12px 14px; font-size:13px; color:#77321F; margin:14px 0; text-align:left}
+
+/* simulasi WhatsApp */
+.phone{
+  max-width:390px; margin:0 auto; border-radius:34px; overflow:hidden;
+  border:1px solid var(--line); box-shadow:var(--shadow-deep); background:#EFE7DB;
+}
+.wa-head{background:#0B5C3C; color:#fff; padding:16px 18px; display:flex; gap:12px; align-items:center}
+.wa-ava{width:38px; height:38px; border-radius:50%; background:var(--gold-pale); color:var(--night); display:flex; align-items:center; justify-content:center; font-family:var(--ff-display); font-size:15px}
+.wa-head b{font-size:15px; display:block; line-height:1.2}
+.wa-head small{font-size:11.5px; color:#BFE3CF}
+.wa-body{padding:18px 14px 22px; background:linear-gradient(#F2ECDF,#EDE4D4); min-height:340px; display:flex; flex-direction:column; gap:10px}
+.bubble{max-width:86%; border-radius:14px; padding:10px 13px; font-size:13px; line-height:1.55; white-space:pre-line; box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.bubble.out{align-self:flex-end; background:#DCF3C8; border-bottom-right-radius:4px}
+.bubble.in{align-self:flex-start; background:#fff; border-bottom-left-radius:4px}
+.bubble .t{display:block; text-align:right; font-size:10px; color:#8B9286; margin-top:5px}
+.sim-note{text-align:center; font-size:12px; color:var(--ink-soft); margin:16px auto 20px; max-width:420px}
+
+/* ============================================================
+   LOGIN
+   ============================================================ */
+.login-stage{min-height:calc(100vh - 54px); display:flex; align-items:center; justify-content:center; padding:40px 18px; background:var(--paper-warm)}
+.login-split{
+  display:grid; grid-template-columns:1fr 1.1fr; max-width:900px; width:100%;
+  background:var(--card); border-radius:26px; overflow:hidden; border:1px solid var(--line); box-shadow:var(--shadow-soft);
+}
+.login-side{
+  background:radial-gradient(500px 400px at 20% 0%, rgba(47,106,72,.55), transparent 60%), var(--night);
+  color:#DFE8DC; padding:46px 38px; display:flex; flex-direction:column; justify-content:center;
+}
+.login-side .lotus{width:54px; color:var(--gold-bright); margin-bottom:22px}
+.login-side h2{color:#F5EEDC; font-size:30px; max-width:8em}
+.login-side p{font-size:14px; color:#A9BBAA; max-width:24em}
+.login-form{padding:46px 40px}
+.login-form h3{font-size:23px; margin-bottom:4px}
+.login-form>p{font-size:13.5px; color:var(--ink-soft); margin-bottom:24px}
+.divider{display:flex; align-items:center; gap:14px; color:var(--ink-soft); font-size:12px; margin:20px 0; text-transform:uppercase; letter-spacing:.1em}
+.divider::before,.divider::after{content:""; height:1px; background:var(--line); flex:1}
+.btn-google{width:100%; background:#fff; border:1.5px solid var(--line); border-radius:12px; padding:13px; font-size:14.5px; font-weight:700; color:var(--ink); display:flex; align-items:center; justify-content:center; gap:10px; transition:.14s}
+.btn-google:hover{border-color:#B9C4B9; box-shadow:var(--shadow-soft)}
+.demo-box{margin-top:26px; border:1.5px dashed var(--gold); border-radius:var(--r-md); padding:16px 17px; background:#FDFAF1}
+.demo-box b{display:block; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); margin-bottom:11px}
+.demo-box .btn{width:100%; margin-bottom:8px}
+.demo-box .btn:last-child{margin-bottom:0}
+
+/* ============================================================
+   PASSPORT KLIEN
+   ============================================================ */
+.pp-stage{max-width:760px; margin:0 auto; padding:34px 16px 100px}
+.pp-topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:20px}
+.pp-topbar .who{font-size:13px; color:var(--ink-soft)}
+.pp-cover{
+  background:
+    radial-gradient(560px 300px at 80% -10%, rgba(47,106,72,.5), transparent 60%),
+    linear-gradient(150deg,#12392A,#0A2B1F 70%);
+  border-radius:24px; border:1px solid var(--gold-line); box-shadow:var(--shadow-deep);
+  color:#EFE6CE; padding:38px 32px 24px; position:relative; overflow:hidden; margin-bottom:22px;
+}
+.pp-cover::before{content:""; position:absolute; inset:10px; border:1px solid rgba(217,179,106,.22); border-radius:16px; pointer-events:none}
+.pp-cover .lotus{width:52px; color:var(--gold-bright); margin:0 auto 14px; display:block}
+.pp-kind{text-align:center; font-size:10.5px; letter-spacing:.4em; text-transform:uppercase; color:var(--gold-bright); font-weight:700; margin-bottom:10px}
+.pp-name{text-align:center; font-family:var(--ff-display); font-size:32px; color:#F8F1DE; margin-bottom:3px}
+.pp-meta{display:flex; justify-content:center; gap:12px; flex-wrap:wrap; margin:10px 0 22px}
+.pp-meta .m{font-size:12px; color:#B9C6B4}
+.pp-meta .m b{color:var(--gold-pale); font-family:var(--ff-mono); font-weight:500}
+.pp-page{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:26px 26px 24px; margin-bottom:18px; position:relative}
+.pp-page::before{
+  content:""; position:absolute; top:14px; bottom:14px; left:0; width:3px; border-radius:3px;
+  background:repeating-linear-gradient(var(--gold-line) 0 6px, transparent 6px 12px);
+}
+.pp-page h3{font-size:20px; display:flex; align-items:baseline; gap:12px; margin-bottom:16px}
+.pp-page h3 small{font-family:var(--ff-body); font-size:12px; color:var(--ink-soft); font-weight:600}
+.stamp-grid{display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:10px; margin-bottom:14px}
+.stamp-slot{
+  aspect-ratio:1; border-radius:50%; border:1.6px dashed var(--line); display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:2px; color:#C6C0AC; font-size:10px; overflow:hidden;
+}
+.stamp-slot.filled{
+  border:1.8px solid var(--gold); border-style:solid; color:var(--gold); background:#FDF9EE;
+  transform:rotate(var(--rot,-4deg)); box-shadow:inset 0 0 0 3px #FDF9EE, inset 0 0 0 4px var(--gold-line);
+}
+.stamp-slot.filled svg{width:44%; }
+.stamp-slot.filled .d{font-family:var(--ff-mono); font-size:8.5px; letter-spacing:.02em; color:#8D6E33}
+.stamp-slot.next{border-color:var(--gold); color:var(--gold); border-style:dashed}
+.prog-cap{display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--ink-soft)}
+.prog-cap b{color:var(--night); font-size:15px; font-family:var(--ff-display); letter-spacing:.02em}
+.visa-list{display:grid; gap:12px}
+.visa{border:1px solid var(--line); border-radius:var(--r-md); overflow:hidden; background:#FFFEFA}
+.visa.next-up{border:1.6px dashed var(--gold); background:#FDFAF1}
+.visa-head{display:flex; align-items:center; gap:14px; padding:14px 16px; width:100%; background:none; border:none; text-align:left}
+.visa-date{
+  flex:0 0 auto; width:52px; text-align:center; border-right:1px solid var(--line); padding-right:12px;
+  font-family:var(--ff-mono); color:var(--ink-soft); font-size:11px; line-height:1.3;
+}
+.visa-date b{display:block; font-size:19px; color:var(--night); font-weight:500}
+.visa-main{flex:1; min-width:0}
+.visa-main b{display:block; font-size:14.5px; color:var(--ink)}
+.visa-main span{font-size:12px; color:var(--ink-soft)}
+.visa-body{border-top:1px dashed var(--line); padding:14px 16px 16px; background:var(--paper); display:none}
+.visa.open .visa-body{display:block}
+.visa-note{font-size:13.5px; color:#3C4C42; margin-bottom:10px}
+.visa-note b{display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); margin-bottom:3px}
+.chev{margin-left:auto; color:var(--ink-soft); transition:transform .18s; flex:0 0 auto}
+.visa.open .chev{transform:rotate(180deg)}
+.materi-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.materi-card{border:1px solid var(--line); border-radius:var(--r-md); padding:16px; background:#FFFEFA; display:flex; gap:13px; align-items:flex-start}
+.materi-ic{width:40px; height:40px; border-radius:11px; background:var(--leaf-soft); color:var(--leaf); display:flex; align-items:center; justify-content:center; font-size:17px; flex:0 0 auto}
+.materi-card b{display:block; font-size:13.5px; line-height:1.35; margin-bottom:3px}
+.materi-card span{font-size:11.5px; color:var(--ink-soft)}
+.materi-card.locked{opacity:.62; background:var(--paper)}
+.materi-card.locked .materi-ic{background:#EFEDE4; color:#9A957F}
+.badge-row{display:flex; gap:14px; flex-wrap:wrap}
+.badge-coin{
+  width:104px; text-align:center; font-size:11px; color:#6B5A2E; font-weight:700; line-height:1.3;
+}
+.badge-coin .coin{
+  width:72px; height:72px; margin:0 auto 8px; border-radius:50%;
+  border:2px solid var(--gold); box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 4px var(--gold-line);
+  background:radial-gradient(circle at 35% 30%, #FDF6E4, #F3E6C4); color:var(--gold);
+  display:flex; align-items:center; justify-content:center;
+}
+.badge-coin .coin svg{width:34px}
+.qris-box{display:flex; gap:22px; align-items:center; flex-wrap:wrap}
+.qris-svg{flex:0 0 auto; width:150px; height:150px; border:1px solid var(--line); border-radius:12px; background:#fff; padding:10px}
+.qris-info{flex:1; min-width:220px; font-size:13.5px; color:#3C4C42}
+.qris-info b{display:block; font-size:15px; color:var(--ink); margin-bottom:4px}
+
+/* ============================================================
+   APLIKASI ADMIN & OWNER
+   ============================================================ */
+.app{display:grid; grid-template-columns:236px 1fr; min-height:calc(100vh - 54px)}
+.side{background:var(--night); color:#C3D0C2; padding:22px 14px; display:flex; flex-direction:column; gap:4px}
+.side-title{font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold-bright); font-weight:700; padding:0 12px; margin:2px 0 12px}
+.side-link{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  background:none; border:none; color:#C3D0C2; font-size:13.5px; font-weight:600;
+  padding:11px 12px; border-radius:10px; transition:.13s;
+}
+.side-link:hover{background:rgba(255,255,255,.06); color:#fff}
+.side-link.active{background:var(--gold); color:#132518; font-weight:800}
+.side-link .cnt{margin-left:auto; background:var(--clay); color:#fff; font-size:10.5px; font-weight:800; border-radius:999px; min-width:19px; height:19px; display:inline-flex; align-items:center; justify-content:center; padding:0 6px}
+.side-link.active .cnt{background:#132518; color:var(--gold-pale)}
+.side-foot{margin-top:auto; font-size:11.5px; color:#7E937F; border-top:1px solid rgba(217,179,106,.16); padding:16px 12px 4px; line-height:1.55}
+.main{padding:30px 32px 90px; background:var(--paper); min-width:0}
+.panel-head{display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:20px; flex-wrap:wrap}
+.panel-head h2{font-size:26px; margin:0}
+.panel-head p{font-size:13px; color:var(--ink-soft); margin:4px 0 0}
+.tablecard{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden}
+.tscroll{overflow-x:auto}
+table{width:100%; border-collapse:collapse; font-size:13.5px; min-width:560px}
+th{text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); font-weight:800; padding:13px 16px; border-bottom:1.5px solid var(--line); background:var(--paper); white-space:nowrap}
+td{padding:13px 16px; border-bottom:1px solid #EFEBDD; vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
+.rowsub{font-size:11.5px; color:var(--ink-soft); display:block; margin-top:1px}
+.empty{padding:34px 20px; text-align:center; color:var(--ink-soft); font-size:13.5px; font-style:italic}
+.ans-detail{background:var(--paper); border-top:1px dashed var(--line); padding:14px 18px; font-size:13px; display:none}
+.ans-detail.open{display:block}
+.ans-detail ul{margin:6px 0 0; padding-left:18px; color:#54463C}
+.mini-form{background:#FDFAF1; border:1.5px dashed var(--gold); border-radius:var(--r-md); padding:16px; margin-top:4px}
+.mini-form h4{font-family:var(--ff-body); font-weight:800; font-size:13.5px; margin-bottom:10px}
+.select-inline{padding:7px 10px; border:1.5px solid var(--line); border-radius:9px; background:#fff; font-size:12.5px; font-family:inherit; color:var(--ink)}
+.stat-cards{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px}
+.stat{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:20px 22px}
+.stat small{font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); font-weight:800; display:block; margin-bottom:8px}
+.stat .v{font-family:var(--ff-display); font-size:29px; color:var(--night); line-height:1.1}
+.stat .sub{font-size:12px; color:var(--ink-soft); margin-top:5px}
+.stat.gold{background:linear-gradient(150deg,#12392A,#0A2B1F); border-color:var(--gold-line)}
+.stat.gold small{color:var(--gold-bright)}
+.stat.gold .v{color:#F5EEDC}
+.stat.gold .sub{color:#A9BBAA}
+.week-card{background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); padding:20px 22px; margin-bottom:14px}
+.week-card h3{font-size:17px; display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+.week-card h3 .tag{font-size:10.5px}
+.kv{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 0; border-bottom:1px dashed var(--line); font-size:13.5px}
+.kv:last-of-type{border-bottom:none}
+.kv .who b{font-weight:700}
+.kv .who span{font-size:11.5px; color:var(--ink-soft)}
+.kv .amt{font-family:var(--ff-mono); font-weight:500; white-space:nowrap}
+.paid-btn{border:1.5px solid var(--line); background:#fff; border-radius:999px; font-size:11.5px; font-weight:800; padding:5px 12px; color:var(--ink-soft); transition:.13s; white-space:nowrap}
+.paid-btn:hover{border-color:var(--leaf); color:var(--leaf)}
+.paid-btn.paid{background:var(--ok-bg); border-color:var(--ok-line); color:var(--ok); cursor:default}
+.margin-line{display:flex; justify-content:space-between; font-size:14.5px; font-weight:800; color:var(--leaf); margin-top:12px; padding-top:12px; border-top:2px solid var(--line)}
+.margin-line .amt{font-family:var(--ff-mono); font-weight:500}
+.rate-input{width:110px; padding:6px 9px; border:1.5px solid var(--gold); border-radius:8px; font-family:var(--ff-mono); font-size:12.5px}
+.rate-val{font-family:var(--ff-mono); font-size:12.5px}
+.rate-edit{border:none; background:none; color:var(--gold); font-size:12px; font-weight:800; text-decoration:underline; text-underline-offset:3px; padding:2px 4px}
+
+/* ---------- animasi ---------- */
+@keyframes rise{from{opacity:0; transform:translateY(18px)}to{opacity:1; transform:none}}
+@keyframes hl{0%{background:#F6E9C8}100%{background:#FDF9EE}}
+.anim-rise{animation:rise .7s ease both}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important; transition:none!important; scroll-behavior:auto!important}
+}
+
+/* ---------- responsif ---------- */
+@media (max-width:980px){
+  .phase-grid{grid-template-columns:repeat(2,1fr)}
+  .phase-card p{min-height:0}
+  .how-steps{grid-template-columns:1fr 1fr; border-left:none}
+  .how-step{border-left:1px solid var(--line); margin-bottom:26px}
+  .teaser{grid-template-columns:1fr; gap:40px}
+  .app{grid-template-columns:1fr}
+  .side{flex-direction:row; flex-wrap:wrap; align-items:center; padding:10px; gap:6px; position:sticky; top:54px; z-index:40}
+  .side-title,.side-foot{display:none}
+  .side-link{width:auto; padding:8px 13px; font-size:12.5px}
+  .main{padding:22px 16px 90px}
+  .stat-cards{grid-template-columns:1fr}
+  .login-split{grid-template-columns:1fr}
+  .login-side{padding:34px 30px}
+  .login-form{padding:30px 24px}
+}
+@media (max-width:620px){
+  .site-links{display:none}
+  .hero-inner{padding:44px 20px 60px}
+  .phase-grid{grid-template-columns:1fr}
+  .how-steps{grid-template-columns:1fr}
+  .section{padding:60px 20px}
+  .stamp-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .materi-grid{grid-template-columns:1fr}
+  .choice-chips,.ans-grid,.grid2{grid-template-columns:1fr}
+  .wiz-card{padding:24px 18px}
+  .pp-cover{padding:30px 20px 18px}
+  .pp-page{padding:20px 16px}
+  .fab-next{right:12px; bottom:12px; padding:11px 16px; font-size:12.5px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ LOTUS (simbol dipakai ulang) ══════════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="lotus">
+      <path d="M32 6 C37.5 13 37.5 23 32 32 C26.5 23 26.5 13 32 6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M19 12 C27 15.5 30.5 23.5 32 32 C24 30.5 17.5 22.5 19 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M45 12 C37 15.5 33.5 23.5 32 32 C40 30.5 46.5 22.5 45 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M7 21 C16.5 21.5 26.5 26.5 32 32 C22.5 34.5 11.5 30 7 21Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M57 21 C47.5 21.5 37.5 26.5 32 32 C41.5 34.5 52.5 30 57 21Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M14 36 C20 39.5 26 40.5 32 40.5 C38 40.5 44 39.5 50 36" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- ══════════════ SHELL: BAR ALUR DEMO ══════════════ -->
+<nav class="shell hidden" id="shell" aria-label="Alur prototipe">
+  <span class="shell-brand"><svg width="24" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>PADMA <small>· Prototipe</small></span>
+  <div class="shell-steps" id="shellSteps"></div>
+</nav>
+<button class="fab-next hidden" id="fabNext"></button>
+
+<!-- ══════════════ LAYAR 0: SAMPUL ══════════════ -->
+<section class="screen active" id="scr-cover">
+  <div class="cover-inner">
+    <div class="cover-frame">
+      <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+      <div class="cover-title">PADMA</div>
+      <div class="cover-sub">Premium Women's Wellness Homecare</div>
+      <hr class="hairline">
+      <div class="cover-kind">Prototipe Interaktif — Website v1</div>
+      <p class="cover-note">Enam layar, satu perjalanan: dari calon klien yang penasaran,<br>sampai laporan mingguan di tangan owner.</p>
+      <button class="btn btn-gold" onclick="go('landing')">Buka Prototipe</button>
+    </div>
+    <div class="cover-foot">Semua nama, angka, dan data di dalam prototipe ini adalah <span class="mono">contoh</span>.</div>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 1: LANDING ══════════════ -->
+<section class="screen" id="scr-landing">
+  <div class="screen-pad">
+    <div class="hero">
+      <svg class="hero-lotus-bg" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+      <nav class="site-nav">
+        <a class="wordmark" href="#/landing"><svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg><span>PADMA</span></a>
+        <div class="site-links">
+          <a href="#" onclick="return false">Layanan</a>
+          <a href="#" onclick="return false">Cara Kerja</a>
+          <a href="#" onclick="return false">Digital Care Passport</a>
+          <button class="btn btn-gold btn-sm" onclick="go('skrining')">Mulai Skrining</button>
+        </div>
+      </nav>
+      <div class="hero-inner on-dark anim-rise">
+        <div class="eyebrow">Homecare promil &amp; perawatan perempuan</div>
+        <h1>Setiap fase hidup perempuan layak didampingi dengan care yang <em>tercatat</em>.</h1>
+        <p class="lead">Bidan berpengalaman datang ke rumah Anda — dan setiap sesi, catatan, serta rekomendasinya terdokumentasi rapi di Digital Care Passport pribadi Anda.</p>
+        <div class="hero-cta">
+          <button class="btn btn-gold" onclick="go('skrining')">Mulai Skrining Gratis · 2 menit</button>
+          <a class="btn btn-ghost" href="#" onclick="return false">Chat WhatsApp</a>
+        </div>
+        <div class="trust-row">
+          <div class="trust-item"><span class="tick">✦</span><span><b>Skrining keselamatan</b><br>mengikuti prinsip panduan ACOG &amp; CDC</span></div>
+          <div class="trust-item"><span class="tick">✦</span><span><b>Perawatan di rumah</b><br>oleh mitra bidan berpengalaman</span></div>
+          <div class="trust-item"><span class="tick">✦</span><span><b>Digital Care Passport</b><br>satu klien, satu perjalanan terdokumentasi</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head">
+        <div class="eyebrow">Lini Layanan</div>
+        <h2>Lima fase, satu perjalanan.</h2>
+        <p>Setiap lini dinamai dari bahasa Sanskerta — karena setiap fase adalah babak yang bermakna.</p>
+      </div>
+      <div class="phase-grid">
+        <div class="phase-card">
+          <div class="glyph">स</div>
+          <h3>Sankalpa</h3>
+          <div class="fase-id">Prekonsepsi · Promil</div>
+          <p>Menyiapkan tubuh dan pikiran menyambut kehamilan.</p>
+          <div class="svc"><span>Fertility Massage</span><span>Flow Yoga</span><span>Konsultasi Nutrisi</span></div>
+        </div>
+        <div class="phase-card">
+          <div class="glyph">ग</div>
+          <h3>Garbha</h3>
+          <div class="fase-id">Kehamilan</div>
+          <p>Menemani sembilan bulan dengan nyaman dan tenang.</p>
+          <div class="svc"><span>Garbha Relief</span><span>Prenatal Yoga</span></div>
+        </div>
+        <div class="phase-card">
+          <div class="glyph">पू</div>
+          <h3>Purnama</h3>
+          <div class="fase-id">Nifas &amp; Menyusui</div>
+          <p>Pemulihan pasca melahirkan dan perjalanan menyusui.</p>
+          <div class="svc"><span>Lactation Hero</span><span>Recovery Massage</span></div>
+        </div>
+        <div class="phase-card">
+          <div class="glyph">ध</div>
+          <h3>Sandhya</h3>
+          <div class="fase-id">Menopause</div>
+          <p>Menjalani masa transisi dengan seimbang dan berdaya.</p>
+          <div class="svc"><span>Balance Care</span></div>
+        </div>
+        <div class="phase-card">
+          <div class="glyph">शि</div>
+          <h3>Shishu</h3>
+          <div class="fase-id">Newborn Care</div>
+          <p>Sentuhan pertama terbaik untuk buah hati Anda.</p>
+          <div class="svc"><span>Parent Touch</span><span>Baby Massage</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="how">
+      <div class="section">
+        <div class="section-head">
+          <div class="eyebrow">Cara Kerja</div>
+          <h2>Dari skrining sampai terdokumentasi.</h2>
+        </div>
+        <div class="how-steps">
+          <div class="how-step"><span class="num">01</span><h3>Skrining awal</h3><p>Dua menit menjawab pertanyaan keselamatan — demi memastikan layanan aman untuk kondisi Anda saat ini.</p></div>
+          <div class="how-step"><span class="num">02</span><h3>Jadwal via WhatsApp</h3><p>Tim PADMA menghubungi Anda, menyepakati layanan, jadwal, dan bidan yang datang.</p></div>
+          <div class="how-step"><span class="num">03</span><h3>Perawatan di rumah</h3><p>Bidan datang ke rumah Anda. Tanpa antre, tanpa perjalanan, dalam suasana paling nyaman.</p></div>
+          <div class="how-step"><span class="num">04</span><h3>Tercatat di Passport</h3><p>Catatan sesi, evaluasi, dan rekomendasi tersimpan di Digital Care Passport Anda — selamanya.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section teaser">
+      <div class="teaser-copy">
+        <div class="eyebrow">Digital Care Passport</div>
+        <h2>Bukan sekadar homecare. Perjalanan yang tercatat.</h2>
+        <ul>
+          <li><span class="tick">✦</span>Riwayat semua sesi &amp; layanan Anda, rapi di satu tempat</li>
+          <li><span class="tick">✦</span>Catatan dan rekomendasi dari bidan setelah setiap kunjungan</li>
+          <li><span class="tick">✦</span>E-book &amp; video panduan yang terbuka sesuai layanan Anda</li>
+          <li><span class="tick">✦</span>Progres paket yang terlihat — seperti stempel di paspor</li>
+        </ul>
+        <button class="btn btn-night" onclick="go('login')">Lihat Contoh Passport</button>
+      </div>
+      <div class="mini-pass">
+        <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+        <div class="mp-kind">Digital Care Passport</div>
+        <div class="mp-name">Ananda Putri</div>
+        <div class="mp-id">PAD-2607-0012</div>
+        <div class="mp-row"><span>Fase perjalanan</span><b>Sankalpa · Promil</b></div>
+        <div class="mp-row"><span>Paket aktif</span><b>Sankalpa Prima · 8 sesi</b></div>
+        <div class="mp-row"><span>Progres</span><b>6 dari 8 sesi</b></div>
+        <div class="mrz">P&lt;PADMA&lt;&lt;ANANDA&lt;PUTRI&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>PAD26070012&lt;SANKALPA&lt;PRIMA&lt;6OF8&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div>
+          <a class="wordmark" href="#/landing"><svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg><span>PADMA</span></a>
+          <p style="margin-top:14px">Premium women's wellness homecare.<br>Personal · Terarah · Bermakna.</p>
+        </div>
+        <div style="font-size:13px; line-height:2">
+          <b style="color:#DCE6DC">Hubungi kami</b><br>
+          WhatsApp: 0877-7840-0200<br>
+          Melayani area Jabodetabek
+        </div>
+      </div>
+      <div class="fine">Prototipe presentasi — seluruh data adalah contoh. © PADMA 2026.</div>
+    </footer>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 2: SKRINING ══════════════ -->
+<section class="screen" id="scr-skrining">
+  <div class="screen-pad">
+    <div class="wiz-wrap">
+      <div class="wiz-brandtop">
+        <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+        <h2>Skrining Awal Klien</h2>
+        <p>± 2 menit · jawab sesuai kondisi Anda <b>saat ini</b></p>
+      </div>
+
+      <!-- intro -->
+      <div class="wiz-card" id="wizIntro">
+        <h3 style="font-size:20px">Sebelum layanan dijadwalkan</h3>
+        <p style="font-size:14px; color:var(--ink-soft)">Skrining singkat ini membantu menentukan apakah layanan PADMA dapat dijadwalkan sekarang, atau sebaiknya diperiksa dokter lebih dulu demi keselamatan Anda.</p>
+        <div class="disc"><b>Bukan diagnosis medis.</b> Skrining ini hanya alat keselamatan awal untuk layanan wellness/homecare.</div>
+        <div class="disc good"><b>Jawaban jujur tidak merugikan Anda.</b> Bila ada kondisi yang perlu perhatian, kami justru membantu mengarahkan agar layanan tetap aman — bukan menghukum atau mempersulit.</div>
+        <div class="grid2">
+          <div class="formfield"><label for="sNama">Nama panggilan</label><input type="text" id="sNama" placeholder="mis. Ananda" autocomplete="name"></div>
+          <div class="formfield"><label for="sHp">No. WhatsApp</label><input type="tel" id="sHp" placeholder="08xx xxxx xxxx" autocomplete="tel"></div>
+        </div>
+        <div class="formfield">
+          <label>Tahap kehidupan Anda</label>
+          <div class="choice-chips" id="faseChips">
+            <button class="chip-choice" data-fase="prekonsepsi">Prekonsepsi / Promil</button>
+            <button class="chip-choice" data-fase="hamil">Kehamilan</button>
+            <button class="chip-choice" data-fase="nifas">Nifas / Menyusui</button>
+            <button class="chip-choice" data-fase="menopause">Menopause</button>
+          </div>
+        </div>
+        <label class="declare"><input type="checkbox" id="sJujur"><span>Saya menyatakan jawaban akan diisi sesuai kondisi saya <b>saat ini</b>, dan memahami bahwa tim PADMA tetap memverifikasi kondisi sebelum layanan.</span></label>
+        <button class="btn btn-gold" id="btnMulaiSkrining" style="width:100%" disabled>Mulai Skrining</button>
+      </div>
+
+      <!-- pertanyaan -->
+      <div class="wiz-card" id="wizQuiz" hidden>
+        <div class="prog-row"><span id="wStep">Pertanyaan 1</span><span id="wPct">0%</span></div>
+        <div class="progressbar"><i id="wBar"></i></div>
+        <span class="qtag" id="wTag">Skrining umum</span>
+        <p class="qtext" id="wText"></p>
+        <p class="qhint" id="wHint"></p>
+        <div class="ans-grid">
+          <button class="ans ya" id="wYa">Ya</button>
+          <button class="ans tidak" id="wTidak">Tidak</button>
+        </div>
+        <div class="backrow">
+          <button class="linklike" id="wBack">← Kembali</button>
+          <span style="font-size:12px; color:var(--ink-soft)">Pilih satu jawaban</span>
+        </div>
+      </div>
+
+      <!-- hasil -->
+      <div class="wiz-card" id="wizResult" hidden>
+        <div class="stamp-result">
+          <div class="stamp-seal" id="rSeal">Hijau · Dapat Dijadwalkan</div>
+          <h3 id="rTitle" style="font-size:23px"></h3>
+          <p id="rCopy" style="font-size:14px; color:#415247; max-width:32em; margin:0 auto 6px"></p>
+          <div><span class="saved-chip" id="rSaved">✓ Tersimpan di sistem PADMA · Kode <span class="mono" id="rKode"></span></span></div>
+        </div>
+        <div class="flags" id="rFlags" hidden><h4>Hal yang perlu diperhatikan</h4><ul id="rFlagList"></ul></div>
+        <div class="alert-urgent" id="rUrgent" hidden>Bila gejala berat atau memburuk cepat — sesak napas, perdarahan banyak, pingsan, kejang, atau nyeri hebat — cari pertolongan gawat darurat atau hubungi <b>119</b> sekarang, jangan menunggu.</div>
+        <button class="btn btn-wa" id="rWaBtn" style="width:100%; margin-top:14px">Lanjut booking via WhatsApp</button>
+        <button class="linklike" style="display:block; margin:14px auto 0" onclick="resetSkrining()">Mulai skrining baru</button>
+        <p style="font-size:11.5px; color:var(--ink-soft); text-align:center; margin:16px 0 0">Hasil ini adalah pra-skrining, bukan izin medis. Tim PADMA memverifikasi kondisi sebelum layanan.</p>
+      </div>
+
+      <!-- simulasi WA -->
+      <div id="wizWa" hidden>
+        <p class="sim-note">📱 <b>Simulasi WhatsApp</b> — di produk asli, tombol tadi langsung membuka chat resmi PADMA dengan pesan yang sudah terisi seperti ini:</p>
+        <div class="phone">
+          <div class="wa-head"><div class="wa-ava">P</div><div><b>PADMA Care</b><small>online</small></div></div>
+          <div class="wa-body" id="waBody"></div>
+        </div>
+        <p class="sim-note">Sementara itu di sisi lain… hasil skrining Anda <b>sudah muncul di Inbox Admin</b>. Lanjutkan alurnya untuk melihatnya.</p>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+          <button class="btn btn-night" onclick="go('admin')">Lihat Sisi Admin →</button>
+          <button class="btn btn-outline" onclick="go('login')">Atau: Login Klien</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 3: LOGIN ══════════════ -->
+<section class="screen" id="scr-login">
+  <div class="screen-pad">
+    <div class="login-stage">
+      <div class="login-split anim-rise">
+        <div class="login-side">
+          <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+          <h2>Passport Anda menunggu.</h2>
+          <p>Riwayat sesi, catatan bidan, materi panduan, dan progres paket Anda — semua di satu tempat yang aman.</p>
+        </div>
+        <div class="login-form">
+          <h3>Masuk ke PADMA</h3>
+          <p>Akun dibuat oleh tim PADMA saat Anda menjadi klien. Masuk dengan email yang terdaftar.</p>
+          <div class="formfield"><label for="lEmail">Email</label><input type="email" id="lEmail" placeholder="nama@email.com" autocomplete="email"></div>
+          <div class="formfield"><label for="lPass">Kata sandi</label><input type="password" id="lPass" placeholder="••••••••" autocomplete="current-password"></div>
+          <button class="btn btn-night" style="width:100%" onclick="go('passport')">Masuk</button>
+          <div class="divider">atau</div>
+          <button class="btn-google" onclick="go('passport')">
+            <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C41 35.4 44 30.2 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+            Masuk dengan Google
+          </button>
+          <div class="demo-box">
+            <b>Mode demo — masuk sebagai:</b>
+            <button class="btn btn-outline btn-sm" onclick="go('passport')">Ananda Putri · Klien</button>
+            <button class="btn btn-outline btn-sm" onclick="go('admin')">Tim PADMA · Admin</button>
+            <button class="btn btn-outline btn-sm" onclick="go('owner')">Pemilik · Owner</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 4: PASSPORT KLIEN ══════════════ -->
+<section class="screen" id="scr-passport">
+  <div class="screen-pad">
+    <div class="pp-stage">
+      <div class="pp-topbar">
+        <span class="who">Masuk sebagai <b>Ananda Putri</b> · Klien</span>
+        <button class="linklike" onclick="go('login')">Keluar</button>
+      </div>
+
+      <div class="pp-cover anim-rise">
+        <svg class="lotus" viewBox="0 0 64 46" aria-hidden="true"><use href="#lotus"/></svg>
+        <div class="pp-kind">Digital Care Passport</div>
+        <div class="pp-name">Ananda Putri</div>
+        <div class="pp-meta">
+          <span class="m">PADMA ID <b>PAD-2607-0012</b></span>
+          <span class="m">Fase <b>SANKALPA · PROMIL</b></span>
+          <span class="m">Sejak <b>JUL 2026</b></span>
+        </div>
+        <div class="mrz">P&lt;PADMA&lt;&lt;ANANDA&lt;PUTRI&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br>PAD26070012&lt;SANKALPA&lt;PRIMA&lt;<span id="mrzProg">6OF8</span>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</div>
+      </div>
+
+      <div class="pp-page">
+        <h3>Paket Aktif <small id="ppPaketName">Sankalpa Prima · 8 sesi</small></h3>
+        <div class="stamp-grid" id="stampGrid"></div>
+        <div class="prog-cap"><span id="ppProgText"></span><b id="ppProgPct"></b></div>
+      </div>
+
+      <div class="pp-page">
+        <h3>Riwayat Sesi <small>ketuk untuk membaca catatan bidan</small></h3>
+        <div class="visa-list" id="visaList"></div>
+      </div>
+
+      <div class="pp-page">
+        <h3>Materi Panduan Anda <small>terbuka sesuai layanan yang Anda jalani</small></h3>
+        <div class="materi-grid" id="materiGrid"></div>
+      </div>
+
+      <div class="pp-page">
+        <h3>Pencapaian</h3>
+        <div class="badge-row" id="badgeRow"></div>
+      </div>
+
+      <div class="pp-page">
+        <h3>Cara Pembayaran</h3>
+        <div class="qris-box">
+          <svg class="qris-svg" id="qrisSvg" viewBox="0 0 25 25" aria-label="QRIS contoh"></svg>
+          <div class="qris-info">
+            <b>QRIS a.n. PADMA Wellness</b>
+            Scan dengan aplikasi bank atau e-wallet apa pun. Setelah membayar, kirim bukti ke WhatsApp admin — tim kami memverifikasi secara manual.
+            <div style="margin-top:8px"><span class="tag">Contoh QR — bukan untuk dipindai</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 5: ADMIN ══════════════ -->
+<section class="screen" id="scr-admin">
+  <div class="screen-pad">
+    <div class="app">
+      <aside class="side">
+        <div class="side-title">Panel Admin</div>
+        <button class="side-link active" data-v="inbox" onclick="adminView('inbox')">📥 Inbox Skrining <span class="cnt" id="cntInbox">2</span></button>
+        <button class="side-link" data-v="klien" onclick="adminView('klien')">👤 Klien</button>
+        <button class="side-link" data-v="sesi" onclick="adminView('sesi')">📅 Sesi</button>
+        <button class="side-link" data-v="mitra" onclick="adminView('mitra')">🤝 Mitra</button>
+        <button class="side-link" data-v="layanan" onclick="adminView('layanan')">🌿 Layanan &amp; Materi</button>
+        <div class="side-foot">🔒 <b style="color:#C9D4C8">Money firewall</b> — tidak ada harga atau honor di panel ini. Angka uang hanya hidup di panel Owner.</div>
+      </aside>
+      <div class="main" id="adminMain"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ LAYAR 6: OWNER ══════════════ -->
+<section class="screen" id="scr-owner">
+  <div class="screen-pad">
+    <div class="app">
+      <aside class="side">
+        <div class="side-title">Panel Owner</div>
+        <button class="side-link active" data-v="rekap" onclick="ownerView('rekap')">📊 Rekap &amp; Honor</button>
+        <button class="side-link" data-v="rate" onclick="ownerView('rate')">💛 Rate Card</button>
+        <div class="side-foot">🔒 Halaman ini <b style="color:#C9D4C8">hanya terlihat oleh Owner</b>. Admin dan klien tidak pernah melihat angka di sini — ditolak di level database.</div>
+      </aside>
+      <div class="main" id="ownerMain"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+"use strict";
+/* ============================================================
+   PADMA Prototipe — mesin demo
+   "Hari ini" dibekukan ke 26 Agu 2026 agar data contoh konsisten.
+   ============================================================ */
+const HARI_INI = "2026-08-26";
+const $ = id => document.getElementById(id);
+const rupiah = n => "Rp " + (n||0).toLocaleString("id-ID");
+const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+function tglID(s){ const d = new Date(s+"T00:00:00"); return d.getDate()+" "+BULAN[d.getMonth()]+" "+d.getFullYear(); }
+function tglPendek(s){ const d = new Date(s+"T00:00:00"); return {d:d.getDate(), b:BULAN[d.getMonth()].toUpperCase()}; }
+function mondayOf(s){ const d = new Date(s+"T00:00:00"); d.setDate(d.getDate()-((d.getDay()+6)%7));
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function rangePekan(mon){ const a=new Date(mon+"T00:00:00"), b=new Date(a); b.setDate(b.getDate()+6);
+  return a.getDate()+" "+BULAN[a.getMonth()]+" – "+b.getDate()+" "+BULAN[b.getMonth()]+" "+b.getFullYear(); }
+
+/* ---------- DATA CONTOH ---------- */
+const FASE = { prekonsepsi:"Prekonsepsi / Promil", hamil:"Kehamilan", nifas:"Nifas / Menyusui", menopause:"Menopause", shishu:"Newborn Care" };
+const SVC = {
+  SANK_MASSAGE:{nama:"Sankalpa Fertility Massage", fase:"prekonsepsi"},
+  SANK_YOGA:{nama:"PADMA Flow Yoga · Prekonsepsi", fase:"prekonsepsi"},
+  SANK_NUTRISI:{nama:"Konsultasi Nutrisi Prekonsepsi", fase:"prekonsepsi"},
+  GAR_RELIEF:{nama:"Garbha Relief Massage", fase:"hamil"},
+  GAR_YOGA:{nama:"Prenatal Gentle Yoga", fase:"hamil"},
+  PUR_LACT:{nama:"Lactation Hero", fase:"nifas"},
+  PUR_RECOV:{nama:"Purnama Recovery Massage", fase:"nifas"},
+  SAN_BALANCE:{nama:"Sandhya Balance Care", fase:"menopause"},
+  SHI_TOUCH:{nama:"Shishu Parent Touch", fase:"shishu"},
+  SHI_CLASS:{nama:"Baby Massage Class", fase:"shishu"},
+};
+const RATES = {
+  SANK_MASSAGE:{h:425000,o:190000}, SANK_YOGA:{h:250000,o:100000}, SANK_NUTRISI:{h:300000,o:130000},
+  GAR_RELIEF:{h:350000,o:150000}, GAR_YOGA:{h:275000,o:110000},
+  PUR_LACT:{h:450000,o:200000}, PUR_RECOV:{h:400000,o:175000},
+  SAN_BALANCE:{h:375000,o:160000}, SHI_TOUCH:{h:400000,o:180000}, SHI_CLASS:{h:300000,o:125000},
+};
+const MITRA = { sri:"Bidan Sri Wahyuni", dewi:"Bidan Dewi Lestari" };
+const MATERI = [
+  {svc:"SANK_MASSAGE", tipe:"ebook", judul:"Memahami Masa Subur & Siklus Anda"},
+  {svc:"SANK_YOGA", tipe:"video", judul:"Flow Yoga Prekonsepsi — 15 Menit"},
+  {svc:"SANK_NUTRISI", tipe:"ebook", judul:"Panduan Nutrisi Prekonsepsi"},
+  {svc:"GAR_RELIEF", tipe:"ebook", judul:"Relaksasi Kehamilan", lockNote:"Terbuka saat perjalanan Anda memasuki fase Garbha"},
+];
+const DATA = {
+  klien:[
+    {id:"ananda", padma:"PAD-2607-0012", nama:"Ananda Putri", email:"ananda.putri@gmail.com", fase:"prekonsepsi", paket:{nama:"Sankalpa Prima", total:8}},
+    {id:"rina", padma:"PAD-2608-0019", nama:"Rina Hapsari", email:"rina.hapsari@gmail.com", fase:"hamil", paket:null},
+  ],
+  sesi:[
+    {id:1, klien:"ananda", svc:"SANK_MASSAGE", tgl:"2026-07-08", mitra:"sri", status:"selesai", paket:true,
+      catatan:"Sesi perkenalan. Pijat relaksasi & pemetaan kondisi awal — ketegangan menumpuk di punggung bawah, kualitas tidur kurang.",
+      rek:"Jaga tidur 7–8 jam, mulai catat siklus haid di lembar yang kami berikan."},
+    {id:2, klien:"ananda", svc:"SANK_MASSAGE", tgl:"2026-07-15", mitra:"sri", status:"selesai", paket:true,
+      catatan:"Ketegangan punggung bawah jauh berkurang. Klien mulai rutin jalan pagi.",
+      rek:"Lanjutkan jalan pagi 30 menit; kompres hangat bila pegal kembali."},
+    {id:3, klien:"ananda", svc:"SANK_YOGA", tgl:"2026-07-22", mitra:"dewi", status:"selesai", paket:true,
+      catatan:"Latihan pernapasan & gerakan dasar. Klien cepat menangkap teknik napas diafragma.",
+      rek:"Ulangi video Flow Yoga 15 Menit di Passport, 3× sepekan."},
+    {id:4, klien:"ananda", svc:"SANK_MASSAGE", tgl:"2026-07-29", mitra:"sri", status:"selesai", paket:true,
+      catatan:"Tubuh merespons baik; keluhan pegal hampir hilang. Suasana hati membaik.",
+      rek:"Pertahankan rutinitas. Sesi berikutnya fokus area pinggul."},
+    {id:5, klien:"ananda", svc:"SANK_NUTRISI", tgl:"2026-08-12", mitra:"dewi", status:"selesai", paket:true,
+      catatan:"Evaluasi pola makan sepekan. Asupan protein & asam folat masih kurang dari kebutuhan promil.",
+      rek:"Ikuti menu contoh di e-book Panduan Nutrisi Prekonsepsi; tambah 1 porsi protein tiap makan."},
+    {id:6, klien:"ananda", svc:"SANK_MASSAGE", tgl:"2026-08-19", mitra:"sri", status:"selesai", paket:true,
+      catatan:"Siklus tercatat lebih teratur dua bulan terakhir. Respons tubuh sangat baik.",
+      rek:"Lanjutkan seluruh rutinitas — perjalanan Anda on track."},
+    {id:7, klien:"ananda", svc:"SANK_YOGA", tgl:"2026-08-28", mitra:"dewi", status:"terjadwal", paket:true, catatan:"", rek:""},
+    {id:8, klien:"rina", svc:"GAR_RELIEF", tgl:"2026-08-21", mitra:"dewi", status:"selesai", paket:false,
+      catatan:"Usia kehamilan 24 minggu. Pijat relief punggung & kaki; bengkak ringan di pergelangan.",
+      rek:"Tinggikan kaki saat berbaring; minum cukup air."},
+    {id:9, klien:"rina", svc:"GAR_RELIEF", tgl:"2026-08-27", mitra:"dewi", status:"terjadwal", paket:false, catatan:"", rek:""},
+  ],
+  skrining:[
+    {kode:"PDM-260825-0917-K2LM", nama:"Maya Anggraini", hp:"0812-3456-7810", fase:"prekonsepsi", hasil:"hijau", flags:[], status:"baru", tgl:"2026-08-25"},
+    {kode:"PDM-260823-1541-Q8ZR", nama:"Sarah Utami", hp:"0857-9922-1144", fase:"hamil", hasil:"merah",
+      flags:["Sakit kepala berat/menetap atau pandangan kabur"], status:"dihubungi", tgl:"2026-08-23"},
+  ],
+  honorMark:{},   // "sri|2026-08-17" -> tanggal dibayar
+  nextSesiId: 10,
+};
+
+/* ---------- ROUTER & SHELL ---------- */
+const STEPS = [
+  {r:"landing", label:"Landing"}, {r:"skrining", label:"Skrining"}, {r:"login", label:"Login"},
+  {r:"passport", label:"Passport"}, {r:"admin", label:"Admin"}, {r:"owner", label:"Owner"},
+];
+function go(r){ location.hash = "#/" + r; }
+function route(){
+  const r = (location.hash.replace("#/","") || "cover");
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  const scr = $("scr-"+r) || $("scr-cover");
+  scr.classList.add("active");
+  const onCover = (scr.id === "scr-cover");
+  $("shell").classList.toggle("hidden", onCover);
+  renderShell(r); renderFab(r);
+  if(r==="passport") renderPassport();
+  if(r==="admin") adminView(currentAdminView);
+  if(r==="owner") ownerView(currentOwnerView);
+  window.scrollTo({top:0});
+}
+function renderShell(cur){
+  $("shellSteps").innerHTML = STEPS.map((s,i)=>
+    `<button class="step-pill ${s.r===cur?"active":""}" onclick="go('${s.r}')"><b>${i+1}</b>${s.label}</button>`).join("");
+  const act = $("shellSteps").querySelector(".step-pill.active");
+  if(act) act.scrollIntoView({block:"nearest", inline:"center"});
+}
+function renderFab(cur){
+  const fab = $("fabNext");
+  const i = STEPS.findIndex(s=>s.r===cur);
+  if(cur==="cover" || i===-1){ fab.classList.add("hidden"); return; }
+  fab.classList.remove("hidden");
+  if(i === STEPS.length-1){
+    fab.innerHTML = `Selesai · kembali ke sampul <span class="arr">↺</span>`;
+    fab.onclick = ()=>go("cover");
+  } else {
+    fab.innerHTML = `Lanjut alur: ${STEPS[i+1].label} <span class="arr">→</span>`;
+    fab.onclick = ()=>go(STEPS[i+1].r);
+  }
+}
+window.addEventListener("hashchange", route);
+
+/* ============================================================
+   SKRINING
+   ============================================================ */
+function lvl(def, ovr){ return f => (ovr && ovr[f]) || def; }
+const Q_UMUM = [
+  {id:"cardioresp", level:()=> "urgent", t:"Apakah saat ini Anda mengalami nyeri dada, sesak napas yang tidak biasa, pingsan, atau kejang?", h:"Jika Ya, jangan lanjutkan layanan wellness."},
+  {id:"severe_pain", level:()=> "urgent", t:"Apakah Anda mengalami nyeri sangat hebat, mendadak, menetap, atau kondisi yang terasa seperti keadaan darurat?", h:"Termasuk nyeri perut/panggul berat yang baru muncul."},
+  {id:"fever", level:lvl("review",{hamil:"urgent", nifas:"urgent"}), t:"Apakah suhu tubuh Anda 38°C atau lebih, atau Anda sedang demam/menggigil dan merasa sakit akut?", h:"Demam saat hamil atau setelah melahirkan perlu perhatian lebih cepat."},
+  {id:"acute_infection", level:()=> "review", t:"Apakah Anda sedang mengalami penyakit menular akut, muntah/diare aktif, atau infeksi yang belum tertangani?", h:"Layanan sebaiknya ditunda sampai kondisi akut membaik."},
+  {id:"skin_wound", level:()=> "review", t:"Apakah ada luka terbuka, infeksi kulit, atau area yang sedang meradang pada bagian tubuh yang akan ditangani?", h:"Tim perlu menilai apakah layanan harus ditunda atau dimodifikasi."},
+  {id:"recent_procedure", level:()=> "review", t:"Apakah Anda baru menjalani operasi/prosedur invasif, atau sedang dalam masa pembatasan aktivitas?", h:"Bila Ya, tim membutuhkan informasi tambahan sebelum menjadwalkan."},
+  {id:"restriction", level:()=> "review", t:"Apakah dokter/bidan pernah meminta Anda membatasi pijat, olahraga, atau aktivitas fisik karena kondisi medis saat ini?", h:"PADMA akan mengikuti arahan klinis tersebut."},
+];
+const Q_FASE = {
+  prekonsepsi:[
+    {id:"pre_heavy_bleeding", level:()=> "urgent", t:"Apakah Anda mengalami perdarahan vagina sangat banyak disertai pusing/lemas, atau perdarahan dengan nyeri perut/panggul hebat?", h:"Kondisi ini perlu evaluasi medis terlebih dahulu."},
+    {id:"pre_abnormal_bleeding", level:()=> "review", t:"Apakah Anda mengalami perdarahan di luar pola haid biasa dan belum pernah diperiksa?", h:"Sebaiknya dinilai sebelum layanan wellness."},
+    {id:"possible_pregnancy", level:()=> "review", t:"Apakah haid Anda terlambat atau ada kemungkinan sedang hamil tetapi belum terkonfirmasi?", h:"Tim menyesuaikan jenis layanan bila ada kemungkinan kehamilan."},
+  ],
+  hamil:[
+    {id:"preg_bleeding_fluid", level:()=> "urgent", t:"Apakah saat ini ada perdarahan dari vagina lebih dari bercak ringan, atau cairan ketuban merembes/pecah?", h:"Ini termasuk warning sign kehamilan."},
+    {id:"preg_headache_vision", level:()=> "urgent", t:"Apakah Anda mengalami sakit kepala berat/menetap, pandangan kabur, pusing berat, atau bengkak mendadak pada wajah/tangan?", h:"Perlu evaluasi medis segera."},
+    {id:"preg_contractions", level:()=> "urgent", t:"Apakah ada nyeri perut hebat yang tidak hilang, atau kontraksi teratur yang terasa tidak sesuai waktunya?", h:"Jangan lanjutkan pijat/yoga sebelum dievaluasi."},
+    {id:"preg_fetal_movement", level:()=> "urgent", t:"Jika Anda sudah biasa merasakan gerakan janin: apakah gerakannya berhenti atau jelas lebih sedikit dari biasanya? (Bila belum biasa merasakannya, pilih Tidak.)", h:""},
+    {id:"preg_highrisk", level:()=> "review", t:"Apakah kehamilan Anda memiliki komplikasi/risiko khusus, atau dokter memberi pembatasan aktivitas?", h:"Contoh: diminta bed rest atau kehati-hatian khusus."},
+  ],
+  nifas:[
+    {id:"pp_heavy_bleeding", level:()=> "urgent", t:"Apakah perdarahan setelah melahirkan sangat banyak — membasahi ≥1 pembalut per jam, keluar bekuan besar, atau disertai pusing/lemas?", h:"Perdarahan berat pasca melahirkan adalah warning sign."},
+    {id:"pp_headache_vision", level:()=> "urgent", t:"Apakah Anda mengalami sakit kepala berat/menetap, perubahan penglihatan, atau bengkak mendadak pada wajah/tangan?", h:"Masalah tekanan darah bisa muncul setelah persalinan."},
+    {id:"pp_leg", level:()=> "urgent", t:"Apakah satu kaki/betis terasa lebih bengkak, merah, hangat, atau nyeri dibanding sisi lainnya?", h:"Perlu menyingkirkan kemungkinan masalah pembuluh darah."},
+    {id:"pp_mental", level:()=> "urgent", t:"Apakah muncul pikiran ingin menyakiti diri sendiri atau bayi, atau Anda merasa tidak mampu menjaga keselamatan diri/bayi?", h:"Ini membutuhkan bantuan segera dan tidak boleh ditunda."},
+    {id:"pp_breast", level:()=> "review", t:"Apakah payudara sangat nyeri, merah, bengkak, atau ada keluhan menyusui akut yang belum dinilai tenaga kesehatan?", h:"Tim akan mengarahkan ke layanan yang tepat."},
+  ],
+  menopause:[
+    {id:"meno_bleeding", level:()=> "review", t:"Apakah ada perdarahan/bercak dari vagina setelah Anda tidak haid selama 12 bulan atau lebih?", h:"Perdarahan pascamenopause perlu diperiksa lebih dulu."},
+    {id:"meno_pelvic", level:()=> "review", t:"Apakah ada nyeri panggul baru yang menetap atau semakin berat dan belum diperiksa?", h:"Perlu klarifikasi penyebab sebelum treatment."},
+    {id:"meno_lump", level:()=> "review", t:"Apakah Anda menemukan benjolan baru pada payudara/perut/panggul yang belum pernah diperiksa?", h:"Sebaiknya dinilai tenaga kesehatan terlebih dahulu."},
+    {id:"meno_weight", level:()=> "review", t:"Apakah berat badan turun nyata tanpa disengaja, atau ada gejala baru menetap yang belum diketahui penyebabnya?", h:"Perlu evaluasi klinis bila signifikan."},
+  ],
+};
+const wiz = { fase:null, nama:"", hp:"", qs:[], i:0, flags:[], kode:null, hasil:null };
+
+document.querySelectorAll("#faseChips .chip-choice").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    document.querySelectorAll("#faseChips .chip-choice").forEach(x=>x.classList.remove("sel"));
+    b.classList.add("sel"); wiz.fase = b.dataset.fase; cekMulai();
+  });
+});
+["sNama","sHp"].forEach(id=>$(id).addEventListener("input", cekMulai));
+$("sJujur").addEventListener("change", cekMulai);
+function cekMulai(){
+  $("btnMulaiSkrining").disabled = !(wiz.fase && $("sNama").value.trim() && $("sHp").value.trim() && $("sJujur").checked);
+}
+$("btnMulaiSkrining").addEventListener("click", ()=>{
+  wiz.nama = $("sNama").value.trim(); wiz.hp = $("sHp").value.trim();
+  wiz.qs = Q_UMUM.concat(Q_FASE[wiz.fase]); wiz.i = 0; wiz.flags = [];
+  wiz.kode = buatKode();
+  $("wizIntro").hidden = true; $("wizResult").hidden = true; $("wizWa").hidden = true;
+  $("wizQuiz").hidden = false; renderQ(); window.scrollTo({top:0,behavior:"smooth"});
+});
+function buatKode(){
+  const r = Math.random().toString(36).slice(2,6).toUpperCase();
+  return "PDM-260826-" + String(Math.floor(Math.random()*9)+9) + String(Math.floor(Math.random()*50)+10) + "-" + r;
+}
+function renderQ(){
+  const q = wiz.qs[wiz.i], n = wiz.qs.length, pct = Math.round(wiz.i/n*100);
+  $("wStep").textContent = "Pertanyaan " + (wiz.i+1) + " dari " + n;
+  $("wPct").textContent = pct + "%"; $("wBar").style.width = pct + "%";
+  $("wTag").textContent = wiz.i < Q_UMUM.length ? "Skrining umum" : FASE[wiz.fase];
+  $("wText").textContent = q.t; $("wHint").textContent = q.h || "";
+  $("wBack").disabled = wiz.i === 0;
+}
+function jawab(ya){
+  const q = wiz.qs[wiz.i], level = q.level(wiz.fase);
+  if(ya) wiz.flags.push({t:q.t, level});
+  if(ya && level === "urgent"){ selesaiSkrining("merah", true); return; }
+  if(wiz.i < wiz.qs.length-1){ wiz.i++; renderQ(); }
+  else selesaiSkrining(wiz.flags.length ? "merah" : "hijau", false);
+}
+$("wYa").addEventListener("click", ()=>jawab(true));
+$("wTidak").addEventListener("click", ()=>jawab(false));
+$("wBack").addEventListener("click", ()=>{ if(wiz.i>0){ wiz.i--; wiz.flags = wiz.flags.filter(f=>f.t!==wiz.qs[wiz.i].t); renderQ(); } });
+
+function selesaiSkrining(hasil, urgent){
+  wiz.hasil = hasil;
+  DATA.skrining.unshift({kode:wiz.kode, nama:wiz.nama, hp:wiz.hp, fase:wiz.fase, hasil,
+    flags:wiz.flags.map(f=>f.t), status:"baru", tgl:HARI_INI, baru:true});
+  $("wizQuiz").hidden = true; $("wizResult").hidden = false;
+  const seal = $("rSeal");
+  if(hasil==="hijau"){
+    seal.className = "stamp-seal g"; seal.textContent = "Hijau · Dapat Dijadwalkan";
+    $("rTitle").textContent = "Layanan dapat dijadwalkan";
+    $("rCopy").textContent = "Dari jawaban Anda tidak ditemukan alasan untuk menunda layanan. Tim PADMA tetap akan mengonfirmasi kondisi Anda sebelum layanan dimulai.";
+    $("rWaBtn").textContent = "Lanjut booking via WhatsApp";
+  } else {
+    seal.className = "stamp-seal r"; seal.textContent = "Merah · Perlu Evaluasi Dokter";
+    $("rTitle").textContent = "Layanan belum dapat dijadwalkan";
+    $("rCopy").textContent = urgent
+      ? "Jawaban Anda memuat tanda yang perlu penanganan medis. Untuk keselamatan Anda, hentikan dulu rencana treatment dan segera hubungi dokter. Ini penundaan demi keselamatan — bukan penolakan."
+      : "Ada jawaban yang sebaiknya diperiksa tenaga kesehatan lebih dulu. Setelah dinyatakan aman, layanan PADMA dapat dijadwalkan kembali.";
+    $("rWaBtn").textContent = "Beri tahu tim PADMA (opsional)";
+  }
+  $("rKode").textContent = wiz.kode;
+  $("rUrgent").hidden = !urgent;
+  $("rFlags").hidden = wiz.flags.length === 0;
+  $("rFlagList").innerHTML = wiz.flags.map(f=>"<li>"+f.t+"</li>").join("");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+$("rWaBtn").addEventListener("click", ()=>{
+  $("wizResult").hidden = true; $("wizWa").hidden = false;
+  let pesan = "Halo PADMA, saya sudah mengisi Skrining Awal Klien.\n\nKode: " + wiz.kode +
+    "\nNama: " + wiz.nama + "\nTahap: " + FASE[wiz.fase] +
+    "\nHasil: " + (wiz.hasil==="hijau" ? "HIJAU — dapat dijadwalkan" : "MERAH — belum dapat dijadwalkan");
+  pesan += wiz.hasil==="hijau" ? "\n\nSaya ingin melanjutkan booking. Mohon dibantu jadwalnya ya 🙏" :
+    "\n\nSaya akan memeriksakan diri ke dokter lebih dulu sesuai arahan skrining.";
+  const balasan = wiz.hasil==="hijau"
+    ? "Halo Kak " + wiz.nama + "! Terima kasih sudah mengisi skrining 🌸 Kode Anda sudah kami verifikasi — hasilnya HIJAU. Untuk fase " + FASE[wiz.fase] + ", jadwal terdekat kami: Kamis & Sabtu pagi. Mau yang mana, Kak?"
+    : "Halo Kak " + wiz.nama + ", terima kasih sudah jujur mengisi skrining 🙏 Demi keselamatan Kakak, silakan periksa ke dokter dulu ya. Setelah dinyatakan aman, kabari kami — jadwal langsung kami siapkan.";
+  $("waBody").innerHTML =
+    '<div class="bubble out">' + pesan.replace(/\n/g,"<br>") + '<span class="t">14.20 ✓✓</span></div>' +
+    '<div class="bubble in">' + balasan + '<span class="t">14.21</span></div>';
+  window.scrollTo({top:0,behavior:"smooth"});
+});
+function resetSkrining(){
+  wiz.fase = null; $("sNama").value = ""; $("sHp").value = ""; $("sJujur").checked = false;
+  document.querySelectorAll("#faseChips .chip-choice").forEach(x=>x.classList.remove("sel"));
+  $("wizResult").hidden = true; $("wizWa").hidden = true; $("wizQuiz").hidden = true;
+  $("wizIntro").hidden = false; cekMulai(); window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ============================================================
+   PASSPORT KLIEN (Ananda)
+   ============================================================ */
+function sesiAnanda(){ return DATA.sesi.filter(s=>s.klien==="ananda"); }
+function renderPassport(){
+  const paket = DATA.klien[0].paket;
+  const inPaket = sesiAnanda().filter(s=>s.paket);
+  const done = inPaket.filter(s=>s.status==="selesai").sort((a,b)=>a.tgl<b.tgl?-1:1);
+  const nextUp = inPaket.find(s=>s.status==="terjadwal");
+  // grid stempel
+  let slots = "";
+  for(let i=0;i<paket.total;i++){
+    if(i < done.length){
+      const t = tglPendek(done[i].tgl);
+      slots += `<div class="stamp-slot filled" style="--rot:${(i%3-1)*4-2}deg"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg><span class="d">${t.d} ${t.b}</span></div>`;
+    } else if(i === done.length && nextUp){
+      const t = tglPendek(nextUp.tgl);
+      slots += `<div class="stamp-slot next"><span class="d" style="font-family:var(--ff-mono)">${t.d} ${t.b}</span><span>terjadwal</span></div>`;
+    } else slots += `<div class="stamp-slot">•</div>`;
+  }
+  $("stampGrid").innerHTML = slots;
+  const pct = Math.round(done.length/paket.total*100);
+  $("ppProgText").textContent = done.length + " dari " + paket.total + " sesi selesai" + (nextUp ? " · berikutnya " + tglID(nextUp.tgl) : "");
+  $("ppProgPct").textContent = pct + "%";
+  $("mrzProg").textContent = done.length + "OF" + paket.total;
+  // riwayat visa
+  const semua = sesiAnanda().slice().sort((a,b)=>a.tgl<b.tgl?1:-1);
+  $("visaList").innerHTML = semua.map(s=>{
+    const t = tglPendek(s.tgl), svc = SVC[s.svc];
+    const pill = s.status==="selesai" ? '<span class="pill done">Selesai</span>' :
+      s.status==="terjadwal" ? '<span class="pill plan">Terjadwal</span>' : '<span class="pill off">Batal</span>';
+    const body = s.status==="selesai" && s.catatan ?
+      `<div class="visa-body">
+        <div class="visa-note"><b>Catatan ${MITRA[s.mitra].split(" ").slice(0,2).join(" ")}</b>${s.catatan}</div>
+        ${s.rek ? `<div class="visa-note"><b>Rekomendasi untuk Anda</b>${s.rek}</div>` : ""}
+      </div>` : "";
+    return `<div class="visa ${s.status==="terjadwal"?"next-up":""} ${body?"":"nobody"}" id="visa${s.id}">
+      <button class="visa-head" ${body?`onclick="document.getElementById('visa${s.id}').classList.toggle('open')"`:""}>
+        <span class="visa-date"><b>${t.d}</b>${t.b}</span>
+        <span class="visa-main"><b>${svc.nama}</b><span>${MITRA[s.mitra]}</span></span>
+        ${pill}
+        ${body ? '<svg class="chev" width="14" viewBox="0 0 14 8"><path d="M1 1l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>' : ""}
+      </button>${body}</div>`;
+  }).join("");
+  // materi
+  const svcSelesai = new Set(sesiAnanda().filter(s=>s.status==="selesai").map(s=>s.svc));
+  $("materiGrid").innerHTML = MATERI.map(m=>{
+    const buka = svcSelesai.has(m.svc);
+    const ic = m.tipe==="ebook" ? "📖" : "▶";
+    if(buka) return `<div class="materi-card"><div class="materi-ic">${ic}</div><div><b>${m.judul}</b><span>${m.tipe==="ebook"?"E-Book · PDF":"Video panduan"} · ${SVC[m.svc].nama}</span></div></div>`;
+    return `<div class="materi-card locked"><div class="materi-ic">🔒</div><div><b>${m.judul}</b><span>${m.lockNote || "Terbuka setelah layanan terkait selesai"}</span></div></div>`;
+  }).join("");
+  // badge
+  $("badgeRow").innerHTML = [...svcSelesai].map(k=>
+    `<div class="badge-coin"><div class="coin"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg></div>${SVC[k].nama.replace(" · Prekonsepsi","")}</div>`).join("")
+    || '<p class="muted" style="font-size:13px">Badge pertama terbit saat sesi pertama selesai.</p>';
+  gambarQris();
+}
+function gambarQris(){
+  const el = $("qrisSvg"); if(el.childNodes.length) return;
+  let seed = 26082026, out = "";
+  const rnd = ()=>{ seed = (seed*1103515245+12345) & 0x7fffffff; return seed/0x7fffffff; };
+  for(let y=0;y<25;y++) for(let x=0;x<25;x++){
+    const finder = (x<7&&y<7)||(x>17&&y<7)||(x<7&&y>17);
+    if(finder){
+      const lx = x>17? x-18 : x, ly = y>17? y-18 : y;
+      const on = lx===0||lx===6||ly===0||ly===6||(lx>=2&&lx<=4&&ly>=2&&ly<=4);
+      if(on) out += `<rect x="${x}" y="${y}" width="1" height="1" fill="#1F2E26"/>`;
+    } else if(rnd() > .52) out += `<rect x="${x}" y="${y}" width="1" height="1" fill="#1F2E26"/>`;
+  }
+  el.innerHTML = out;
+}
+
+/* ============================================================
+   ADMIN
+   ============================================================ */
+let currentAdminView = "inbox";
+let sesiFormOpen = null;
+function adminView(v){
+  currentAdminView = v;
+  document.querySelectorAll("#scr-admin .side-link").forEach(b=>b.classList.toggle("active", b.dataset.v===v));
+  const M = $("adminMain");
+  if(v==="inbox") M.innerHTML = vInbox();
+  if(v==="klien") M.innerHTML = vKlien();
+  if(v==="sesi") M.innerHTML = vSesi();
+  if(v==="mitra") M.innerHTML = vMitra();
+  if(v==="layanan") M.innerHTML = vLayanan();
+  $("cntInbox").textContent = DATA.skrining.filter(s=>s.status==="baru").length;
+}
+function vInbox(){
+  const rows = DATA.skrining.map((s,i)=>`
+    <tr class="${s.baru?"rowhl":""}">
+      <td><span class="mono" style="font-size:12px">${s.kode}</span><span class="rowsub">${tglID(s.tgl)}</span></td>
+      <td><b>${s.nama}</b><span class="rowsub">${s.hp} · ${FASE[s.fase]}</span></td>
+      <td>${s.hasil==="hijau"?'<span class="pill green">HIJAU</span>':'<span class="pill red">MERAH</span>'}</td>
+      <td><select class="select-inline" onchange="DATA.skrining[${i}].status=this.value; adminView('inbox')">
+        ${["baru","dihubungi","jadi_klien","ditolak"].map(o=>`<option value="${o}" ${s.status===o?"selected":""}>${o.replace("_"," ")}</option>`).join("")}
+      </select></td>
+      <td><button class="linklike" onclick="document.getElementById('det${i}').classList.toggle('open')">jawaban</button></td>
+    </tr>
+    <tr><td colspan="5" style="padding:0; border:none"><div class="ans-detail" id="det${i}">
+      ${s.flags.length ? "<b>Jawaban “Ya” yang perlu diperhatikan:</b><ul>"+s.flags.map(f=>"<li>"+f+"</li>").join("")+"</ul>"
+        : "Semua pertanyaan dijawab <b>Tidak</b> — tidak ada bendera. Aman dijadwalkan setelah konfirmasi kondisi."}
+    </div></td></tr>`).join("");
+  return `<div class="panel-head"><div><h2>Inbox Skrining</h2>
+      <p>Saat pesan WhatsApp masuk, cocokkan kodenya di sini untuk melihat jawaban asli — bukan sekadar percaya isi pesan.</p></div></div>
+    <div class="note-lock">💡 Coba isi skrining di layar <b>Skrining</b> — hasilnya langsung muncul di daftar ini.</div>
+    <div class="tablecard"><div class="tscroll"><table>
+      <thead><tr><th>Kode</th><th>Calon klien</th><th>Hasil</th><th>Tindak lanjut</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+function vKlien(){
+  const rows = DATA.klien.map(k=>{
+    const tot = DATA.sesi.filter(s=>s.klien===k.id && s.status==="selesai").length;
+    return `<tr><td><span class="mono" style="font-size:12px">${k.padma}</span></td>
+      <td><b>${k.nama}</b><span class="rowsub">${k.email}</span></td>
+      <td>${FASE[k.fase]}</td>
+      <td>${k.paket ? k.paket.nama+" · "+k.paket.total+" sesi" : '<span class="muted">Sesi lepas</span>'}</td>
+      <td class="mono">${tot}</td></tr>`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Klien</h2><p>Akun klien dibuat di sini — klien lalu login dengan email yang sama dan otomatis terhubung ke passport-nya.</p></div>
+      <button class="btn btn-night btn-sm" onclick="alert('Di produk asli: formulir klien baru (nama, email, no. HP, fase, paket).')">+ Klien baru</button></div>
+    <div class="tablecard"><div class="tscroll"><table>
+      <thead><tr><th>PADMA ID</th><th>Nama</th><th>Fase</th><th>Paket</th><th>Sesi selesai</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+function vSesi(){
+  const rows = DATA.sesi.slice().sort((a,b)=>a.tgl<b.tgl?1:-1).map(s=>{
+    const k = DATA.klien.find(x=>x.id===s.klien);
+    const pill = s.status==="selesai"?'<span class="pill done">Selesai</span>':s.status==="terjadwal"?'<span class="pill plan">Terjadwal</span>':'<span class="pill off">Batal</span>';
+    const aksi = s.status==="terjadwal"
+      ? `<button class="btn btn-gold btn-sm" onclick="bukaFormSesi(${s.id})">Tandai selesai</button>`
+      : s.status==="selesai" ? `<button class="linklike" onclick="document.getElementById('cat${s.id}').classList.toggle('open')">catatan</button>` : "";
+    const form = sesiFormOpen===s.id ? `
+      <tr><td colspan="5" style="padding:12px 16px; border-bottom:1px solid #EFEBDD"><div class="mini-form">
+        <h4>Selesaikan sesi — catatan untuk passport ${k.nama}</h4>
+        <div class="formfield"><label>Catatan &amp; evaluasi (dari laporan bidan)</label><textarea id="fCat" rows="2" placeholder="Apa yang dilakukan, bagaimana respons klien…"></textarea></div>
+        <div class="formfield"><label>Rekomendasi untuk klien</label><textarea id="fRek" rows="2" placeholder="Home care / self-care yang disarankan…"></textarea></div>
+        <div style="display:flex; gap:10px"><button class="btn btn-night btn-sm" onclick="simpanSesi(${s.id})">Simpan · sesi selesai</button>
+        <button class="btn btn-outline btn-sm" onclick="sesiFormOpen=null; adminView('sesi')">Batal</button></div>
+      </div></td></tr>` : "";
+    const cat = s.status==="selesai" && s.catatan ? `
+      <tr><td colspan="5" style="padding:0; border:none"><div class="ans-detail" id="cat${s.id}">
+        <b>Catatan:</b> ${s.catatan}<br><b>Rekomendasi:</b> ${s.rek || "—"}</div></td></tr>` : "";
+    return `<tr class="${s.baruSelesai?"rowhl":""}"><td><b>${k.nama}</b><span class="rowsub">${k.padma}</span></td>
+      <td>${SVC[s.svc].nama}<span class="rowsub">${tglID(s.tgl)}${s.paket?" · paket":""}</span></td>
+      <td>${MITRA[s.mitra]}</td><td>${pill}</td><td>${aksi}</td></tr>${form}${cat}`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Sesi</h2><p>Menandai <b>Selesai</b> + mengisi catatan akan langsung memperbarui Passport klien dan rekap Owner. Coba, lalu buka layar Passport.</p></div>
+      <button class="btn btn-night btn-sm" onclick="alert('Di produk asli: formulir jadwal sesi baru (klien, layanan, tanggal, mitra).')">+ Jadwalkan sesi</button></div>
+    <div class="tablecard"><div class="tscroll"><table>
+      <thead><tr><th>Klien</th><th>Layanan</th><th>Mitra</th><th>Status</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+function bukaFormSesi(id){ sesiFormOpen = id; adminView("sesi");
+  setTimeout(()=>{ const f=$("fCat"); if(f) f.focus(); },50); }
+function simpanSesi(id){
+  const s = DATA.sesi.find(x=>x.id===id);
+  s.catatan = $("fCat").value.trim() || "Sesi berjalan lancar sesuai rencana.";
+  s.rek = $("fRek").value.trim();
+  s.status = "selesai"; s.baruSelesai = true; sesiFormOpen = null;
+  adminView("sesi");
+  setTimeout(()=>{ delete s.baruSelesai; }, 2600);
+}
+function vMitra(){
+  const rows = Object.keys(MITRA).map(m=>{
+    const tot = DATA.sesi.filter(s=>s.mitra===m && s.status==="selesai").length;
+    return `<tr><td><b>${MITRA[m]}</b></td><td>08xx-xxxx-xxxx</td><td class="mono">${tot} sesi selesai</td><td><span class="pill green">Aktif</span></td></tr>`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Mitra</h2><p>Mitra adalah data, bukan pengguna aplikasi — bidan melapor via WhatsApp, admin yang mencatat.</p></div></div>
+    <div class="tablecard"><div class="tscroll"><table><thead><tr><th>Nama</th><th>Kontak</th><th>Kinerja</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+function vLayanan(){
+  const byFase = {};
+  Object.keys(SVC).forEach(k=>{ (byFase[SVC[k].fase] = byFase[SVC[k].fase]||[]).push(k); });
+  const blok = Object.keys(byFase).map(f=>`
+    <div class="week-card"><h3>${FASE[f]}</h3>
+      ${byFase[f].map(k=>{
+        const mat = MATERI.filter(m=>m.svc===k);
+        return `<div class="kv"><span class="who"><b>${SVC[k].nama}</b><br><span>${mat.length? mat.map(m=>(m.tipe==="ebook"?"📖 ":"▶ ")+m.judul).join(" · ") : "belum ada materi"}</span></span><span class="pill green">Aktif</span></div>`;
+      }).join("")}
+    </div>`).join("");
+  return `<div class="panel-head"><div><h2>Layanan &amp; Materi</h2><p>Nama layanan dan materi bonusnya. Perhatikan: tidak ada satu pun angka harga di sini — itu wilayah Owner.</p></div></div>${blok}`;
+}
+
+/* ============================================================
+   OWNER
+   ============================================================ */
+let currentOwnerView = "rekap";
+function ownerView(v){
+  currentOwnerView = v;
+  document.querySelectorAll("#scr-owner .side-link").forEach(b=>b.classList.toggle("active", b.dataset.v===v));
+  $("ownerMain").innerHTML = v==="rekap" ? vRekap() : vRate();
+}
+function rekapPekan(){
+  const done = DATA.sesi.filter(s=>s.status==="selesai");
+  const weeks = {};
+  done.forEach(s=>{ const w = mondayOf(s.tgl); (weeks[w] = weeks[w]||[]).push(s); });
+  return weeks;
+}
+function vRekap(){
+  const weeks = rekapPekan();
+  const wkIni = mondayOf(HARI_INI);
+  const listIni = weeks[wkIni] || [];
+  let honorIni = 0, hargaIni = 0;
+  listIni.forEach(s=>{ honorIni += RATES[s.svc].o; hargaIni += RATES[s.svc].h; });
+  const stat = `
+    <div class="stat-cards">
+      <div class="stat"><small>Sesi selesai pekan ini</small><div class="v">${listIni.length}</div>
+        <div class="sub">${listIni.length? "" : "Selesaikan sesi di panel Admin — angka ini ikut bergerak."}</div></div>
+      <div class="stat"><small>Honor dibayar Sabtu ini</small><div class="v">${rupiah(honorIni)}</div>
+        <div class="sub">dari sesi berstatus Selesai pekan ${rangePekan(wkIni)}</div></div>
+      <div class="stat gold"><small>Margin PADMA pekan ini</small><div class="v">${rupiah(hargaIni-honorIni)}</div>
+        <div class="sub">harga klien − honor mitra</div></div>
+    </div>`;
+  const blok = Object.keys(weeks).sort().reverse().map(w=>{
+    const list = weeks[w], per = {};
+    let th = 0, tp = 0;
+    list.forEach(s=>{ per[s.mitra] = (per[s.mitra]||0) + RATES[s.svc].o; th += RATES[s.svc].o; tp += RATES[s.svc].h; });
+    const rows = Object.keys(per).map(m=>{
+      const key = m + "|" + w, paid = DATA.honorMark[key];
+      return `<div class="kv"><span class="who"><b>${MITRA[m]}</b><br><span>${list.filter(x=>x.mitra===m).length} sesi selesai</span></span>
+        <span style="display:flex; gap:12px; align-items:center"><span class="amt">${rupiah(per[m])}</span>
+        <button class="paid-btn ${paid?"paid":""}" onclick="tandaiBayar('${key}')" ${paid?"disabled":""}>${paid ? "✓ Dibayar "+paid : "Tandai dibayar"}</button></span></div>`;
+    }).join("");
+    return `<div class="week-card"><h3>Pekan ${rangePekan(w)} <span class="tag">${list.length} sesi</span></h3>
+      <div style="font-size:11.5px; color:var(--ink-soft); margin-bottom:4px">Honor yang harus dibayar (jadwal gajian: Sabtu):</div>
+      ${rows}<div class="margin-line"><span>Margin PADMA</span><span class="amt">${rupiah(tp-th)}</span></div></div>`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Rekap &amp; Honor</h2><p>Dihitung otomatis dari sesi Selesai — dengan tarif yang berlaku pada tanggal sesi, jadi rekap lama tidak berubah saat harga naik.</p></div></div>
+    ${stat}${blok || '<div class="empty">Belum ada sesi selesai.</div>'}`;
+}
+function tandaiBayar(key){
+  DATA.honorMark[key] = tglID(HARI_INI).split(" ").slice(0,2).join(" ");
+  ownerView("rekap");
+}
+let rateEditKey = null;
+function vRate(){
+  const rows = Object.keys(SVC).map(k=>{
+    const ed = rateEditKey === k;
+    return `<tr><td><b>${SVC[k].nama}</b><span class="rowsub">${FASE[SVC[k].fase]}</span></td>
+      <td>${ed ? `<input class="rate-input" id="rh" type="text" value="${RATES[k].h}">` : `<span class="rate-val">${rupiah(RATES[k].h)}</span>`}</td>
+      <td>${ed ? `<input class="rate-input" id="ro" type="text" value="${RATES[k].o}">` : `<span class="rate-val">${rupiah(RATES[k].o)}</span>`}</td>
+      <td class="rate-val" style="color:var(--leaf)">${rupiah(RATES[k].h - RATES[k].o)}</td>
+      <td>${ed ? `<button class="btn btn-night btn-sm" onclick="simpanRate('${k}')">Simpan</button>`
+               : `<button class="rate-edit" onclick="rateEditKey='${k}'; ownerView('rate')">ubah</button>`}</td></tr>`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Rate Card</h2><p>Harga ke klien &amp; honor mitra per sesi. Angka ini hidup hanya di halaman ini — admin tidak pernah melihatnya.</p></div></div>
+    <div class="tablecard"><div class="tscroll"><table>
+      <thead><tr><th>Layanan</th><th>Harga klien</th><th>Honor mitra</th><th>Margin</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>
+    <p style="font-size:12px; color:var(--ink-soft); margin-top:12px">Di produk asli, setiap perubahan tarif tercatat dengan tanggal berlakunya — rekap pekan lama tetap memakai tarif lama.</p>`;
+}
+function simpanRate(k){
+  const h = parseInt(String($("rh").value).replace(/\D/g,""),10);
+  const o = parseInt(String($("ro").value).replace(/\D/g,""),10);
+  if(!isNaN(h)) RATES[k].h = h;
+  if(!isNaN(o)) RATES[k].o = o;
+  rateEditKey = null; ownerView("rate");
+}
+
+/* ---------- init ---------- */
+const qRoute = new URLSearchParams(location.search).get("r");
+if(qRoute && !location.hash) location.hash = "#/" + qRoute;
+route();
+</script>
+</body>
+</html>
