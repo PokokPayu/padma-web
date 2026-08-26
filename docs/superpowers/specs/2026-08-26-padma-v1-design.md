@@ -1,0 +1,127 @@
+# PADMA v1 — Design Doc
+
+Tanggal: 26 Agustus 2026
+Status: menunggu review
+Bahan sumber: poster "Digital Care Passport PADMA" + 2 mockup client (`documents/mockups/padma-1.html`, `documents/mockups/padma-2.html`)
+
+## 1. Konteks
+
+PADMA adalah klinik promil/wellness homecare premium untuk perempuan (prekonsepsi, kehamilan, nifas, menopause, newborn care). Layanan diberikan mitra (bidan) yang datang ke rumah klien. Komunikasi dan booking berjalan lewat WhatsApp.
+
+Client (orang awam) membuat mockup via prompting AI; mockup itu menjadi bahan mentah, bukan spesifikasi. Dokumen ini adalah hasil bedah dan penyederhanaan mockup tersebut oleh tim developer, dengan keputusan yang sudah disepakati.
+
+Platform v1: **website**. Mobile menjadi kemungkinan fase berikutnya — arsitektur dipilih agar backend yang sama bisa dipakai ulang aplikasi mobile.
+
+## 2. Keputusan yang Sudah Disepakati
+
+| # | Topik | Keputusan |
+|---|---|---|
+| 1 | Scope v1 | Semua modul: landing 1 halaman, skrining, passport klien, panel admin, panel owner |
+| 2 | Hasil skrining | Disimpan ke server (nama + no. HP, tanpa login); admin verifikasi via kode skrining. Lock localStorage 24 jam dari mockup dibuang |
+| 3 | Model penjualan | Model data mendukung paket **dan** sesi lepas (hybrid); katalog final menunggu jawaban client |
+| 4 | Login klien | Email+password dan Google OAuth; akun dibuat admin dulu, penautan otomatis by email |
+| 5 | Catatan sesi | Diinput **admin** (bidan lapor via WA/lisan). Mitra = data, bukan pengguna aplikasi |
+| 6 | Panel owner | Rate card + rekap mingguan + tombol "tandai sudah dibayar" per mitra per pekan. Pembayaran klien TIDAK dilacak di v1 |
+| 7 | QRIS | Level 1: QRIS statis (tampilkan gambar QR merchant, verifikasi mutasi manual). Gateway/QRIS dinamis = fase 2 |
+| 8 | Landing | Satu halaman: hero, 5 lini layanan, alur, CTA skrining + WA |
+| 9 | Stack | Next.js (App Router, TypeScript, Tailwind) + Supabase (Postgres, Auth, Storage), deploy Vercel |
+
+## 3. Yang Sengaja Dipangkas dari Mockup/Poster (v1)
+
+- **QR code di passport** — tidak ada use case nyata.
+- **Notifikasi in-app** — kabar ke klien lewat WA.
+- **Status "On Track"** — progres % (untuk klien berpaket) sudah cukup; label status tanpa definisi dibuang.
+- **Lock hasil skrining 24 jam di perangkat** — digantikan penyimpanan server.
+- **Pelacakan pembayaran klien / tagihan** — fase 2, menunggu jawaban client (lihat §10).
+- **Akun untuk mitra/bidan** — fase 2 bila diperlukan.
+- **Sertifikat/badge**: tetap ada tapi dalam bentuk paling sederhana (badge per layanan yang pernah selesai, derived, tanpa tabel sendiri).
+
+## 4. Peran & Struktur Aplikasi
+
+Tiga peran: `klien`, `admin`, `owner`. Owner adalah superset admin (bisa membuka semua halaman admin). Peran tersimpan di profil pengguna, dibawa di klaim JWT, dicek di middleware rute **dan** di kebijakan per-query (defense in depth).
+
+| Rute | Akses | Isi |
+|---|---|---|
+| `/` | Publik | Landing: hero, 5 lini layanan, alur kerja, CTA "Mulai Skrining" + tombol WA |
+| `/skrining` | Publik | Wizard skrining; konten pertanyaan & logika persis mockup 2 |
+| `/masuk` | Publik | Login semua peran: email+password & Google |
+| `/passport` | Klien | Identitas + PADMA ID, progres paket, riwayat sesi + catatan & rekomendasi, materi bonus, badge, blok "Cara Bayar" (QRIS statis) |
+| `/admin` | Admin, Owner | Inbox skrining, kelola klien, kelola sesi & catatan, kelola mitra, kelola layanan & materi |
+| `/owner` | Owner | Rate card, rekap honor mingguan, tanda bayar, margin |
+
+Seluruh UI berbahasa Indonesia.
+
+**Aktivasi akun klien:** admin membuat data klien (nama, email, no. HP, fase) → sistem menampilkan teks sambutan siap-salin untuk dikirim admin via WA → klien login Google / daftar email+password → server mencocokkan email ke `clients.email`, mengisi `clients.user_id`, redirect ke `/passport`. Login dengan email tak terdaftar → halaman "akun belum terhubung, hubungi admin" (bukan error mentah). Tidak ada pendaftaran klien mandiri.
+
+## 5. Model Data
+
+Prinsip: **uang dipisah secara struktural**. Tabel operasional tidak punya kolom uang; firewall ditegakkan RLS Postgres, bukan sekadar disembunyikan di UI.
+
+### Tabel operasional (admin boleh akses)
+
+- `clients` — id, `padma_id` (format `PAD-YYMM-NNNN`, digenerate sistem), nama, email (unik), no_hp, phase_id, user_id (nullable, FK auth.users, terisi saat penautan), created_at.
+- `partners` — id, nama, no_hp, aktif. Mitra/bidan sebagai data.
+- `phases` — lookup, seed 5 baris: Sankalpa/Prekonsepsi, Garbha/Kehamilan, Purnama/Nifas & Menyusui, Sandhya/Menopause, Shishu/Newborn Care.
+- `services` — id, phase_id, nama, deskripsi, aktif. **Tanpa kolom uang.**
+- `packages` — id, service_id, nama, jumlah_sesi, aktif.
+- `client_packages` — id, client_id, package_id, tanggal_mulai, status (aktif|selesai|berhenti).
+- `sessions` — id, client_id, service_id, client_package_id (nullable), partner_id, tanggal, status (`terjadwal`|`selesai`|`batal`), catatan (text), rekomendasi (text), created_at, updated_at. **Tanpa kolom uang.**
+- `screenings` — id, kode (`PDM-…`, digenerate server), nama, no_hp, fase_skrining, jawaban (jsonb: id pertanyaan → ya/tidak), hasil (`hijau`|`merah`), flags (jsonb), status_tindak_lanjut (`baru`|`dihubungi`|`jadi_klien`|`ditolak`), client_id (nullable), created_at. Catatan: skrining hanya menawarkan 4 fase (prekonsepsi, kehamilan, nifas, menopause) sesuai mockup — fase Shishu tidak diskrining tersendiri karena yang diskrining adalah ibunya (masuk fase Nifas).
+- `materials` — id, judul, tipe (`ebook`|`video`), service_id, file_path (Storage, untuk ebook) / video_url (YouTube unlisted), aktif.
+
+### Tabel uang (hanya owner)
+
+- `service_rates` — id, service_id, harga_klien, honor_mitra, `berlaku_sejak` (date). Edit rate card = insert baris baru, tidak update baris lama.
+- `honor_marks` — id, partner_id, week_start (date, Senin), dibayar_pada, ditandai_oleh.
+
+### Nilai derived (tidak disimpan)
+
+- Progres paket = sesi `selesai` dalam paket ÷ `jumlah_sesi`.
+- Badge = daftar layanan dengan ≥1 sesi `selesai` milik klien.
+- Rekap mingguan & margin = agregasi sesi `selesai` per pekan (Senin–Minggu) × tarif yang `berlaku_sejak` ≤ tanggal sesi (tarif termutakhir pada tanggal itu).
+
+## 6. Alur Kunci
+
+1. **Skrining → calon klien.** Pengunjung isi nama + no. HP → pilih fase → jawab pertanyaan universal + per-fase (level `urgent` menghentikan skrining seketika, `review` menandai) → hasil Hijau/Merah tersimpan ke `screenings` → tombol WA membuka chat berisi kode skrining. Admin menemukan entri di inbox, memverifikasi jawaban asli, memperbarui status tindak lanjut. Hasil Merah dengan flag urgent tetap menampilkan blok darurat 119 seperti mockup.
+2. **Siklus sesi.** Admin membuat sesi `terjadwal` → setelah kunjungan, bidan lapor via WA → admin set `selesai` + isi catatan & rekomendasi → efek berantai otomatis: muncul di passport, progres paket bertambah, badge terbit, materi layanan terbuka, masuk rekap owner. Sesi `batal` tidak dihitung apa pun.
+3. **Rekap owner.** Per pekan per mitra: jumlah sesi selesai × honor (tarif historis) → total dibayar Sabtu; margin = Σharga − Σhonor. "Tandai dibayar" mengisi `honor_marks`.
+4. **Materi bonus.** Klien melihat materi dari layanan yang punya sesi `selesai` saja (materi tidak bocor sebelum layanan berjalan). E-book via signed URL berumur pendek; video sebagai embed YouTube.
+
+## 7. Keamanan
+
+- RLS di semua tabel. Klien: hanya baris miliknya (via `user_id`). Admin: CRUD tabel operasional; `service_rates` & `honor_marks` ditolak di level DB. Owner: penuh.
+- Data skrining = data kesehatan (relevan UU PDP): koleksi minimal, akses hanya admin/owner, tidak tampil di URL/log.
+- Endpoint skrining publik: validasi Zod + rate limit sederhana.
+- E-book di bucket Storage privat, akses via signed URL.
+- Kunci service-role hanya di server. Semua mutasi lewat server (route handler / server action), bukan langsung dari browser dengan anon key untuk tabel sensitif.
+
+## 8. Error Handling & Empty State
+
+- Gagal simpan skrining → klien tetap melihat hasil + tombol WA (funnel tidak boleh mati); kegagalan dicatat untuk dicek.
+- Email tak terdaftar saat login → halaman ramah berisi kontak WA admin.
+- Semua halaman punya empty state yang dirancang (passport tanpa sesi, inbox kosong, rekap kosong) — minggu awal data memang kosong.
+
+## 9. Testing
+
+- Unit: logika hasil skrining (urgent/review per fase), kalkulasi rekap mingguan dengan riwayat tarif, progres paket.
+- **Test firewall (terpenting):** integrasi yang login sebagai admin dan membuktikan query ke `service_rates`/`honor_marks` ditolak RLS.
+- E2E (Playwright), happy path: skrining→hasil tersimpan; login klien→passport; admin buat & selesaikan sesi→muncul di passport & rekap.
+
+## 10. Daftar Pertanyaan untuk Client (menggantung, tidak memblokir pembangunan)
+
+1. Layanan dijual per-sesi, paket, atau keduanya? Kalau paket: paket apa saja, berapa sesi?
+2. Katalog layanan final per fase + penamaan (poster memakai nama fase Sanskrit; mockup memakai nama layanan konkret seperti "Lactation Hero" — mana yang dipakai ke publik?).
+3. Materi e-book & video sudah ada atau baru wacana? (Fitur tetap dibangun; kosong dulu bila belum ada.)
+4. Pembayaran klien perlu dilacak di sistem (tagihan/lunas) atau cukup manual seperti sekarang?
+5. QRIS: sudah punya merchant? Cukup QR statis + cek mutasi, atau mau konfirmasi otomatis (daftar Midtrans/Xendit, biaya ~0,7%/transaksi)? → menentukan fase 2.
+6. Nomor WA resmi untuk semua CTA (mockup memakai 6287778400200 — konfirmasi).
+
+## 11. Deployment & Seed
+
+- Vercel (app) + Supabase cloud (DB/Auth/Storage), free tier dulu.
+- Seed: 5 fase, layanan contoh dari mockup (Lactation Hero, Garbha Relief, Shishu Parent Touch, Flow Yoga Intro, Return to Work) berikut tarif contohnya, 1 akun owner, 1 akun admin.
+- Preview deployment Vercel dipakai untuk demo ke client.
+
+## 12. Di Luar Scope v1 (fase 2 dan seterusnya)
+
+Tagihan + QRIS dinamis via gateway, pelacakan pembayaran klien, akun mitra, rating/ulasan klien, notifikasi, aplikasi mobile (React Native/Expo, memakai backend Supabase yang sama), landing multi-halaman/artikel.

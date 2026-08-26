@@ -1,0 +1,1250 @@
+Konten dibuat oleh pengguna dan belum diverifikasi. 6 Pelajari tentang artifacts
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0E3A2A" />
+    <title>Skrining Awal Klien · PADMA</title>
+    <style>
+      :root {
+        --green: #0e3a2a;
+        --green2: #2c6444;
+        --gold: #b08d3e;
+        --cream: #fbf9f4;
+        --ink: #20342a;
+        --muted: #6e7d72;
+        --line: #dce7dd;
+        --white: #ffffff;
+        --okbg: #eef5ea;
+        --okln: #cadfc2;
+        --oktx: #24583d;
+        --warnbg: #fff7e8;
+        --warnln: #e8cf95;
+        --warntx: #7b5b13;
+        --redbg: #fbebe6;
+        --redln: #e7bfb4;
+        --redtx: #9c3a28;
+        --shadow: 0 18px 52px rgba(0, 0, 0, 0.25);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: linear-gradient(160deg, #0e3a2a 0%, #174c35 100%);
+        padding: 18px 12px 28px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      button,
+      a {
+        font: inherit;
+      }
+      .wrap {
+        max-width: 680px;
+        margin: 0 auto;
+      }
+      .card {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .brand {
+        background: var(--green);
+        color: #fff;
+        padding: 24px 24px 20px;
+        text-align: center;
+      }
+      .brand .logo {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 30px;
+        letter-spacing: 10px;
+        margin-left: 10px;
+      }
+      .brand .sub {
+        font-size: 10px;
+        letter-spacing: 2.4px;
+        text-transform: uppercase;
+        color: #e9cc82;
+        margin-top: 5px;
+      }
+      .brand .line {
+        width: 52px;
+        height: 1px;
+        background: var(--gold);
+        margin: 14px auto;
+      }
+      .brand .title {
+        font-family: Georgia, serif;
+        font-size: 18px;
+        color: #f3e7cf;
+      }
+      .body {
+        padding: 24px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--green);
+        margin-top: 0;
+      }
+      h2 {
+        font-size: 21px;
+        margin-bottom: 8px;
+      }
+      h3 {
+        font-size: 17px;
+        margin-bottom: 8px;
+      }
+      p {
+        margin-top: 0;
+      }
+      .lead {
+        font-size: 14.5px;
+        color: #3e4e43;
+        margin-bottom: 14px;
+      }
+      .note {
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+      .disc {
+        background: var(--cream);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 13px 14px;
+        margin: 14px 0;
+        font-size: 12.8px;
+        color: #3e4e43;
+      }
+      .disc b {
+        color: var(--green);
+      }
+      .group {
+        margin-top: 20px;
+      }
+      .group-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .choice-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+      .choice {
+        border: 1.5px solid var(--line);
+        background: #fff;
+        border-radius: 12px;
+        padding: 12px 10px;
+        color: var(--ink);
+        cursor: pointer;
+        min-height: 50px;
+        text-align: center;
+        transition: 0.15s;
+      }
+      .choice:hover {
+        border-color: var(--gold);
+      }
+      .choice.sel {
+        border-color: var(--green);
+        background: var(--okbg);
+        color: var(--green);
+        font-weight: 700;
+        box-shadow: 0 0 0 1px rgba(14, 58, 42, 0.04);
+      }
+      .btn {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: none;
+        border-radius: 12px;
+        background: var(--green);
+        color: #fff;
+        padding: 14px 18px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+        transition: 0.15s;
+        margin-top: 12px;
+        min-height: 50px;
+      }
+      .btn:hover {
+        background: #0a2f22;
+      }
+      .btn:disabled {
+        background: #b9c6bc;
+        cursor: not-allowed;
+      }
+      .btn.secondary {
+        background: #fff;
+        color: var(--green);
+        border: 1.5px solid var(--line);
+      }
+      .btn.secondary:hover {
+        border-color: var(--green);
+        background: #f8fbf8;
+      }
+      .btn.warn {
+        background: #9b7118;
+      }
+      .progress-wrap {
+        margin-bottom: 18px;
+      }
+      .progress-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 7px;
+      }
+      .progress {
+        height: 7px;
+        background: #edf1ee;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: var(--gold);
+        transition: 0.25s;
+      }
+      .qcard {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 20px 18px;
+        background: #fff;
+        box-shadow: 0 8px 24px rgba(14, 58, 42, 0.06);
+      }
+      .qtag {
+        display: inline-block;
+        background: var(--cream);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .qtext {
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 20px;
+        line-height: 1.38;
+        color: var(--ink);
+        margin: 0;
+      }
+      .qhint {
+        font-size: 12.5px;
+        color: var(--muted);
+        margin-top: 10px;
+        margin-bottom: 0;
+      }
+      .answer-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .answer {
+        min-height: 56px;
+        border: 1.5px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--ink);
+        font-weight: 750;
+        cursor: pointer;
+        font-size: 15px;
+        transition: 0.12s;
+      }
+      .answer.yes:hover,
+      .answer.yes:focus {
+        border-color: var(--redtx);
+        background: var(--redbg);
+        color: var(--redtx);
+      }
+      .answer.no:hover,
+      .answer.no:focus {
+        border-color: var(--green2);
+        background: var(--okbg);
+        color: var(--green2);
+      }
+      .backrow {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 14px;
+        gap: 10px;
+      }
+      .linkbtn {
+        border: none;
+        background: transparent;
+        color: var(--green2);
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 8px 0;
+      }
+      .linkbtn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      .result-head {
+        text-align: center;
+        padding: 4px 0 8px;
+      }
+      .status-icon {
+        width: 62px;
+        height: 62px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 12px;
+        font-size: 30px;
+        font-weight: 800;
+      }
+      .status-icon.g {
+        background: var(--okbg);
+        color: var(--oktx);
+        border: 1px solid var(--okln);
+      }
+      .status-icon.y {
+        background: var(--warnbg);
+        color: var(--warntx);
+        border: 1px solid var(--warnln);
+      }
+      .status-icon.r {
+        background: var(--redbg);
+        color: var(--redtx);
+        border: 1px solid var(--redln);
+      }
+      .band {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 7px 14px;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.45px;
+      }
+      .band.g {
+        background: var(--okbg);
+        color: var(--oktx);
+        border: 1px solid var(--okln);
+      }
+      .band.y {
+        background: var(--warnbg);
+        color: var(--warntx);
+        border: 1px solid var(--warnln);
+      }
+      .band.r {
+        background: var(--redbg);
+        color: var(--redtx);
+        border: 1px solid var(--redln);
+      }
+      .result-title {
+        font-size: 23px;
+        margin: 13px 0 8px;
+      }
+      .result-copy {
+        font-size: 14px;
+        color: #405047;
+        max-width: 560px;
+        margin: 0 auto;
+      }
+      .actionbox {
+        border-radius: 14px;
+        padding: 15px 16px;
+        margin-top: 16px;
+        font-size: 13.5px;
+      }
+      .actionbox.g {
+        background: var(--okbg);
+        border: 1px solid var(--okln);
+      }
+      .actionbox.y {
+        background: var(--warnbg);
+        border: 1px solid var(--warnln);
+      }
+      .actionbox.r {
+        background: var(--redbg);
+        border: 1px solid var(--redln);
+      }
+      .actionbox strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .flags {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 16px;
+        background: #fff;
+      }
+      .flags h3 {
+        font-size: 15px;
+        margin-bottom: 7px;
+      }
+      .flags ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        color: #4a594f;
+      }
+      .flags li + li {
+        margin-top: 6px;
+      }
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 12px 0 0;
+      }
+      .pill {
+        font-size: 11.5px;
+        border: 1px solid var(--line);
+        background: var(--cream);
+        border-radius: 999px;
+        padding: 5px 9px;
+        color: #56645a;
+      }
+      .alert {
+        border-left: 4px solid var(--redtx);
+        background: #fff8f6;
+        border-radius: 8px;
+        padding: 11px 12px;
+        font-size: 12.7px;
+        color: #6e3025;
+        margin-top: 12px;
+      }
+      .disc-bottom {
+        font-size: 11.5px;
+        color: var(--muted);
+        margin-top: 20px;
+        border-top: 1px solid var(--line);
+        padding-top: 13px;
+      }
+      .refs {
+        margin-top: 12px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .refs summary {
+        cursor: pointer;
+        color: #607067;
+        font-weight: 700;
+      }
+      .refs a {
+        color: var(--green2);
+      }
+      .hidden {
+        display: none !important;
+      }
+      .foot {
+        text-align: center;
+        color: #a7bbae;
+        font-size: 11px;
+        margin-top: 16px;
+        letter-spacing: 0.4px;
+      }
+      @media (max-width: 520px) {
+        body {
+          padding: 0;
+          background: var(--green);
+        }
+        .wrap {
+          max-width: none;
+        }
+        .card {
+          border-radius: 0;
+          box-shadow: none;
+          min-height: 100vh;
+        }
+        .brand {
+          padding-top: max(22px, env(safe-area-inset-top));
+        }
+        .body {
+          padding: 20px 17px 26px;
+        }
+        .choice-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .qtext {
+          font-size: 19px;
+        }
+        .foot {
+          display: none;
+        }
+      }
+      @media (max-width: 360px) {
+        .choice-grid {
+          grid-template-columns: 1fr;
+        }
+        .answer-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .declare {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        background: #f7f4ec;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 13px 14px;
+        margin: 16px 0 6px;
+        font-size: 13px;
+        color: #405047;
+      }
+      .declare input {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        accent-color: var(--green);
+        flex: 0 0 auto;
+      }
+      .locknote {
+        font-size: 12px;
+        color: var(--muted);
+        text-align: center;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <header class="brand">
+          <div class="logo">PADMA</div>
+          <div class="sub">Premium Women's Wellness Homecare</div>
+          <div class="line"></div>
+          <div class="title">Skrining Awal Klien</div>
+        </header>
+
+        <main class="body">
+          <section id="intro">
+            <h2>Sebelum layanan dijadwalkan</h2>
+            <p class="lead">
+              Skrining singkat ini membantu menentukan apakah layanan PADMA
+              dapat dijadwalkan sekarang, atau sebaiknya diperiksa dokter lebih
+              dulu demi keselamatan Anda.
+            </p>
+
+            <div class="disc">
+              <b>Bukan diagnosis medis.</b> Skrining ini hanya alat keselamatan
+              awal untuk layanan wellness/homecare. Jawaban diproses di
+              perangkat Anda dan tidak dikirim ke server oleh halaman ini.
+            </div>
+
+            <div
+              class="disc"
+              style="background: #eef5ea; border-color: #cadfc2"
+            >
+              <b>Jawaban jujur tidak merugikan Anda.</b> Bila ada kondisi yang
+              perlu perhatian, kami justru membantu mengarahkan agar layanan
+              tetap aman untuk Anda — bukan menghukum atau mempersulit. Isi apa
+              adanya.
+            </div>
+
+            <div class="group">
+              <div class="group-label">1. Tahap kehidupan</div>
+              <div class="choice-grid" id="phaseChoices">
+                <button class="choice" data-value="prekonsepsi">
+                  Prekonsepsi
+                </button>
+                <button class="choice" data-value="hamil">Kehamilan</button>
+                <button class="choice" data-value="nifas">
+                  Nifas / Menyusui
+                </button>
+                <button class="choice" data-value="menopause">Menopause</button>
+              </div>
+            </div>
+
+            <label class="declare">
+              <input type="checkbox" id="truthCheck" />
+              <span
+                >Saya menyatakan jawaban akan diisi sesuai kondisi saya
+                <b>saat ini</b>. Saya memahami bahwa hasil ini adalah
+                pra-skrining dan tim PADMA tetap dapat menunda atau memodifikasi
+                layanan bila hasil verifikasi sebelum kunjungan berbeda.</span
+              >
+            </label>
+
+            <button class="btn" id="startBtn" disabled>Mulai Skrining</button>
+            <p class="note" style="text-align: center; margin-top: 9px">
+              ± 1–2 menit · jawab sesuai kondisi saat ini
+            </p>
+          </section>
+
+          <section id="quiz" class="hidden" aria-live="polite">
+            <div class="progress-wrap">
+              <div class="progress-row">
+                <span id="stepText">Pertanyaan 1</span
+                ><span id="percentText">0%</span>
+              </div>
+              <div class="progress"><i id="progressBar"></i></div>
+            </div>
+
+            <div class="qcard">
+              <span class="qtag" id="qTag">Skrining keselamatan</span>
+              <p class="qtext" id="qText"></p>
+              <p class="qhint" id="qHint"></p>
+              <div class="answer-grid">
+                <button class="answer yes" id="yesBtn">Ya</button>
+                <button class="answer no" id="noBtn">Tidak</button>
+              </div>
+            </div>
+
+            <div class="backrow">
+              <button class="linkbtn" id="backBtn">← Kembali</button>
+              <span class="note">Pilih satu jawaban</span>
+            </div>
+          </section>
+
+          <section id="result" class="hidden" aria-live="polite">
+            <div
+              class="disc hidden"
+              id="prevBanner"
+              style="
+                background: var(--warnbg);
+                border-color: var(--warnln);
+                color: var(--warntx);
+              "
+            ></div>
+            <div class="result-head">
+              <div class="status-icon" id="statusIcon">✓</div>
+              <span class="band" id="statusBand"></span>
+              <h2 class="result-title" id="resultTitle"></h2>
+              <p class="result-copy" id="resultCopy"></p>
+              <div class="meta">
+                <span class="pill" id="phasePill"></span>
+                <span class="pill" id="screeningPill"></span>
+              </div>
+            </div>
+
+            <div class="actionbox" id="actionBox"></div>
+
+            <div class="flags hidden" id="flagsBox">
+              <h3>Hal yang perlu diperhatikan</h3>
+              <ul id="flagList"></ul>
+            </div>
+
+            <div class="alert hidden" id="urgentNote"></div>
+
+            <a class="btn" id="waBtn" href="#" target="_blank" rel="noopener"
+              >Kirim hasil ke PADMA via WhatsApp</a
+            >
+            <button
+              class="linkbtn"
+              id="resetBtn"
+              style="display: block; margin: 12px auto 0"
+            >
+              Mulai skrining baru
+            </button>
+            <p class="locknote">
+              Hasil ini tersimpan di perangkat Anda selama 24 jam agar tidak
+              perlu diisi ulang. Bila kondisi Anda berubah atau Anda sudah
+              mendapat evaluasi medis, gunakan “Mulai skrining baru” lalu
+              informasikan kepada tim PADMA. Tim tetap memverifikasi kondisi
+              sebelum layanan.
+            </p>
+          </section>
+
+          <p class="disc-bottom">
+            Keputusan pada halaman ini adalah <b>pra-skrining</b>, bukan izin
+            medis dan bukan jaminan suatu tindakan pasti aman. Tim PADMA tetap
+            melakukan verifikasi kondisi sebelum layanan. Bila jawaban saat
+            verifikasi berbeda dengan skrining, keputusan layanan mengikuti
+            kondisi aktual.
+          </p>
+
+          <details class="refs">
+            <summary>Dasar warning signs yang digunakan</summary>
+            <p style="margin: 8px 0 0">
+              Ringkasan warning signs kehamilan/nifas mengikuti prinsip ACOG dan
+              CDC; perdarahan setelah menopause diperlakukan sebagai kondisi
+              yang memerlukan evaluasi klinis sebelum layanan.
+            </p>
+            <p style="margin: 5px 0 0">
+              <a
+                href="https://www.cdc.gov/hearher/maternal-warning-signs/index.html"
+                target="_blank"
+                rel="noopener"
+                >CDC — Urgent Maternal Warning Signs</a
+              ><br />
+              <a
+                href="https://www.acog.org/womens-health/faqs/exercise-during-pregnancy"
+                target="_blank"
+                rel="noopener"
+                >ACOG — Exercise During Pregnancy</a
+              ><br />
+              <a
+                href="https://www.nhs.uk/symptoms/post-menopausal-bleeding/"
+                target="_blank"
+                rel="noopener"
+                >NHS — Postmenopausal Bleeding</a
+              >
+            </p>
+          </details>
+        </main>
+      </div>
+      <div class="foot">
+        PADMA · Nurturing women through every stage of life
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        // Isi nomor WhatsApp PADMA dalam format internasional tanpa tanda + bila ingin tombol langsung ke nomor tertentu.
+        // Contoh: var PADMA_WA = '62812XXXXXXXX';
+        var PADMA_WA = "6287778400200";
+
+        var state = {
+          phase: null,
+          screeningId: null,
+          questions: [],
+          index: 0,
+          answers: [],
+          flags: [],
+        };
+
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+
+        var LABELS = {
+          phase: {
+            prekonsepsi: "Prekonsepsi",
+            hamil: "Kehamilan",
+            nifas: "Nifas / Menyusui",
+            menopause: "Menopause",
+          },
+        };
+
+        function levelDynamic(defaultLevel, overrides) {
+          return function (ctx) {
+            return (overrides && overrides[ctx.phase]) || defaultLevel;
+          };
+        }
+
+        var UNIVERSAL = [
+          {
+            id: "cardioresp",
+            level: "urgent",
+            t: "Apakah saat ini Anda mengalami nyeri dada, sesak napas yang tidak biasa, pingsan, atau kejang?",
+            hint: "Jika Ya, jangan lanjutkan layanan wellness.",
+          },
+          {
+            id: "severe_pain",
+            level: "urgent",
+            t: "Apakah Anda mengalami nyeri sangat hebat, mendadak, menetap, atau kondisi yang terasa seperti keadaan darurat?",
+            hint: "Termasuk nyeri perut/panggul berat yang baru muncul.",
+          },
+          {
+            id: "fever",
+            level: levelDynamic("review", { hamil: "urgent", nifas: "urgent" }),
+            t: "Apakah suhu tubuh Anda 38°C atau lebih, atau Anda sedang demam/menggigil dan merasa sakit akut?",
+            hint: "Demam saat hamil atau setelah melahirkan perlu perhatian lebih cepat.",
+          },
+          {
+            id: "acute_infection",
+            level: "review",
+            t: "Apakah Anda sedang mengalami penyakit menular akut, muntah/diare aktif, atau infeksi yang belum tertangani?",
+            hint: "Layanan homecare sebaiknya ditunda sampai kondisi akut membaik atau sudah dinilai tenaga kesehatan.",
+          },
+          {
+            id: "skin_wound",
+            level: "review",
+            t: "Apakah ada luka terbuka, infeksi kulit, ruam menular, atau area yang sedang meradang pada bagian tubuh yang akan ditangani?",
+            hint: "Tim perlu menilai apakah layanan harus ditunda atau dimodifikasi.",
+          },
+          {
+            id: "recent_procedure",
+            level: "review",
+            t: "Apakah Anda baru menjalani operasi/prosedur invasif, masih memiliki luka yang belum pulih, atau sedang dalam masa pembatasan aktivitas?",
+            hint: "Bila Ya, tim membutuhkan informasi tambahan sebelum menjadwalkan layanan.",
+          },
+          {
+            id: "restriction",
+            level: "review",
+            t: "Apakah dokter/bidan/fisioterapis pernah meminta Anda membatasi pijat, olahraga, gerakan tertentu, atau aktivitas fisik karena kondisi medis saat ini?",
+            hint: "Jika ada pembatasan, PADMA perlu mengikuti arahan klinis tersebut.",
+          },
+        ];
+
+        var PHASE = {
+          prekonsepsi: [
+            {
+              id: "pre_heavy_bleeding",
+              level: "urgent",
+              t: "Apakah Anda mengalami perdarahan vagina yang sangat banyak disertai pusing/lemas, atau perdarahan dengan nyeri perut/panggul hebat?",
+              hint: "Kondisi ini perlu evaluasi medis terlebih dahulu.",
+            },
+            {
+              id: "pre_abnormal_bleeding",
+              level: "review",
+              t: "Apakah Anda mengalami perdarahan di luar pola haid yang biasa dan belum pernah diperiksa?",
+              hint: "Perdarahan tidak biasa sebaiknya dinilai sebelum layanan wellness.",
+            },
+            {
+              id: "possible_pregnancy",
+              level: "review",
+              t: "Apakah haid Anda terlambat atau ada kemungkinan sedang hamil tetapi belum terkonfirmasi?",
+              hint: "Tim perlu menyesuaikan jenis layanan bila ada kemungkinan kehamilan.",
+            },
+          ],
+
+          hamil: [
+            {
+              id: "preg_bleeding_fluid",
+              level: "urgent",
+              t: "Apakah saat ini ada perdarahan dari vagina lebih dari bercak ringan, atau cairan seperti air ketuban merembes/pecah?",
+              hint: "Ini termasuk warning sign kehamilan.",
+            },
+            {
+              id: "preg_headache_vision",
+              level: "urgent",
+              t: "Apakah Anda mengalami sakit kepala berat/menetap, pandangan kabur, pusing berat/pingsan, atau bengkak mendadak pada wajah/tangan?",
+              hint: "Perlu evaluasi medis segera, terutama pada kehamilan.",
+            },
+            {
+              id: "preg_abdominal_contractions",
+              level: "urgent",
+              t: "Apakah ada nyeri perut hebat yang tidak hilang atau kontraksi teratur yang terasa tidak sesuai waktunya?",
+              hint: "Jangan lanjutkan pijat/yoga sebelum dievaluasi.",
+            },
+            {
+              id: "preg_fetal_movement",
+              level: "urgent",
+              t: "Jika Anda sudah biasa merasakan gerakan janin: apakah gerakannya berhenti atau jelas lebih sedikit dari biasanya? (Jika Anda belum biasa merasakan gerakan janin, pilih Tidak.)",
+              hint: "",
+            },
+            {
+              id: "preg_highrisk",
+              level: "review",
+              t: "Apakah kehamilan Anda memiliki komplikasi/risiko khusus atau Anda belum mendapat izin untuk aktivitas yang direncanakan?",
+              hint: "Contoh: dokter memberi pembatasan aktivitas atau meminta kehati-hatian khusus.",
+            },
+          ],
+
+          nifas: [
+            {
+              id: "pp_heavy_bleeding",
+              level: "urgent",
+              t: "Apakah perdarahan setelah melahirkan sangat banyak — misalnya membasahi ≥1 pembalut dalam 1 jam, mengalir deras, keluar bekuan besar, atau disertai pusing/lemas?",
+              hint: "Perdarahan berat setelah melahirkan adalah warning sign.",
+            },
+            {
+              id: "pp_headache_vision",
+              level: "urgent",
+              t: "Apakah Anda mengalami sakit kepala berat/menetap, perubahan penglihatan, pusing berat/pingsan, atau bengkak mendadak pada wajah/tangan?",
+              hint: "Masalah tekanan darah dapat muncul juga setelah persalinan.",
+            },
+            {
+              id: "pp_leg",
+              level: "urgent",
+              t: "Apakah satu kaki/betis terasa lebih bengkak, merah, hangat, atau nyeri dibanding sisi lainnya?",
+              hint: "Perlu menyingkirkan kemungkinan masalah pembuluh darah.",
+            },
+            {
+              id: "pp_mental",
+              level: "urgent",
+              t: "Apakah muncul pikiran ingin menyakiti diri sendiri atau bayi, atau Anda merasa tidak mampu menjaga keselamatan diri/bayi?",
+              hint: "Ini membutuhkan bantuan segera dan tidak boleh ditunda.",
+            },
+            {
+              id: "pp_breast",
+              level: "review",
+              t: "Apakah payudara sangat nyeri, merah, bengkak, atau ada keluhan menyusui akut yang belum dinilai tenaga kesehatan?",
+              hint: "Tim dapat mengarahkan ke layanan yang tepat setelah klarifikasi.",
+            },
+          ],
+
+          menopause: [
+            {
+              id: "meno_bleeding",
+              level: "review",
+              t: "Apakah ada perdarahan/bercak dari vagina setelah Anda tidak haid selama 12 bulan atau lebih?",
+              hint: "Perdarahan pascamenopause perlu diperiksa sebelum layanan wellness dilanjutkan.",
+            },
+            {
+              id: "meno_pelvic",
+              level: "review",
+              t: "Apakah ada nyeri panggul baru yang menetap atau semakin berat dan belum diperiksa?",
+              hint: "Perlu klarifikasi penyebab sebelum treatment.",
+            },
+            {
+              id: "meno_lump",
+              level: "review",
+              t: "Apakah Anda menemukan benjolan baru pada payudara/perut/panggul yang belum pernah diperiksa?",
+              hint: "Sebaiknya dinilai tenaga kesehatan terlebih dahulu.",
+            },
+            {
+              id: "meno_weight",
+              level: "review",
+              t: "Apakah berat badan turun nyata tanpa disengaja atau ada gejala baru yang menetap dan belum diketahui penyebabnya?",
+              hint: "Tim PADMA tidak akan mendiagnosis penyebabnya; perlu evaluasi klinis bila signifikan.",
+            },
+          ],
+        };
+
+        function pickChoice(containerId, key) {
+          var box = $(containerId);
+          box.querySelectorAll(".choice").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              box.querySelectorAll(".choice").forEach(function (x) {
+                x.classList.remove("sel");
+              });
+              btn.classList.add("sel");
+              state[key] = btn.dataset.value;
+              updateStartState();
+            });
+          });
+        }
+
+        pickChoice("phaseChoices", "phase");
+
+        function updateStartState() {
+          $("startBtn").disabled = !(state.phase && $("truthCheck").checked);
+        }
+        $("truthCheck").addEventListener("change", updateStartState);
+
+        $("startBtn").addEventListener("click", function () {
+          state.questions = UNIVERSAL.concat(PHASE[state.phase] || []);
+          state.index = 0;
+          state.answers = [];
+          state.flags = [];
+          state.screeningId = makeScreeningId();
+          $("intro").classList.add("hidden");
+          $("result").classList.add("hidden");
+          $("quiz").classList.remove("hidden");
+          renderQuestion();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+
+        function resolveLevel(q) {
+          return typeof q.level === "function" ? q.level(state) : q.level;
+        }
+
+        function renderQuestion() {
+          var q = state.questions[state.index];
+          var n = state.questions.length;
+          var pct = Math.round((state.index / n) * 100);
+          $("stepText").textContent =
+            "Pertanyaan " + (state.index + 1) + " dari " + n;
+          $("percentText").textContent = pct + "%";
+          $("progressBar").style.width = pct + "%";
+          $("qTag").textContent =
+            state.index < UNIVERSAL.length
+              ? "Skrining umum"
+              : LABELS.phase[state.phase];
+          $("qText").textContent = q.t;
+          $("qHint").textContent = "";
+          $("qHint").classList.add("hidden");
+          $("backBtn").disabled = state.index === 0;
+          $("yesBtn").focus();
+        }
+
+        function answer(value) {
+          var q = state.questions[state.index];
+          var level = resolveLevel(q);
+          state.answers[state.index] = {
+            id: q.id,
+            value: value,
+            level: level,
+            text: q.t,
+          };
+
+          // Red flag berat: hentikan skrining seketika, langsung ke layar STOP.
+          if (value === true && level === "urgent") {
+            $("progressBar").style.width = "100%";
+            $("percentText").textContent = "100%";
+            state.flags = collectFlags();
+            showResult("stop");
+            return;
+          }
+
+          if (state.index < state.questions.length - 1) {
+            state.index++;
+            renderQuestion();
+          } else {
+            $("progressBar").style.width = "100%";
+            $("percentText").textContent = "100%";
+            state.flags = collectFlags();
+            showResult(determineOutcome());
+          }
+        }
+
+        $("yesBtn").addEventListener("click", function () {
+          answer(true);
+        });
+        $("noBtn").addEventListener("click", function () {
+          answer(false);
+        });
+
+        $("backBtn").addEventListener("click", function () {
+          if (state.index > 0) {
+            state.answers[state.index] = undefined;
+            state.index--;
+            renderQuestion();
+          }
+        });
+
+        function collectFlags() {
+          return state.answers.filter(Boolean).filter(function (a) {
+            return a.value === true;
+          });
+        }
+
+        function determineOutcome() {
+          return state.flags.length ? "stop" : "clear";
+        }
+
+        function showResult(outcome, skipSave) {
+          $("quiz").classList.add("hidden");
+          $("result").classList.remove("hidden");
+          $("phasePill").textContent = LABELS.phase[state.phase];
+          $("screeningPill").textContent = "ID " + state.screeningId;
+
+          var icon = $("statusIcon"),
+            band = $("statusBand"),
+            box = $("actionBox"),
+            urgent = $("urgentNote");
+          icon.className = "status-icon";
+          band.className = "band";
+          box.className = "actionbox";
+          urgent.classList.add("hidden");
+          $("prevBanner").classList.add("hidden");
+
+          if (outcome === "clear") {
+            icon.classList.add("g");
+            band.classList.add("g");
+            box.classList.add("g");
+            icon.textContent = "✓";
+            band.textContent = "Hijau · Dapat dijadwalkan";
+            $("resultTitle").textContent = "Layanan dapat dijadwalkan";
+            $("resultCopy").textContent =
+              "Dari jawaban skrining ini tidak ditemukan alasan untuk menunda layanan. Tim PADMA tetap akan mengonfirmasi kondisi Anda sebelum layanan dimulai.";
+            box.innerHTML =
+              "<strong>Langkah berikutnya</strong>Lanjutkan booking. Bila sebelum kunjungan muncul keluhan baru — demam, perdarahan, sesak, nyeri hebat, atau kondisi memburuk — beri tahu tim dan jangan memaksakan treatment.";
+          } else {
+            var severe = state.flags.some(function (f) {
+              return f.level === "urgent";
+            });
+            icon.classList.add("r");
+            band.classList.add("r");
+            box.classList.add("r");
+            icon.textContent = "!";
+            band.textContent = "Merah · Layanan belum dapat dijadwalkan";
+            $("resultTitle").textContent = "Layanan belum dapat dijadwalkan";
+            if (severe) {
+              $("resultCopy").textContent =
+                "Jawaban Anda memuat tanda yang perlu penanganan medis. Untuk keselamatan Anda, hentikan dulu rencana pijat/yoga/treatment saat ini.";
+              box.innerHTML =
+                "<strong>Langkah berikutnya</strong>Segera hubungi dokter atau rumah sakit terdekat. Setelah kondisi Anda dinilai dan dinyatakan aman, layanan PADMA dapat dijadwalkan kembali — ini penundaan demi keselamatan, bukan penolakan.";
+              urgent.textContent =
+                "Bila gejala berat atau memburuk cepat — sesak napas, perdarahan banyak, pingsan, kejang, nyeri hebat, atau Anda merasa tidak dapat menjaga keselamatan diri/bayi — cari pertolongan gawat darurat atau hubungi 119 sekarang, jangan menunggu.";
+              urgent.classList.remove("hidden");
+            } else {
+              $("resultCopy").textContent =
+                "Ada jawaban yang sebaiknya diperiksa tenaga kesehatan lebih dulu. Bila ragu, lebih baik konsultasi ke dokter sebelum layanan — ini demi keselamatan Anda.";
+              box.innerHTML =
+                "<strong>Langkah berikutnya</strong>Periksakan dulu ke dokter atau bidan untuk memastikan kondisi aman. Setelah dinyatakan aman, layanan PADMA dapat dijadwalkan kembali — ini penundaan demi keselamatan, bukan penolakan.";
+            }
+          }
+
+          renderFlags();
+          setWhatsApp(outcome);
+          if (!skipSave) saveLock(outcome);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        function renderFlags() {
+          var box = $("flagsBox"),
+            ul = $("flagList");
+          ul.innerHTML = "";
+          if (!state.flags.length) {
+            box.classList.add("hidden");
+            return;
+          }
+          state.flags.forEach(function (f) {
+            var li = document.createElement("li");
+            li.textContent = f.text;
+            ul.appendChild(li);
+          });
+          box.classList.remove("hidden");
+        }
+
+        function setWhatsApp(outcome) {
+          var btn = $("waBtn");
+          var label =
+            outcome === "clear"
+              ? "HIJAU — dapat dijadwalkan"
+              : "MERAH — belum dapat dijadwalkan";
+          var msg =
+            "Halo PADMA, saya sudah mengisi Skrining Awal Klien.\n\n" +
+            "ID skrining: " +
+            state.screeningId +
+            "\n" +
+            "Tahap: " +
+            LABELS.phase[state.phase] +
+            "\n" +
+            "Hasil: " +
+            label +
+            "\n";
+
+          if (state.flags.length) {
+            msg += "\nJawaban yang perlu diperhatikan:\n";
+            state.flags.forEach(function (f, i) {
+              msg += i + 1 + ". " + f.text + "\n";
+            });
+          }
+
+          if (outcome === "clear") {
+            btn.classList.remove("secondary");
+            btn.textContent = "Lanjut booking via WhatsApp";
+            msg += "\nSaya ingin melanjutkan booking. Mohon dibantu jadwalnya.";
+          } else {
+            btn.classList.add("secondary");
+            btn.textContent = "Beri tahu tim PADMA (opsional)";
+            msg +=
+              "\nSaya memahami layanan belum dapat dijadwalkan saat ini dan akan lebih dulu memeriksakan diri ke dokter/rumah sakit. Pesan ini hanya pemberitahuan, bukan permintaan booking.";
+          }
+
+          var target =
+            "https://wa.me/" +
+            (PADMA_WA ? PADMA_WA : "") +
+            "?text=" +
+            encodeURIComponent(msg);
+          btn.href = target;
+        }
+
+        function makeScreeningId() {
+          var d = new Date();
+          var pad = function (n) {
+            return String(n).padStart(2, "0");
+          };
+          var rnd = Math.random().toString(36).slice(2, 6).toUpperCase();
+          return (
+            "PDM-" +
+            d.getFullYear() +
+            pad(d.getMonth() + 1) +
+            pad(d.getDate()) +
+            "-" +
+            pad(d.getHours()) +
+            pad(d.getMinutes()) +
+            "-" +
+            rnd
+          );
+        }
+
+        function saveLock(outcome) {
+          try {
+            localStorage.setItem(
+              "padmaScreeningLock",
+              JSON.stringify({
+                ts: Date.now(),
+                outcome: outcome,
+                phase: state.phase,
+                screeningId: state.screeningId,
+                flags: state.flags,
+              }),
+            );
+          } catch (e) {}
+        }
+
+        function restoreLock() {
+          try {
+            var raw = localStorage.getItem("padmaScreeningLock");
+            if (!raw) return false;
+            var data = JSON.parse(raw);
+            var age = Date.now() - (data.ts || 0);
+            if (age > 24 * 60 * 60 * 1000) {
+              localStorage.removeItem("padmaScreeningLock");
+              return false;
+            }
+            state.phase = data.phase;
+            state.screeningId = data.screeningId;
+            state.flags = Array.isArray(data.flags) ? data.flags : [];
+            $("intro").classList.add("hidden");
+            $("quiz").classList.add("hidden");
+            var o = data.outcome === "clear" ? "clear" : "stop";
+            showResult(o, true);
+
+            // Tandai dengan jelas bahwa ini hasil lama + tahap + waktunya, agar tidak
+            // tertukar dengan tahap lain.
+            var when = new Date(data.ts);
+            var pad = function (n) {
+              return String(n).padStart(2, "0");
+            };
+            var wStr =
+              pad(when.getDate()) +
+              "/" +
+              pad(when.getMonth() + 1) +
+              "/" +
+              when.getFullYear() +
+              " " +
+              pad(when.getHours()) +
+              ":" +
+              pad(when.getMinutes());
+            var pb = $("prevBanner");
+            pb.innerHTML =
+              "<b>Ini hasil skrining sebelumnya.</b> Tahap: " +
+              (LABELS.phase[data.phase] || "-") +
+              " · " +
+              wStr +
+              ". Untuk tahap/kondisi berbeda atau setelah evaluasi medis, tekan “Mulai skrining baru”.";
+            pb.classList.remove("hidden");
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+
+        $("resetBtn").addEventListener("click", function () {
+          if (
+            confirm(
+              "Mulai skrining baru? Hasil sebelumnya di perangkat ini akan dihapus.",
+            )
+          ) {
+            try {
+              localStorage.removeItem("padmaScreeningLock");
+            } catch (e) {}
+            location.reload();
+          }
+        });
+
+        restoreLock();
+      })();
+    </script>
+  </body>
+</html>
+Tautan disalin
