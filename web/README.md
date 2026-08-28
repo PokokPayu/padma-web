@@ -43,7 +43,20 @@ menghapus berkas migration atau `.env.local`, jadi aman diulang.
 Akun demo (password semua `padma-dev-123`):
 - owner@padma.test → /owner
 - admin@padma.test → /admin
-- ananda@padma.test → /passport
+- ananda@padma.test → /passport (klien yang sudah diaktifkan)
+
+Klien `Rina Hapsari` sengaja **belum** diaktifkan — ia bahan uji alur aktivasi.
+Akun klien tidak bisa lagi tertaut hanya karena emailnya cocok (celah yang
+membocorkan rekam medis; lihat spec bagian 7): penautan wajib lewat tautan
+undangan sekali-pakai yang di produksi dikirim admin via WhatsApp. Untuk dev,
+`npm run seed:users` mencetak tautannya:
+
+```
+http://localhost:3000/aktivasi?token=undangan-dev-rina-...
+```
+
+Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
+menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
 ## Test
 
@@ -59,10 +72,14 @@ sehingga user demo selalu ada sebelum test pertama login. Seed-nya idempoten
 
 `npm run seed:users` tetap ada untuk menyiapkan data demo bagi `npm run dev`.
 
-Dua test yang menjaga keamanan:
+Test yang menjaga keamanan:
 
 - `tests/rls-firewall.test.ts` — membuktikan admin/klien tidak bisa menyentuh
   tabel uang (`service_rates`, `honor_marks`).
+- `tests/penautan-undangan.test.ts` — mereproduksi eksploit "self-signup dengan
+  email klien" dan membuktikan kegagalannya sampai lapisan data (penyerang
+  membaca 0 baris `clients`/`sessions`), plus aturan token undangan: salah,
+  kedaluwarsa, sudah dipakai, dan email tidak cocok semuanya ditolak.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,

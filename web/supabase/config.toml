@@ -180,10 +180,13 @@ refresh_token_reuse_interval = 10
 # `signup_disabled: "Signups not allowed for this instance"` — padahal keputusan #4
 # mengharuskan klien login Google untuk mengaktifkan akunnya. Jadi mematikan signup
 # akan mematahkan aktivasi akun klien.
-# Pengaman sebenarnya ada di penautan: server hanya mengisi clients.user_id bila email
-# COCOK PERSIS dengan baris klien yang dibuat admin (lihat src/lib/auth/link-client.ts;
-# dulu memakai .ilike sehingga `%` jadi wildcard). Mendaftar sendiri tidak memberi
-# akses apa pun ke data klien.
+# Pengaman sebenarnya ada di penautan, dan sejak 28 Agu 2026 pengaman itu BUKAN LAGI
+# pencocokan email: mencocokkan email — sepersis apa pun — hanya membuktikan bahwa
+# penyerang bisa MENEBAK alamat email klien. Server kini mengisi clients.user_id
+# hanya bila pengguna membawa TOKEN UNDANGAN sekali-pakai yang dikirim admin lewat
+# pesan sambutan WhatsApp, DAN emailnya cocok persis (lihat src/lib/auth/link-client.ts
+# serta migration 20260828220000). Mendaftar sendiri tidak memberi akses apa pun ke
+# data klien.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
@@ -234,7 +237,39 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
-enable_confirmations = false
+#
+# DINYALAKAN (28 Agu 2026) sesudah DIUJI, bukan diasumsikan. Selama ini `false`,
+# artinya GoTrue meng-auto-confirm setiap pendaftaran mandiri TANPA bukti
+# kepemilikan email. Itulah yang membuat eksploit ini jalan: penyerang cukup
+# menebak alamat email klien (`rina@padma.test`), mendaftar sendiri, dan
+# akunnya langsung dianggap "pemilik email itu".
+#
+# Perisai utamanya sekarang adalah penautan bertoken undangan
+# (src/lib/auth/link-client.ts + migration 20260828220000) — email yang cocok
+# tidak lagi menautkan apa pun. Konfirmasi email adalah LAPIS KEDUA: ia
+# mencegah penyerang menduduki alamat email klien sebelum kliennya sempat
+# mengaktifkan akun (squatting), yang tanpa ini bisa mengunci klien asli
+# keluar dari email miliknya sendiri.
+#
+# Hasil uji terhadap instance GoTrue terisolasi (image sama, v2.196.0; database
+# terpisah; stack lokal tidak disentuh), MAILER_AUTOCONFIRM=false vs true:
+#   (a) auth.admin.createUser({ email_confirm: true })  — scripts/seed-users.ts
+#       HTTP 200, email_confirmed_at terisi, login DAPAT SESI     → TIDAK patah
+#   (b) login provider eksternal (OAuth) PERTAMA KALI
+#       redirect balik dengan #access_token=...                   → TIDAK patah
+#       (diuji lewat provider OIDC palsu; GoTrue memakai satu jalur kode yang
+#        sama untuk semua provider eksternal, dan email dari provider ditandai
+#        terverifikasi — sama seperti Google)
+#   (c) pendaftaran mandiri email+sandi
+#       false: confirmed_at kosong, tanpa sesi, login ditolak `email_not_confirmed`
+#       true : confirmed_at langsung terisi, sesi LANGSUNG diberikan
+# Hanya (c) yang berubah — persis lubang yang ingin ditutup.
+#
+# Catatan operasional: sesudah mengubah baris ini, stack lokal perlu
+# `supabase stop && supabase start` agar env container GoTrue ikut berubah.
+# Test suite sengaja tidak bergantung pada setelan ini (user uji dibuat lewat
+# service role dengan email_confirm), jadi `npm test` hijau di kedua keadaan.
+enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.

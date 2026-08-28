@@ -1,7 +1,8 @@
 /**
- * Regresi keamanan: penautan akun klien TIDAK BOLEH memakai pencocokan pola.
+ * Regresi keamanan: penautan akun klien TIDAK BOLEH memakai pencocokan pola,
+ * dan pencocokan email — sepersis apa pun — TIDAK PERNAH cukup sendirian.
  *
- * Celah asal: linkClientByEmail memakai `.ilike("email", email)` yang oleh
+ * Celah asal (1): linkClientByEmail memakai `.ilike("email", email)` yang oleh
  * PostgREST diterjemahkan ke SQL LIKE, sehingga karakter `%` dan `_` di dalam
  * email penyerang menjadi WILDCARD. Karena pendaftaran mandiri terbuka,
  * penyerang cukup mendaftar dengan email `%@padma.test` untuk menautkan akunnya
@@ -9,12 +10,25 @@
  * `clients.user_id = auth.uid()`) catatan sesi & rekomendasi: data kesehatan
  * pasien, ranah UU PDP.
  *
- * Test ini mengunci: pencocokan email harus PERSIS, tapi tetap tidak peduli
- * kapitalisasi.
+ * Celah asal (2): pencocokan persis `.eq()` menutup wildcard, tapi tetap
+ * bersandar pada asumsi bahwa email yang dipakai login benar-benar milik orang
+ * itu. `enable_confirmations = false` membuat asumsi itu bohong — menebak
+ * alamat email sudah cukup untuk merebut rekam medis.
+ *
+ * Karena keamanannya menguat, tuntutan test ini ikut diperkuat: setiap skenario
+ * pola kini diberi TOKEN UNDANGAN YANG SAH milik korban (posisi penyerang
+ * terkuat yang masih masuk akal) dan tetap harus GAGAL, karena email harus
+ * cocok persis juga. Perilaku sah — beda kapitalisasi tetap tertaut — tetap
+ * dijaga, sekarang lewat jalur bertoken.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import { linkClientByEmail } from "@/lib/auth/link-client";
+import {
+  createClientInvite,
+  linkClientByInvite,
+  isClientLinked,
+} from "@/lib/auth/link-client";
+import { TOKEN_UNDANGAN_RINA } from "../scripts/seed-users";
 
 const admin = createAdminSupabase();
 
@@ -40,7 +54,7 @@ const clientIdsUji = [KLIEN_KAPITAL_ID, KLIEN_KECIL_ID];
 
 async function buatUser(email: string): Promise<string> {
   // Sengaja lewat pendaftaran mandiri seperti penyerang sungguhan
-  // (config.toml: enable_signup = true, enable_confirmations = false).
+  // (config.toml: enable_signup = true).
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: "padma-dev-123",
@@ -57,9 +71,19 @@ async function userIdKlienSeed(email: string): Promise<string> {
   return user.id;
 }
 
+/** Token undangan SAH milik korban — penyerang diberi posisi terkuat. */
+async function tokenKorban(clientId: string): Promise<string> {
+  const { token } = await createClientInvite(clientId);
+  return token;
+}
+
 async function bersihkan() {
   await admin.from("clients").delete().in("id", clientIdsUji);
-  await admin.from("clients").update({ user_id: null }).eq("id", RINA_CLIENT_ID);
+  await admin
+    .from("clients")
+    .update({ user_id: null, linked_at: null })
+    .eq("id", RINA_CLIENT_ID);
+  await createClientInvite(RINA_CLIENT_ID, { token: TOKEN_UNDANGAN_RINA });
   const { data } = await admin.auth.admin.listUsers();
   for (const u of data.users) {
     if (
@@ -112,8 +136,9 @@ beforeAll(async () => {
 afterAll(bersihkan);
 
 describe("penautan klien kebal pola LIKE", () => {
-  it("email `%@padma.test` tidak menautkan klien mana pun", async () => {
-    const linked = await linkClientByEmail(userIds.wildcard, EMAIL_WILDCARD);
+  it("email `%@padma.test` tidak menautkan klien mana pun (walau tokennya sah)", async () => {
+    const token = await tokenKorban(RINA_CLIENT_ID);
+    const linked = await linkClientByInvite(userIds.wildcard, EMAIL_WILDCARD, token);
     expect(linked).toBe(false);
 
     const { data: tertaut } = await admin
@@ -128,10 +153,26 @@ describe("penautan klien kebal pola LIKE", () => {
       .eq("id", RINA_CLIENT_ID)
       .single();
     expect(rina!.user_id).toBeNull();
+
+    // Token korban yang gagal dipakai penyerang tidak boleh ikut hangus —
+    // pemilik sahnya masih harus bisa memakainya (dibuktikan sampai penautan
+    // sungguhan di tests/penautan-undangan.test.ts).
+    const { data: undangan } = await admin
+      .from("client_invites")
+      .select("used_at")
+      .eq("client_id", RINA_CLIENT_ID)
+      .single();
+    expect(undangan!.used_at).toBeNull();
+    expect(token.length).toBeGreaterThan(0);
   });
 
-  it("email berisi `_` tidak salah menautkan klien lain", async () => {
-    const linked = await linkClientByEmail(userIds.underscore, EMAIL_UNDERSCORE);
+  it("email berisi `_` tidak salah menautkan klien lain (walau tokennya sah)", async () => {
+    const token = await tokenKorban(RINA_CLIENT_ID);
+    const linked = await linkClientByInvite(
+      userIds.underscore,
+      EMAIL_UNDERSCORE,
+      token,
+    );
     expect(linked).toBe(false);
 
     const { data: rina } = await admin
@@ -142,13 +183,25 @@ describe("penautan klien kebal pola LIKE", () => {
     expect(rina!.user_id).toBeNull();
   });
 
-  it("fallback 'sudah tertaut' juga kebal pola (user tertaut tidak lolos lewat wildcard)", async () => {
-    // Ananda sudah tertaut ke kliennya sendiri. Memanggil dengan email pola
-    // yang BUKAN emailnya tidak boleh dianggap sukses.
-    expect(await linkClientByEmail(userIds.ananda, EMAIL_WILDCARD)).toBe(false);
-    expect(await linkClientByEmail(userIds.ananda, "anand_@padma.test")).toBe(false);
-    // Kontrol positif: email aslinya tetap sukses lewat fallback.
-    expect(await linkClientByEmail(userIds.ananda, "ananda@padma.test")).toBe(true);
+  it("pengenalan user yang sudah tertaut tidak lagi bersandar pada email sama sekali", async () => {
+    // Dulu ada fallback "sudah tertaut" berbasis email; itu pun harus kebal
+    // pola. Sekarang lebih kuat: pengenalan memakai `user_id` (identitas yang
+    // sudah dibuktikan token), jadi email apa pun — pola atau bukan — tidak
+    // bisa dipakai mengklaim status tertaut.
+    expect(
+      await linkClientByInvite(userIds.ananda, EMAIL_WILDCARD, await tokenKorban(ANANDA_CLIENT_ID)),
+    ).toBe(false);
+    expect(
+      await linkClientByInvite(userIds.ananda, "anand_@padma.test", await tokenKorban(ANANDA_CLIENT_ID)),
+    ).toBe(false);
+    // Bahkan dengan email aslinya + token sah: barisnya sudah tertaut, jadi
+    // tidak ada penautan ulang (dan karenanya tidak ada jalur perebutan).
+    expect(
+      await linkClientByInvite(userIds.ananda, "ananda@padma.test", await tokenKorban(ANANDA_CLIENT_ID)),
+    ).toBe(false);
+    // Yang menyatakan "sudah tertaut" adalah user_id, bukan email.
+    expect(await isClientLinked(userIds.ananda)).toBe(true);
+    expect(await isClientLinked(userIds.wildcard)).toBe(false);
 
     const { data: ananda } = await admin
       .from("clients")
@@ -159,7 +212,12 @@ describe("penautan klien kebal pola LIKE", () => {
   });
 
   it("perilaku sah tetap jalan: beda kapitalisasi tetap tertaut (klien huruf besar)", async () => {
-    const linked = await linkClientByEmail(userIds.kapital, EMAIL_KAPITAL_LOGIN);
+    const token = await tokenKorban(KLIEN_KAPITAL_ID);
+    const linked = await linkClientByInvite(
+      userIds.kapital,
+      EMAIL_KAPITAL_LOGIN,
+      token,
+    );
     expect(linked).toBe(true);
 
     const { data: klien } = await admin
@@ -169,12 +227,16 @@ describe("penautan klien kebal pola LIKE", () => {
       .single();
     expect(klien!.user_id).toBe(userIds.kapital);
 
-    // Login kedua kalinya (fallback) tetap sukses.
-    expect(await linkClientByEmail(userIds.kapital, EMAIL_KAPITAL_LOGIN)).toBe(true);
+    // Login kedua kalinya tidak perlu token lagi — dan token lama sudah mati.
+    expect(await isClientLinked(userIds.kapital)).toBe(true);
+    expect(
+      await linkClientByInvite(userIds.kapital, EMAIL_KAPITAL_LOGIN, token),
+    ).toBe(false);
   });
 
   it("perilaku sah tetap jalan: input huruf besar atas klien huruf kecil", async () => {
-    const linked = await linkClientByEmail(userIds.kecil, EMAIL_KECIL_LOGIN);
+    const token = await tokenKorban(KLIEN_KECIL_ID);
+    const linked = await linkClientByInvite(userIds.kecil, EMAIL_KECIL_LOGIN, token);
     expect(linked).toBe(true);
 
     const { data: klien } = await admin
@@ -194,7 +256,16 @@ describe("penautan klien kebal pola LIKE", () => {
     expect(klien!.email).toBe(EMAIL_KAPITAL_LOGIN);
   });
 
-  it("email kosong tidak menautkan apa pun", async () => {
-    expect(await linkClientByEmail(userIds.wildcard, "")).toBe(false);
+  it("email kosong tidak menautkan apa pun (walau tokennya sah)", async () => {
+    const token = await tokenKorban(RINA_CLIENT_ID);
+    expect(await linkClientByInvite(userIds.wildcard, "", token)).toBe(false);
+    expect(await linkClientByInvite(userIds.wildcard, "   ", token)).toBe(false);
+
+    const { data: rina } = await admin
+      .from("clients")
+      .select("user_id")
+      .eq("id", RINA_CLIENT_ID)
+      .single();
+    expect(rina!.user_id).toBeNull();
   });
 });
