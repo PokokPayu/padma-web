@@ -15,6 +15,31 @@ npm run seed:users          # user demo 3 peran (untuk `npm run dev`; `npm test`
 npm run dev
 ```
 
+### Bila `npx supabase db reset` gagal
+
+Kegagalan di langkah ini hampir selalu berasal dari **stack Docker lokal**, bukan
+dari isi repo — Docker daemon tersendat, tarikan image gagal, atau container
+stack tertinggal di keadaan basi sesudah update CLI/Docker. Gejalanya berupa CLI
+berhenti dengan `LegacyDbSetupError` (gagal menyiapkan container database) atau
+`LegacyRestartServicesError` (gagal merestart storage/auth/realtime/pooler di
+akhir reset).
+
+Pemulihannya: bangun ulang stack lokal, lalu reset lagi.
+
+```bash
+npm run db:recover   # = npx supabase stop && npx supabase start && npx supabase db reset
+```
+
+Padanan manualnya, bila ingin melihat tiap langkah:
+
+```bash
+npx supabase stop && npx supabase start
+npx supabase db reset
+```
+
+Sesudah itu lanjutkan dari `npm run seed:users` seperti biasa. Reset **tidak**
+menghapus berkas migration atau `.env.local`, jadi aman diulang.
+
 Akun demo (password semua `padma-dev-123`):
 - owner@padma.test → /owner
 - admin@padma.test → /admin

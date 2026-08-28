@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "tsx tests/e2e/access-matrix.e2e.ts",
+    "db:recover": "npx supabase stop && npx supabase start && npx supabase db reset",
     "seed:users": "tsx scripts/seed-users.ts"
   },
   "dependencies": {
