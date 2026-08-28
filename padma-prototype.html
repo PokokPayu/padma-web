@@ -878,7 +878,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         </div>
         <div style="font-size:13px; line-height:2">
           <b style="color:#DCE6DC">Hubungi kami</b><br>
-          WhatsApp: 0877-7840-0200<br>
+          WhatsApp: <span id="waNumFooter">0877-7840-0200</span><br>
           Melayani area Jabodetabek
         </div>
       </div>
@@ -1108,6 +1108,10 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
 
       <!-- ── VIEW: BAYAR ── -->
       <div class="pp-view" id="ppv-bayar">
+      <div class="pp-page">
+        <h3>Tagihan Anda <small>nominal disampaikan tim PADMA via WhatsApp</small></h3>
+        <div id="tagihanList"></div>
+      </div>
       <div class="pp-page" id="secBayar">
         <h3>Cara Pembayaran</h3>
         <div class="qris-box">
@@ -1161,6 +1165,7 @@ tr.rowhl td{background:#FDF9EE; animation:hl 2.4s ease}
         <button class="side-link active" data-v="inbox" onclick="adminView('inbox')"><span class="ic"><svg><use href="#ic-inbox"/></svg></span><span class="lbl">Inbox</span> <span class="cnt" id="cntInbox">2</span></button>
         <button class="side-link" data-v="klien" onclick="adminView('klien')"><span class="ic"><svg><use href="#ic-user"/></svg></span><span class="lbl">Klien</span></button>
         <button class="side-link" data-v="sesi" onclick="adminView('sesi')"><span class="ic"><svg><use href="#ic-cal"/></svg></span><span class="lbl">Sesi</span> <span class="cnt" id="cntSesi" style="display:none"></span></button>
+        <button class="side-link" data-v="bayar" onclick="adminView('bayar')"><span class="ic"><svg><use href="#ic-qr"/></svg></span><span class="lbl">Pembayaran</span> <span class="cnt" id="cntBayar" style="display:none"></span></button>
         <button class="side-link" data-v="mitra" onclick="adminView('mitra')"><span class="ic"><svg><use href="#ic-mitra"/></svg></span><span class="lbl">Mitra</span></button>
         <button class="side-link" data-v="layanan" onclick="adminView('layanan')"><span class="ic"><svg><use href="#ic-leaf"/></svg></span><span class="lbl">Layanan</span></button>
         <div class="side-foot"><svg class="nav-ic"><use href="#ic-lock"/></svg> <b style="color:#C9D4C8">Money firewall</b> — tidak ada harga atau honor di panel ini. Angka uang hanya hidup di panel Owner.</div>
@@ -1271,6 +1276,11 @@ const DATA = {
   ],
   honorMark:{},   // "sri|2026-08-17" -> tanggal dibayar
   bookings:[],    // permintaan jadwal dari klien
+  tagihan:[       // item pembayaran klien — status saja, tanpa nominal (nominal via WA)
+    {id:1, label:"Paket Sankalpa Prima · 8 sesi", status:"lunas"},
+    {id:2, label:"Sesi lepas: Konsultasi Nutrisi Lanjutan · 5 Sep 2026", status:"belum"},
+  ],
+  settings:{ wa:"0877-7840-0200" },
   nextSesiId: 10,
 };
 
@@ -1509,6 +1519,18 @@ function renderPassport(){
   $("nextCard").innerHTML = nc;
   if(!$("bkSvc").options.length)
     $("bkSvc").innerHTML = Object.keys(SVC).map(k=>`<option value="${k}">${SVC[k].nama} — ${FASE[SVC[k].fase]}</option>`).join("");
+  // tagihan (halaman Bayar) — status saja, tanpa nominal
+  $("tagihanList").innerHTML = DATA.tagihan.map(t=>{
+    const chip = t.status==="lunas" ? '<span class="pill done">Lunas</span>'
+      : t.status==="menunggu" ? '<span class="pill plan">Menunggu verifikasi</span>'
+      : '<span class="pill red">Belum dibayar</span>';
+    let bawah = "";
+    if(t.status==="belum") bawah = `<button class="btn btn-wa btn-sm" style="margin-top:10px" onclick="sudahBayar(${t.id})">Saya sudah bayar — kirim bukti via WA</button>`;
+    if(t.status==="menunggu") bawah = `<p style="font-size:12px; color:var(--ink-soft); margin:8px 0 0">Tim PADMA sedang memverifikasi bukti Anda. <em>(Di produk asli: WhatsApp tadi terbuka otomatis berisi teks siap kirim + tempat melampirkan bukti.)</em></p>`;
+    return `<div style="padding:12px 0; border-bottom:1px dashed var(--line)">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:center"><b style="font-size:13.5px">${t.label}</b>${chip}</div>
+      ${bawah}</div>`;
+  }).join("");
   // badge
   $("badgeRow").innerHTML = [...svcSelesai].map(k=>
     `<div class="badge-coin"><div class="coin"><svg viewBox="0 0 64 46"><use href="#lotus"/></svg></div>${SVC[k].nama.replace(" · Prekonsepsi","")}</div>`).join("")
@@ -1536,6 +1558,11 @@ function kirimBooking(){
   $("bookingForm").hidden = true; $("bookingOk").hidden = false;
   renderPassport();
   window.scrollTo({top:0, behavior:"smooth"});
+}
+function sudahBayar(id){
+  const t = DATA.tagihan.find(x=>x.id===id);
+  if(t) t.status = "menunggu";
+  renderPassport();
 }
 function wmarkHtml(){
   return `<div class="wmark" aria-hidden="true">${Array.from({length:14},()=>"<span>Ananda Putri · PAD-2607-0012</span>").join("")}</div>`;
@@ -1619,10 +1646,39 @@ function adminView(v){
   if(v==="sesi") M.innerHTML = vSesi();
   if(v==="mitra") M.innerHTML = vMitra();
   if(v==="layanan") M.innerHTML = vLayanan();
+  if(v==="bayar") M.innerHTML = vBayarAdmin();
   $("cntInbox").textContent = DATA.skrining.filter(s=>s.status==="baru").length;
   const nReq = DATA.bookings.filter(b=>b.status==="menunggu").length;
   $("cntSesi").textContent = nReq;
   $("cntSesi").style.display = nReq ? "" : "none";
+  const nVer = DATA.tagihan.filter(t=>t.status==="menunggu").length;
+  $("cntBayar").textContent = nVer;
+  $("cntBayar").style.display = nVer ? "" : "none";
+}
+function vBayarAdmin(){
+  const label = {belum:"Belum dibayar", menunggu:"Menunggu verifikasi", lunas:"Lunas"};
+  const rows = DATA.tagihan.map(t=>{
+    const chip = t.status==="lunas" ? '<span class="pill done">Lunas</span>'
+      : t.status==="menunggu" ? '<span class="pill plan">Menunggu verifikasi</span>'
+      : '<span class="pill red">Belum dibayar</span>';
+    return `<tr class="${t.status==="menunggu"?"rowhl":""}">
+      <td><b>Ananda Putri</b><span class="rowsub">PAD-2607-0012</span></td>
+      <td>${t.label}</td><td>${chip}</td>
+      <td><select class="select-inline" onchange="ubahStatusBayar(${t.id}, this.value)">
+        ${Object.keys(label).map(k=>`<option value="${k}" ${t.status===k?"selected":""}>${label[k]}</option>`).join("")}
+      </select></td></tr>`;
+  }).join("");
+  return `<div class="panel-head"><div><h2>Pembayaran</h2>
+      <p>Verifikasi manual: cek bukti di WhatsApp &amp; mutasi rekening, lalu ubah status di sini. Nominal tidak tampil — angka uang hanya hidup di panel Owner.</p></div></div>
+    <div class="note-lock">✦ Klien menekan &ldquo;Saya sudah bayar&rdquo; di passport → status jadi <b>Menunggu verifikasi</b> → Anda ubah ke <b>Lunas</b> setelah bukti cocok dengan mutasi.</div>
+    <div class="tablecard"><div class="tscroll"><table>
+      <thead><tr><th>Klien</th><th>Item</th><th>Status</th><th>Ubah status</th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+function ubahStatusBayar(id, v){
+  const t = DATA.tagihan.find(x=>x.id===id);
+  if(t) t.status = v;
+  adminView("bayar");
 }
 function konfirmasiBooking(id){
   const b = DATA.bookings.find(x=>x.id===id);
@@ -1784,7 +1840,20 @@ function vLayanan(){
         return `<div class="kv"><span class="who"><b>${SVC[k].nama}</b><br><span>${mat.length? mat.map(m=>`<svg class="mi-inline"><use href="#${m.tipe==="ebook"?"ic-book":"ic-play"}"/></svg>`+m.judul).join(" · ") : "belum ada materi"}</span></span><span class="pill green">Aktif</span></div>`;
       }).join("")}
     </div>`).join("");
-  return `<div class="panel-head"><div><h2>Layanan &amp; Materi</h2><p>Nama layanan dan materi bonusnya. Perhatikan: tidak ada satu pun angka harga di sini — itu wilayah Owner.</p></div></div>${blok}`;
+  const pengaturan = `<div class="week-card"><h3>Pengaturan Aplikasi</h3>
+    <div class="formfield" style="max-width:340px"><label>Nomor WhatsApp resmi (dipakai semua tombol WA)</label>
+      <input type="tel" id="setWa" value="${DATA.settings.wa}"></div>
+    <button class="btn btn-night btn-sm" onclick="simpanWa()">Simpan</button>
+    <p style="font-size:12px; color:var(--ink-soft); margin:10px 0 0">Di produk asli tersimpan di database (app_settings) — bisa diganti kapan saja tanpa deploy ulang.</p>
+  </div>`;
+  return `<div class="panel-head"><div><h2>Layanan &amp; Materi</h2><p>Katalog di bawah adalah <b>data dummy</b> — saat live, Anda mengganti isinya sendiri dari panel ini. Tidak ada satu pun angka harga di sini — itu wilayah Owner.</p></div></div>${blok}${pengaturan}`;
+}
+function simpanWa(){
+  const v = $("setWa").value.trim();
+  if(v) DATA.settings.wa = v;
+  const f = $("waNumFooter");
+  if(f) f.textContent = DATA.settings.wa;
+  adminView("layanan");
 }
 
 /* ============================================================
