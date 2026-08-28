@@ -1,16 +1,37 @@
-import Link from "next/link";
+import { bacaKatalog } from "@/lib/katalog";
+import { bacaPengaturan } from "@/lib/settings";
+import { Hero } from "./_landing/hero";
+import { LiniLayanan } from "./_landing/lini-layanan";
+import { CaraKerja } from "./_landing/cara-kerja";
+import { PassportTeaser } from "./_landing/passport-teaser";
+import { Pembanding } from "./_landing/pembanding";
+import { Footer } from "./_landing/footer";
 
-export default function Home() {
+// Katalog datang dari DB dan diganti klien lewat panel admin, jadi halaman ini
+// tidak boleh dibekukan selamanya di waktu build (default `next build` untuk
+// halaman tanpa cookie/header adalah statis penuh — perubahan katalog baru
+// terlihat setelah deploy berikutnya). Dengan revalidate, landing tetap murah
+// (dilayani dari cache) tetapi menyusul isi terbaru dalam hitungan menit.
+export const revalidate = 300;
+
+// Rute publik: TIDAK memanggil requireRole. Katalog dirender server-side dari
+// Postgres lewat policy "baca publik" — bila policy itu hilang, pengunjung
+// anonim menerima 0 baris TANPA error dan landing tampil kosong. Penjagaannya
+// ada di `tests/landing.test.ts` + `tests/landing-katalog.test.ts`.
+export default async function Home() {
+  const [katalog, pengaturan] = await Promise.all([
+    bacaKatalog(),
+    bacaPengaturan(),
+  ]);
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-paper">
-      <h1 className="font-serif text-3xl tracking-[0.3em] text-night">PADMA</h1>
-      <p className="text-ink-soft text-sm">Landing publik dibangun di Plan 2.</p>
-      <Link
-        href="/masuk"
-        className="rounded-lg bg-night px-5 py-2.5 font-bold text-gold-pale"
-      >
-        Masuk
-      </Link>
+    <main className="bg-paper">
+      <Hero waLink={pengaturan.nomorWaLink} />
+      <LiniLayanan katalog={katalog} />
+      <CaraKerja />
+      <PassportTeaser />
+      <Pembanding />
+      <Footer waTampilan={pengaturan.nomorWaTampilan} />
     </main>
   );
 }
