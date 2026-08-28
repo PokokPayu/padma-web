@@ -174,6 +174,16 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
+# TETAP true — sudah diuji (28 Agu 2026), bukan asumsi: dengan
+# GOTRUE_DISABLE_SIGNUP=true, `auth.admin.createUser` service role (scripts/seed-users.ts)
+# tetap jalan, TAPI login Google/OAuth pertama kali ditolak
+# `signup_disabled: "Signups not allowed for this instance"` — padahal keputusan #4
+# mengharuskan klien login Google untuk mengaktifkan akunnya. Jadi mematikan signup
+# akan mematahkan aktivasi akun klien.
+# Pengaman sebenarnya ada di penautan: server hanya mengisi clients.user_id bila email
+# COCOK PERSIS dengan baris klien yang dibuat admin (lihat src/lib/auth/link-client.ts;
+# dulu memakai .ilike sehingga `%` jadi wildcard). Mendaftar sendiri tidak memberi
+# akses apa pun ke data klien.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
