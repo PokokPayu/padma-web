@@ -58,6 +58,21 @@ http://localhost:3000/aktivasi?token=undangan-dev-rina-...
 Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
 menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
+## Rute
+
+| Rute | Akses | Isi |
+|---|---|---|
+| `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
+| `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
+| `/masuk` | Publik | Login email+password & Google |
+| `/passport` | Klien | Digital Care Passport (Plan 4) |
+| `/admin` | Admin, Owner | Dashboard admin |
+| `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut |
+| `/owner` | Owner | Rate card & rekap honor (Plan 5) |
+
+Catatan keamanan: `anon` tidak punya hak tabel pada `screenings` — penyimpanan
+skrining publik WAJIB lewat route handler dengan service role.
+
 ## Test
 
 ```bash
@@ -99,9 +114,19 @@ Test yang menjaga keamanan:
 ### E2E (opsional, di luar `npm test`)
 
 ```bash
-npm run dev        # terminal lain
-npm run test:e2e   # matriks akses lewat browser sungguhan (Playwright)
+npm run dev               # terminal lain
+npm run test:e2e:semua    # kedua skrip di bawah, berurutan
 ```
+
+- `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
+- `npm run test:e2e:funnel` — funnel calon klien: landing (katalog dari DB) →
+  wizard skrining → hasil tersimpan → muncul di inbox admin. Termasuk pagar
+  keselamatan: demam pada fase **kehamilan** wajib memicu merah-urgent + blok
+  darurat **119**, dan kode skrining tidak boleh bocor ke URL. Skrip ini
+  membaca teks yang benar-benar terlihat (`innerText`), bukan `textContent` —
+  `textContent` ikut memungut payload RSC di dalam `<script>` sehingga
+  pemeriksaan "119" bisa lolos palsu. Entri uji yang dibuatnya dihapus lagi di
+  akhir run (lewat service role), jadi aman diulang.
 
 ## Deploy
 
