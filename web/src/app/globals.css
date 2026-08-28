@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night: #0a2b1f;
+  --color-pine: #11382a;
+  --color-leaf: #2f6a48;
+  --color-leaf-soft: #e9f1e9;
+  --color-gold: #b58a3c;
+  --color-gold-bright: #d9b36a;
+  --color-gold-pale: #f0e3c3;
+  --color-paper: #fbf8f0;
+  --color-paper-warm: #f5efe1;
+  --color-ink: #1f2e26;
+  --color-ink-soft: #5d6c61;
+  --color-clay: #a6472f;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
