@@ -178,6 +178,57 @@ async function main() {
     teksBaris || "(baris tidak ditemukan)",
   );
 
+  // ---- 5. Spec §8: penyimpanan GAGAL tidak boleh mematikan funnel ----
+  // Endpoint sengaja dijatuhkan (500) supaya kegagalan benar-benar terjadi di
+  // browser, bukan sekadar disimpulkan dari membaca kode. Yang harus tetap
+  // berdiri: layar hasil, tombol WhatsApp. Yang TIDAK boleh muncul: chip
+  // "Tersimpan" — menampilkannya saat gagal adalah berbohong ke pengguna dan
+  // menyesatkan admin yang mencari kodenya di inbox.
+  const ctxGagal = await browser.newContext();
+  const gagalPage = await ctxGagal.newPage();
+  await gagalPage.route("**/api/skrining", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: "{}" }),
+  );
+  await gagalPage.goto(`${BASE}/skrining`, { waitUntil: "networkidle" });
+  await gagalPage.getByLabel("Nama panggilan").fill("Uji Gagal Simpan");
+  await gagalPage.getByLabel("No. WhatsApp").fill("0812-0000-4321");
+  await gagalPage.getByRole("button", { name: "Menopause", exact: true }).click();
+  await gagalPage.getByRole("checkbox").check();
+  await gagalPage.getByRole("button", { name: "Mulai Skrining" }).click();
+
+  // Menopause: 7 soal umum + 4 soal fase, semuanya dijawab "Tidak" -> hijau.
+  for (let i = 0; i < 11; i++) {
+    await gagalPage.getByRole("button", { name: "Tidak", exact: true }).click();
+  }
+  await gagalPage.waitForLoadState("networkidle");
+  const teksGagal = (await gagalPage.textContent("body")) ?? "";
+
+  catat(
+    "5a. endpoint mati -> layar hasil TETAP tampil (funnel hidup)",
+    teksGagal.includes("Layanan dapat dijadwalkan"),
+    teksGagal.includes("Layanan dapat dijadwalkan") ? "hasil tetap tampil" : "funnel MATI",
+  );
+  const adaTombolWa = await gagalPage
+    .getByRole("link", { name: /WhatsApp/i })
+    .count();
+  catat(
+    "5b. endpoint mati -> tombol WhatsApp tetap ada",
+    adaTombolWa > 0,
+    `${adaTombolWa} tautan WhatsApp`,
+  );
+  catat(
+    "5c. endpoint mati -> chip 'Tersimpan' TIDAK berbohong",
+    !teksGagal.includes("Tersimpan di sistem PADMA"),
+    teksGagal.includes("Tersimpan di sistem PADMA")
+      ? "chip MUNCUL padahal gagal simpan — berbohong ke pengguna"
+      : "chip tidak muncul (benar)",
+  );
+  catat(
+    "5d. endpoint mati -> tidak ada kode palsu yang ditampilkan",
+    !/PDM-\d{6}-\d{4}-[A-Z0-9]{4}/.test(teksGagal),
+    "tidak ada kode di layar (benar — tidak ada yang tersimpan)",
+  );
+
   await browser.close();
 
   // Idempoten: bersihkan entri yang dibuat run ini (lewat service role —

@@ -2150,11 +2150,11 @@ git add web && git commit -m "test(plan2): E2E funnel skrining + dokumentasi rut
 
 ## Definition of Done — Plan 2
 
-- [ ] Pengunjung anonim melihat landing dengan katalog layanan **dari database** (tidak kosong).
-- [ ] Wizard skrining berjalan untuk keempat fase; demam pada kehamilan/nifas memicu `urgent` + blok 119, pada prekonsepsi/menopause tidak.
-- [ ] Hasil skrining tersimpan di `screenings` lewat endpoint server; `hasil` yang dikirim klien diabaikan.
-- [ ] Gagal simpan tidak mematikan funnel: hasil & tombol WhatsApp tetap tampil, chip "tersimpan" tidak berbohong.
-- [ ] Tidak ada kode/hasil skrining di URL.
-- [ ] Admin melihat entri di `/admin/skrining` lengkap dengan penanda URGENT, dan bisa mengubah tindak lanjut.
-- [ ] `npm test` hijau seluruhnya (termasuk `access-matrix-layouts`, `rls-firewall`, `money-firewall-struktural`), `npm run test:e2e` hijau, `npm run build` sukses.
-- [ ] Tidak ada policy/GRANT insert baru untuk `anon` pada `screenings`.
+- [x] Pengunjung anonim melihat landing dengan katalog layanan **dari database** (tidak kosong).
+- [x] Wizard skrining berjalan untuk keempat fase; demam pada kehamilan/nifas memicu `urgent` + blok 119, pada prekonsepsi/menopause tidak.
+- [x] Hasil skrining tersimpan di `screenings` lewat endpoint server; `hasil` yang dikirim klien diabaikan.
+- [x] Gagal simpan tidak mematikan funnel: hasil & tombol WhatsApp tetap tampil, chip "tersimpan" tidak berbohong.
+- [x] Tidak ada kode/hasil skrining di URL.
+- [x] Admin melihat entri di `/admin/skrining` lengkap dengan penanda URGENT, dan bisa mengubah tindak lanjut.
+- [x] `npm test` hijau seluruhnya (termasuk `access-matrix-layouts`, `rls-firewall`, `money-firewall-struktural`), `npm run test:e2e` hijau, `npm run build` sukses.
+- [x] Tidak ada policy/GRANT insert baru untuk `anon` pada `screenings`.
