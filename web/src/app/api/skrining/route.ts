@@ -1,37 +1,77 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { nilaiSkrining } from "@/lib/skrining/evaluasi";
+import { saringJawaban } from "@/lib/skrining/bank-soal";
 import { buatKodeSkrining } from "@/lib/skrining/kode";
 import { SkemaSkriningPublik } from "@/lib/skrining/skema";
+import { kunciPembatas, terlaluSering } from "@/lib/skrining/pembatas";
 
-// Rate limit sederhana per proses. Bukan pertahanan sempurna (Vercel serverless
-// punya banyak instance), tapi cukup menahan penyalahgunaan kasual dan tidak
-// memerlukan infrastruktur tambahan di v1.
-const JEJAK = new Map<string, number[]>();
-const JENDELA_MS = 60_000;
-const MAKS_PER_JENDELA = 5;
+// Rute ini PUBLIK (tanpa auth) tetapi menulis dengan SERVICE ROLE. Karena itu
+// urutan pemeriksaan penting: yang paling murah dan paling membatasi dulu.
+//   1. rate limit (kunci yang tidak bisa dipilih penyerang — lihat pembatas.ts)
+//   2. batas ukuran body (body raksasa tidak pernah sampai ke JSON.parse)
+//   3. skema Zod (termasuk batas jumlah kunci `jawaban`)
+//   4. penyaringan `jawaban` ke id soal yang dikenal sebelum insert
+// Lapis kelima ada di DB: CHECK ukuran jawaban (fail-closed bila kode dilewati).
 
-function terlaluSering(ip: string): boolean {
-  const sekarang = Date.now();
-  const riwayat = (JEJAK.get(ip) ?? []).filter((t) => sekarang - t < JENDELA_MS);
-  riwayat.push(sekarang);
-  JEJAK.set(ip, riwayat);
-  return riwayat.length > MAKS_PER_JENDELA;
+/**
+ * Skrining terbesar = nama + no_hp + fase + 12 jawaban boolean (< 1 KB).
+ * 16 KB sangat longgar; 2,76 MB — yang sebelumnya diterima — tidak pernah wajar.
+ */
+const MAKS_BYTE_BODY = 16 * 1024;
+
+/**
+ * Membaca body dengan pagar byte NYATA: `content-length` boleh bohong atau
+ * tidak ada, jadi aliran dibaca bertahap dan dibatalkan begitu melewati batas.
+ * Mengembalikan null bila body terlalu besar.
+ */
+async function bacaBodyTerbatas(request: Request, maks: number): Promise<string | null> {
+  const dilaporkan = Number(request.headers.get("content-length"));
+  if (Number.isFinite(dilaporkan) && dilaporkan > maks) return null;
+
+  const aliran = request.body;
+  if (!aliran) {
+    const teks = await request.text();
+    return new TextEncoder().encode(teks).byteLength > maks ? null : teks;
+  }
+
+  const pembaca = aliran.getReader();
+  const pengurai = new TextDecoder("utf-8");
+  let teks = "";
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await pembaca.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maks) {
+        await pembaca.cancel().catch(() => {});
+        return null;
+      }
+      teks += pengurai.decode(value, { stream: true });
+    }
+  } finally {
+    pembaca.releaseLock();
+  }
+  return teks + pengurai.decode();
 }
 
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "tak-dikenal";
-  if (terlaluSering(ip)) {
+  if (terlaluSering(kunciPembatas(request))) {
     return NextResponse.json(
       { pesan: "Terlalu banyak percobaan. Coba lagi sebentar lagi." },
       { status: 429 },
     );
   }
 
+  const teks = await bacaBodyTerbatas(request, MAKS_BYTE_BODY);
+  if (teks === null) {
+    return NextResponse.json({ pesan: "Data skrining terlalu besar." }, { status: 413 });
+  }
+
   let mentah: unknown;
   try {
-    mentah = await request.json();
+    mentah = JSON.parse(teks);
   } catch {
     return NextResponse.json({ pesan: "Format tidak valid." }, { status: 400 });
   }
@@ -44,6 +84,8 @@ export async function POST(request: Request) {
 
   const { nama, no_hp, fase, jawaban } = parsed.data;
   const penilaian = nilaiSkrining(fase, jawaban);
+  // Hanya id soal yang dikenal untuk fase ini yang ikut tersimpan.
+  const jawabanBersih = saringJawaban(fase, jawaban);
   const admin = createAdminSupabase();
 
   // `kode` UNIQUE — coba ulang bila bentrok, jangan crash.
@@ -54,7 +96,7 @@ export async function POST(request: Request) {
       nama,
       no_hp,
       fase,
-      jawaban: { ...jawaban, dihentikan_pada: penilaian.dihentikanPada },
+      jawaban: { ...jawabanBersih, dihentikan_pada: penilaian.dihentikanPada },
       hasil: penilaian.hasil,
       flags: penilaian.flags,
     });

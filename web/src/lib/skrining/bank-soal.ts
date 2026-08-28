@@ -195,6 +195,26 @@ export function daftarSoal(fase: FaseSkrining): Soal[] {
   return [...SOAL_UMUM, ...SOAL_FASE[fase]];
 }
 
+/**
+ * Menyaring `jawaban` kiriman klien ke id soal yang MEMANG ada untuk fase itu.
+ *
+ * Temuan red team: route lama menyimpan `jawaban` mentah verbatim, jadi kunci
+ * id-palsu sembarang ikut masuk ke kolom jsonb data kesehatan. Penilaian sendiri
+ * memang hanya membaca id yang dikenal — tapi yang TERSIMPAN harus ikut bersih,
+ * bukan cuma yang dibaca.
+ */
+export function saringJawaban(
+  fase: FaseSkrining,
+  jawaban: Record<string, boolean>,
+): Record<string, boolean> {
+  const dikenal = new Set(daftarSoal(fase).map((s) => s.id));
+  const bersih: Record<string, boolean> = {};
+  for (const [id, nilai] of Object.entries(jawaban)) {
+    if (dikenal.has(id)) bersih[id] = nilai;
+  }
+  return bersih;
+}
+
 export function levelSoal(soal: Soal, fase: FaseSkrining): Level {
   if (typeof soal.level === "string") return soal.level;
   return soal.level.perFase[fase] ?? soal.level.default;
