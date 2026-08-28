@@ -119,7 +119,9 @@ Prinsip: **uang dipisah secara struktural**. Tabel operasional tidak punya kolom
 
 ## 11. Deployment & Seed
 
-- Vercel (app) + Supabase cloud (DB/Auth/Storage), free tier dulu.
+- **Keputusan (28 Agu 2026): Vercel dipakai untuk production.** Development & demo di tier Hobby (gratis); saat go-live upgrade ke Pro (~$20/bulan) karena tier gratis tidak boleh untuk penggunaan komersial. Custom domain client dipasang di Vercel (SSL otomatis). Opsi deployment lain (VPS dsb.) ditunda — dievaluasi lagi nanti bila diperlukan.
+- Supabase cloud (DB/Auth/Storage), free tier dulu — batasannya kapasitas, bukan komersialitas; cukup untuk skala awal.
+- Estimasi biaya operasional go-live untuk client: ~Rp 350–400rb/bulan (Vercel Pro) + domain ~Rp 200rb/tahun.
 - Seed: 5 fase, layanan contoh dari mockup (Lactation Hero, Garbha Relief, Shishu Parent Touch, Flow Yoga Intro, Return to Work) berikut tarif contohnya, 1 akun owner, 1 akun admin.
 - Preview deployment Vercel dipakai untuk demo ke client.
 
