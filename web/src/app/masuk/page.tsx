@@ -1,6 +1,6 @@
 import { FormMasuk } from "./form-masuk";
 
-export const metadata = { title: "Masuk — PADMA" };
+export const metadata = { title: "Masuk" };
 
 export default function MasukPage() {
   return (

@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-marcellus), ui-serif, Georgia, Cambria, serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+
   --color-night: #0a2b1f;
   --color-pine: #11382a;
   --color-leaf: #2f6a48;
