@@ -71,9 +71,14 @@ describe("Isolasi data klien", () => {
 });
 
 describe("Anonim", () => {
-  it("anon tidak melihat clients", async () => {
-    const { data } = await anonClient().from("clients").select("*");
-    expect(data).toHaveLength(0);
+  it("anon tidak melihat clients — ditolak di lapis hak tabel, bukan sekadar 0 baris", async () => {
+    const { data, error } = await anonClient().from("clients").select("*");
+    // Tidak ada satu pun baris pasien yang bocor.
+    expect(data ?? []).toHaveLength(0);
+    // Sejak migration cabut_grant_anon_berlebih, anon tidak punya hak tabel
+    // sama sekali sehingga ditolak SEBELUM RLS dievaluasi. Ini jaminan yang
+    // lebih kuat daripada "RLS memfilter habis": bocor butuh dua kesalahan.
+    expect(error?.code).toBe("42501");
   });
 
   it("anon TIDAK bisa insert screenings langsung", async () => {
