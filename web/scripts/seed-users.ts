@@ -1,19 +1,28 @@
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Kredensial dev ada di .env.local (lihat vitest.config.ts yang memakai
 // DOTENV_CONFIG_PATH=".env.local"); .env dipakai sebagai cadangan.
 config({ path: [".env.local", ".env"] });
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+function adminClient(): SupabaseClient {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
 
 const PASSWORD = "padma-dev-123";
 
-async function ensureUser(email: string, nama: string, role: "klien" | "admin" | "owner") {
+async function ensureUser(
+  admin: SupabaseClient,
+  email: string,
+  nama: string,
+  role: "klien" | "admin" | "owner",
+) {
   const { data: list } = await admin.auth.admin.listUsers();
   let user = list.users.find((u) => u.email === email);
   if (!user) {
@@ -33,10 +42,17 @@ async function ensureUser(email: string, nama: string, role: "klien" | "admin" |
   return user!;
 }
 
-async function main() {
-  await ensureUser("owner@padma.test", "Pemilik PADMA", "owner");
-  await ensureUser("admin@padma.test", "Admin PADMA", "admin");
-  const ananda = await ensureUser("ananda@padma.test", "Ananda Putri", "klien");
+/**
+ * Idempoten: aman dijalankan berkali-kali (user dibuat hanya bila belum ada,
+ * sisanya upsert). Dipakai oleh `npm run seed:users` DAN oleh globalSetup
+ * vitest (tests/global-setup.ts) supaya `npm test` tidak lagi bergantung pada
+ * langkah manual sesudah `npx supabase db reset`.
+ */
+export async function seedUsers() {
+  const admin = adminClient();
+  await ensureUser(admin, "owner@padma.test", "Pemilik PADMA", "owner");
+  await ensureUser(admin, "admin@padma.test", "Admin PADMA", "admin");
+  const ananda = await ensureUser(admin, "ananda@padma.test", "Ananda Putri", "klien");
 
   // Klien tertaut (Ananda) + klien belum tertaut (Rina, bahan test penautan).
   const { error: cErr } = await admin.from("clients").upsert(
@@ -107,10 +123,15 @@ async function main() {
   );
   if (sErr) throw sErr;
 
-  console.log("Seed pengguna & data demo selesai.");
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Hanya jalan bila dieksekusi langsung (`npm run seed:users`), bukan saat
+// diimpor oleh globalSetup vitest.
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  seedUsers()
+    .then(() => console.log("Seed pengguna & data demo selesai."))
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    });
+}
