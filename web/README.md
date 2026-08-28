@@ -80,6 +80,15 @@ Test yang menjaga keamanan:
   email klien" dan membuktikan kegagalannya sampai lapisan data (penyerang
   membaca 0 baris `clients`/`sessions`), plus aturan token undangan: salah,
   kedaluwarsa, sudah dipakai, dan email tidak cocok semuanya ditolak.
+- `tests/penautan-kolom-terkunci.test.ts` — menutup jalur penautan terakhir yang
+  masih melewati token: PATCH langsung `clients.user_id`/`linked_at` dengan JWT
+  **admin/owner** (bukan service role). Vektor itu melewati seluruh gerbang
+  token — termasuk "email harus cocok" — sehingga admin bisa mengikat akun
+  ber-email asing ke baris klien mana pun dan membocorkan rekam medisnya tanpa
+  jejak di `client_invites`. Kini ditolak DATABASE (42501) lewat trigger
+  `trg_guard_client_link`, dibuktikan juga lewat koneksi SQL langsung sebagai
+  peran `authenticated`. Kolom itu hanya boleh ditulis service role, yaitu
+  `linkClientByInvite()`.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,
