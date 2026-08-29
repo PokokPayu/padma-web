@@ -82,6 +82,22 @@ async function bersihkan() {
   await admin.from("sessions").delete().eq("id", SESI_UJI);
   await admin.from("client_packages").delete().eq("id", PAKET_UJI);
   await admin.from("clients").delete().like("padma_id", "PAD-UJI%");
+
+  // Jejak audit fixture ikut disapu — lihat tests/jejak-yatim.test.ts.
+  //
+  // Sesi dan paket di atas LAHIR berstatus 'menunggu_verifikasi', dan sejak
+  // migration 20260829180000 pencatat jejak menutup jalur INSERT juga. Jadi
+  // kedua penyisipan itu menulis dua baris `jejak_status_bayar`. Tabel jejak
+  // SENGAJA tanpa foreign key (cascade akan menghapus tepat bukti yang
+  // menjelaskan penghapusan), sehingga penghapusan di atas TIDAK menyapunya:
+  // tanpa dua baris ini, `npm test` menumpuk +2 baris yatim per run, selamanya.
+  //
+  // Wajib lewat `admin` (SERVICE ROLE): `authenticated` sengaja tidak memegang
+  // DELETE atas tabel jejak — baris audit tidak boleh dihapus oleh peran yang
+  // sedang diaudit. Pagar hak itu properti keamanan, bukan kerepotan yang
+  // boleh dilonggarkan supaya pembersihan ini lebih ringkas.
+  await admin.from("jejak_status_bayar").delete().eq("sesi_id", SESI_UJI);
+  await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", PAKET_UJI);
 }
 
 const { hitungAntrean } = await import("@/lib/admin/antrean");
