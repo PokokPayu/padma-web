@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
+import { hariIniJakarta } from "./waktu";
 
 /**
  * SATU-SATUNYA jalur tulis milik klien.
@@ -90,11 +92,64 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     return { ok: false, pesan: "Preferensi waktu tidak sah." };
   }
 
+  // Perbandingan STRING, bukan aritmatika Date: kolom `tanggal` bertipe date
+  // dan hidup sebagai 'YYYY-MM-DD'. "Hari ini" diambil dari kalender Jakarta —
+  // server berjalan UTC, jadi jam mesin akan salah hari selama 7 jam setiap
+  // hari. Regex di atas hanya memeriksa RUPA tanggal; ini yang memeriksa NILAI
+  // (red team meloloskan 2020-01-01 lewat celah itu).
+  if (tanggal < hariIniJakarta()) {
+    return { ok: false, pesan: "Tanggal sudah lewat. Pilih tanggal mulai hari ini." };
+  }
+
+  const supabase = await createServerSupabase();
+
+  // Layanan harus AKTIF. Foreign key hanya menolak service_id yang TIDAK ADA,
+  // sedangkan formulir menyaring `aktif` di UI — dan server action adalah
+  // endpoint POST tersendiri yang tidak pernah melewati UI itu.
+  const { data: layanan } = await supabase
+    .from("services")
+    .select("id")
+    .eq("id", serviceId)
+    .eq("aktif", true)
+    .maybeSingle();
+  if (!layanan) {
+    return { ok: false, pesan: "Layanan tidak tersedia untuk saat ini." };
+  }
+
+  // Pembatas antrean. Penegak sebenarnya ada di basis data (trigger
+  // guard_booking_pembatas + unique index booking_requests_antrean_unik),
+  // karena klien memegang policy INSERT dan bisa memanggil PostgREST langsung.
+  // Dua pemeriksaan di bawah ada untuk PESAN yang bisa dibaca manusia, bukan
+  // sebagai pagar — pagarnya sudah dipasang sebelum lapisan ini.
+  const { count } = await supabase
+    .from("booking_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .eq("status", "menunggu");
+  if ((count ?? 0) >= BATAS_PERMINTAAN_MENUNGGU) {
+    return {
+      ok: false,
+      pesan: `Masih ada ${BATAS_PERMINTAAN_MENUNGGU} permintaan yang menunggu jawaban tim PADMA. Tunggu kabarnya dulu, ya.`,
+    };
+  }
+
+  const { data: kembar } = await supabase
+    .from("booking_requests")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("service_id", serviceId)
+    .eq("tanggal", tanggal)
+    .eq("preferensi_waktu", waktu)
+    .eq("status", "menunggu")
+    .limit(1);
+  if ((kembar ?? []).length > 0) {
+    return { ok: false, pesan: "Permintaan yang sama sudah terkirim dan sedang diproses." };
+  }
+
   // Insert memakai SESI PENGGUNA, bukan service role: RLS + trigger
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
   // Nilai apa pun yang ikut dikirim browser di FormData diabaikan — hanya
   // empat medan di bawah yang pernah menyentuh basis data.
-  const supabase = await createServerSupabase();
   const { error } = await supabase.from("booking_requests").insert({
     client_id: clientId,
     service_id: serviceId,

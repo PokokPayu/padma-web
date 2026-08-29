@@ -43,7 +43,10 @@ const PAKET_ANANDA = "55555555-5555-5555-5555-555555555501";
 const SVC_NUTRISI = "11111111-1111-1111-1111-111111111103";
 const SVC_MASSAGE = "11111111-1111-1111-1111-111111111101";
 const MITRA = "33333333-3333-3333-3333-333333333302";
-const TGL_UJI = "2026-11-17";
+// Sengaja JAUH di masa depan. `ajukanJadwal` menolak tanggal lampau menurut
+// kalender Jakarta, jadi tanggal uji yang "beberapa minggu lagi" akan berubah
+// menjadi kegagalan palsu begitu hari itu lewat.
+const TGL_UJI = "2030-11-17";
 
 // Lapisan data & action memakai sesi pengguna (createServerSupabase). Di vitest
 // tidak ada cookie, jadi klien ber-sesi sungguhan disuntikkan — RLS dan

@@ -9,7 +9,15 @@ import { ajukanJadwal } from "@/lib/passport/aksi";
 // dan dikunci trigger basis data.
 const WAKTU = ["pagi", "siang", "sore"] as const;
 
-export function FormAjukan({ layanan }: { layanan: Array<{ id: string; nama: string }> }) {
+export function FormAjukan({
+  layanan,
+  tanggalPalingAwal,
+}: {
+  layanan: Array<{ id: string; nama: string }>;
+  // String 'YYYY-MM-DD' menurut kalender Jakarta, dirakit di server. Jangan
+  // menghitungnya di browser: jam perangkat pemakai bisa apa saja.
+  tanggalPalingAwal: string;
+}) {
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
   const [selesai, setSelesai] = useState(false);
@@ -75,6 +83,7 @@ export function FormAjukan({ layanan }: { layanan: Array<{ id: string; nama: str
           <input
             type="date"
             name="tanggal"
+            min={tanggalPalingAwal}
             required
             className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
           />

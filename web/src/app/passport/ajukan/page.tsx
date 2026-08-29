@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ambilKlien } from "@/lib/passport/data";
+import { hariIniJakarta } from "@/lib/passport/waktu";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { FormAjukan } from "./form";
 
@@ -20,5 +21,13 @@ export default async function HalamanAjukan() {
     .eq("aktif", true)
     .order("nama");
 
-  return <FormAjukan layanan={(data ?? []) as Array<{ id: string; nama: string }>} />;
+  // `min` hanyalah kenyamanan pemakai — penolakan tanggal lampau yang sungguh
+  // mengikat ada di server action dan di trigger basis data. Atribut HTML bisa
+  // dihapus siapa saja lewat devtools.
+  return (
+    <FormAjukan
+      layanan={(data ?? []) as Array<{ id: string; nama: string }>}
+      tanggalPalingAwal={hariIniJakarta()}
+    />
+  );
 }
