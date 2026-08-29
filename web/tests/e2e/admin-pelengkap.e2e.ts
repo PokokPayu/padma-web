@@ -22,7 +22,11 @@
  *   1. Klien menekan "Saya sudah bayar" di Passport → status menjadi
  *      `menunggu_verifikasi`, BUKAN `lunas`, dan jejaknya menyebut
  *      peran_aktor 'klien' dengan aktor_id klien itu.
- *   2. Item itu muncul di antrean /admin/bayar sebagai "Menunggu verifikasi".
+ *   2. Badge "Klaim pembayaran" di /admin menyalakan angkanya, admin MENGKLIK
+ *      kartunya menuju /admin/bayar, dan item itu ada di sana sebagai
+ *      "Menunggu verifikasi" — sementara SESI ANGGOTA PAKET tidak pernah ikut
+ *      muncul (tagihan hantu) dan angka badge sama persis dengan jumlah baris
+ *      yang benar-benar bisa diverifikasi.
  *   3. Admin menekan "Tandai lunas" → baris jejak baru berbunyi
  *      peran_aktor 'admin' dengan aktor_id AKUN ADMIN YANG MENEKANNYA.
  *   4. Klien memuat ulang Passport-nya dan melihat "Lunas".
@@ -63,12 +67,14 @@ const EMAIL_KLIEN = `${PENANDA}${stempel}@padma.test`;
 const NAMA_KLIEN = `${PENANDA_ISI} Klien ${stempel}`;
 const PADMA_ID = `PAD-9${String(stempel).slice(-3)}-${String(stempel).slice(-4)}`;
 const NAMA_LAYANAN = `${PENANDA_ISI} Layanan ${stempel}`;
+const NAMA_PAKET = `${PENANDA_ISI} Paket ${stempel}`;
 const JUDUL_MATERI = `${PENANDA_ISI} Materi ${stempel}`;
 
 /** Mitra & fase dari seed — dirujuk, tidak diubah. */
 const MITRA_SEED = "33333333-3333-3333-3333-333333333301";
 const FASE = "prekonsepsi";
 const TANGGAL_SESI = "2026-11-17";
+const TANGGAL_SESI_PAKET = "2026-11-18";
 
 /**
  * Nilai setelan bertanda. Nomor WA wajib lolos `periksaNilai("nomor_wa")`:
@@ -167,7 +173,11 @@ async function uidAkun(email: string): Promise<string> {
  *  - `clients.user_id` menunjuk `auth.users(id)` tanpa `on delete`, jadi akun
  *    auth dihapus paling akhir.
  *  - `materials` menyapu bab & videonya lewat cascade; `services` baru bisa
- *    hilang sesudah sesi & materinya hilang.
+ *    hilang sesudah sesi, materi, DAN paketnya hilang.
+ *  - `client_packages` ikut tersapu saat `clients` dihapus (cascade), tetapi
+ *    `sessions.client_package_id` TIDAK bercascade — sesi harus lebih dulu.
+ *    `packages` sendiri tidak bercascade dari `services`: barisnya dihapus
+ *    manual, dan baru bisa sesudah tidak ada `client_packages` yang menunjuk.
  */
 async function bersihkan() {
   const { data: klien } = await admin
@@ -198,6 +208,7 @@ async function bersihkan() {
   for (const l of layanan ?? []) {
     await admin.from("materials").delete().eq("service_id", l.id);
     await admin.from("service_rates").delete().eq("service_id", l.id);
+    await admin.from("packages").delete().eq("service_id", l.id);
     await admin.from("services").delete().eq("id", l.id);
   }
 
@@ -219,6 +230,10 @@ async function main() {
 
   const browser = await chromium.launch();
   let idSesiUji = "";
+  // Dideklarasikan DI LUAR `try`: pemeriksaan "tidak ada jejak yatim" di bawah
+  // baru bermakna kalau id-nya masih terpegang sesudah barisnya dihapus.
+  let idSesiPaket = "";
+  let idPaketKlien = "";
   try {
     // =============== FIXTURE (service role — bukan bagian yang diuji) ========
     const { data: layananUji, error: eLayanan } = await admin
@@ -269,6 +284,52 @@ async function main() {
     if (eSesi) throw eSesi;
     idSesiUji = sesiUji.id as string;
 
+    // --- Fixture "tagihan hantu" ------------------------------------------
+    // Satu paket LUNAS berisi satu sesi. Sesi anggota paket tidak pernah
+    // memikul tagihannya sendiri (constraint `sessions_bayar_hanya_lepas`
+    // memaksa status_bayar-nya tetap 'belum'), sehingga saringan naif
+    // `status_bayar <> 'lunas'` akan memungutnya sebagai tagihan yang sudah
+    // dibayar dua kali. Fixture ini ada supaya ketidakhadirannya di
+    // /admin/bayar benar-benar diuji, bukan diasumsikan.
+    const { data: paketUji, error: ePaket } = await admin
+      .from("packages")
+      .insert({ service_id: layananUji.id, nama: NAMA_PAKET, jumlah_sesi: 3, aktif: true })
+      .select("id")
+      .single();
+    if (ePaket) throw ePaket;
+
+    // status_bayar sengaja dibiarkan default 'belum' lalu DIUBAH: INSERT
+    // dengan status ≠ 'belum' ditolak `guard_insert_status_bayar` (42501),
+    // sedangkan transisi 'belum' -> 'lunas' memang jalur yang sah.
+    const { data: paketKlien, error: ePaketKlien } = await admin
+      .from("client_packages")
+      .insert({ client_id: klienUji.id, package_id: paketUji.id, status: "aktif" })
+      .select("id")
+      .single();
+    if (ePaketKlien) throw ePaketKlien;
+    idPaketKlien = paketKlien.id as string;
+    const { error: eLunasPaket } = await admin
+      .from("client_packages")
+      .update({ status_bayar: "lunas" })
+      .eq("id", paketKlien.id);
+    if (eLunasPaket) throw eLunasPaket;
+
+    const { data: sesiPaket, error: eSesiPaket } = await admin
+      .from("sessions")
+      .insert({
+        client_id: klienUji.id,
+        service_id: layananUji.id,
+        partner_id: MITRA_SEED,
+        client_package_id: paketKlien.id,
+        tanggal: TANGGAL_SESI_PAKET,
+        status: "terjadwal",
+        status_bayar: "belum",
+      })
+      .select("id")
+      .single();
+    if (eSesiPaket) throw eSesiPaket;
+    idSesiPaket = sesiPaket.id as string;
+
     const { data: materiUji, error: eMateri } = await admin
       .from("materials")
       .insert({
@@ -298,11 +359,23 @@ async function main() {
     const halamanKlien = await ctxKlien.newPage();
     await halamanKlien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
 
+    const barisPassport = halamanKlien.locator("[data-tagihan]");
+    const barisSesiLepas = barisPassport.filter({ hasText: NAMA_LAYANAN });
     catat(
-      "1a. tagihan sesi klien muncul sebagai Belum dibayar",
-      (await halamanKlien.locator('[data-tagihan="belum"]').count()) === 1 &&
-        memuat(await teksTerlihat(halamanKlien), NAMA_LAYANAN),
+      "1a. tagihan sesi lepas muncul sebagai Belum dibayar",
+      (await barisSesiLepas.count()) === 1 &&
+        (await barisSesiLepas.getAttribute("data-tagihan")) === "belum",
       `isi: ${(await teksTerlihat(halamanKlien)).slice(0, 140)}`,
+    );
+
+    // Sisi klien dari pagar yang sama: passport memuat PAKETNYA, bukan sesi
+    // anggotanya. Dua item, bukan tiga — kalau sesi berpaket ikut terdaftar,
+    // klien akan ditagih untuk sesuatu yang paketnya sudah melunasi.
+    catat(
+      "1a2. sesi anggota paket tidak menjadi tagihan terpisah di passport klien",
+      (await barisPassport.count()) === 2 &&
+        (await barisPassport.filter({ hasText: NAMA_PAKET }).count()) === 1,
+      `${await barisPassport.count()} baris tagihan (paket + sesi lepas)`,
     );
 
     await halamanKlien
@@ -343,18 +416,68 @@ async function main() {
     // =============== 2. Item masuk antrean admin ============================
     const ctxAdmin = await login(browser, "admin@padma.test");
     const kerja = await ctxAdmin.newPage();
-    await kerja.goto(`${BASE}/admin/bayar`, { waitUntil: "networkidle" });
+    await kerja.goto(`${BASE}/admin`, { waitUntil: "networkidle" });
+
+    // Angka dibaca dari kartu dashboard, BUKAN dihitung ulang di skrip ini:
+    // yang diuji justru apakah angka yang dilihat admin sama dengan pekerjaan
+    // yang benar-benar bisa ia selesaikan.
+    const kartuKlaim = kerja.locator('a[href="/admin/bayar"]', {
+      hasText: "Klaim pembayaran",
+    });
+    const angkaBadge = Number((await kartuKlaim.innerText()).match(/\d+/)?.[0] ?? -1);
+    catat(
+      "2a. kartu 'Klaim pembayaran' di /admin menyalakan angka (badge menyala)",
+      angkaBadge >= 1,
+      `angka kartu: ${angkaBadge}`,
+    );
+
+    // Ditekan, bukan di-goto: kartu yang tidak bisa diklik adalah alarm yang
+    // tidak punya tujuan — keadaan yang sempat nyata selama modulnya belum ada.
+    await Promise.all([
+      kerja.waitForURL(`${BASE}/admin/bayar`, { timeout: 20_000 }),
+      kartuKlaim.click(),
+    ]);
+    await kerja.waitForLoadState("networkidle");
 
     const barisTagihan = kerja.locator(`[data-item="sesi:${idSesiUji}"]`);
     catat(
-      "2a. tagihan itu muncul di antrean admin dengan status menunggu_verifikasi",
+      "2b. tagihan itu muncul di antrean admin dengan status menunggu_verifikasi",
       (await barisTagihan.count()) === 1 &&
         (await barisTagihan.getAttribute("data-status")) === "menunggu_verifikasi" &&
         memuat(await barisTagihan.innerText(), PADMA_ID),
       (await barisTagihan.innerText()).replace(/\s+/g, " "),
     );
+
+    // Inti pagar "tagihan hantu": sesi anggota paket TIDAK boleh punya baris
+    // sendiri, sementara PAKETNYA memang punya. Keduanya diperiksa bersama —
+    // memeriksa ketidakhadiran saja akan hijau juga bila seluruh fixture gagal
+    // terbaca.
     catat(
-      "2b. tidak ada nominal rupiah di antrean pembayaran (money firewall)",
+      "2c. sesi anggota paket TIDAK punya baris tagihan sendiri (tanpa hantu)",
+      (await kerja.locator(`[data-item="sesi:${idSesiPaket}"]`).count()) === 0 &&
+        (await kerja.locator(`[data-item="paket:${paketKlien.id}"]`).count()) === 1,
+      `baris sesi berpaket: ${await kerja
+        .locator(`[data-item="sesi:${idSesiPaket}"]`)
+        .count()}; baris paketnya: ${await kerja
+        .locator(`[data-item="paket:${paketKlien.id}"]`)
+        .count()}`,
+    );
+
+    // Badge yang tidak sama dengan daftarnya adalah alarm yang tidak bisa
+    // dibersihkan: admin menekan setiap tombol yang ada lalu angkanya tetap
+    // menyala. Angka kartu dibandingkan dengan baris yang benar-benar
+    // menunggu verifikasi di halaman ini.
+    const barisMenunggu = await kerja
+      .locator('[data-item][data-status="menunggu_verifikasi"]')
+      .count();
+    catat(
+      "2d. angka badge sama persis dengan jumlah baris menunggu_verifikasi",
+      angkaBadge === barisMenunggu,
+      `badge ${angkaBadge} vs baris ${barisMenunggu}`,
+    );
+
+    catat(
+      "2e. tidak ada nominal rupiah di antrean pembayaran (money firewall)",
       !/Rp\s?\d/.test(await teksTerlihat(kerja)),
       "hanya status & label item, tanpa angka uang",
     );
@@ -399,11 +522,18 @@ async function main() {
 
     // =============== 4. Klien melihat hasilnya ==============================
     await halamanKlien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
+    // Baris DIPILIH menurut labelnya, bukan menurut statusnya: paket fixture
+    // juga berstatus lunas, sehingga menghitung `[data-tagihan="lunas"]` saja
+    // akan hijau bahkan bila keputusan admin tidak pernah sampai ke klien.
+    const barisSesiSesudah = halamanKlien
+      .locator("[data-tagihan]")
+      .filter({ hasText: NAMA_LAYANAN });
     catat(
       "4a. passport klien menampilkan item itu sebagai Lunas",
-      (await halamanKlien.locator('[data-tagihan="lunas"]').count()) === 1 &&
-        memuat(await teksTerlihat(halamanKlien), "Lunas"),
-      `isi: ${(await teksTerlihat(halamanKlien)).slice(0, 140)}`,
+      (await barisSesiSesudah.count()) === 1 &&
+        (await barisSesiSesudah.getAttribute("data-tagihan")) === "lunas" &&
+        memuat(await barisSesiSesudah.innerText(), "Lunas"),
+      `isi: ${(await barisSesiSesudah.innerText()).replace(/\s+/g, " ")}`,
     );
     catat(
       "4b. tombol klaim tidak lagi ditawarkan untuk item yang sudah lunas",
@@ -561,6 +691,10 @@ async function main() {
       }
     }
     if (idSesiUji) await admin.from("jejak_status_bayar").delete().eq("sesi_id", idSesiUji);
+    if (idSesiPaket) await admin.from("jejak_status_bayar").delete().eq("sesi_id", idSesiPaket);
+    if (idPaketKlien) {
+      await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", idPaketKlien);
+    }
     await bersihkan();
   }
 
@@ -577,10 +711,23 @@ async function main() {
   const sisaUser = (daftarUser?.users ?? []).filter((u) =>
     (u.email ?? "").startsWith(PENANDA),
   );
-  const { data: jejakYatim } = await admin
-    .from("jejak_status_bayar")
-    .select("id")
-    .eq("sesi_id", idSesiUji);
+  // Ketiga sasaran diperiksa terpisah: `jejak_status_bayar` sengaja TANPA
+  // foreign key supaya tidak ikut tersapu cascade, jadi tidak ada satu pun
+  // penghapusan induk yang membuktikan barisnya hilang. Jejak paket menempel di
+  // kolom LAIN (`paket_klien_id`) — memeriksa `sesi_id` saja akan hijau sambil
+  // meninggalkan baris yatim setiap kali skrip ini berjalan.
+  // id kosong disaring lebih dulu: `sesi_id.eq.` tanpa nilai adalah uuid tidak
+  // sah dan PostgREST menjawabnya 400, sehingga `jejakYatim` menjadi null dan
+  // pemeriksaannya lolos PALSU justru pada run yang mati di tengah fixture.
+  const sasaranJejak = [
+    ...(idSesiUji ? [`sesi_id.eq.${idSesiUji}`] : []),
+    ...(idSesiPaket ? [`sesi_id.eq.${idSesiPaket}`] : []),
+    ...(idPaketKlien ? [`paket_klien_id.eq.${idPaketKlien}`] : []),
+  ];
+  const { data: jejakYatim, error: eJejakYatim } = sasaranJejak.length
+    ? await admin.from("jejak_status_bayar").select("id").or(sasaranJejak.join(","))
+    : { data: [], error: null };
+  if (eJejakYatim) throw eJejakYatim;
 
   catat(
     "7a. seluruh data uji terhapus, termasuk jejak yang tidak ikut cascade",

@@ -141,7 +141,7 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # keempat skrip di bawah, berurutan
+npm run test:e2e:semua    # kelima skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
@@ -174,8 +174,26 @@ npm run test:e2e:semua    # keempat skrip di bawah, berurutan
   di akhir run (baris klien dulu, baru akun auth — `clients.user_id` menunjuk
   `auth.users` tanpa `on delete`), jadi aman diulang dan tidak menggeser
   hitungan yang di-assert `npm test`.
+- `npm run test:e2e:pelengkap` — rantai UANG & KONTEN yang lahir di Plan 3B:
+  klien menekan "Saya sudah bayar" → badge "Klaim pembayaran" di `/admin`
+  menyala dan kartunya DIKLIK menuju `/admin/bayar` → admin menandai lunas →
+  klien melihat "Lunas" di passport-nya; lalu nomor WhatsApp, alamat, & jam
+  operasional diubah di `/admin/pengaturan` dan diperiksa merambat ke `/skrining`
+  (halaman statis penuh — tanpa `revalidatePath("/skrining")` wizardnya memakai
+  nomor lama sampai deploy berikutnya) serta ke footer landing; terakhir sebuah
+  materi dinonaktifkan dan babnya dibaca **lewat REST langsung**, bukan sekadar
+  dicek hilang dari layar. Yang hanya bisa dibuktikan di sini:
+  `jejak_status_bayar.peran_aktor` berbunyi `admin` dengan `aktor_id` akun yang
+  benar-benar menekan tombolnya — bukan `service_role`/NULL, yaitu bukti yang
+  tidak menyebut siapa pun. Fixture-nya sengaja memuat satu paket berisi sesi,
+  supaya ketiadaan "tagihan hantu" (sesi anggota paket yang punya baris tagihan
+  sendiri) benar-benar diuji, dan supaya angka badge dibandingkan dengan jumlah
+  baris yang benar-benar bisa diverifikasi. Data ujinya berpenanda
+  `e2e-pelengkap-` / `E2E-PLKP`; `app_settings` dikembalikan persis dan baris
+  `jejak_status_bayar` dihapus manual (tabel itu sengaja tanpa FK sehingga tidak
+  ikut cascade — jejak yatim pernah menumpuk lintas run).
 
-Catatan untuk keempat skrip: klik beruntun pada wizard/kartu harus menunggu
+Catatan untuk kelima skrip: klik beruntun pada wizard/kartu harus menunggu
 render berikutnya (mis. `Pertanyaan N dari`). Tombol jawaban adalah simpul DOM
 yang sama di semua pertanyaan, sehingga dua klik di frame yang sama memakai
 `indeks` lama — satu jawaban tertelan dan skenarionya merah secara acak.
