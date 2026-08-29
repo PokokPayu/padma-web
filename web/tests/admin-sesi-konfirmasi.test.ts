@@ -86,6 +86,24 @@ const sumberHalaman = baca("src/app/admin/sesi/page.tsx");
 const sumberAntrean = baca("src/app/admin/sesi/antrean-permintaan.tsx");
 const migrasi = baca("supabase/migrations/20260829170000_sesi_dari_permintaan.sql");
 
+/**
+ * Badan SATU server action, dipotong dari sumbernya.
+ *
+ * Berkas `aksi.ts` menampung lebih dari satu action, dan aturannya berbeda per
+ * action: `konfirmasiPermintaan` tidak boleh membaca identitas klien dari
+ * payload (sumber kebenarannya adalah baris permintaan), sedangkan
+ * `jadwalkanSesi` justru harus — di jalur itu memang admin yang memilih klien
+ * dan tidak ada baris lain untuk dibaca. Pemeriksaan berbasis seluruh isi
+ * berkas akan mencampur keduanya, jadi ia dipersempit ke fungsi yang dimaksud.
+ */
+function badanAction(nama: string): string {
+  const mulai = sumberAksi.indexOf(`export async function ${nama}(`);
+  expect(mulai).toBeGreaterThanOrEqual(0);
+  const sisa = sumberAksi.slice(mulai + 1);
+  const akhir = sisa.indexOf("\nexport async function ");
+  return akhir === -1 ? sisa : sisa.slice(0, akhir);
+}
+
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
 
@@ -181,9 +199,12 @@ describe("konfirmasi permintaan jadwal", () => {
     // Hanya dua nilai yang boleh datang dari luar: permintaan mana, dan mitra
     // siapa. Sisanya dibaca dari barisnya sendiri — kalau tidak, satu request
     // POST yang dikarang bisa membuat sesi atas nama klien lain.
-    expect(sumberAksi).not.toMatch(/formData\.get\(\s*"client_id"/);
-    expect(sumberAksi).toMatch(/client_id:\s*\w+\.client_id/);
-    expect(sumberAksi).toMatch(/service_id:\s*\w+\.service_id/);
+    const badan = badanAction("konfirmasiPermintaan");
+    // Tidak ada FormData sama sekali di jalur ini — bukan sekadar tidak ada
+    // medan `client_id`. Yang masuk hanyalah dua argumen fungsi.
+    expect(badan).not.toContain("formData");
+    expect(badan).toMatch(/client_id:\s*\w+\.client_id/);
+    expect(badan).toMatch(/service_id:\s*\w+\.service_id/);
   });
 
   it("menyegarkan cache antrean admin dan passport klien", async () => {
@@ -471,7 +492,10 @@ describe("berkas server action sesi", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(2); // konfirmasiPermintaan, tolakPermintaan
+    // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi.
+    // Angkanya sengaja tepat, bukan `toBeGreaterThan`: action baru yang lupa
+    // memasang penjaganya harus memerahkan berkas ini, bukan lewat diam-diam.
+    expect(jumlahAction).toBe(4);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

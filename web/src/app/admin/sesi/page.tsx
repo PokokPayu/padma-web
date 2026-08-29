@@ -1,9 +1,11 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { pilihanMitra } from "@/lib/admin/mitra";
-import { formatTanggalID } from "@/lib/passport/waktu";
+import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { BlokPermintaan, type PermintaanAntre } from "./antrean-permintaan";
-import { LABEL_WAKTU, type PreferensiWaktu } from "./status";
+import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
+import { BarisSesi, type BarisSesiTampil } from "./form-selesai";
+import { LABEL_WAKTU, type PreferensiWaktu, type StatusSesi } from "./status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Sesi" };
@@ -17,27 +19,65 @@ type BarisPermintaan = {
   services: { nama: string } | null;
 };
 
+type BarisSesiDb = {
+  id: string;
+  tanggal: string;
+  status: StatusSesi;
+  catatan: string;
+  rekomendasi: string;
+  client_package_id: string | null;
+  clients: { nama: string; padma_id: string } | null;
+  services: { nama: string } | null;
+  partners: { nama: string } | null;
+};
+
+// Panel operasional, bukan arsip. Riwayat lengkap satu klien dibaca di halaman
+// klien; daftar ini hanya perlu memuat yang masih relevan dikerjakan hari ini.
+const BATAS_BARIS = 100;
+
 export default async function SesiPage() {
   await requireRole(["admin", "owner"]);
 
-  // Sesi pengguna, bukan service role: policy `booking: staf` yang mengizinkan
-  // antrean ini terbaca, dan itulah yang ingin ikut diperiksa Postgres.
+  // Sesi pengguna, bukan service role: policy `booking: staf` dan `sessions:
+  // staf` yang mengizinkan halaman ini terbaca, dan itulah yang ingin ikut
+  // diperiksa Postgres.
   const supabase = await createServerSupabase();
 
-  const [{ data: permintaan }, mitra] = await Promise.all([
-    supabase
-      .from("booking_requests")
-      .select("id, tanggal, preferensi_waktu, catatan, clients ( nama ), services ( nama )")
-      .eq("status", "menunggu")
-      // Yang paling dekat tanggalnya paling mendesak dijawab.
-      .order("tanggal", { ascending: true })
-      .order("created_at", { ascending: true })
-      .returns<BarisPermintaan[]>(),
-    // Hanya mitra AKTIF yang boleh ditawarkan untuk sesi baru. Daftar NAMA untuk
-    // riwayat (view `partner_publik`) sengaja tidak menyaring apa pun — dua
-    // kebutuhan berbeda dari satu tabel yang sama.
-    pilihanMitra(),
-  ]);
+  const [{ data: permintaan }, { data: sesi }, { data: klien }, { data: layanan }, mitra] =
+    await Promise.all([
+      supabase
+        .from("booking_requests")
+        .select("id, tanggal, preferensi_waktu, catatan, clients ( nama ), services ( nama )")
+        .eq("status", "menunggu")
+        // Yang paling dekat tanggalnya paling mendesak dijawab.
+        .order("tanggal", { ascending: true })
+        .order("created_at", { ascending: true })
+        .returns<BarisPermintaan[]>(),
+      // Sesi terbaru di atas: yang baru saja dijalani bidan adalah yang paling
+      // mungkin perlu ditandai selesai.
+      supabase
+        .from("sessions")
+        .select(
+          "id, tanggal, status, catatan, rekomendasi, client_package_id, clients ( nama, padma_id ), services ( nama ), partners ( nama )",
+        )
+        .order("tanggal", { ascending: false })
+        .limit(BATAS_BARIS)
+        .returns<BarisSesiDb[]>(),
+      supabase
+        .from("clients")
+        .select("id, nama, padma_id")
+        .order("nama")
+        .returns<{ id: string; nama: string; padma_id: string }[]>(),
+      supabase
+        .from("services")
+        .select("id, nama")
+        .order("nama")
+        .returns<{ id: string; nama: string }[]>(),
+      // Hanya mitra AKTIF yang boleh ditawarkan untuk sesi baru. Daftar NAMA
+      // untuk riwayat (view `partner_publik`) sengaja tidak menyaring apa pun —
+      // dua kebutuhan berbeda dari satu tabel yang sama.
+      pilihanMitra(),
+    ]);
 
   const antre: PermintaanAntre[] = (permintaan ?? []).map((p) => ({
     id: p.id,
@@ -51,14 +91,44 @@ export default async function SesiPage() {
     catatan: p.catatan,
   }));
 
+  const daftarSesi: BarisSesiTampil[] = (sesi ?? []).map((s) => ({
+    id: s.id,
+    namaKlien: s.clients?.nama ?? "Klien",
+    padmaId: s.clients?.padma_id ?? "—",
+    namaLayanan: s.services?.nama ?? "Layanan",
+    tanggal: formatTanggalID(s.tanggal),
+    // Mitra dibaca dari tabel `partners` (hak staf), bukan dari view publik.
+    namaMitra: s.partners?.nama ?? "Tim PADMA",
+    status: s.status,
+    dalamPaket: s.client_package_id !== null,
+    catatan: s.catatan,
+    rekomendasi: s.rekomendasi,
+  }));
+
+  const pilihanKlien: PilihanKlien[] = (klien ?? []).map((k) => ({
+    id: k.id,
+    nama: k.nama,
+    padmaId: k.padma_id,
+  }));
+
   return (
     <main>
-      <header className="mb-5">
-        <h1 className="font-serif text-2xl text-night">Sesi</h1>
-        <p className="mt-1 max-w-xl text-[13px] text-ink-soft">
-          Permintaan jadwal dari klien menunggu keputusan di sini. Yang
-          dikonfirmasi langsung menjadi sesi pada Passport kliennya.
-        </p>
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-2xl text-night">Sesi</h1>
+          <p className="mt-1 max-w-xl text-[13px] text-ink-soft">
+            Permintaan jadwal dari klien menunggu keputusan di sini. Yang
+            dikonfirmasi langsung menjadi sesi pada Passport kliennya.
+          </p>
+        </div>
+        <FormJadwalSesi
+          klien={pilihanKlien}
+          layanan={layanan ?? []}
+          mitra={mitra}
+          // Tanggal awal formulir = hari ini menurut kalender Jakarta, bukan
+          // jam server: pada 17:00–24:00 UTC keduanya sudah berbeda tanggal.
+          tanggalAwal={hariIniJakarta()}
+        />
       </header>
 
       <section aria-label="Permintaan jadwal menunggu">
@@ -77,6 +147,43 @@ export default async function SesiPage() {
             </p>
           </>
         )}
+      </section>
+
+      <section aria-label="Daftar sesi" className="mt-6">
+        <h2 className="mb-3 font-serif text-lg text-night">Sesi terbaru</h2>
+
+        {daftarSesi.length === 0 ? (
+          <p className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm italic text-ink-soft">
+            Belum ada sesi. Mulai dari tombol &ldquo;+ Jadwalkan sesi&rdquo;.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-black/10 bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-[13.5px]">
+                <thead>
+                  <tr className="border-b-[1.5px] border-black/10 bg-paper text-[11px] uppercase tracking-wider text-ink-soft">
+                    <th className="p-4 text-left font-extrabold">Klien</th>
+                    <th className="p-4 text-left font-extrabold">Layanan</th>
+                    <th className="p-4 text-left font-extrabold">Mitra</th>
+                    <th className="p-4 text-left font-extrabold">Status</th>
+                    <th className="p-4 text-left font-extrabold">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daftarSesi.map((s) => (
+                    <BarisSesi key={s.id} sesi={s} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <p className="mt-2 text-[12px] text-ink-soft">
+          Catatan &amp; rekomendasi yang ditulis saat menandai sesi selesai
+          langsung terbaca klien di Passport-nya — tulislah untuk dibaca klien,
+          bukan sebagai catatan internal.
+        </p>
       </section>
     </main>
   );

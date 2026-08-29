@@ -34,6 +34,17 @@ import { createServerSupabase } from "@/lib/supabase/server";
 type Gagal = { ok: false; pesan: string };
 type Berhasil = { ok: true };
 
+// Tanggal divalidasi sebagai TEKS, bukan lewat `new Date(...)`: kolom `tanggal`
+// bertipe `date` dan sudah berupa YYYY-MM-DD, sedangkan `new Date("2026-12-27")`
+// adalah tengah malam UTC — di zona mana pun sebelah barat ia mundur sehari.
+// Aturan yang sama berlaku di seluruh proyek (lihat `@/lib/passport/waktu`).
+const POLA_TANGGAL = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+// Catatan bidan masuk ke `sessions.catatan` yang bertipe `text` tanpa batas.
+// Batas ditegakkan di sini supaya satu tempelan raksasa tidak menjadi payload
+// yang harus dirender ulang pada setiap kunjungan passport klien.
+const BATAS_CATATAN = 2000;
+
 /**
  * Mengubah satu permintaan jadwal menjadi sesi terjadwal.
  *
@@ -139,6 +150,156 @@ export async function tolakPermintaan(permintaanId: string): Promise<Berhasil | 
 
   revalidatePath("/admin/sesi");
   revalidatePath("/admin");
+  revalidatePath("/passport");
+  return { ok: true };
+}
+
+/**
+ * Menjadwalkan sesi LANGSUNG — tanpa melewati antrean permintaan.
+ *
+ * Jalur ini ada karena sebagian besar jadwal klinik lahir di telepon, bukan di
+ * aplikasi. Bedanya dengan `konfirmasiPermintaan`: di sini memang admin yang
+ * memilih kliennya, jadi `client_id` boleh datang dari formulir — yang
+ * menjaganya adalah `requireRole` di atas, bukan asal-usul nilainya.
+ *
+ * Satu nilai yang TETAP tidak boleh datang dari formulir adalah
+ * `client_package_id`. Paket dibaca dari klien yang dipilih: bila ia boleh
+ * dikirim, satu POST yang dikarang bisa menempelkan sesi seorang klien pada
+ * paket klien lain — progres orang itu bertambah tanpa ia pernah dikunjungi,
+ * dan tidak ada foreign key yang keberatan karena paketnya memang ada.
+ *
+ * Status sesi tertulis mati: `terjadwal`. Sesi tidak pernah lahir "selesai" —
+ * catatan bidannya belum ada, dan stempel passport akan terbit kosong.
+ */
+export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const clientId = String(formData.get("client_id") ?? "").trim();
+  const serviceId = String(formData.get("service_id") ?? "").trim();
+  const partnerId = String(formData.get("partner_id") ?? "").trim();
+  const tanggal = String(formData.get("tanggal") ?? "").trim();
+  const pakaiPaket = formData.get("pakai_paket") !== null;
+
+  if (!clientId || !serviceId || !partnerId) {
+    return { ok: false, pesan: "Klien, layanan, dan mitra wajib dipilih." };
+  }
+  if (!POLA_TANGGAL.test(tanggal)) {
+    return { ok: false, pesan: "Tanggal harus berformat YYYY-MM-DD." };
+  }
+
+  const supabase = await createServerSupabase();
+
+  // Ketiganya diperiksa SEBELUM menulis. Foreign key memang menolak id yang
+  // tidak ada, tetapi pesannya adalah kode Postgres — dan untuk mitra ia sama
+  // sekali tidak menolong: mitra yang sudah pensiun tetap ada barisnya.
+  const [{ data: klien }, { data: layanan }, { data: mitra }] = await Promise.all([
+    supabase.from("clients").select("id").eq("id", clientId).maybeSingle(),
+    supabase.from("services").select("id").eq("id", serviceId).maybeSingle(),
+    supabase
+      .from("partners")
+      .select("id")
+      .eq("id", partnerId)
+      .eq("aktif", true)
+      .maybeSingle(),
+  ]);
+
+  if (!klien) return { ok: false, pesan: "Klien tidak ditemukan." };
+  if (!layanan) return { ok: false, pesan: "Layanan tidak ditemukan." };
+  if (!mitra) return { ok: false, pesan: "Mitra tidak tersedia. Pilih mitra yang aktif." };
+
+  // Paket dibaca dari klien yang dipilih — tidak pernah dari formulir.
+  let paketId: string | null = null;
+  if (pakaiPaket) {
+    const { data: paket } = await supabase
+      .from("client_packages")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("status", "aktif")
+      .order("tanggal_mulai", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    paketId = paket?.id ?? null;
+  }
+
+  const { error } = await supabase.from("sessions").insert({
+    client_id: clientId,
+    service_id: serviceId,
+    partner_id: partnerId,
+    tanggal,
+    status: "terjadwal",
+    catatan: "",
+    rekomendasi: "",
+    client_package_id: paketId,
+  });
+
+  if (error) return { ok: false, pesan: "Gagal menyimpan jadwal sesi." };
+
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
+  // Sesi baru langsung tampil di passport klien sebagai jadwal berikutnya.
+  revalidatePath("/passport");
+  return { ok: true };
+}
+
+/**
+ * Menandai sesi SELESAI beserta catatan bidan.
+ *
+ * Inilah satu-satunya tempat catatan bidan masuk ke passport klien, dan karena
+ * itu tiga hal dijaga ketat:
+ *
+ *  1. `eq("status","terjadwal")` bukan sekadar validasi. Tanpanya, sesi yang
+ *     sudah dibatalkan bisa dihidupkan kembali, dan catatan sesi yang sudah
+ *     selesai bisa ditimpa diam-diam oleh klik kedua — rekam medis kehilangan
+ *     versi aslinya tanpa satu pun error.
+ *
+ *  2. Catatan wajib berisi. Sesi "selesai" tanpa catatan adalah stempel kosong
+ *     di passport: klien melihat kunjungannya bertambah tetapi tidak menerima
+ *     apa pun dari kunjungan itu.
+ *
+ *  3. Keadaan pembayaran TIDAK ikut disentuh — namanya pun tidak disebut di
+ *     berkas ini. Keputusan uang punya tabel jejak audit tersendiri (lihat
+ *     migration jejak keputusan pembayaran); membuatnya bergerak sebagai efek
+ *     samping "tandai selesai" berarti jejak itu mencatat aktor yang benar
+ *     untuk keputusan yang tidak pernah diambil siapa pun.
+ */
+export async function selesaikanSesi(
+  sesiId: string,
+  formData: FormData,
+): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const catatan = String(formData.get("catatan") ?? "").trim();
+  const rekomendasi = String(formData.get("rekomendasi") ?? "").trim();
+
+  if (catatan.length === 0) {
+    return { ok: false, pesan: "Catatan wajib diisi — inilah yang dibaca klien." };
+  }
+  if (catatan.length > BATAS_CATATAN || rekomendasi.length > BATAS_CATATAN) {
+    return {
+      ok: false,
+      pesan: `Catatan dan rekomendasi maksimal ${BATAS_CATATAN} karakter.`,
+    };
+  }
+
+  const supabase = await createServerSupabase();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .update({ status: "selesai", catatan, rekomendasi })
+    .eq("id", sesiId)
+    .eq("status", "terjadwal")
+    .select("id");
+
+  // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST 200 + [] —
+  // sesi batal, sesi yang sudah selesai, dan sesi yang tidak ada semuanya
+  // mendarat di sini, dan ketiganya bukan keberhasilan.
+  if (error || (data ?? []).length === 0) {
+    return { ok: false, pesan: "Sesi tidak ditemukan atau sudah ditangani." };
+  }
+
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
+  // Catatan bidan baru terbit di riwayat sesi klien.
   revalidatePath("/passport");
   return { ok: true };
 }

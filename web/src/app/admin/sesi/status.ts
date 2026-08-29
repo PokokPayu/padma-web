@@ -31,3 +31,17 @@ export const LABEL_STATUS_PERMINTAAN: Record<StatusPermintaan, string> = {
   dikonfirmasi: "Dikonfirmasi",
   ditolak: "Ditolak",
 };
+
+// Status SESI (enum `session_status`) — berbeda dari status PERMINTAAN di atas.
+// Keduanya sengaja tidak digabung: permintaan yang `ditolak` dan sesi yang
+// `batal` terdengar mirip tetapi hidup di tabel berbeda, dan menyatukan
+// labelnya adalah cara paling mudah menampilkan status yang salah.
+export const STATUS_SESI_SAH = ["terjadwal", "selesai", "batal"] as const;
+
+export type StatusSesi = (typeof STATUS_SESI_SAH)[number];
+
+export const LABEL_STATUS_SESI: Record<StatusSesi, string> = {
+  terjadwal: "Terjadwal",
+  selesai: "Selesai",
+  batal: "Batal",
+};
