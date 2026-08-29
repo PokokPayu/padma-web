@@ -250,7 +250,26 @@ describe("server action tindak lanjut", () => {
     const ekspor = [...sumberAksi.matchAll(/^export\s+(?!type\b)(\w+)/gm)].map(
       (m) => m[1],
     );
-    expect(ekspor).toEqual(["async"]);
+    // Modul ini bertambah action (konversi skrining → klien), jadi jumlahnya
+    // tidak lagi tetap satu. Yang dikunci adalah aturannya: SETIAP ekspor wajib
+    // `async` — satu saja yang bukan, `next build` gagal.
+    expect(ekspor.length).toBeGreaterThan(0);
+    expect([...new Set(ekspor)]).toEqual(["async"]);
+  });
+
+  it("SETIAP action membawa penjaga perannya sendiri", () => {
+    // Server action adalah endpoint POST tersendiri: action yang lahir tanpa
+    // requireRole adalah pintu terbuka, dan tidak ada layout yang menutupnya.
+    const jumlahAction = [
+      ...sumberAksi.matchAll(/^export\s+async\s+function\s+\w+/gm),
+    ].length;
+    const jumlahGuard = [
+      ...sumberAksi.matchAll(
+        /await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g,
+      ),
+    ].length;
+    expect(jumlahAction).toBeGreaterThan(0);
+    expect(jumlahGuard).toBe(jumlahAction);
   });
 
   it("hanya mengubah status_tindak_lanjut — bukan hasil/flags/jawaban", () => {

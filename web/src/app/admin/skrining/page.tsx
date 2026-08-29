@@ -7,11 +7,26 @@ export const metadata = { title: "Inbox Skrining" };
 export default async function InboxSkriningPage() {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("screenings")
-    .select("id, kode, nama, no_hp, fase, hasil, status_tindak_lanjut, created_at, flags")
-    .order("created_at", { ascending: false })
-    .limit(100);
+
+  // `client_id` ikut dibaca supaya inbox bisa membedakan calon klien yang sudah
+  // didaftarkan dari yang belum — tanpa kolom itu, satu-satunya kabar bahwa
+  // seseorang sudah punya PADMA ID adalah ingatan admin.
+  const [{ data }, { data: fase }] = await Promise.all([
+    supabase
+      .from("screenings")
+      .select(
+        "id, kode, nama, no_hp, fase, hasil, status_tindak_lanjut, created_at, flags, client_id",
+      )
+      .order("created_at", { ascending: false })
+      .limit(100),
+    // Nama fase datang dari tabel `phases`, tidak pernah disalin sebagai
+    // literal ke komponen.
+    supabase
+      .from("phases")
+      .select("id, nama, urutan")
+      .order("urutan")
+      .returns<{ id: string; nama: string; urutan: number }[]>(),
+  ]);
 
   return (
     <main className="p-8">
@@ -22,7 +37,7 @@ export default async function InboxSkriningPage() {
           jawaban asli — bukan sekadar percaya isi pesan.
         </p>
       </header>
-      <TabelInbox baris={(data ?? []) as BarisSkrining[]} />
+      <TabelInbox baris={(data ?? []) as BarisSkrining[]} fase={fase ?? []} />
     </main>
   );
 }
