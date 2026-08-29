@@ -123,31 +123,127 @@ export async function seedUsers() {
   );
   if (cpErr) throw cpErr;
 
+  // Perjalanan Ananda dibuat UTUH, bukan sekadar cukup untuk test: passport
+  // yang tampil 1/8 sesi tanpa badge tidak menunjukkan apa pun saat demo.
+  // Susunannya: 6 sesi selesai di dalam paket Sankalpa Prima (progres 6/8),
+  // 1 sesi terjadwal sebagai penanda "berikutnya" pada stempel ke-7, dan
+  // 1 sesi LEPAS yang belum dibayar sebagai bahan halaman Bayar.
+  //
+  // Tiga layanan berbeda dipakai (Fertility Massage, Flow Yoga, Konsultasi
+  // Nutrisi) sehingga lahir 3 badge. Layanan 1106 Lactation Hero SENGAJA tidak
+  // pernah dijalani — materi gating hanya terbukti selama ada layanan yang
+  // belum pernah disentuh Ananda.
+  //
+  // `catatan`, `rekomendasi`, dan `status_bayar` ditulis eksplisit di SETIAP
+  // baris: upsert massal PostgREST memakai gabungan kunci seluruh objek dan
+  // mengisi yang tidak disebut dengan NULL (bukan DEFAULT), sedangkan ketiga
+  // kolom itu NOT NULL.
+  const sesiDalamPaket = {
+    client_id: ANANDA_CLIENT_ID,
+    client_package_id: "55555555-5555-5555-5555-555555555501",
+    status_bayar: "belum" as const, // sesi berpaket ikut status bayar paketnya
+  };
+
   const { error: sErr } = await admin.from("sessions").upsert(
     [
+      // ---- 6 sesi SELESAI dalam paket Sankalpa Prima (progres 6/8) ----
       {
+        ...sesiDalamPaket,
         id: "66666666-6666-6666-6666-666666666601",
-        client_id: "44444444-4444-4444-4444-444444444401",
-        service_id: "11111111-1111-1111-1111-111111111101",
-        client_package_id: "55555555-5555-5555-5555-555555555501",
+        service_id: "11111111-1111-1111-1111-111111111101", // Fertility Massage
         partner_id: "33333333-3333-3333-3333-333333333301",
         tanggal: "2026-07-08",
         status: "selesai",
-        catatan: "Sesi perkenalan; pemetaan kondisi awal.",
-        rekomendasi: "Jaga tidur 7-8 jam; mulai catat siklus.",
+        catatan:
+          "Sesi perkenalan. Pijat relaksasi & pemetaan kondisi awal — ketegangan menumpuk di punggung bawah, kualitas tidur kurang.",
+        rekomendasi:
+          "Jaga tidur 7–8 jam, mulai catat siklus haid di lembar yang kami berikan.",
       },
       {
+        ...sesiDalamPaket,
         id: "66666666-6666-6666-6666-666666666602",
-        client_id: "44444444-4444-4444-4444-444444444401",
         service_id: "11111111-1111-1111-1111-111111111101",
-        client_package_id: "55555555-5555-5555-5555-555555555501",
         partner_id: "33333333-3333-3333-3333-333333333301",
-        tanggal: "2026-09-04",
+        tanggal: "2026-07-15",
+        status: "selesai",
+        catatan:
+          "Ketegangan punggung bawah jauh berkurang. Klien mulai rutin jalan pagi bersama pasangan.",
+        rekomendasi:
+          "Lanjutkan jalan pagi 30 menit; kompres hangat bila pegal kembali.",
+      },
+      {
+        ...sesiDalamPaket,
+        id: "66666666-6666-6666-6666-666666666603",
+        service_id: "11111111-1111-1111-1111-111111111102", // Flow Yoga
+        partner_id: "33333333-3333-3333-3333-333333333302",
+        tanggal: "2026-07-22",
+        status: "selesai",
+        catatan:
+          "Latihan pernapasan & gerakan dasar. Klien cepat menangkap teknik napas diafragma.",
+        rekomendasi:
+          "Ulangi rangkaian napas & gerakan dasar di rumah, 15 menit, 3× sepekan.",
+      },
+      {
+        ...sesiDalamPaket,
+        id: "66666666-6666-6666-6666-666666666604",
+        service_id: "11111111-1111-1111-1111-111111111101",
+        partner_id: "33333333-3333-3333-3333-333333333301",
+        tanggal: "2026-07-29",
+        status: "selesai",
+        catatan:
+          "Tubuh merespons baik; keluhan pegal hampir hilang. Suasana hati membaik dibanding sesi pertama.",
+        rekomendasi:
+          "Pertahankan rutinitas. Sesi berikutnya fokus pada area pinggul.",
+      },
+      {
+        ...sesiDalamPaket,
+        id: "66666666-6666-6666-6666-666666666605",
+        service_id: "11111111-1111-1111-1111-111111111103", // Konsultasi Nutrisi
+        partner_id: "33333333-3333-3333-3333-333333333302",
+        tanggal: "2026-08-12",
+        status: "selesai",
+        catatan:
+          "Evaluasi pola makan sepekan. Asupan protein & asam folat masih kurang dari kebutuhan promil.",
+        rekomendasi:
+          "Ikuti menu contoh yang kami berikan; tambah satu porsi protein pada tiap waktu makan.",
+      },
+      {
+        ...sesiDalamPaket,
+        id: "66666666-6666-6666-6666-666666666606",
+        service_id: "11111111-1111-1111-1111-111111111101",
+        partner_id: "33333333-3333-3333-3333-333333333301",
+        tanggal: "2026-08-19",
+        status: "selesai",
+        catatan:
+          "Siklus tercatat lebih teratur dua bulan terakhir. Respons tubuh sangat baik terhadap rangkaian perawatan.",
+        rekomendasi:
+          "Lanjutkan seluruh rutinitas — perjalanan Anda berjalan sesuai rencana.",
+      },
+      // ---- sesi TERJADWAL berikutnya (stempel ke-7 = penanda "berikutnya") ----
+      // Sengaja jauh (Des 2026) supaya tampilan demo tidak berubah menjadi
+      // "tidak ada sesi berikutnya" hanya karena tanggal seed terlewat.
+      {
+        ...sesiDalamPaket,
+        id: "66666666-6666-6666-6666-666666666607",
+        service_id: "11111111-1111-1111-1111-111111111102",
+        partner_id: "33333333-3333-3333-3333-333333333302",
+        tanggal: "2026-12-04",
         status: "terjadwal",
-        // Wajib eksplisit: upsert massal PostgREST mengisi kolom yang tidak
-        // disebut dengan NULL (bukan DEFAULT), sedangkan kedua kolom NOT NULL.
         catatan: "",
         rekomendasi: "",
+      },
+      // ---- sesi LEPAS yang belum dibayar (bahan halaman Bayar) ----
+      {
+        id: "66666666-6666-6666-6666-666666666608",
+        client_id: ANANDA_CLIENT_ID,
+        service_id: "11111111-1111-1111-1111-111111111103",
+        client_package_id: null, // di luar paket → menjadi item tagihan sendiri
+        partner_id: "33333333-3333-3333-3333-333333333302",
+        tanggal: "2026-12-11",
+        status: "terjadwal",
+        catatan: "",
+        rekomendasi: "",
+        status_bayar: "belum",
       },
     ],
     { onConflict: "id" },
