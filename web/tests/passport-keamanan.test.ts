@@ -107,6 +107,56 @@ describe("nama mitra untuk klien", () => {
   });
 });
 
+/**
+ * Klien sengaja TIDAK punya policy UPDATE pada tabel mana pun yang menyimpan
+ * status. RLS tidak mengenal batas per-kolom untuk UPDATE: satu policy langsung
+ * menyerahkan `status`, `catatan`, `client_id`, dan `status_bayar` sekaligus.
+ * Test ini mengunci keadaan itu supaya tidak dilonggarkan "sebentar saja" oleh
+ * siapa pun yang ingin klaim bayar bekerja tanpa server action.
+ */
+describe("klaim pembayaran", () => {
+  it("klien TIDAK punya jalur UPDATE langsung ke client_packages", async () => {
+    const { k, clientId } = await klienDanId();
+    const { data: cp } = await admin.from("client_packages")
+      .select("id, status_bayar").eq("client_id", clientId).limit(1).single();
+
+    const { data: ubah } = await k.from("client_packages")
+      .update({ status_bayar: "lunas" }).eq("id", cp!.id).select();
+    expect(ubah ?? []).toHaveLength(0);
+
+    const { data: cek } = await admin.from("client_packages")
+      .select("status_bayar").eq("id", cp!.id).single();
+    expect(cek!.status_bayar).toBe(cp!.status_bayar); // tidak berubah
+  });
+
+  it("klien TIDAK punya jalur UPDATE langsung ke sessions", async () => {
+    const { k, clientId } = await klienDanId();
+    const { data: s } = await admin.from("sessions")
+      .select("id, status").eq("client_id", clientId).eq("status", "terjadwal").limit(1).single();
+
+    const { data: ubah } = await k.from("sessions")
+      .update({ status: "selesai" }).eq("id", s!.id).select();
+    expect(ubah ?? []).toHaveLength(0);
+
+    const { data: cek } = await admin.from("sessions").select("status").eq("id", s!.id).single();
+    expect(cek!.status).toBe("terjadwal");
+  });
+
+  it("klien TIDAK bisa menyetel status_bayar sesinya sendiri menjadi lunas", async () => {
+    const { k, clientId } = await klienDanId();
+    const { data: s } = await admin.from("sessions")
+      .select("id, status_bayar").eq("client_id", clientId).eq("status_bayar", "belum").limit(1).single();
+
+    const { data: ubah } = await k.from("sessions")
+      .update({ status_bayar: "lunas" }).eq("id", s!.id).select();
+    expect(ubah ?? []).toHaveLength(0);
+
+    const { data: cek } = await admin.from("sessions")
+      .select("status_bayar").eq("id", s!.id).single();
+    expect(cek!.status_bayar).toBe("belum");
+  });
+});
+
 describe("invarian satu akun ↔ satu klien", () => {
   it("clients.user_id unik (mencegah satu user menempel ke dua klien)", async () => {
     const { data: ananda } = await admin.from("clients")
