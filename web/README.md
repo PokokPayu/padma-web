@@ -72,9 +72,17 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/passport/bayar` | Klien | STATUS tagihan (tanpa nominal) + klaim "saya sudah bayar" |
 | `/passport/ajukan` | Klien | Ajukan jadwal — selalu berstatus `menunggu` |
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
-| `/admin` | Admin, Owner | Dashboard admin |
-| `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut |
+| `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
+| `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
+| `/admin/klien` | Admin, Owner | Daftar klien + tambah klien (PADMA ID otomatis) & status aktivasi |
+| `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp |
+| `/admin/sesi` | Admin, Owner | Antrean permintaan jadwal, jadwalkan sesi, tandai selesai + catatan bidan |
+| `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/owner` | Owner | Rate card & rekap honor (Plan 5) |
+
+Tidak ada satu pun nominal uang di rute `/admin/*`: `service_rates` menjawab
+admin dengan HTTP 200 + `[]` (kosong senyap, bukan error), dan panel admin tidak
+punya medan harga/honor mana pun.
 
 Catatan keamanan: `anon` tidak punya hak tabel pada `screenings` — penyimpanan
 skrining publik WAJIB lewat route handler dengan service role.
@@ -129,7 +137,7 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # ketiga skrip di bawah, berurutan
+npm run test:e2e:semua    # keempat skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
@@ -150,8 +158,20 @@ npm run test:e2e:semua    # ketiga skrip di bawah, berurutan
   dan bottom bar 390px tanpa scroll horizontal. Status bayar & permintaan jadwal
   yang disentuhnya dikembalikan ke keadaan seed di awal DAN di akhir run, jadi
   aman diulang.
+- `npm run test:e2e:admin` — rantai operasional klinik dalam SATU alur: admin
+  masuk → membuat klien baru (PADMA ID otomatis, status "Belum aktif") →
+  menerbitkan tautan aktivasi → klien membuka tautan itu di browser lain, masuk,
+  dan mendarat di `/passport` (barisnya berubah menjadi "Aktif" di panel admin)
+  → admin menjadwalkan sesi lalu menandainya selesai dengan catatan &
+  rekomendasi bidan → klien membaca catatan itu di `/passport/sesi` dan badge
+  pertamanya terbit. Tiap potongan sudah punya test unit; yang hanya bisa
+  dibuktikan di sini adalah SAMBUNGANNYA. Seluruh data ujinya beremail
+  `e2e-admin-<timestamp>@padma.test` dan dihapus lewat service role di awal DAN
+  di akhir run (baris klien dulu, baru akun auth — `clients.user_id` menunjuk
+  `auth.users` tanpa `on delete`), jadi aman diulang dan tidak menggeser
+  hitungan yang di-assert `npm test`.
 
-Catatan untuk ketiga skrip: klik beruntun pada wizard/kartu harus menunggu
+Catatan untuk keempat skrip: klik beruntun pada wizard/kartu harus menunggu
 render berikutnya (mis. `Pertanyaan N dari`). Tombol jawaban adalah simpul DOM
 yang sama di semua pertanyaan, sehingga dua klik di frame yang sama memakai
 `indeks` lama — satu jawaban tertelan dan skenarionya merah secara acak.

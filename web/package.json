@@ -12,7 +12,8 @@
     "test:e2e": "tsx tests/e2e/access-matrix.e2e.ts",
     "test:e2e:funnel": "tsx tests/e2e/funnel-skrining.e2e.ts",
     "test:e2e:passport": "tsx tests/e2e/passport.e2e.ts",
-    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:funnel && npm run test:e2e:passport",
+    "test:e2e:admin": "tsx tests/e2e/admin-operasional.e2e.ts",
+    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:funnel && npm run test:e2e:passport && npm run test:e2e:admin",
     "db:recover": "npx supabase stop && npx supabase start && npx supabase db reset",
     "seed:users": "tsx scripts/seed-users.ts"
   },
