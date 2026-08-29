@@ -20,6 +20,12 @@
  *     `@/lib/passport/turunan` — dan pagarnya ditulis di berkas yang sama
  *     dengan perbaikan RPC-nya, bukan menyusul.
  *
+ * Keduanya ditutup dengan SARINGAN, dan saringan yang sama disalin ke tiga
+ * berkas. Karena itu blok terakhir berkas ini mengunci lapis ketiga yang
+ * membuat salinan-salinan itu tidak bisa berpisah diam-diam: constraint
+ * `sessions_bayar_hanya_lepas`, yang mengubah "sesi berpaket berstatus bayar"
+ * dari keadaan-yang-disaring menjadi keadaan-yang-tidak-bisa-ada.
+ *
  * Higiene: setiap perubahan `status_bayar` menulis satu baris
  * `jejak_status_bayar`, dan tabel jejak SENGAJA tanpa foreign key (cascade akan
  * menghapus tepat bukti yang menjelaskan penghapusan). Fixture di sini karena
@@ -37,6 +43,7 @@ const PAKET_SEED = "55555555-5555-5555-5555-555555555501"; // paket Ananda (seed
 const PAKET_UJI = "55555555-5555-5555-5555-5555555555b1";
 const SESI_PAKET = "66666666-6666-6666-6666-6666666666b1";
 const SESI_LEPAS = "66666666-6666-6666-6666-6666666666b2";
+const SESI_LAHIR = "66666666-6666-6666-6666-6666666666b3";
 const SVC_MASSAGE = "11111111-1111-1111-1111-111111111101";
 const SVC_NUTRISI = "11111111-1111-1111-1111-111111111103";
 const MITRA_A = "33333333-3333-3333-3333-333333333301";
@@ -54,9 +61,12 @@ vi.mock("@/lib/supabase/server", () => ({
 const { hitungKlaimMenunggu, hitungAntrean } = await import("@/lib/admin/antrean");
 
 async function bersihkan() {
-  await admin.from("jejak_status_bayar").delete().in("sesi_id", [SESI_PAKET, SESI_LEPAS]);
+  await admin
+    .from("jejak_status_bayar")
+    .delete()
+    .in("sesi_id", [SESI_PAKET, SESI_LEPAS, SESI_LAHIR]);
   await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", PAKET_UJI);
-  await admin.from("sessions").delete().in("id", [SESI_PAKET, SESI_LEPAS]);
+  await admin.from("sessions").delete().in("id", [SESI_PAKET, SESI_LEPAS, SESI_LAHIR]);
   await admin.from("client_packages").delete().eq("id", PAKET_UJI);
 }
 
@@ -193,16 +203,27 @@ describe("klaim pembayaran hanya untuk sesi lepas", () => {
 });
 
 describe("badge antrean sinkron dengan daftar", () => {
-  it("mengklaim sesi berpaket TIDAK menaikkan badge klaimMenunggu", async () => {
+  it("keadaan 'sesi berpaket menunggu verifikasi' tidak bisa lagi dipaksakan sama sekali", async () => {
+    // Semula test ini memaksa keadaannya lewat service role (menembus RPC) lalu
+    // membuktikan saringan badge membuangnya. Sejak constraint
+    // `sessions_bayar_hanya_lepas`, pemaksaan itu SENDIRI ditolak database —
+    // jadi assertion diperkuat, bukan dilonggarkan: yang dibuktikan bukan lagi
+    // "badge menyaringnya", melainkan "keadaannya tidak bisa lahir".
+    //
+    // Assertion lama tetap dipertahankan di baris terakhir. Tanpa itu, seorang
+    // yang kelak mencabut saringan `client_package_id is null` dari
+    // `hitungKlaimMenunggu()` tidak akan melihat satu pun test merah selama
+    // constraint masih berdiri — dan saringan itu adalah lapis yang menjaga
+    // badge tetap sama dengan daftar `/admin/bayar`.
     const sebelum = await hitungKlaimMenunggu();
 
-    // Dipaksa lewat service role (menembus RPC) untuk meniru data lama yang
-    // terlanjur ada sebelum perbaikan — badge yang tidak bisa dibersihkan.
-    await admin
+    const { error } = await admin
       .from("sessions")
       .update({ status_bayar: "menunggu_verifikasi" })
       .eq("id", SESI_PAKET);
+    expect(error?.code).toBe("23514");
 
+    expect(await statusBayarSesi(SESI_PAKET)).toBe("belum");
     expect(await hitungKlaimMenunggu()).toBe(sebelum); // sesi berpaket bukan tagihan
   });
 
@@ -243,6 +264,8 @@ describe("badge antrean sinkron dengan daftar", () => {
   });
 
   it("hitungAntrean().klaimMenunggu memakai hitungan yang sama, bukan salinannya", async () => {
+    // Dua sasaran sekaligus (sesi lepas + paket aktif) supaya kedua cabang
+    // hitungan ikut terbukti, bukan hanya salah satunya.
     // Bila dashboard dan badge menghitung sendiri-sendiri, keduanya akan
     // berpisah diam-diam pada perubahan saringan berikutnya.
     await admin
@@ -250,10 +273,107 @@ describe("badge antrean sinkron dengan daftar", () => {
       .update({ status_bayar: "menunggu_verifikasi" })
       .eq("id", SESI_LEPAS);
     await admin
+      .from("client_packages")
+      .update({ status_bayar: "menunggu_verifikasi" })
+      .eq("id", PAKET_UJI);
+    const antrean = await hitungAntrean();
+    expect(antrean.klaimMenunggu).toBe(await hitungKlaimMenunggu());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CONSTRAINT STRUKTURAL
+// ---------------------------------------------------------------------------
+/**
+ * Saringan `client_package_id is null` di RPC klaim, di `susunTagihan()`, dan
+ * di `hitungKlaimMenunggu()` semuanya menjawab pertanyaan yang sama: "sesi
+ * berpaket tidak memikul status pembayaran sendiri". Tiga salinan aturan di
+ * tiga berkas adalah tiga kesempatan untuk berpisah diam-diam.
+ *
+ * `sessions_bayar_hanya_lepas` memindahkan aturannya ke tempat yang tidak bisa
+ * dilewati siapa pun — termasuk service role, termasuk SECURITY DEFINER,
+ * termasuk psql. Sejak itu, "sesi berpaket berstatus menunggu_verifikasi"
+ * bukan lagi keadaan yang disaring, melainkan keadaan yang TIDAK ADA.
+ *
+ * URUTAN: constraint ini sengaja lahir SESUDAH perbaikan RPC klaim. Bila
+ * dibalik, RPC melempar 23514 -> PostgREST 400 -> klien membaca "Gagal
+ * memproses" padahal jawaban yang benar adalah "item ini memang bukan tagihan".
+ * Test "klien TIDAK bisa mengklaim sesi yang sudah tercakup paket" di atas
+ * menguncinya: ia meng-assert `error` NULL, bukan sekadar 0 baris.
+ */
+describe("constraint sesi berpaket tidak memikul status pembayaran", () => {
+  it("service role sekalipun tidak bisa menyetel status_bayar pada sesi berpaket", async () => {
+    const { error } = await admin
       .from("sessions")
       .update({ status_bayar: "menunggu_verifikasi" })
       .eq("id", SESI_PAKET);
-    const antrean = await hitungAntrean();
-    expect(antrean.klaimMenunggu).toBe(await hitungKlaimMenunggu());
+    expect(error?.code).toBe("23514"); // pelanggaran CHECK
+    expect(await statusBayarSesi(SESI_PAKET)).toBe("belum");
+  });
+
+  it("'lunas' pun tertutup — sesi berpaket mengikuti status paketnya, titik", async () => {
+    const { error } = await admin
+      .from("sessions")
+      .update({ status_bayar: "lunas" })
+      .eq("id", SESI_PAKET);
+    expect(error?.code).toBe("23514");
+    expect(await statusBayarSesi(SESI_PAKET)).toBe("belum");
+  });
+
+  it("sesi berpaket TIDAK bisa LAHIR membawa status bayar", async () => {
+    // Trigger `guard_insert_status_bayar` hanya menjaga peran API; CHECK
+    // berlaku untuk semua, termasuk jalur seed/migrasi data.
+    const { error } = await admin.from("sessions").insert({
+      id: SESI_LAHIR,
+      client_id: KLIEN,
+      client_package_id: PAKET_UJI,
+      service_id: SVC_MASSAGE,
+      partner_id: MITRA_A,
+      tanggal: "2026-12-22",
+      status: "terjadwal",
+      status_bayar: "lunas",
+      catatan: "",
+      rekomendasi: "",
+    });
+    expect(error?.code).toBe("23514");
+    const { data } = await admin.from("sessions").select("id").eq("id", SESI_LAHIR).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it("memindahkan sesi lepas berstatus bayar ke dalam paket ditolak", async () => {
+    // Pintu belakang yang tersisa bila constraint hanya menjaga status_bayar:
+    // bayar dulu sebagai sesi lepas, baru dimasukkan ke paket.
+    const { error: eBayar } = await admin
+      .from("sessions")
+      .update({ status_bayar: "lunas" })
+      .eq("id", SESI_LEPAS);
+    expect(eBayar).toBeNull();
+
+    const { error } = await admin
+      .from("sessions")
+      .update({ client_package_id: PAKET_UJI })
+      .eq("id", SESI_LEPAS);
+    expect(error?.code).toBe("23514");
+
+    const { data } = await admin
+      .from("sessions")
+      .select("client_package_id")
+      .eq("id", SESI_LEPAS)
+      .single();
+    expect(data!.client_package_id).toBeNull();
+  });
+
+  it("sesi lepas yang BELUM dibayar tetap boleh dimasukkan ke paket (alur sah hidup)", async () => {
+    const { error } = await admin
+      .from("sessions")
+      .update({ client_package_id: PAKET_UJI })
+      .eq("id", SESI_LEPAS);
+    expect(error).toBeNull();
+    const { data } = await admin
+      .from("sessions")
+      .select("client_package_id")
+      .eq("id", SESI_LEPAS)
+      .single();
+    expect(data!.client_package_id).toBe(PAKET_UJI);
   });
 });
