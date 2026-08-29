@@ -216,7 +216,7 @@ describe("ambilDaftarMateri", () => {
     expect(json.toLowerCase()).not.toContain("\"url\"");
   });
 
-  it("materi non-aktif tidak muncul (policy chapters/videos tidak melihat materials.aktif)", async () => {
+  it("materi non-aktif tidak muncul (baris materials sendiri tetap terbaca RLS)", async () => {
     const { ambilDaftarMateri } = await import("@/lib/passport/data");
     await svc.from("materials").update({ aktif: false }).eq("id", MATERI_TERBUKA_EBOOK);
     try {

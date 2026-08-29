@@ -79,6 +79,8 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/admin/sesi` | Admin, Owner | Antrean permintaan jadwal, jadwalkan sesi, tandai selesai + catatan bidan |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
+| `/admin/layanan` | Admin, Owner | Katalog layanan & paket per fase; pensiun lewat `aktif = false`, tanpa hapus |
+| `/admin/materi` | Admin, Owner | Materi panduan per layanan; metadata + isi disimpan satu aksi, nonaktif menutup isinya di RLS |
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Rate card & rekap honor (Plan 5) |
 

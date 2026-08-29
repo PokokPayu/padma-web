@@ -13,6 +13,7 @@ type Ikon =
   | "bayar"
   | "mitra"
   | "katalog"
+  | "materi"
   | "setelan";
 
 // `badge` menunjuk medan Antrean yang dipakai, bukan angkanya — supaya satu
@@ -35,6 +36,9 @@ const MENU: Array<{
   // Judul halamannya "Layanan & Paket"; labelnya dipendekkan karena bottom bar
   // mobile kini memuat delapan tujuan.
   { href: "/admin/layanan", label: "Layanan", ikon: "katalog" },
+  // Judul halamannya "Materi Panduan"; labelnya cukup "Materi" — bottom bar
+  // mobile kini memuat sembilan tujuan.
+  { href: "/admin/materi", label: "Materi", ikon: "materi" },
   // Alasan yang sama dengan "Bayar": judul halamannya "Pengaturan", labelnya
   // "Setelan" agar tetap terbaca utuh di bottom bar mobile.
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
@@ -93,6 +97,19 @@ function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
       <svg viewBox="0 0 24 24" {...p}>
         <rect x="3.2" y="6.4" width="17.6" height="13.4" rx="2.4" />
         <path d="M6.6 3.4h10.8M4.9 10.4h14.2" strokeLinecap="round" />
+      </svg>
+    );
+  // Buku terbuka, bukan berkas/unduhan: materi PADMA sengaja hanya bisa dibaca
+  // di dalam aplikasi — ikon berkas akan menjanjikan unduhan yang memang tidak
+  // pernah ada.
+  if (jenis === "materi")
+    return (
+      <svg viewBox="0 0 24 24" {...p}>
+        <path
+          d="M12 6.4C10.3 5.1 8.3 4.5 5.6 4.5H3.4v13.2h2.2c2.7 0 4.7.6 6.4 1.9 1.7-1.3 3.7-1.9 6.4-1.9h2.2V4.5h-2.2c-2.7 0-4.7.6-6.4 1.9z"
+          strokeLinejoin="round"
+        />
+        <path d="M12 6.4v13.2" strokeLinecap="round" />
       </svg>
     );
   // Sekrup penyetel, bukan roda gigi: modul ini menyetel teks & nomor yang

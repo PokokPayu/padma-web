@@ -165,8 +165,11 @@ export async function ambilDaftarMateri(): Promise<MateriRingkas[]> {
     .select(
       "id, judul, tipe, deskripsi, services(nama), material_chapters(id), material_videos(material_id)",
     )
-    // Policy chapters/videos TIDAK mengevaluasi materials.aktif — penyaringan
-    // materi non-aktif adalah tanggung jawab query ini sendiri.
+    // Policy chapters/videos kini ikut mengevaluasi materials.aktif (migration
+    // gating_materi_hormati_aktif), sehingga ISI materi yang ditarik memang
+    // berhenti dijawab basis data. Baris `materials` sendiri TETAP terbaca
+    // setiap pengguna login — menutupnya akan mengulangi bug partner_publik —
+    // jadi menghilangkan KARTU-nya tetap tanggung jawab query ini.
     .eq("aktif", true)
     .order("judul")
     .returns<BarisMateriDaftar[]>();

@@ -220,7 +220,7 @@ describe("navigasi admin", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat delapan tujuan berbahasa Indonesia", () => {
+  it("memuat sembilan tujuan berbahasa Indonesia", () => {
     const m = markupNav("/admin");
     const tujuan = [
       ["/admin", "Beranda"],
@@ -231,6 +231,8 @@ describe("navigasi admin", () => {
       ["/admin/mitra", "Mitra"],
       // Label "Layanan", judul halamannya "Layanan & Paket".
       ["/admin/layanan", "Layanan"],
+      // Label "Materi", judul halamannya "Materi Panduan".
+      ["/admin/materi", "Materi"],
       // Label "Setelan", judul halamannya "Pengaturan" — alasan yang sama
       // dengan "Bayar"/"Pembayaran": bottom bar mobile memotong label panjang.
       ["/admin/pengaturan", "Setelan"],
@@ -239,7 +241,7 @@ describe("navigasi admin", () => {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
     }
-    // Jumlahnya dikunci PERSIS (dua nav × delapan tautan): tujuan yang lahir
+    // Jumlahnya dikunci PERSIS (dua nav × sembilan tautan): tujuan yang lahir
     // tanpa memperbarui daftar di atas akan lolos dari seluruh assertion
     // `toContain` tanpa satu pun test merah.
     expect([...m.matchAll(/<a\b/g)]).toHaveLength(tujuan.length * 2);

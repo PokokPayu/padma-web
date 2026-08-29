@@ -17,10 +17,12 @@
  *     OBJEK NULL — bukan error. Halaman yang lupa memeriksanya akan merender
  *     kerangka kosong, atau lebih buruk: menyimpulkan berhak dari kolom lain.
  *     Akses langsung ke URL materi terkunci diuji apa adanya.
- *  3. `materials.aktif` tidak dievaluasi policy `material_chapters` /
- *     `material_videos`. Materi yang ditarik admin tetap punya bab yang terbaca
- *     RLS — penyaringan `aktif` adalah tanggung jawab query aplikasi sendiri,
- *     di daftar MAUPUN di reader.
+ *  3. `materials.aktif` disaring DUA LAPIS. Sejak migration
+ *     `gating_materi_hormati_aktif`, policy baca klien pada `material_chapters`
+ *     & `material_videos` ikut mengevaluasi `materials.aktif` — materi yang
+ *     ditarik admin benar-benar berhenti dijawab basis data. Query aplikasi
+ *     TETAP menyaringnya sendiri, di daftar MAUPUN di reader: lapis itu yang
+ *     menentukan halamannya 404 alih-alih merender kerangka kosong.
  *
  * Bentuk kartu diuji lewat atribut `data-*`, bukan kelas Tailwind: kelas berubah
  * tiap kali desain disetel, sedangkan "materi ini terbuka atau tidak" adalah
@@ -197,8 +199,10 @@ describe("daftar materi — pagar kebocoran (halaman ini tidak boleh membawa isi
   });
 
   it("materi yang ditarik admin (aktif=false) hilang dari daftar", async () => {
-    // `materials.aktif` TIDAK dievaluasi policy chapters/videos: babnya tetap
-    // terbaca RLS, jadi penyaringan ini murni tanggung jawab query aplikasi.
+    // Policy chapters/videos kini ikut mengevaluasi `materials.aktif`, tetapi
+    // baris `materials` sendiri TETAP terbaca setiap pengguna login (menutupnya
+    // akan mengulangi bug `partner_publik`). Jadi hilangnya kartu dari daftar
+    // tetap murni tanggung jawab query aplikasi ini.
     await svc.from("materials").update({ aktif: false }).eq("id", TERBUKA_EBOOK);
     try {
       const m = await markupDaftar();
@@ -324,17 +328,25 @@ describe("reader materi — yang belum terbuka (akses langsung ke URL)", () => {
     expect(m).not.toContain("PAD-2607-0012");
   });
 
-  it("materi yang ditarik admin (aktif=false) tidak bisa dibaca walau babnya terbaca RLS", async () => {
+  it("materi yang ditarik admin (aktif=false) tertutup di POLICY maupun di reader", async () => {
     await svc.from("materials").update({ aktif: false }).eq("id", TERBUKA_EBOOK);
     try {
-      // Bab materi ini TETAP dikembalikan RLS untuk Ananda — buktinya di sini,
-      // supaya jelas bahwa yang menyaring adalah query reader, bukan policy.
-      const { data } = await ref.klien!
+      // Dulu bab materi ini TETAP dikembalikan RLS untuk Ananda, dan yang
+      // menyaring hanyalah query reader — artinya "menonaktifkan materi" cuma
+      // menyembunyikan kartu sementara isinya tetap bisa diambil dengan satu
+      // permintaan REST. Sejak migration `gating_materi_hormati_aktif`, policy
+      // baca klien ikut mengevaluasi `materials.aktif`, jadi yang dijaga di
+      // sini MENGUAT: babnya tidak lagi dijawab basis data sama sekali.
+      const { data, error } = await ref.klien!
         .from("material_chapters")
         .select("id")
         .eq("material_id", TERBUKA_EBOOK);
-      expect((data ?? []).length).toBeGreaterThan(0);
+      expect(error).toBeNull();
+      expect(data ?? []).toHaveLength(0);
 
+      // Lapis kedua tetap diuji: query reader menyaring `aktif` sendiri, jadi
+      // halamannya 404 — bukan kerangka kosong — bahkan bila kelak policy-nya
+      // diubah lagi.
       await expect(markupReader(TERBUKA_EBOOK)).rejects.toThrow("NEXT_NOT_FOUND");
     } finally {
       await svc.from("materials").update({ aktif: true }).eq("id", TERBUKA_EBOOK);
