@@ -389,6 +389,31 @@ describe("teks WhatsApp siap salin", () => {
     expect(teks).toMatch(/sekali/i);
   });
 
+  it("menyebut nomor WhatsApp klinik yang SEDANG berlaku, lewat prop", () => {
+    // Sejak /admin/pengaturan lahir, nomor klinik bisa berubah kapan saja.
+    // Nomornya MENGALIR SEBAGAI PARAMETER: `pesan-undangan.ts` wajib tetap
+    // tanpa impor karena pemanggilnya komponen "use client", dan modul setelan
+    // menyeret klien service role ke bundel browser.
+    const teks = teksUndanganWhatsApp({
+      nama: "Uji Aktivasi",
+      email: EMAIL_BARU,
+      tautan: tautanAktivasi(ORIGIN, tokenTerbit),
+      nomorWa: "0877-7840-0201",
+    });
+    expect(teks).toContain("0877-7840-0201");
+
+    // Dan berkas penyusunnya tetap murni — pagar yang membuat prop itu perlu.
+    expect(baca("src/lib/auth/pesan-undangan.ts")).not.toMatch(/^\s*import\s/m);
+    // Halaman detail mengambilnya di server lalu menurunkannya ke kartu.
+    expect(sumberDetail).toContain("nomorWaKlinik");
+    expect(sumberDetail).toMatch(/nomorWa=\{/);
+    // Kartu tidak boleh MENGAMBILNYA sendiri. Ditulis sebagai pola impor
+    // (bukan substring) supaya prosa yang MENJELASKAN kenapa modul itu dijauhi
+    // tetap boleh ada — persis seperti pagar link-client di bawah.
+    expect(sumberKartu).not.toMatch(/from\s+["'][^"']*lib\/settings["']/);
+    expect(sumberKartu).not.toMatch(/from\s+["'][^"']*admin\/pengaturan["']/);
+  });
+
   it("bentuk tautan berbagi SATU sumber dengan inviteLink", () => {
     // Dua tempat yang menyusun URL aktivasi sendiri-sendiri adalah cara paling
     // mudah menerbitkan tautan yang tidak pernah bisa ditukarkan.
@@ -462,7 +487,11 @@ describe("kartu aktivasi di halaman detail klien", () => {
 
   it("memperingatkan bahwa token hanya tampil sekali", () => {
     const m = renderToStaticMarkup(
-      createElement(KartuAktivasi, { clientId: KLIEN_PENJAGA, nama: "Uji Penjaga" }),
+      createElement(KartuAktivasi, {
+        clientId: KLIEN_PENJAGA,
+        nama: "Uji Penjaga",
+        nomorWa: "0877-7840-0200",
+      }),
     );
     expect(m).toContain("Terbitkan tautan aktivasi");
     expect(sumberKartu).toMatch(/sekali/i);

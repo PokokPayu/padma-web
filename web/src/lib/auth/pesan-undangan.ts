@@ -38,17 +38,26 @@ export function tautanAktivasi(origin: string, token: string): string {
  *     sebabnya),
  *   - masa berlaku & sifat sekali pakai, supaya klien tidak menyimpan tautan
  *     ini sebagai "pintu masuk" harian.
+ *
+ * `nomorWa` MENGALIR SEBAGAI PARAMETER, tidak dibaca sendiri dari
+ * `app_settings`. Berkas ini wajib tetap tanpa impor: pemanggilnya adalah
+ * komponen `"use client"`, dan modul setelan menyeret klien service role. Jadi
+ * nomor yang sedang berlaku diambil server component lalu diturunkan sebagai
+ * prop. Ia opsional supaya pemanggil yang tidak punya konteks setelan (skrip,
+ * test) tetap menghasilkan pesan yang sah.
  */
 export function teksUndanganWhatsApp({
   nama,
   email,
   tautan,
+  nomorWa,
 }: {
   nama: string;
   email: string;
   tautan: string;
+  nomorWa?: string;
 }): string {
-  return [
+  const baris = [
     `Halo ${nama}, selamat datang di PADMA 🌸`,
     "",
     "Digital Care Passport Anda sudah siap. Buka tautan berikut untuk mengaktifkan akun, lalu masuk dengan email " +
@@ -57,5 +66,9 @@ export function teksUndanganWhatsApp({
     tautan,
     "",
     `Tautan ini berlaku ${INVITE_TTL_DAYS} hari dan hanya bisa dipakai sekali.`,
-  ].join("\n");
+  ];
+  if (nomorWa) {
+    baris.push("", `Ada kendala? Hubungi kami di ${nomorWa}.`);
+  }
+  return baris.join("\n");
 }

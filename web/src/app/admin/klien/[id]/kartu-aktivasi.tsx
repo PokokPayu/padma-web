@@ -26,9 +26,20 @@ import { tautanAktivasi, teksUndanganWhatsApp } from "@/lib/auth/pesan-undangan"
 export function KartuAktivasi({
   clientId,
   nama,
+  nomorWa,
 }: {
   clientId: string;
   nama: string;
+  /**
+   * Nomor WhatsApp klinik dalam format tampilan, DITURUNKAN DARI SERVER.
+   *
+   * Ia tidak dibaca di sini: `app_settings` hanya bisa dibaca lewat modul yang
+   * memuat klien Supabase, dan komponen ini berjalan di browser. Karena nomor
+   * itu kini bisa diubah admin lewat /admin/pengaturan, mengambilnya per
+   * permintaan di server component induk adalah satu-satunya cara agar pesan
+   * sambutan tidak menyebut nomor yang sudah tidak dipakai lagi.
+   */
+  nomorWa: string;
 }) {
   const [pending, mulai] = useTransition();
   const [teks, setTeks] = useState<string | null>(null);
@@ -50,6 +61,7 @@ export function KartuAktivasi({
           nama: r.nama,
           email: r.email,
           tautan: tautanAktivasi(window.location.origin, r.token),
+          nomorWa,
         }),
       );
     });

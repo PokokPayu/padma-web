@@ -220,7 +220,7 @@ describe("navigasi admin", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat enam tujuan berbahasa Indonesia", () => {
+  it("memuat tujuh tujuan berbahasa Indonesia", () => {
     const m = markupNav("/admin");
     for (const [href, label] of [
       ["/admin", "Beranda"],
@@ -229,6 +229,9 @@ describe("navigasi admin", () => {
       ["/admin/sesi", "Sesi"],
       ["/admin/bayar", "Bayar"],
       ["/admin/mitra", "Mitra"],
+      // Label "Setelan", judul halamannya "Pengaturan" — alasan yang sama
+      // dengan "Bayar"/"Pembayaran": bottom bar mobile memotong label panjang.
+      ["/admin/pengaturan", "Setelan"],
     ]) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);

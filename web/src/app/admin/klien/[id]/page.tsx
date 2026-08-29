@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { nomorWaKlinik } from "@/lib/admin/pengaturan";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { FormEditKlien } from "../form-klien";
 import { KartuAktivasi } from "./kartu-aktivasi";
@@ -45,7 +46,11 @@ export default async function DetailKlienPage({
 
   if (!klien) notFound();
 
-  const [{ data: fase }, { data: sesi }] = await Promise.all([
+  // Nomor klinik dibaca per permintaan lewat sesi admin, bukan dipanggang:
+  // sejak /admin/pengaturan lahir, nomornya bisa berubah kapan saja dan pesan
+  // sambutan yang menyebut nomor mati adalah kesalahan yang tidak terlihat
+  // siapa pun sampai ada klien yang tidak bisa menghubungi klinik.
+  const [{ data: fase }, { data: sesi }, wa] = await Promise.all([
     supabase
       .from("phases")
       .select("id, nama, urutan")
@@ -58,6 +63,7 @@ export default async function DetailKlienPage({
       .order("tanggal", { ascending: false })
       .limit(8)
       .returns<Sesi[]>(),
+    nomorWaKlinik(),
   ]);
 
   const aktif = klien.user_id !== null;
@@ -114,7 +120,13 @@ export default async function DetailKlienPage({
           tautan untuk akun yang sudah aktif akan menghapus catatan siapa
           menukarkan undangannya — server menolaknya, dan tombolnya pun tidak
           ditawarkan di sini. */}
-      {!aktif && <KartuAktivasi clientId={klien.id} nama={klien.nama} />}
+      {!aktif && (
+        <KartuAktivasi
+          clientId={klien.id}
+          nama={klien.nama}
+          nomorWa={wa.tampilan}
+        />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <FormEditKlien

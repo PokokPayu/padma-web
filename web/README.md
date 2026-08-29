@@ -78,6 +78,8 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp |
 | `/admin/sesi` | Admin, Owner | Antrean permintaan jadwal, jadwalkan sesi, tandai selesai + catatan bidan |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
+| `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
+| `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Rate card & rekap honor (Plan 5) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*`: `service_rates` menjawab

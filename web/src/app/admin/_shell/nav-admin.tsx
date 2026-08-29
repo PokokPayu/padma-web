@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Lotus } from "@/app/_landing/lotus";
 import type { Antrean } from "@/lib/admin/antrean";
 
-type Ikon = "lotus" | "inbox" | "user" | "cal" | "bayar" | "mitra";
+type Ikon = "lotus" | "inbox" | "user" | "cal" | "bayar" | "mitra" | "setelan";
 
 // `badge` menunjuk medan Antrean yang dipakai, bukan angkanya — supaya satu
 // sumber angka (server) tidak pernah tersalin ulang sebagai literal di UI.
@@ -19,11 +19,14 @@ const MENU: Array<{
   { href: "/admin/skrining", label: "Inbox", ikon: "inbox", badge: "skriningBaru" },
   { href: "/admin/klien", label: "Klien", ikon: "user", badge: "klienBelumAktif" },
   { href: "/admin/sesi", label: "Sesi", ikon: "cal", badge: "permintaanMenunggu" },
-  // Label sengaja "Bayar", bukan "Pembayaran": bottom bar mobile memuat enam
+  // Label sengaja "Bayar", bukan "Pembayaran": bottom bar mobile memuat tujuh
   // tujuan dan label panjang akan terpotong justru di tab yang paling perlu
   // dikenali. Judul halamannya tetap "Pembayaran".
   { href: "/admin/bayar", label: "Bayar", ikon: "bayar", badge: "klaimMenunggu" },
   { href: "/admin/mitra", label: "Mitra", ikon: "mitra" },
+  // Alasan yang sama dengan "Bayar": judul halamannya "Pengaturan", labelnya
+  // "Setelan" agar tetap terbaca utuh di bottom bar mobile.
+  { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
 ];
 
 function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
@@ -70,6 +73,18 @@ function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
           strokeLinejoin="round"
         />
         <path d="M9 8.4h6M9 12.2h6" strokeLinecap="round" />
+      </svg>
+    );
+  // Sekrup penyetel, bukan roda gigi: modul ini menyetel teks & nomor yang
+  // dilihat publik, bukan menyimpan preferensi teknis.
+  if (jenis === "setelan")
+    return (
+      <svg viewBox="0 0 24 24" {...p}>
+        <circle cx="12" cy="12" r="3.1" />
+        <path
+          d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8"
+          strokeLinecap="round"
+        />
       </svg>
     );
   return (
