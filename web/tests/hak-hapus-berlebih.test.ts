@@ -608,20 +608,39 @@ describe("master data tidak bisa dihapus staf", () => {
     // `nomor_wa` menggerakkan seluruh CTA WhatsApp di landing & wizard
     // skrining. Menghapusnya mematikan CTA itu tanpa satu pun error di layar;
     // tidak ada alur produk yang pernah menghapus setelan — hanya menimpanya.
-    const KUNCI_UJI = "PAD-UJI-kunci";
-    await svc.from("app_settings").upsert({ key: KUNCI_UJI, value: "x" }, { onConflict: "key" });
+    //
+    // KUNCINYA BUKAN KARANGAN, dan itu bukan gaya penulisan. Sejak migration
+    // `registri_kunci_pengaturan`, `app_settings.key` ber-FK ke daftar putih
+    // `app_setting_keys`: kunci uji seperti "PAD-UJI-kunci" ditolak 23503, dan
+    // service role TIDAK dikecualikan — constraint integritas berlaku untuk
+    // setiap peran. Karena itu fixture di sini memakai kunci terdaftar
+    // sungguhan, dan `finally` MENGEMBALIKAN NILAINYA alih-alih menghapus
+    // barisnya: baris `nomor_wa` berasal dari seed dan dibutuhkan landing,
+    // wizard skrining, & passport.
+    const KUNCI_UJI = "nomor_wa";
+    const { data: awal } = await svc
+      .from("app_settings")
+      .select("value")
+      .eq("key", KUNCI_UJI)
+      .single();
+    expect(awal, "fixture: baris nomor_wa dari seed harus ada").not.toBeNull();
     try {
       const a = await signInAs("admin@padma.test");
       const { error } = await a.from("app_settings").delete().eq("key", KUNCI_UJI);
       expect(error?.code).toBe("42501");
       const { data } = await svc
         .from("app_settings")
-        .select("key")
+        .select("key, value")
         .eq("key", KUNCI_UJI)
         .maybeSingle();
       expect(data).not.toBeNull();
+      // 42501 saja tidak membuktikan barisnya utuh: yang dijaga adalah NILAI
+      // yang masih dipakai seluruh CTA WhatsApp, bukan kode HTTP-nya.
+      expect(data!.value).toBe(awal!.value);
     } finally {
-      await svc.from("app_settings").delete().eq("key", KUNCI_UJI);
+      await svc
+        .from("app_settings")
+        .upsert({ key: KUNCI_UJI, value: awal!.value }, { onConflict: "key" });
     }
   });
 
@@ -662,17 +681,30 @@ describe("master data tidak bisa dihapus staf", () => {
     expect(eMitra).toBeNull();
     expect(mitraBaru).not.toBeNull();
 
+    // Kunci TERDAFTAR yang seed sengaja tidak isi: membuktikan admin masih
+    // bisa MELAHIRKAN baris setelan (bukan sekadar menimpa yang sudah ada),
+    // tanpa memakai kunci karangan yang kini ditolak FK 23503. Baris ini bukan
+    // milik seed, jadi ia boleh — dan wajib — dibersihkan di bawah.
+    const KUNCI_TULIS = "jam_operasional";
     const { error: eSetelan } = await a
       .from("app_settings")
-      .upsert({ key: "PAD-UJI-tulis", value: "1" }, { onConflict: "key" });
+      .upsert({ key: KUNCI_TULIS, value: "Senin–Sabtu 08.00–20.00" }, { onConflict: "key" });
     expect(eSetelan).toBeNull();
+
+    // Kontrol negatif di baris yang sama: hak tulis admin TIDAK berarti admin
+    // boleh mengarang kunci. Inilah yang menutup money firewall lewat BARIS
+    // (lihat tests/pengaturan-kunci.test.ts).
+    const { error: eKarangan } = await a
+      .from("app_settings")
+      .upsert({ key: "PAD-UJI-tulis", value: "425000" }, { onConflict: "key" });
+    expect(eKarangan?.code).toBe("23503");
 
     // Service role tetap memegang DELETE — pembersihan fixture bergantung
     // padanya, dan itulah yang membuat pencabutan di atas tidak melumpuhkan
     // suite ini sendiri.
     const { error: eBersih } = await svc.from("partners").delete().eq("id", mitraBaru!.id);
     expect(eBersih).toBeNull();
-    await svc.from("app_settings").delete().eq("key", "PAD-UJI-tulis");
+    await svc.from("app_settings").delete().eq("key", KUNCI_TULIS);
   });
 });
 
