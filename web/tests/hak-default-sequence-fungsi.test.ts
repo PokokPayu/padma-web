@@ -156,7 +156,28 @@ describe("default privileges — peran yang MEMANG butuh tetap utuh", () => {
   it("authenticated tetap memegang hak default sequence, function, dan tabel", () => {
     expect(hakUntuk("authenticated", "S")).toEqual(["SELECT", "UPDATE", "USAGE"]);
     expect(hakUntuk("authenticated", "f")).toEqual(["EXECUTE"]);
-    expect(hakUntuk("authenticated", "r").length).toBeGreaterThanOrEqual(7);
+
+    // Untuk TABEL, jumlah minimum diganti daftar per-verba: ia menjaga DUA
+    // arah sekaligus, dan tidak ikut goyah saat versi Postgres menambah verba
+    // baru (MAINTAIN lahir di PG17 dan sudah pernah menggeser hitungan ini).
+    //
+    // Arah pertama — yang WAJIB TETAP ADA. Klien, admin, dan owner login
+    // sebagai peran SQL yang sama (`authenticated`); mencabut verba baca/tulis
+    // di sini melumpuhkan staf, bukan menahan penyerang.
+    const hakTabel = hakUntuk("authenticated", "r");
+    for (const wajib of ["SELECT", "INSERT", "UPDATE", "REFERENCES", "TRIGGER"]) {
+      expect(hakTabel, `authenticated wajib tetap memegang ${wajib}`).toContain(wajib);
+    }
+
+    // Arah kedua — yang WAJIB TETAP TERCABUT, supaya tabel Plan berikutnya
+    // tidak lahir mewarisinya diam-diam dari default privileges Supabase:
+    //   TRUNCATE — migration `pengerasan_admin`; tidak pernah difilter RLS.
+    //   DELETE   — migration `cabut_hak_hapus_berlebih`; penghapusan materi,
+    //              permintaan jadwal, master data, & tabel uang menghancurkan
+    //              riwayat/bukti, sementara bentuk pensiunnya (`aktif = false`,
+    //              status `ditolak`) sudah ada di skema.
+    expect(hakTabel).not.toContain("TRUNCATE");
+    expect(hakTabel).not.toContain("DELETE");
   });
 
   it("service_role tetap memegang hak default sequence, function, dan tabel", () => {
