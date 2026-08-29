@@ -190,11 +190,18 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   const supabase = await createServerSupabase();
 
   // Ketiganya diperiksa SEBELUM menulis. Foreign key memang menolak id yang
-  // tidak ada, tetapi pesannya adalah kode Postgres — dan untuk mitra ia sama
-  // sekali tidak menolong: mitra yang sudah pensiun tetap ada barisnya.
+  // tidak ada, tetapi pesannya adalah kode Postgres — dan untuk mitra maupun
+  // layanan ia sama sekali tidak menolong: yang sudah dipensiunkan tetap ada
+  // barisnya. Formulir menyaring `aktif` di UI, dan server action adalah
+  // endpoint POST tersendiri yang tidak pernah melewati UI itu.
   const [{ data: klien }, { data: layanan }, { data: mitra }] = await Promise.all([
     supabase.from("clients").select("id").eq("id", clientId).maybeSingle(),
-    supabase.from("services").select("id").eq("id", serviceId).maybeSingle(),
+    supabase
+      .from("services")
+      .select("id")
+      .eq("id", serviceId)
+      .eq("aktif", true)
+      .maybeSingle(),
     supabase
       .from("partners")
       .select("id")
@@ -204,7 +211,9 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   ]);
 
   if (!klien) return { ok: false, pesan: "Klien tidak ditemukan." };
-  if (!layanan) return { ok: false, pesan: "Layanan tidak ditemukan." };
+  if (!layanan) {
+    return { ok: false, pesan: "Layanan tidak tersedia. Pilih layanan yang aktif." };
+  }
   if (!mitra) return { ok: false, pesan: "Mitra tidak tersedia. Pilih mitra yang aktif." };
 
   // Paket dibaca dari klien yang dipilih — tidak pernah dari formulir.

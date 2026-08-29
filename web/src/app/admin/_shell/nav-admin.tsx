@@ -5,7 +5,15 @@ import { usePathname } from "next/navigation";
 import { Lotus } from "@/app/_landing/lotus";
 import type { Antrean } from "@/lib/admin/antrean";
 
-type Ikon = "lotus" | "inbox" | "user" | "cal" | "bayar" | "mitra" | "setelan";
+type Ikon =
+  | "lotus"
+  | "inbox"
+  | "user"
+  | "cal"
+  | "bayar"
+  | "mitra"
+  | "katalog"
+  | "setelan";
 
 // `badge` menunjuk medan Antrean yang dipakai, bukan angkanya — supaya satu
 // sumber angka (server) tidak pernah tersalin ulang sebagai literal di UI.
@@ -24,6 +32,9 @@ const MENU: Array<{
   // dikenali. Judul halamannya tetap "Pembayaran".
   { href: "/admin/bayar", label: "Bayar", ikon: "bayar", badge: "klaimMenunggu" },
   { href: "/admin/mitra", label: "Mitra", ikon: "mitra" },
+  // Judul halamannya "Layanan & Paket"; labelnya dipendekkan karena bottom bar
+  // mobile kini memuat delapan tujuan.
+  { href: "/admin/layanan", label: "Layanan", ikon: "katalog" },
   // Alasan yang sama dengan "Bayar": judul halamannya "Pengaturan", labelnya
   // "Setelan" agar tetap terbaca utuh di bottom bar mobile.
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
@@ -73,6 +84,15 @@ function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
           strokeLinejoin="round"
         />
         <path d="M9 8.4h6M9 12.2h6" strokeLinecap="round" />
+      </svg>
+    );
+  // Lapisan kartu katalog, bukan tag harga: modul Layanan mengelola nama &
+  // susunan paket, sementara angka tarifnya tidak pernah singgah di panel admin.
+  if (jenis === "katalog")
+    return (
+      <svg viewBox="0 0 24 24" {...p}>
+        <rect x="3.2" y="6.4" width="17.6" height="13.4" rx="2.4" />
+        <path d="M6.6 3.4h10.8M4.9 10.4h14.2" strokeLinecap="round" />
       </svg>
     );
   // Sekrup penyetel, bukan roda gigi: modul ini menyetel teks & nomor yang
