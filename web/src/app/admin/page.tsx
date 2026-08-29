@@ -15,7 +15,11 @@ function KartuAntrean({
   label: string;
   jumlah: number;
   keterangan: string;
-  href?: string;
+  // WAJIB, bukan opsional: setiap angka di dashboard ini kini punya modul yang
+  // bisa memadamkannya. Angka tanpa tujuan adalah alarm yang tidak bisa
+  // dibersihkan — keadaan yang sempat nyata untuk "Klaim pembayaran" selama
+  // modulnya belum ada, dan tidak boleh lahir lagi diam-diam.
+  href: string;
 }) {
   const isi = (
     <>
@@ -33,18 +37,13 @@ function KartuAntrean({
     </>
   );
 
-  const kelas =
-    "block rounded-2xl border border-black/10 bg-white px-5 py-5 transition";
-
-  // Kartu tanpa `href` sengaja tidak menjadi tautan: modul Pembayaran belum
-  // ada, dan tautan yang mendarat di 404 lebih buruk daripada angka yang jujur
-  // menunggu modulnya dibangun.
-  return href ? (
-    <Link href={href} className={`${kelas} hover:border-gold hover:shadow-sm`}>
+  return (
+    <Link
+      href={href}
+      className="block rounded-2xl border border-black/10 bg-white px-5 py-5 transition hover:border-gold hover:shadow-sm"
+    >
       {isi}
     </Link>
-  ) : (
-    <div className={kelas}>{isi}</div>
   );
 }
 
@@ -84,6 +83,7 @@ export default async function AdminPage() {
           label="Klaim pembayaran"
           jumlah={antrean.klaimMenunggu}
           keterangan="Sesi & paket menunggu verifikasi"
+          href="/admin/bayar"
         />
         <KartuAntrean
           label="Klien belum aktif"

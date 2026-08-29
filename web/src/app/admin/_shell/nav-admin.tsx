@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Lotus } from "@/app/_landing/lotus";
 import type { Antrean } from "@/lib/admin/antrean";
 
-type Ikon = "lotus" | "inbox" | "user" | "cal" | "mitra";
+type Ikon = "lotus" | "inbox" | "user" | "cal" | "bayar" | "mitra";
 
 // `badge` menunjuk medan Antrean yang dipakai, bukan angkanya — supaya satu
 // sumber angka (server) tidak pernah tersalin ulang sebagai literal di UI.
@@ -19,6 +19,10 @@ const MENU: Array<{
   { href: "/admin/skrining", label: "Inbox", ikon: "inbox", badge: "skriningBaru" },
   { href: "/admin/klien", label: "Klien", ikon: "user", badge: "klienBelumAktif" },
   { href: "/admin/sesi", label: "Sesi", ikon: "cal", badge: "permintaanMenunggu" },
+  // Label sengaja "Bayar", bukan "Pembayaran": bottom bar mobile memuat enam
+  // tujuan dan label panjang akan terpotong justru di tab yang paling perlu
+  // dikenali. Judul halamannya tetap "Pembayaran".
+  { href: "/admin/bayar", label: "Bayar", ikon: "bayar", badge: "klaimMenunggu" },
   { href: "/admin/mitra", label: "Mitra", ikon: "mitra" },
 ];
 
@@ -54,6 +58,18 @@ function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
       <svg viewBox="0 0 24 24" {...p}>
         <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
         <path d="M3.5 10h17M8 2.8v3.7M16 2.8v3.7" strokeLinecap="round" />
+      </svg>
+    );
+  // Kuitansi, bukan lambang mata uang: panel admin tidak pernah menampilkan
+  // nominal, dan ikon "Rp" akan menjanjikan angka yang memang tidak ada.
+  if (jenis === "bayar")
+    return (
+      <svg viewBox="0 0 24 24" {...p}>
+        <path
+          d="M5.5 3.6h13v16.8l-2.2-1.5-2.2 1.5-2.1-1.5-2.2 1.5-2.2-1.5-2.1 1.5z"
+          strokeLinejoin="round"
+        />
+        <path d="M9 8.4h6M9 12.2h6" strokeLinecap="round" />
       </svg>
     );
   return (

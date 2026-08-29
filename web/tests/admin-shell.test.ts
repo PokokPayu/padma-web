@@ -220,13 +220,14 @@ describe("navigasi admin", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat lima tujuan berbahasa Indonesia", () => {
+  it("memuat enam tujuan berbahasa Indonesia", () => {
     const m = markupNav("/admin");
     for (const [href, label] of [
       ["/admin", "Beranda"],
       ["/admin/skrining", "Inbox"],
       ["/admin/klien", "Klien"],
       ["/admin/sesi", "Sesi"],
+      ["/admin/bayar", "Bayar"],
       ["/admin/mitra", "Mitra"],
     ]) {
       expect(m).toContain(`href="${href}"`);
@@ -264,9 +265,17 @@ describe("navigasi admin", () => {
     expect([...m.matchAll(/aria-label="3 menunggu"/g)]).toHaveLength(2); // Inbox
     expect([...m.matchAll(/aria-label="7 menunggu"/g)]).toHaveLength(2); // Klien
     expect([...m.matchAll(/aria-label="5 menunggu"/g)]).toHaveLength(2); // Sesi
-    // klaimMenunggu belum punya tujuan navigasi di plan ini — angkanya tidak
-    // boleh nyasar ke badge tujuan lain.
-    expect(m).not.toContain('aria-label="9 menunggu"');
+    // klaimMenunggu SUDAH punya tujuannya sendiri sejak modul /admin/bayar
+    // lahir. Sebelumnya angka ini sengaja tidak dirender sebagai badge —
+    // menandai bahwa modulnya belum ada — dan yang dijaga adalah agar ia tidak
+    // nyasar ke tab lain. Sekarang yang dijaga MENGUAT: ia wajib muncul, tepat
+    // dua kali (tab desktop + bottom bar), dan tetap hanya di tab Bayar.
+    expect([...m.matchAll(/aria-label="9 menunggu"/g)]).toHaveLength(2); // Bayar
+    for (const tag of m.match(/<a[^>]*>[\s\S]*?<\/a>/g) ?? []) {
+      if (tag.includes('aria-label="9 menunggu"')) {
+        expect(tag).toContain('href="/admin/bayar"');
+      }
+    }
   });
 
   it("badge nol tetap hilang walau tujuan lain punya antrean", () => {
@@ -393,7 +402,14 @@ describe("dashboard antrean admin", () => {
     const { default: AdminPage } = await import("@/app/admin/page");
     rute.kini = "/admin";
     const m = renderToStaticMarkup(await AdminPage());
-    for (const href of ["/admin/skrining", "/admin/klien", "/admin/sesi"]) {
+    // Keempat angka — termasuk "Klaim pembayaran", yang sejak modul
+    // /admin/bayar lahir tidak boleh lagi menjadi angka tanpa tujuan.
+    for (const href of [
+      "/admin/skrining",
+      "/admin/klien",
+      "/admin/sesi",
+      "/admin/bayar",
+    ]) {
       expect(m).toContain(`href="${href}"`);
     }
   });
