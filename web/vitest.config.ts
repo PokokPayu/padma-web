@@ -12,6 +12,9 @@ export default defineConfig({
     globalSetup: ["tests/global-setup.ts"],
     env: {
       DOTENV_CONFIG_PATH: ".env.local",
+      // Vercel berjalan UTC, mesin dev WIB. Tanpa ini, bug zona waktu
+      // tidak akan pernah terlihat lokal.
+      TZ: "UTC",
       // Test rate limit /api/skrining menirukan DEPLOY NYATA: satu proxy
       // tepercaya (Vercel) di depan aplikasi, yang menulis hop terluar
       // X-Forwarded-For. Kasus "tanpa proxy tepercaya" (nilai 0, seperti
