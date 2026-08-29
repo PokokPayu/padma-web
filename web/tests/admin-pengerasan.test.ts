@@ -77,6 +77,33 @@ describe("hak berbahaya dicabut", () => {
     expect(baris.map((b) => b.table_name)).toEqual([]);
   });
 
+  /**
+   * VIEW adalah objek dengan haknya SENDIRI, dan ia mewarisi default
+   * privileges Supabase persis seperti tabel. `partner_publik` terbukti
+   * tembus: `authenticated` memegang INSERT/UPDATE/DELETE atasnya, view-nya
+   * auto-updatable, dan `security_invoker = off` membuat RLS `partners`
+   * diperiksa sebagai PEMILIK view (postgres) — sehingga setiap pengguna
+   * login bisa menulis `partners` tanpa satu policy pun ikut diperiksa.
+   *
+   * Invarian ini sengaja berlaku untuk SELURUH view di schema `public`,
+   * termasuk view yang belum lahir: itulah yang menangkap kekambuhannya di
+   * Plan 3B, bukan test per-view.
+   */
+  it("anon & authenticated TIDAK memegang verba tulis pada VIEW mana pun", async () => {
+    const baris = await querySql<{ table_name: string; grantee: string; privilege_type: string }>(`
+      select g.table_name, g.grantee, g.privilege_type
+        from information_schema.role_table_grants g
+        join information_schema.views v
+          on v.table_schema = g.table_schema and v.table_name = g.table_name
+       where g.table_schema = 'public'
+         and g.grantee in ('anon','authenticated')
+         and g.privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')
+       order by 1, 2, 3`);
+    expect(
+      baris.map((b) => `${b.table_name}:${b.grantee}:${b.privilege_type}`),
+    ).toEqual([]);
+  });
+
   it("admin TIDAK bisa menghapus sesi (rekam medis)", async () => {
     const a = await signInAs("admin@padma.test");
     const { error } = await a.from("sessions").delete().eq("id", SESI_SEED);

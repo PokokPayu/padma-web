@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
-import { createAdminSupabase } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
 import { hariIniJakarta } from "./waktu";
@@ -47,23 +46,26 @@ export async function klaimSudahBayar(
   const clientId = await klienSaatIni();
   if (!clientId) return { ok: false, pesan: "Akun belum terhubung." };
 
-  // Service role dipakai HANYA untuk menulis satu kolom status, dengan filter
-  // kepemilikan eksplisit + syarat status asal. Karena service role menembus
-  // RLS, kedua filter inilah satu-satunya pagar yang tersisa.
-  const admin = createAdminSupabase();
-  const tabel = jenis === "paket" ? "client_packages" : "sessions";
-  const { data, error } = await admin
-    .from(tabel)
-    .update({ status_bayar: "menunggu_verifikasi" })
-    .eq("id", id)
-    .eq("client_id", clientId) // kepemilikan
-    .eq("status_bayar", "belum") // hanya dari 'belum'; keputusan berikutnya milik admin
-    .select("id");
+  // SESI PENGGUNA, bukan service role. Di bawah service role `auth.uid()`
+  // NULL dan `user_role()` jatuh ke 'klien', sehingga trigger jejak audit
+  // mencatat `peran_aktor='service_role'` tanpa aktor — tepat kebalikan dari
+  // alasan tabel jejak itu dibuat (sengketa "saya sudah transfer" vs "belum
+  // masuk"). Karena klien memang tidak punya policy UPDATE atas dua tabel itu,
+  // tulisannya lewat fungsi `security definer` yang JWT-nya ikut terbawa:
+  // kepemilikan (auth.uid() -> clients) dan syarat status asal dijaga DI DALAM
+  // fungsi, dan tujuannya hardcoded di sana — tidak ada argumen status di sini
+  // maupun di sana.
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase.rpc("klaim_sudah_bayar", {
+    jenis,
+    sasaran_id: id,
+  });
 
   if (error) return { ok: false, pesan: "Gagal memproses." };
   // UPDATE yang tertahan menghasilkan 0 baris TANPA error — jangan melaporkan
   // "berhasil" tanpa memeriksa jumlah barisnya.
-  if ((data ?? []).length === 0) {
+  const terpengaruh = (data ?? []) as string[];
+  if (terpengaruh.length === 0) {
     return { ok: false, pesan: "Item tidak ditemukan atau statusnya sudah berubah." };
   }
 

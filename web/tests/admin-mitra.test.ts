@@ -430,6 +430,56 @@ describe("pagar basis data yang menopang modul ini", () => {
     const { data } = await sesiKlien.from("partner_publik").select("*").limit(1);
     expect(Object.keys(data![0])).not.toContain("no_hp");
   });
+
+  /**
+   * TITIK BUTA yang ditembus red team: test di atas hanya menembak TABEL
+   * `partners`. View `partner_publik` adalah objek TERPISAH dengan haknya
+   * sendiri — `authenticated` mewarisi INSERT/UPDATE/DELETE dari default
+   * privileges Supabase, view-nya auto-updatable (select sederhana tanpa
+   * WHERE), dan `security_invoker = off` membuat pemeriksaan hak & RLS
+   * dilakukan sebagai PEMILIK view (postgres). Tiga fakta itu bertemu menjadi
+   * pintu tulis ke `partners` yang melewati RLS sepenuhnya: setiap pengguna
+   * login — termasuk akun daftar-mandiri tanpa baris `clients` — bisa menulis
+   * ulang nama bidan yang dibaca SELURUH klien di riwayat sesi.
+   */
+  it("klien TIDAK bisa menulis mitra lewat VIEW partner_publik", async () => {
+    const sebelum = (await barisMitra(MITRA_EDIT))!.nama;
+
+    const { error: eUbah } = await sesiKlien
+      .from("partner_publik")
+      .update({ nama: "PAD-UJI Lewat View" })
+      .eq("id", MITRA_EDIT)
+      .select();
+    expect(eUbah?.code).toBe("42501");
+
+    const { error: eTambah } = await sesiKlien
+      .from("partner_publik")
+      .insert({ nama: "PAD-UJI Hantu Lewat View" })
+      .select();
+    expect(eTambah?.code).toBe("42501");
+
+    const { error: eHapus } = await sesiKlien
+      .from("partner_publik")
+      .delete()
+      .eq("id", MITRA_EDIT);
+    expect(eHapus?.code).toBe("42501");
+
+    // 42501 tanpa pembacaan ulang tidak membuktikan apa pun.
+    expect((await barisMitra(MITRA_EDIT))!.nama).toBe(sebelum);
+    const { data: hantu } = await admin
+      .from("partners")
+      .select("id")
+      .like("nama", "PAD-UJI Hantu%");
+    expect(hantu ?? []).toHaveLength(0);
+  });
+
+  it("klien TETAP bisa MEMBACA partner_publik (jalur riwayat passport hidup)", async () => {
+    // Pencabutan verba tulis tidak boleh ikut mematikan satu-satunya cara
+    // klien mengetahui nama bidannya.
+    const { data, error } = await sesiKlien.from("partner_publik").select("id, nama");
+    expect(error).toBeNull();
+    expect((data ?? []).length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 // ---------------------------------------------------------------------------

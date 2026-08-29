@@ -32,6 +32,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { querySql } from "./helpers/db";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -228,6 +229,83 @@ describe("klaim bayar — kepemilikan (service role menulis, RLS tidak menyaring
   });
 });
 
+/**
+ * Jejak audit pembayaran ada untuk menjawab satu sengketa: "saya sudah
+ * transfer" versus "belum masuk". Kalau jalur klaim klien menulis lewat
+ * service role, setiap baris jejak berkata `aktor_id = NULL,
+ * peran_aktor = 'service_role'` — barisnya ada, jumlahnya benar, dan tidak
+ * membuktikan apa pun tentang siapa yang mengklaim. Karena itu yang diuji di
+ * sini bukan "ada jejaknya", melainkan jejaknya menyebut MANUSIA-nya.
+ */
+describe("klaim klien meninggalkan jejak ber-AKTOR, bukan 'service_role'", () => {
+  let idAnanda = "";
+
+  beforeAll(async () => {
+    const { data } = await sesiAnanda.auth.getUser();
+    idAnanda = data.user!.id;
+  });
+
+  beforeEach(async () => {
+    ref.sesi = sesiAnanda;
+    await setStatusBayar("sessions", SESI_LEPAS, "belum");
+    await setStatusBayar("client_packages", PAKET_ANANDA, "belum");
+    await admin.from("jejak_status_bayar").delete().eq("sesi_id", SESI_LEPAS);
+    await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", PAKET_ANANDA);
+  });
+
+  afterAll(async () => {
+    await admin.from("jejak_status_bayar").delete().eq("sesi_id", SESI_LEPAS);
+    await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", PAKET_ANANDA);
+  });
+
+  it("klaim sesi mencatat TEPAT SATU jejak atas nama klien yang menekannya", async () => {
+    expect((await klaimSudahBayar("sesi", SESI_LEPAS)).ok).toBe(true);
+
+    const { data: jejak } = await admin
+      .from("jejak_status_bayar")
+      .select("*")
+      .eq("sesi_id", SESI_LEPAS);
+    // PERSIS satu, bukan ">= 1": jejak ganda sama menyesatkannya dengan jejak
+    // hilang saat sengketa dibaca.
+    expect(jejak).toHaveLength(1);
+    expect(jejak![0]).toMatchObject({
+      status_lama: "belum",
+      status_baru: "menunggu_verifikasi",
+      peran_aktor: "klien",
+      aktor_id: idAnanda,
+      paket_klien_id: null,
+    });
+  });
+
+  it("klaim paket juga tercatat atas nama klien", async () => {
+    expect((await klaimSudahBayar("paket", PAKET_ANANDA)).ok).toBe(true);
+
+    const { data: jejak } = await admin
+      .from("jejak_status_bayar")
+      .select("*")
+      .eq("paket_klien_id", PAKET_ANANDA);
+    expect(jejak).toHaveLength(1);
+    expect(jejak![0]).toMatchObject({
+      status_baru: "menunggu_verifikasi",
+      peran_aktor: "klien",
+      aktor_id: idAnanda,
+      sesi_id: null,
+    });
+  });
+
+  it("klaim yang GAGAL (milik klien lain) tidak menulis jejak apa pun", async () => {
+    await admin.from("jejak_status_bayar").delete().eq("sesi_id", sesiUjiRina);
+    const r = await klaimSudahBayar("sesi", sesiUjiRina);
+    expect(r.ok).toBe(false);
+
+    const { count } = await admin
+      .from("jejak_status_bayar")
+      .select("*", { count: "exact", head: true })
+      .eq("sesi_id", sesiUjiRina);
+    expect(count).toBe(0);
+  });
+});
+
 describe("penjaga peran di dalam server action (bukan hanya di layout)", () => {
   afterAll(() => {
     ref.sesi = sesiAnanda;
@@ -364,7 +442,10 @@ describe("pagar sumber server action", () => {
   });
 
   it("nilai tujuan hardcoded, dan nilai istimewa admin tidak pernah disebut", () => {
-    expect(sumber).toContain('status_bayar: "menunggu_verifikasi"');
+    // Transisi klaim ('belum' -> 'menunggu_verifikasi') PINDAH ke fungsi DB
+    // `klaim_sudah_bayar` supaya jejak auditnya menyebut klien, bukan
+    // 'service_role'. Nilai tujuannya tetap hardcoded — sekarang di SQL —
+    // dan diuji pada OBJEK NYATA di describe "RPC klaim_sudah_bayar" di bawah.
     expect(sumber).toContain('status: "menunggu"');
     // 'lunas' & 'dikonfirmasi' adalah keputusan staf; keduanya tidak boleh
     // punya jalan masuk lewat berkas ini.
@@ -372,9 +453,16 @@ describe("pagar sumber server action", () => {
     expect(sumber).not.toContain("dikonfirmasi");
   });
 
-  it("tulisan service role dibatasi kepemilikan dan status asal", () => {
-    expect(sumber).toContain('.eq("client_id", clientId)');
-    expect(sumber).toContain('.eq("status_bayar", "belum")');
+  it("jalur klaim TIDAK memakai service role sama sekali", () => {
+    // Pagar ini MENGGANTIKAN "tulisan service role dibatasi kepemilikan dan
+    // status asal", dan lebih keras darinya: di bawah service role
+    // `auth.uid()` NULL dan `user_role()` jatuh ke 'klien', sehingga trigger
+    // jejak audit kehilangan aktornya — persis sengketa yang tabel jejak
+    // dibuat untuk menyelesaikannya. Kepemilikan & status asal sekarang
+    // dijaga DI DALAM fungsi DB, yang diuji pada objek nyata di bawah.
+    expect(sumber).not.toContain("createAdminSupabase");
+    expect(sumber).not.toContain("SERVICE_ROLE");
+    expect(sumber).toMatch(/\.rpc\(\s*["']klaim_sudah_bayar["']/);
   });
 
   it("jumlah baris terpengaruh diperiksa (UPDATE tertahan menghasilkan 0 baris tanpa error)", () => {
@@ -392,6 +480,85 @@ describe("pagar sumber server action", () => {
     const form = baca("src/app/passport/ajukan/form.tsx");
     expect(form).not.toMatch(/name=["']status["']/);
     expect(form).not.toMatch(/["']dikonfirmasi["']/);
+  });
+});
+
+/**
+ * RPC adalah PERMUKAAN SERANGAN BARU: PostgREST mengekspos setiap fungsi
+ * `public` sebagai endpoint POST /rest/v1/rpc/<nama>, dan fungsi ini
+ * `security definer` — ia berjalan dengan hak postgres dan menembus RLS.
+ * Karena itu ia harus (a) tertutup untuk anon, (b) menurunkan identitas dari
+ * `auth.uid()` dan bukan dari argumen, dan (c) tidak punya satu pun argumen
+ * berupa status tujuan.
+ */
+describe("RPC klaim_sudah_bayar sebagai permukaan baru", () => {
+  it("tanda tangannya TIDAK memuat status tujuan", async () => {
+    const f = await querySql<{ args: string; secdef: boolean }>(
+      `select pg_get_function_identity_arguments(p.oid) as args, p.prosecdef as secdef
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'klaim_sudah_bayar'`,
+    );
+    expect(f).toHaveLength(1);
+    expect(f[0].secdef).toBe(true);
+    expect(f[0].args.toLowerCase()).not.toContain("status");
+  });
+
+  it("nilai tujuan & status asal hardcoded di dalam fungsi, bukan argumen", async () => {
+    const def = await querySql<{ def: string }>(
+      `select pg_get_functiondef(p.oid) as def
+         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'klaim_sudah_bayar'`,
+    );
+    const isi = def[0].def;
+    expect(isi).toContain("'menunggu_verifikasi'");
+    expect(isi).toContain("'belum'");
+    // Kepemilikan diturunkan dari SESI, bukan dari argumen.
+    expect(isi).toContain("auth.uid()");
+    // 'lunas' tidak boleh punya jalan masuk lewat jalur klien mana pun.
+    expect(isi).not.toContain("lunas");
+  });
+
+  it("anon TIDAK bisa memanggilnya", async () => {
+    const { error } = await anonClient().rpc("klaim_sudah_bayar", {
+      jenis: "sesi",
+      sasaran_id: SESI_LEPAS,
+    });
+    expect(`${error?.code} ${error?.message}`).toMatch(/42501|permission denied|PGRST202/i);
+
+    // Dan benar-benar tidak menulis apa pun.
+    expect(await statusBayar("sessions", SESI_LEPAS)).not.toBe("menunggu_verifikasi");
+  });
+
+  it("klien TIDAK bisa mengklaim milik klien lain lewat RPC langsung", async () => {
+    await setStatusBayar("sessions", sesiUjiRina, "belum");
+    const { data, error } = await sesiAnanda.rpc("klaim_sudah_bayar", {
+      jenis: "sesi",
+      sasaran_id: sesiUjiRina,
+    });
+    expect(error).toBeNull(); // ditahan oleh filter kepemilikan, bukan lemparan
+    expect(data ?? []).toHaveLength(0);
+    expect(await statusBayar("sessions", sesiUjiRina)).toBe("belum");
+  });
+
+  it("staf yang memanggil RPC langsung tidak bisa memakainya menyetel lunas", async () => {
+    // Fungsi ini hanya mengenal satu transisi; peran apa pun yang memanggilnya
+    // tetap tidak punya cara menyebut 'lunas'.
+    const a = await signInAs("admin@padma.test");
+    await setStatusBayar("sessions", SESI_LEPAS, "belum");
+    const { data } = await a.rpc("klaim_sudah_bayar", {
+      jenis: "sesi",
+      sasaran_id: SESI_LEPAS,
+    });
+    expect(data ?? []).toHaveLength(0); // admin bukan pemilik baris klien mana pun
+    expect(await statusBayar("sessions", SESI_LEPAS)).toBe("belum");
+  });
+
+  it("jenis di luar 'paket'/'sesi' ditolak, bukan diam-diam diterjemahkan", async () => {
+    const { error } = await sesiAnanda.rpc("klaim_sudah_bayar", {
+      jenis: "profiles",
+      sasaran_id: SESI_LEPAS,
+    });
+    expect(error).not.toBeNull();
   });
 });
 
