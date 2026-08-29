@@ -1,8 +1,22 @@
 import { Lotus } from "./lotus";
 
-// `waTampilan` datang dari `bacaPengaturan()` (app_settings) — satu sumber
-// nomor untuk seluruh aplikasi. Jangan menuliskannya keras di sini.
-export function Footer({ waTampilan }: { waTampilan: string }) {
+// KETIGA nilai di blok "Hubungi kami" datang dari `bacaPengaturan()`
+// (app_settings) — satu sumber untuk seluruh aplikasi. Jangan menuliskannya
+// keras di sini: alamat sempat ditulis keras di berkas ini sementara kunci
+// `alamat_klinik` sudah punya kartunya sendiri di /admin/pengaturan, sehingga
+// panel mengaku "Halaman publik sudah memakai nilai baru" untuk kendali yang
+// tidak menggerakkan apa pun. Teks cadangannya tinggal di
+// `@/lib/pengaturan/bentuk` (ALAMAT_BAWAAN/JAM_BAWAAN) bersama penjagaan
+// nilainya, supaya nilai kosong tidak pernah menerbitkan footer berlubang.
+export function Footer({
+  waTampilan,
+  alamat,
+  jam,
+}: {
+  waTampilan: string;
+  alamat: string;
+  jam: string;
+}) {
   return (
     <footer className="bg-night px-6 py-14 text-[#9DB09E]">
       <div className="mx-auto flex max-w-6xl flex-wrap justify-between gap-8">
@@ -24,7 +38,9 @@ export function Footer({ waTampilan }: { waTampilan: string }) {
           <br />
           WhatsApp: {waTampilan}
           <br />
-          Melayani area Jabodetabek
+          {jam}
+          <br />
+          {alamat}
         </div>
       </div>
       <p className="mx-auto mt-9 max-w-6xl border-t border-gold/15 pt-4 text-[11.5px] text-[#6E8271]">

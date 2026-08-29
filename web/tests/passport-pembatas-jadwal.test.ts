@@ -53,6 +53,53 @@ const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
 vi.mock("@/lib/supabase/server", () => ({
   createServerSupabase: async () => ref.sesi!,
 }));
+
+/**
+ * ===== KENAPA `auth.getUser()` DIJAWAB SEKALI DI SINI =====
+ * Bukan pelonggaran assertion — perbaikan KESETIAAN HARNESS. Tidak satu pun
+ * `expect` di berkas ini berubah karenanya.
+ *
+ * Di produksi, 50 pengiriman serentak adalah 50 REQUEST TERPISAH: masing-masing
+ * membawa cookie-nya sendiri dan `createServerSupabase()` melahirkan klien
+ * sendiri, sehingga 50 pemeriksaan identitas berjalan benar-benar paralel. Di
+ * test, `createServerSupabase` di-mock menjadi SATU klien supabase-js bersama —
+ * dan supabase-js mengunci (process lock) seluruh panggilan auth pada satu
+ * klien, sehingga 50 `getUser()` mengantre menjadi satu deret permintaan GoTrue.
+ *
+ * Diukur langsung pada stack lokal ini (29 Agu 2026), satu klien, n panggilan
+ * `auth.getUser()` serentak:
+ *      n=1  ->  947ms, 0 gagal
+ *      n=2  -> 3876ms, 0 gagal
+ *      n=4  -> 7450ms, 0 gagal
+ *      n=8  -> 5472ms, 0 gagal
+ *      n=12 -> 11774ms, 12 gagal — SEMUANYA
+ *              AuthRetryableFetchError 504 "Processing this request timed out"
+ *      n=50 -> 11471ms, 50 gagal — SEMUANYA 504
+ *
+ * Akibatnya `requireRole` melihat `user === null` lalu `redirect("/masuk")`,
+ * dan test 50-serentak mati dengan "REDIRECT /masuk" SEBELUM satu pun INSERT
+ * dikirim. Artinya test itu tidak pernah benar-benar menguji pembatasnya: ia
+ * mengukur throughput GoTrue lokal. (Sebelum `testTimeout` dinaikkan, kegagalan
+ * yang sama menyamar sebagai "Test timed out in 5000ms" — lalu 50 permintaannya
+ * yang masih terbang mencemari test BERIKUTNYA, itulah sebabnya assertion yang
+ * merah berpindah-pindah tiap run.)
+ *
+ * Identitas tetap diperiksa: `requireRole(["klien"])` DAN `klienSaatIni()`
+ * berjalan apa adanya, hanya jawaban GoTrue-nya diambil sekali per klien —
+ * persis seperti satu request produksi yang memeriksa identitasnya sendiri
+ * sekali. Yang dibiarkan 50-serentak justru bagian yang sedang diuji: tulisan
+ * ke `booking_requests`. Bahwa penjaga peran itu sungguh menolak diuji di
+ * berkasnya sendiri (tests/passport-rls.test.ts, access-matrix E2E).
+ */
+async function sesiSiapSerentak(c: SupabaseClient): Promise<SupabaseClient> {
+  const jawaban = await c.auth.getUser();
+  if (!jawaban.data.user) {
+    throw new Error(`Sesi test tidak sah: ${jawaban.error?.message ?? "tanpa user"}`);
+  }
+  (c.auth as unknown as { getUser: () => Promise<typeof jawaban> }).getUser = async () =>
+    jawaban;
+  return c;
+}
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
@@ -110,7 +157,7 @@ async function isiAntrean(jumlah: number) {
 }
 
 beforeAll(async () => {
-  sesiAnanda = await signInAs("ananda@padma.test");
+  sesiAnanda = await sesiSiapSerentak(await signInAs("ananda@padma.test"));
   ref.sesi = sesiAnanda;
   await bersihkanAnanda();
 });

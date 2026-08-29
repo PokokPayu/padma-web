@@ -37,6 +37,22 @@ export type BentukSetelan = "nomor_wa" | "teks_polos";
  */
 export const NOMOR_WA_BAWAAN = "6287778400200";
 
+/**
+ * Teks cadangan untuk dua setelan yang dipajang di footer landing.
+ *
+ * Sama seperti `NOMOR_WA_BAWAAN`, keduanya BUKAN "nilai default yang boleh
+ * dilupakan" melainkan jaring pengaman: baris `alamat_klinik` /
+ * `jam_operasional` boleh belum pernah diisi (registri melahirkannya lewat
+ * migration, bukan seed), dan satu klik "Simpan" pada medan kosong bisa
+ * menyimpan `""`. Tanpa jaring ini footer terbit dengan baris hilang —
+ * kegagalan senyap yang persis sama bentuknya dengan `https://wa.me/`.
+ *
+ * `ALAMAT_BAWAAN` adalah kalimat yang SELAMA INI ditulis keras di
+ * `src/app/_landing/footer.tsx`; ia dipindahkan ke sini, bukan dikarang.
+ */
+export const ALAMAT_BAWAAN = "Melayani area Jabodetabek";
+export const JAM_BAWAAN = "Jadwal kunjungan diatur lewat WhatsApp";
+
 export const PANJANG_WA_MIN = 8;
 export const PANJANG_WA_MAKS = 15; // E.164
 
@@ -82,6 +98,25 @@ export function nomorWaSah(mentah: string): boolean {
 export function nomorWaTerpakai(tersimpan: string | null | undefined): string {
   const digit = keInternasional(tersimpan ?? "");
   return nomorWaSah(digit) ? digit : NOMOR_WA_BAWAAN;
+}
+
+/**
+ * Teks setelan yang BENAR-BENAR dipajang halaman publik.
+ *
+ * Pasangan `nomorWaTerpakai` untuk kunci bertipe `teks_polos`, dan dijaga
+ * dengan aturan yang SAMA — bukan aturan kedua yang bisa berselisih dengannya.
+ * Yang diperiksa NILAI-nya, bukan keberadaan barisnya: `null` (belum pernah
+ * diisi), `""`, `"   "`, dan nilai yang tidak lolos `periksaNilai` (mis. yang
+ * mendarat lewat service role tanpa melewati panel) semuanya jatuh ke teks
+ * bawaan. Nilai yang lolos dikembalikan TERNORMALISASI, sehingga apa yang
+ * dipajang halaman publik persis sama dengan apa yang disimpan panel.
+ */
+export function teksTerpakai(
+  tersimpan: string | null | undefined,
+  bawaan: string,
+): string {
+  const hasil = periksaNilai("teks_polos", tersimpan ?? "");
+  return hasil.ok ? hasil.nilai : bawaan;
 }
 
 /** 6287778400200 → 0877-7840-0200 */

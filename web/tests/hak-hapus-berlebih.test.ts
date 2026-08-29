@@ -637,6 +637,28 @@ describe("master data tidak bisa dihapus staf", () => {
       // 42501 saja tidak membuktikan barisnya utuh: yang dijaga adalah NILAI
       // yang masih dipakai seluruh CTA WhatsApp, bukan kode HTTP-nya.
       expect(data!.value).toBe(awal!.value);
+
+      // PASANGANNYA — assertion di atas menguji VERBA, dan verba bukan efek.
+      // Red team menembusnya lewat pintu sebelah: PATCH pada KOLOM KUNCI
+      // memindahkan baris `nomor_wa` ke kunci lain, sehingga `nomor_wa`
+      // LENYAP persis seperti DELETE yang sudah dicabut, dan seluruh CTA
+      // WhatsApp diam-diam jatuh ke NOMOR_WA_BAWAAN yang ditulis keras di
+      // src/lib/pengaturan/bentuk.ts. Ditutup trigger trg_jaga_identitas_setelan.
+      const { data: pindah, error: ePindah } = await a
+        .from("app_settings")
+        .update({ key: "alamat_klinik" })
+        .eq("key", KUNCI_UJI)
+        .select("key");
+      expect(ePindah?.code, "kunci setelan tidak boleh bisa ditulis ulang").toBe("42501");
+      expect(pindah ?? []).toHaveLength(0);
+
+      const { data: sesudah } = await svc
+        .from("app_settings")
+        .select("key, value")
+        .eq("key", KUNCI_UJI)
+        .maybeSingle();
+      expect(sesudah, "baris nomor_wa harus MASIH ADA sesudah percobaan pindah").not.toBeNull();
+      expect(sesudah!.value).toBe(awal!.value);
     } finally {
       await svc
         .from("app_settings")
@@ -705,6 +727,169 @@ describe("master data tidak bisa dihapus staf", () => {
     const { error: eBersih } = await svc.from("partners").delete().eq("id", mitraBaru!.id);
     expect(eBersih).toBeNull();
     await svc.from("app_settings").delete().eq("key", KUNCI_TULIS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (C2) KOLOM IDENTITAS — pencabutan DELETE menjaga VERBA, bukan EFEK
+// ---------------------------------------------------------------------------
+// Temuan red team, direproduksi sebagai admin sungguhan lewat PostgREST:
+//
+//   DELETE /rest/v1/app_settings?key=eq.nomor_wa   -> 403 42501   (pagar bekerja)
+//   PATCH  /rest/v1/app_settings?key=eq.nomor_wa  {"key":"alamat_klinik"}
+//                                                  -> 200, baris nomor_wa LENYAP
+//   CTA landing sesudahnya -> https://wa.me/6287778400200 (NOMOR_WA_BAWAAN),
+//   bukan nomor yang disetel klinik. Tanpa error, tanpa test merah.
+//
+// Efeknya identik DELETE. Yang membedakan `app_settings` dari master data
+// lain: kuncinya adalah IDENTITAS MENURUT MAKNA — kode mencarinya dengan
+// literal `where key = 'nomor_wa'`, jadi memindahkan kuncinya sama saja
+// dengan menghapus barisnya. Kelompok assertion di bawah karena itu menghitung
+// KEBERADAAN BARIS SETELAH PERCOBAAN, bukan kode HTTP-nya saja.
+describe("kolom identitas tidak bisa ditulis ulang (efek = DELETE)", () => {
+  it("admin tidak bisa memindahkan setelan ke kunci lain", async () => {
+    const a = await signInAs("admin@padma.test");
+    const { data: awal } = await svc
+      .from("app_settings")
+      .select("value")
+      .eq("key", "nomor_wa")
+      .single();
+
+    for (const tujuan of ["alamat_klinik", "jam_operasional"]) {
+      const { data, error } = await a
+        .from("app_settings")
+        .update({ key: tujuan })
+        .eq("key", "nomor_wa")
+        .select("key");
+      expect(error?.code, `pindah ke ${tujuan} harus ditolak`).toBe("42501");
+      expect(data ?? []).toHaveLength(0);
+    }
+
+    // Yang dijaga bukan kode HTTP-nya, melainkan barisnya: `nomor_wa` masih
+    // ada DENGAN NILAI SEMULA, sehingga CTA WhatsApp tidak jatuh ke bawaan.
+    const { data: sesudah } = await svc
+      .from("app_settings")
+      .select("key, value")
+      .eq("key", "nomor_wa")
+      .maybeSingle();
+    expect(sesudah).not.toBeNull();
+    expect(sesudah!.value).toBe(awal!.value);
+  });
+
+  it("owner pun ditolak — ini bukan soal tingkat peran", async () => {
+    const o = await signInAs("owner@padma.test");
+    const { error } = await o
+      .from("app_settings")
+      .update({ key: "alamat_klinik" })
+      .eq("key", "nomor_wa")
+      .select("key");
+    expect(error?.code).toBe("42501");
+    const { data } = await svc.from("app_settings").select("key").eq("key", "nomor_wa");
+    expect(data ?? []).toHaveLength(1);
+  });
+
+  it("KONTROL: menyimpan NILAI setelan TETAP bekerja (upsert & update)", async () => {
+    // Assertion ini menahan perbaikan yang TERLIHAT benar tetapi melumpuhkan
+    // jalur sah: `revoke update on app_settings; grant update (value)`.
+    // Diukur, bukan diperkirakan (29 Agu 2026) — dengan hak kolom itu terpasang,
+    // upsert PostgREST milik `simpanSetelan` mati 42501, karena PostgREST
+    // menerbitkan `on conflict (key) do update set key = excluded.key, ...`
+    // sehingga kolom `key` ikut menuntut hak UPDATE. Lihat describe (F).
+    const a = await signInAs("admin@padma.test");
+    const { data: awal } = await svc
+      .from("app_settings")
+      .select("value")
+      .eq("key", "nomor_wa")
+      .single();
+    try {
+      const { data: viaUpsert, error: eUpsert } = await a
+        .from("app_settings")
+        .upsert({ key: "nomor_wa", value: "6281111111111" }, { onConflict: "key" })
+        .select("key");
+      expect(eUpsert, "jalur simpanSetelan (upsert) harus tetap hidup").toBeNull();
+      expect(viaUpsert ?? []).toHaveLength(1);
+
+      const { data: viaUpdate, error: eUpdate } = await a
+        .from("app_settings")
+        .update({ value: "6282222222222" })
+        .eq("key", "nomor_wa")
+        .select("key");
+      expect(eUpdate).toBeNull();
+      expect(viaUpdate ?? []).toHaveLength(1);
+
+      // Baris utuh dengan kunci BERNILAI SAMA juga harus lolos: trigger
+      // mengikat PERUBAHAN nilai, bukan kehadiran kolom di payload.
+      const { error: eUtuh } = await a
+        .from("app_settings")
+        .update({ key: "nomor_wa", value: awal!.value })
+        .eq("key", "nomor_wa")
+        .select("key");
+      expect(eUtuh, "payload baris utuh harus tetap lolos").toBeNull();
+    } finally {
+      await svc
+        .from("app_settings")
+        .upsert({ key: "nomor_wa", value: awal!.value }, { onConflict: "key" });
+    }
+  });
+
+  it("admin tidak bisa menulis ulang id fase, tetapi TETAP boleh menyunting namanya", async () => {
+    // `phases.id` adalah taksonomi yang DITULIS KERAS di produk
+    // (`FASE_SKRINING_KE_PHASE` di src/app/admin/skrining/status.ts memetakan
+    // 'prekonsepsi' dst. satu per satu). Menulis ulangnya memutus pemetaan itu
+    // tanpa satu pun error di layar — efek yang sama dengan DELETE yang sudah
+    // dicabut. Hari ini foreign key `services_phase_id_fkey` KEBETULAN
+    // menahannya (kelima fase seed dirujuk layanan), tetapi itu perlindungan
+    // yang bergantung pada isi data, bukan invarian.
+    const a = await signInAs("admin@padma.test");
+    const { error } = await a
+      .from("phases")
+      .update({ id: "PAD-UJI-fase" })
+      .eq("id", "menopause")
+      .select("id");
+    expect(error?.code).toBe("42501");
+
+    const { data: fase } = await svc.from("phases").select("id").order("urutan");
+    expect((fase ?? []).map((f) => f.id)).toEqual([
+      "prekonsepsi",
+      "kehamilan",
+      "nifas",
+      "menopause",
+      "newborn",
+    ]);
+
+    // KONTROL: penyuntingan taksonomi yang wajar tidak ikut terkunci.
+    const { data: namaAwal } = await svc
+      .from("phases")
+      .select("nama")
+      .eq("id", "menopause")
+      .single();
+    try {
+      const { data, error: eNama } = await a
+        .from("phases")
+        .update({ nama: "PAD-UJI Menopause" })
+        .eq("id", "menopause")
+        .select("id");
+      expect(eNama).toBeNull();
+      expect(data ?? []).toHaveLength(1);
+    } finally {
+      await svc.from("phases").update({ nama: namaAwal!.nama }).eq("id", "menopause");
+    }
+  });
+
+  it("STRUKTURAL: triggernya benar-benar terpasang (red team menemukan pg_trigger kosong)", async () => {
+    const baris = await querySql<{ tabel: string; trigger: string }>(`
+      select c.relname as tabel, t.tgname as trigger
+        from pg_trigger t
+        join pg_class c on c.oid = t.tgrelid
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public'
+         and not t.tgisinternal
+         and c.relname in ('app_settings','phases')
+       order by 1, 2`);
+    expect(baris.map((b) => `${b.tabel}.${b.trigger}`)).toEqual([
+      "app_settings.trg_jaga_identitas_setelan",
+      "phases.trg_jaga_identitas_fase",
+    ]);
   });
 });
 
@@ -1078,5 +1263,70 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
       .eq("id", KLIEN_RINA)
       .select("id");
     expect(eUtuh).toBeNull();
+  });
+
+  /**
+   * Saran auditor #3 (red team, 29 Agu 2026): "tutup PATCH kolom kunci
+   * app_settings dengan hak kolom —
+   *     revoke update on public.app_settings from authenticated;
+   *     grant  update (value) on public.app_settings to authenticated;
+   *   `simpanSetelan` tetap bekerja apa adanya — ia hanya menulis `value`."
+   *
+   * TEMUANNYA BENAR (dan sudah ditutup, lihat describe (C2)); PERBAIKANNYA
+   * YANG KELIRU. Premis "ia hanya menulis `value`" tidak berlaku untuk UPSERT:
+   * PostgREST menerbitkan
+   *     insert into app_settings (key, value) values (...)
+   *       on conflict (key) do update set key = excluded.key, value = excluded.value
+   * sehingga cabang DO UPDATE menuntut hak UPDATE pada kolom `key` juga —
+   * meskipun nilainya tidak berubah. Diukur lewat REST sebagai admin sungguhan
+   * dengan hak kolom itu terpasang hidup di basis data lokal:
+   *     UPSERT  -> 42501 "permission denied for table app_settings"   <-- MATI
+   *     UPD val -> [{"key":"nomor_wa"}]
+   *     UPD key -> 42501                                              <-- tertutup
+   * Artinya sarannya menutup celahnya SEKALIGUS mematikan satu-satunya jalur
+   * simpan panel pengaturan. Penggantinya adalah trigger — pola yang sama
+   * dengan `guard_client_link` di atas dan dengan alasan yang sama: hak kolom
+   * mengikat KEHADIRAN kolom di payload, trigger mengikat PERUBAHAN NILAI.
+   */
+  it("app_settings.key TETAP ter-grant UPDATE — pencabutannya mematikan upsert panel", async () => {
+    const baris = await querySql<{ column_name: string }>(`
+      select column_name from information_schema.column_privileges
+       where table_schema='public' and table_name='app_settings'
+         and grantee='authenticated' and privilege_type='UPDATE'
+       order by 1`);
+    expect(baris.map((b) => b.column_name)).toEqual(["key", "value"]);
+  });
+
+  it("hak kolom itu BENAR-BENAR mematahkan upsert (dibuktikan, bukan diasumsikan)", async () => {
+    const { data: pengguna } = await svc.auth.admin.listUsers();
+    const uidAdmin = pengguna.users.find((u) => u.email === "admin@padma.test")!.id;
+
+    const hasil = await dalamTransaksiRollback(async (jalankan) => {
+      await jalankan(`revoke update on public.app_settings from authenticated`);
+      await jalankan(`grant update (value) on public.app_settings to authenticated`);
+      await jalankan(`set local role authenticated`);
+      await jalankan(
+        `select set_config('request.jwt.claims',
+           json_build_object('sub', $1::text, 'role', 'authenticated')::text, true)`,
+        [uidAdmin],
+      );
+
+      // (a) Bentuk SQL yang benar-benar diterbitkan PostgREST untuk upsert.
+      let pesanUpsert = "";
+      try {
+        await jalankan(
+          `insert into public.app_settings (key, value) values ('nomor_wa', '6280000000000')
+             on conflict (key) do update set key = excluded.key, value = excluded.value`,
+        );
+      } catch (e) {
+        pesanUpsert = (e as Error).message;
+      }
+      return [{ pesanUpsert }];
+    });
+
+    expect(
+      hasil[0].pesanUpsert,
+      "hak kolom `value` saja mematikan upsert panel pengaturan",
+    ).toContain("permission denied for table app_settings");
   });
 });

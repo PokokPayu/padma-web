@@ -31,7 +31,11 @@ export default async function Home() {
       <CaraKerja />
       <PassportTeaser />
       <Pembanding />
-      <Footer waTampilan={pengaturan.nomorWaTampilan} />
+      <Footer
+        waTampilan={pengaturan.nomorWaTampilan}
+        jam={pengaturan.jamTampilan}
+        alamat={pengaturan.alamatTampilan}
+      />
     </main>
   );
 }

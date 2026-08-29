@@ -36,7 +36,7 @@
  * dari seed dan dibutuhkan landing, skrining, serta passport.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -90,6 +90,10 @@ const { simpanSetelan } = await import("@/app/admin/pengaturan/aksi");
 const { KartuSetelan } = await import("@/app/admin/pengaturan/form-pengaturan");
 const { default: PengaturanPage } = await import("@/app/admin/pengaturan/page");
 const { bacaPengaturan } = await import("@/lib/settings");
+// Landing dirender SUNGGUHAN di describe (D2): satu-satunya cara membuktikan
+// bahwa nilai yang disimpan panel benar-benar sampai ke halaman pengunjung —
+// membaca sumbernya saja tidak membuktikan apa pun tentang nilai DB.
+const { default: Home } = await import("@/app/page");
 
 const sumberAksi = baca("src/app/admin/pengaturan/aksi.ts");
 const sumberHalaman = baca("src/app/admin/pengaturan/page.tsx");
@@ -331,6 +335,104 @@ describe("simpanSetelan", () => {
     await expect(simpanSetelan("nomor_wa", fd("6280000000000"))).rejects.toThrow(/REDIRECT/);
     ref.sesi = sesiAdmin;
     expect(await nilaiDb("nomor_wa")).toBe(WA_SEED);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (D2) KENDALI MATI — kunci terdaftar yang tidak dibaca halaman mana pun
+// ---------------------------------------------------------------------------
+// Temuan red team (29 Agu 2026). Dua dari tiga kartu di /admin/pengaturan
+// adalah KENDALI MATI: `alamat_klinik` & `jam_operasional` terdaftar di
+// registri, dirender sebagai kartu, disimpan ke basis data — lalu tidak dibaca
+// SATU pun halaman. Diuji dengan nilai bertanda pada server dev yang hidup:
+//     upsert alamat_klinik   = "PAD-UJI-ALAMAT-Kemang Jakarta Selatan"
+//     upsert jam_operasional = "PAD-UJI-JAM 08.00-20.00 WIB"
+//     kemunculan "PAD-UJI" di HTML: / -> 0   /skrining -> 0   /masuk -> 0
+//     footer tetap "Melayani area Jabodetabek" (ditulis keras di footer.tsx:27)
+// Sementara formulir menjawab "Tersimpan. Halaman publik sudah memakai nilai
+// baru." — kalimat yang tidak benar untuk dua dari tiga kartu. Itu bentuk yang
+// sama dengan "tombol yang berbohong sejak hari pertama" yang migration
+// `gating_materi_hormati_aktif` sendiri larang untuk modul materi.
+describe("setiap kunci terdaftar BENAR-BENAR dibaca halaman publik", () => {
+  it("alamat & jam yang disimpan admin muncul di footer landing", async () => {
+    const ALAMAT = "PAD-UJI Kemang Jakarta Selatan";
+    const JAM = "PAD-UJI Senin-Sabtu 08.00-20.00 WIB";
+    expect((await simpanSetelan(KUNCI_TEKS, fd(ALAMAT))).ok).toBe(true);
+    expect((await simpanSetelan(KUNCI_JAM, fd(JAM))).ok).toBe(true);
+
+    const s = await bacaPengaturan();
+    expect(s.alamatTampilan).toBe(ALAMAT);
+    expect(s.jamTampilan).toBe(JAM);
+
+    const m = renderToStaticMarkup(await Home());
+    expect(m, "alamat_klinik tidak sampai ke landing").toContain(ALAMAT);
+    expect(m, "jam_operasional tidak sampai ke landing").toContain(JAM);
+  });
+
+  it("nilai KOSONG jatuh ke teks bawaan — bukan footer berlubang", async () => {
+    // Penjagaan NILAI yang sama seperti `nomorWaTerpakai`: satu klik "Simpan"
+    // pada medan kosong, atau baris yang belum pernah diisi, tidak boleh
+    // menerbitkan footer dengan baris hilang.
+    await paksaNilai(KUNCI_TEKS, "");
+    await paksaNilai(KUNCI_JAM, "   ");
+    const s = await bacaPengaturan();
+    expect(s.alamatTampilan).toBe(bentuk.ALAMAT_BAWAAN);
+    expect(s.jamTampilan).toBe(bentuk.JAM_BAWAAN);
+
+    const m = renderToStaticMarkup(await Home());
+    expect(m).toContain(bentuk.ALAMAT_BAWAAN);
+    expect(m).toContain(bentuk.JAM_BAWAAN);
+  });
+
+  it("baris yang BELUM PERNAH ADA pun jatuh ke teks bawaan", async () => {
+    await svc.from("app_settings").delete().in("key", [KUNCI_TEKS, KUNCI_JAM]);
+    const s = await bacaPengaturan();
+    expect(s.alamatTampilan).toBe(bentuk.ALAMAT_BAWAAN);
+    expect(s.jamTampilan).toBe(bentuk.JAM_BAWAAN);
+  });
+
+  it("nilai sampah di basis data tidak diterbitkan apa adanya", async () => {
+    // Nilai bisa mendarat lewat service role tanpa melewati `periksaNilai`.
+    await paksaNilai(KUNCI_TEKS, "<script>alert(1)</script>");
+    await paksaNilai(KUNCI_JAM, "javascript:alert(1)");
+    const s = await bacaPengaturan();
+    expect(s.alamatTampilan).toBe(bentuk.ALAMAT_BAWAAN);
+    expect(s.jamTampilan).toBe(bentuk.JAM_BAWAAN);
+  });
+
+  it("footer tidak lagi menulis keras alamat & jam", () => {
+    const footer = baca("src/app/_landing/footer.tsx");
+    expect(footer, "alamat masih ditulis keras di komponen").not.toContain(
+      "Jabodetabek",
+    );
+  });
+
+  it("TIDAK ADA kunci terdaftar tanpa pembaca (kendali mati)", async () => {
+    // Inilah assertion yang seharusnya sudah merah sejak hari pertama:
+    // registri berjanji "ditampilkan di footer" / "ditampilkan ke pengunjung",
+    // sementara `grep -rn alamat_klinik src/` tidak menemukan apa pun di luar
+    // registri. Kunci baru yang lahir lewat migration tanpa pembaca akan
+    // langsung merah di sini, bukan ditemukan red team berikutnya.
+    const { data: registri } = await svc.from("app_setting_keys").select("key");
+    expect((registri ?? []).length).toBeGreaterThanOrEqual(3);
+
+    const berkasSrc: string[] = [];
+    const telusuri = (dir: string) => {
+      for (const e of readdirSync(path.join(AKAR, dir), { withFileTypes: true })) {
+        const rel = path.join(dir, e.name);
+        if (e.isDirectory()) telusuri(rel);
+        else if (/\.(ts|tsx)$/.test(e.name)) berkasSrc.push(baca(rel));
+      }
+    };
+    telusuri("src");
+    const semuaSumber = berkasSrc.join("\n");
+
+    for (const r of registri ?? []) {
+      expect(
+        semuaSumber.includes(r.key as string),
+        `kunci "${r.key}" terdaftar tetapi tidak dibaca satu berkas pun di src/`,
+      ).toBe(true);
+    }
   });
 });
 
