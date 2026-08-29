@@ -153,6 +153,20 @@ revoke delete on public.honor_marks   from authenticated;
 -- materi menyapu seluruh isinya sekaligus lewat cascade; menghapus satu bab
 -- menghapus satu bab. Pagar yang ditegakkan di (1a) adalah pagar terhadap
 -- KEHILANGAN MASSAL YANG SENYAP, bukan larangan menyunting.
+--
+-- >>> KOREKSI (lihat 20260829200000_batas_radius_hapus_isi_materi.sql) <<<
+-- Kalimat "menghapus satu bab menghapus satu bab" SALAH, dan SQL di bagian ini
+-- (yaitu: ketiadaan `revoke delete`) sudah dibatalkan migration tersebut.
+-- Premisnya tidak pernah diuji lewat PostgREST: filter pada URL adalah PILIHAN
+-- PEMANGGIL, bukan pembatas baris. Sebagai admin sungguhan (anon key + JWT
+-- admin), `DELETE /rest/v1/material_chapters?urutan=gte.0` -> HTTP 204 dan
+-- SELURUH bab SELURUH materi klinik lenyap dalam satu permintaan — radius yang
+-- justru LEBIH BESAR daripada menghapus satu `materials`. Paragraf ini sengaja
+-- dibiarkan berdiri (SQL migration yang sudah dipakai tidak ditulis ulang di
+-- repo ini) agar penalaran yang keliru terbaca berdampingan dengan
+-- bantahannya. Yang tetap BENAR dari paragraf ini: penyuntingan bab memang
+-- pekerjaan sah — karena itu penggantinya bukan larangan, melainkan RPC
+-- berparameter tunggal `hapus_bab_materi` / `lepas_video_materi`.
 
 -- ---------------------------------------------------------------------------
 -- (3) TUTUP SUMBERNYA — supaya temuan ini tidak kambuh sendiri
