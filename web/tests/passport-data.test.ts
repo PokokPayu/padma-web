@@ -1,0 +1,342 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminSupabase } from "@/lib/supabase/admin";
+import { signInAs } from "./helpers/as-user";
+
+// `createServerSupabase()` membaca `cookies()` dari next/headers, yang hanya
+// bermakna di dalam request scope. Agar lapisan data BENAR-BENAR dieksekusi di
+// test (bukan sekadar dibaca sebagai teks), modulnya diganti dengan klien
+// Supabase ber-SESI NYATA hasil `signInAs`. Konsekuensinya penting: seluruh
+// query di bawah tetap melewati RLS sebagai Ananda — persis seperti di server.
+const ref = vi.hoisted(() => ({ klien: null as SupabaseClient | null }));
+
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.klien!,
+}));
+
+// Lapisan data memakai createServerSupabase (cookies), yang tidak tersedia di
+// vitest. Yang diuji di sini adalah INVARIAN QUERY-nya lewat klien ber-sesi:
+// bentuk data, gating, dan tidak bocornya isi materi.
+describe("invarian query passport (lewat RLS sesi klien)", () => {
+  it("klien hanya melihat sesinya sendiri", async () => {
+    const k = await signInAs("ananda@padma.test");
+    const { data, error } = await k
+      .from("sessions")
+      .select("id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, partner_id, services(id, nama)")
+      .order("tanggal", { ascending: false });
+    expect(error).toBeNull();
+    expect(data!.length).toBeGreaterThan(0);
+    expect(data![0].services).not.toBeNull();
+  });
+
+  it("nama mitra terbaca lewat partner_publik sebagai query terpisah", async () => {
+    // Sengaja BUKAN embed: embed ke view bergantung inferensi relasi dan
+    // kegagalannya senyap. Query terpisah selalu bekerja.
+    const k = await signInAs("ananda@padma.test");
+    const { data, error } = await k.from("partner_publik").select("id, nama");
+    expect(error).toBeNull();
+    expect(data!.length).toBeGreaterThanOrEqual(2);
+    expect(data![0].nama).toBeTruthy();
+  });
+
+  it("daftar materi TIDAK memuat isi bab maupun URL video", async () => {
+    const k = await signInAs("ananda@padma.test");
+    const { data, error } = await k
+      .from("materials")
+      .select("id, judul, tipe, deskripsi, service_id, material_chapters(id), material_videos(material_id)")
+      .eq("aktif", true);
+    expect(error).toBeNull();
+    const json = JSON.stringify(data);
+    expect(json).not.toContain("vimeo.com");
+    expect(json.toLowerCase()).not.toContain("\"isi\"");
+  });
+
+  it("materi terkunci: judul terlihat, isi kosong", async () => {
+    const k = await signInAs("ananda@padma.test");
+    const { data } = await k
+      .from("materials")
+      .select("judul, service_id, material_chapters(id), material_videos(material_id)")
+      .eq("aktif", true);
+    const adaTerkunci = data!.some(
+      (m) => (m.material_chapters as unknown[]).length === 0 && m.material_videos === null,
+    );
+    expect(adaTerkunci).toBe(true); // seed menyediakan materi Lactation Hero yang belum dijalani
+  });
+
+  it("embed material_videos berbentuk OBJEK/null, bukan array", async () => {
+    const k = await signInAs("ananda@padma.test");
+    const { data } = await k.from("materials").select("material_videos(material_id)").eq("aktif", true);
+    const nilai = data!.map((m) => m.material_videos);
+    expect(nilai.every((v) => v === null || (typeof v === "object" && !Array.isArray(v)))).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Lapisan data itu sendiri — dieksekusi sungguhan lewat sesi Ananda.
+// ===========================================================================
+const svc = createAdminSupabase();
+
+const ANANDA = "44444444-4444-4444-4444-444444444401";
+const RINA = "44444444-4444-4444-4444-444444444402";
+const PAKET_ANANDA = "55555555-5555-5555-5555-555555555501";
+
+// 1101 Sankalpa Fertility Massage — Ananda punya sesi `selesai` (TERBUKA).
+const MATERI_TERBUKA_VIDEO = "77777777-7777-7777-7777-777777777701";
+const MATERI_TERBUKA_EBOOK = "77777777-7777-7777-7777-777777777702";
+// 1106 Lactation Hero — Ananda tidak pernah menjalaninya (TERKUNCI).
+const MATERI_TERKUNCI_VIDEO = "77777777-7777-7777-7777-777777777703";
+const MATERI_TERKUNCI_EBOOK = "77777777-7777-7777-7777-777777777704";
+
+const SVC_YOGA = "11111111-1111-1111-1111-111111111102";
+
+async function pakaiSesi(email: string) {
+  ref.klien = await signInAs(email);
+}
+
+describe("ambilKlien", () => {
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+
+  it("mengembalikan identitas klien beserta fase yang sudah dipetakan", async () => {
+    const { ambilKlien } = await import("@/lib/passport/data");
+    const k = await ambilKlien();
+    expect(k).not.toBeNull();
+    expect(k).toMatchObject({
+      id: ANANDA,
+      padmaId: "PAD-2607-0012",
+      nama: "Ananda Putri",
+      email: "ananda@padma.test",
+      faseId: "prekonsepsi",
+      faseNama: "Prekonsepsi / Promil",
+      faseSanskrit: "Sankalpa",
+    });
+    expect(k!.noHp).toBeTruthy();
+  });
+
+  it("user tanpa baris clients mengembalikan null, BUKAN melempar PGRST116", async () => {
+    // Keputusan G: klien belum tertaut diarahkan, bukan meledak. `maybeSingle`
+    // adalah yang membedakannya dari `single`.
+    await pakaiSesi("admin@padma.test");
+    const { ambilKlien } = await import("@/lib/passport/data");
+    await expect(ambilKlien()).resolves.toBeNull();
+    await pakaiSesi("ananda@padma.test");
+  });
+});
+
+describe("ambilSesi", () => {
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+
+  it("memetakan sesi lengkap dengan NAMA BIDAN dari query terpisah", async () => {
+    const { ambilSesi } = await import("@/lib/passport/data");
+    const sesi = await ambilSesi(ANANDA);
+    expect(sesi.length).toBeGreaterThan(0);
+
+    // "Tim PADMA" adalah nilai jatuh-tempo saat pemetaan nama mitra gagal.
+    // Kalau ia muncul, penggabungan partner_publik di JS sedang rusak — dan
+    // kegagalan itu memang senyap, karena itu diuji eksplisit.
+    expect(sesi.every((s) => s.namaMitra !== "Tim PADMA")).toBe(true);
+    expect(sesi.map((s) => s.namaMitra)).toContain("Bidan Sri Wahyuni");
+
+    // Nama layanan ikut termuat, catatan/rekomendasi tidak pernah null.
+    expect(sesi.every((s) => s.namaLayanan !== "Layanan")).toBe(true);
+    expect(sesi.every((s) => typeof s.catatan === "string")).toBe(true);
+    expect(sesi.every((s) => typeof s.rekomendasi === "string")).toBe(true);
+  });
+
+  it("memetakan client_package_id menjadi clientPackageId (snake -> camel)", async () => {
+    const { ambilSesi } = await import("@/lib/passport/data");
+    const sesi = await ambilSesi(ANANDA);
+    const berpaket = sesi.filter((s) => s.clientPackageId !== null);
+    expect(berpaket.length).toBeGreaterThan(0);
+    expect(berpaket.every((s) => s.clientPackageId === PAKET_ANANDA)).toBe(true);
+  });
+
+  it("terurut menurun menurut tanggal (perbandingan string, bukan Date)", async () => {
+    const { ambilSesi } = await import("@/lib/passport/data");
+    const tgl = (await ambilSesi(ANANDA)).map((s) => s.tanggal);
+    expect(tgl.every((t) => /^\d{4}-\d{2}-\d{2}$/.test(t))).toBe(true);
+    expect([...tgl].sort().reverse()).toEqual(tgl);
+  });
+
+  it("sesi klien LAIN tidak pernah terbawa (RLS yang menjaga, bukan UI)", async () => {
+    const { ambilSesi } = await import("@/lib/passport/data");
+    await expect(ambilSesi(RINA)).resolves.toEqual([]);
+  });
+});
+
+describe("ambilPaket", () => {
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+
+  it("memetakan paket aktif beserta nama & jumlah sesi dari packages", async () => {
+    const { ambilPaket } = await import("@/lib/passport/data");
+    const paket = await ambilPaket(ANANDA);
+    expect(paket).toHaveLength(1);
+    expect(paket[0]).toEqual({
+      id: PAKET_ANANDA,
+      nama: "Sankalpa Prima",
+      jumlahSesi: 8,
+      statusBayar: "lunas",
+    });
+  });
+
+  it("paket klien lain tidak terbawa", async () => {
+    const { ambilPaket } = await import("@/lib/passport/data");
+    await expect(ambilPaket(RINA)).resolves.toEqual([]);
+  });
+});
+
+describe("ambilDaftarMateri", () => {
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+
+  it("menandai terbuka/terkunci dari hasil RLS, bukan dari kolom apa pun", async () => {
+    const { ambilDaftarMateri } = await import("@/lib/passport/data");
+    const daftar = await ambilDaftarMateri();
+    const per = new Map(daftar.map((m) => [m.id, m]));
+
+    expect(per.get(MATERI_TERBUKA_VIDEO)!.terbuka).toBe(true);
+    expect(per.get(MATERI_TERBUKA_EBOOK)!.terbuka).toBe(true);
+    expect(per.get(MATERI_TERBUKA_EBOOK)!.jumlahBab).toBeGreaterThanOrEqual(2);
+
+    // Terkunci: kartunya TETAP tampil (judul & deskripsi terbaca) — hanya
+    // isinya yang tidak ada.
+    expect(per.get(MATERI_TERKUNCI_VIDEO)!.terbuka).toBe(false);
+    expect(per.get(MATERI_TERKUNCI_EBOOK)!.terbuka).toBe(false);
+    expect(per.get(MATERI_TERKUNCI_EBOOK)!.jumlahBab).toBe(0);
+    expect(per.get(MATERI_TERKUNCI_EBOOK)!.judul).toBe("Panduan ASI Perah");
+    expect(per.get(MATERI_TERKUNCI_VIDEO)!.namaLayanan).toBe("Lactation Hero");
+  });
+
+  it("hasilnya TIDAK memuat isi bab maupun URL video sama sekali", async () => {
+    const { ambilDaftarMateri } = await import("@/lib/passport/data");
+    const json = JSON.stringify(await ambilDaftarMateri());
+    expect(json).not.toContain("vimeo.com");
+    expect(json).not.toContain("Isi bab");
+    expect(json.toLowerCase()).not.toContain("\"isi\"");
+    expect(json.toLowerCase()).not.toContain("\"url\"");
+  });
+
+  it("materi non-aktif tidak muncul (policy chapters/videos tidak melihat materials.aktif)", async () => {
+    const { ambilDaftarMateri } = await import("@/lib/passport/data");
+    await svc.from("materials").update({ aktif: false }).eq("id", MATERI_TERBUKA_EBOOK);
+    try {
+      const daftar = await ambilDaftarMateri();
+      expect(daftar.map((m) => m.id)).not.toContain(MATERI_TERBUKA_EBOOK);
+    } finally {
+      await svc.from("materials").update({ aktif: true }).eq("id", MATERI_TERBUKA_EBOOK);
+    }
+  });
+});
+
+describe("ambilMateriDetail", () => {
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+
+  it("materi terbuka: bab terurut menurut `urutan` dan isinya terbaca", async () => {
+    const { ambilMateriDetail } = await import("@/lib/passport/data");
+    const d = await ambilMateriDetail(MATERI_TERBUKA_EBOOK);
+    expect(d).not.toBeNull();
+    expect(d!.tipe).toBe("ebook");
+    expect(d!.bab.length).toBeGreaterThanOrEqual(2);
+    expect(d!.bab.map((b) => b.urutan)).toEqual([...d!.bab.map((b) => b.urutan)].sort((a, b) => a - b));
+    expect(d!.bab.every((b) => b.isi.length > 0)).toBe(true);
+    expect(d!.videoUrl).toBeNull();
+  });
+
+  it("materi video terbuka: videoUrl terisi dari embed OBJEK (bukan array)", async () => {
+    const { ambilMateriDetail } = await import("@/lib/passport/data");
+    const d = await ambilMateriDetail(MATERI_TERBUKA_VIDEO);
+    expect(d!.videoUrl).toBe("https://vimeo.com/padma-sankalpa-001");
+  });
+
+  it("materi TERKUNCI: metadata tampil, bab kosong & videoUrl null walau URL-nya diakses langsung", async () => {
+    const { ambilMateriDetail } = await import("@/lib/passport/data");
+    const ebook = await ambilMateriDetail(MATERI_TERKUNCI_EBOOK);
+    expect(ebook!.judul).toBe("Panduan ASI Perah");
+    expect(ebook!.bab).toEqual([]);
+    expect(ebook!.videoUrl).toBeNull();
+
+    const video = await ambilMateriDetail(MATERI_TERKUNCI_VIDEO);
+    expect(video!.videoUrl).toBeNull();
+    expect(JSON.stringify(video)).not.toContain("RAHASIA");
+  });
+
+  it("materi non-aktif atau tidak dikenal mengembalikan null", async () => {
+    const { ambilMateriDetail } = await import("@/lib/passport/data");
+    await expect(
+      ambilMateriDetail("77777777-7777-7777-7777-7777777770ff"),
+    ).resolves.toBeNull();
+
+    await svc.from("materials").update({ aktif: false }).eq("id", MATERI_TERBUKA_EBOOK);
+    try {
+      await expect(ambilMateriDetail(MATERI_TERBUKA_EBOOK)).resolves.toBeNull();
+    } finally {
+      await svc.from("materials").update({ aktif: true }).eq("id", MATERI_TERBUKA_EBOOK);
+    }
+  });
+});
+
+describe("ambilPermintaanJadwal", () => {
+  const bersihkan: string[] = [];
+
+  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+  afterAll(async () => {
+    if (bersihkan.length) await svc.from("booking_requests").delete().in("id", bersihkan);
+  });
+
+  it("hanya permintaan berstatus menunggu milik klien yang ditampilkan", async () => {
+    const { data: baris } = await svc.from("booking_requests").insert([
+      { client_id: ANANDA, service_id: SVC_YOGA, tanggal: "2026-12-18", preferensi_waktu: "pagi", status: "menunggu" },
+      { client_id: ANANDA, service_id: SVC_YOGA, tanggal: "2026-12-19", preferensi_waktu: "sore", status: "dikonfirmasi" },
+      { client_id: RINA, service_id: SVC_YOGA, tanggal: "2026-12-17", preferensi_waktu: "siang", status: "menunggu" },
+    ]).select("id, tanggal, status");
+    for (const b of baris ?? []) bersihkan.push(b.id);
+
+    const { ambilPermintaanJadwal } = await import("@/lib/passport/data");
+    const hasil = await ambilPermintaanJadwal(ANANDA);
+    const tanggal = hasil.map((p) => p.tanggal);
+
+    expect(tanggal).toContain("2026-12-18");
+    expect(tanggal).not.toContain("2026-12-19"); // sudah dikonfirmasi
+    expect(tanggal).not.toContain("2026-12-17"); // milik klien lain
+    expect(hasil.every((p) => p.status === "menunggu")).toBe(true);
+
+    const punya = hasil.find((p) => p.tanggal === "2026-12-18")!;
+    expect(punya.namaLayanan).toBe("PADMA Flow Yoga - Prekonsepsi");
+    expect(punya.preferensiWaktu).toBe("pagi");
+  });
+});
+
+describe("pagar struktural lapisan data", () => {
+  const sumber = readFileSync(
+    resolve(__dirname, "../src/lib/passport/data.ts"),
+    "utf8",
+  );
+
+  it("TIDAK memakai service role — RLS yang menjadi penjaga, bukan UI", () => {
+    expect(sumber).not.toContain("createAdminSupabase");
+    expect(sumber).not.toContain("SERVICE_ROLE");
+  });
+
+  it("TIDAK memakai cache lintas-permintaan (bisa membagikan data antar klien)", () => {
+    expect(sumber).not.toContain("unstable_cache");
+    expect(sumber).not.toMatch(/export\s+const\s+revalidate/);
+  });
+
+  it("query DAFTAR materi tidak pernah menyebut kolom isi atau url", () => {
+    const daftar = sumber.slice(
+      sumber.indexOf("export async function ambilDaftarMateri"),
+      sumber.indexOf("export type MateriDetail"),
+    );
+    expect(daftar.length).toBeGreaterThan(0);
+    expect(daftar).toContain("material_chapters(id)");
+    expect(daftar).not.toMatch(/material_chapters\([^)]*isi/);
+    expect(daftar).not.toMatch(/material_videos\([^)]*url/);
+  });
+
+  it("nama mitra digabung di JS, tidak lewat embed PostgREST ke view", () => {
+    // Embed ke sebuah VIEW bergantung inferensi relasi yang tidak dijamin, dan
+    // kegagalannya senyap (nama bidan jadi null, atau riwayat kosong tanpa error).
+    expect(sumber).toContain('from("partner_publik")');
+    expect(sumber).not.toMatch(/partner_publik\s*\(/);
+  });
+});
