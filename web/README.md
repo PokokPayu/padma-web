@@ -65,7 +65,13 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
 | `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
 | `/masuk` | Publik | Login email+password & Google |
-| `/passport` | Klien | Digital Care Passport (Plan 4) |
+| `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
+| `/passport/sesi` | Klien | Riwayat sesi + catatan & rekomendasi bidan (tertutup sampai diketuk) |
+| `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
+| `/passport/materi/[id]` | Klien | Reader e-book/video berwatermark identitas, tanpa unduhan |
+| `/passport/bayar` | Klien | STATUS tagihan (tanpa nominal) + klaim "saya sudah bayar" |
+| `/passport/ajukan` | Klien | Ajukan jadwal — selalu berstatus `menunggu` |
+| `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/admin` | Admin, Owner | Dashboard admin |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut |
 | `/owner` | Owner | Rate card & rekap honor (Plan 5) |
@@ -104,6 +110,14 @@ Test yang menjaga keamanan:
   `trg_guard_client_link`, dibuktikan juga lewat koneksi SQL langsung sebagai
   peran `authenticated`. Kolom itu hanya boleh ditulis service role, yaitu
   `linkClientByInvite()`.
+- `tests/passport-keamanan.test.ts`, `tests/passport-materi.test.ts`,
+  `tests/passport-bayar-ajukan.test.ts`, `tests/passport-profil.test.ts` —
+  pagar Digital Care Passport: klien tidak punya jalur UPDATE ke `sessions`,
+  `client_packages`, `booking_requests`, maupun `clients` (semua perubahan lewat
+  server action bernilai tujuan hardcoded), materi terkunci tidak mengirim isi
+  bab/URL video, dan halaman profil tetap read-only. Ingat: PostgREST menjawab
+  200 + `[]` untuk UPDATE yang tertahan RLS, jadi test wajib membaca ulang
+  nilainya dengan service role — bukan menyimpulkan dari status HTTP.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,
@@ -115,7 +129,7 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # kedua skrip di bawah, berurutan
+npm run test:e2e:semua    # ketiga skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
@@ -127,6 +141,20 @@ npm run test:e2e:semua    # kedua skrip di bawah, berurutan
   `textContent` ikut memungut payload RSC di dalam `<script>` sehingga
   pemeriksaan "119" bisa lolos palsu. Entri uji yang dibuatnya dihapus lagi di
   akhir run (lewat service role), jadi aman diulang.
+- `npm run test:e2e:passport` — Digital Care Passport klien: sampul & progres
+  6/8 sesi, nama bidan (bukti view `partner_publik` terbaca), catatan bidan yang
+  baru muncul sesudah kartunya diketuk, gating materi (isi bab & URL video tidak
+  pernah ikut ke halaman daftar; materi terkunci tetap ditolak meski URL-nya
+  diketik langsung), watermark reader tanpa aksi unduh, klaim bayar yang hanya
+  bisa `belum → menunggu_verifikasi`, permintaan jadwal yang selalu `menunggu`,
+  dan bottom bar 390px tanpa scroll horizontal. Status bayar & permintaan jadwal
+  yang disentuhnya dikembalikan ke keadaan seed di awal DAN di akhir run, jadi
+  aman diulang.
+
+Catatan untuk ketiga skrip: klik beruntun pada wizard/kartu harus menunggu
+render berikutnya (mis. `Pertanyaan N dari`). Tombol jawaban adalah simpul DOM
+yang sama di semua pertanyaan, sehingga dua klik di frame yang sama memakai
+`indeks` lama — satu jawaban tertelan dan skenarionya merah secara acak.
 
 ## Deploy
 

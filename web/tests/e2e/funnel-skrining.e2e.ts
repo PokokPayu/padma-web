@@ -197,16 +197,28 @@ async function main() {
   await gagalPage.getByRole("button", { name: "Mulai Skrining" }).click();
 
   // Menopause: 7 soal umum + 4 soal fase, semuanya dijawab "Tidak" -> hijau.
-  for (let i = 0; i < 11; i++) {
+  //
+  // Nomor pertanyaan ditunggu tiap langkah, persis seperti skenario 2. Tombol
+  // "Tidak" adalah simpul DOM yang SAMA di seluruh pertanyaan, jadi klik
+  // beruntun tanpa menunggu bisa mendarat di render lama: dua klik memakai
+  // `indeks` yang sama sehingga satu jawaban tertelan dan wizard berhenti
+  // sebelum pertanyaan terakhir. Kegagalannya tidak deterministik — kadang
+  // 5a merah sendirian, kadang 5a+5b sekaligus.
+  for (let nomor = 1; nomor <= 11; nomor++) {
+    await gagalPage.getByText(`Pertanyaan ${nomor} dari`).waitFor({ timeout: 10_000 });
     await gagalPage.getByRole("button", { name: "Tidak", exact: true }).click();
   }
-  await gagalPage.waitForLoadState("networkidle");
+  // Penanda netral yang sama dengan 2c: layar hasil, bukan sekadar jaringan
+  // sepi. `networkidle` bisa terpenuhi sebelum React sempat merender hasil.
+  const hasilTampil = await munculDalam(gagalPage, "Hasil ini adalah pra-skrining");
   const teksGagal = (await gagalPage.textContent("body")) ?? "";
 
   catat(
     "5a. endpoint mati -> layar hasil TETAP tampil (funnel hidup)",
-    teksGagal.includes("Layanan dapat dijadwalkan"),
-    teksGagal.includes("Layanan dapat dijadwalkan") ? "hasil tetap tampil" : "funnel MATI",
+    hasilTampil && teksGagal.includes("Layanan dapat dijadwalkan"),
+    hasilTampil && teksGagal.includes("Layanan dapat dijadwalkan")
+      ? "hasil tetap tampil"
+      : "funnel MATI",
   );
   const adaTombolWa = await gagalPage
     .getByRole("link", { name: /WhatsApp/i })
