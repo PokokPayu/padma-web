@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { FormEditKlien } from "../form-klien";
+import { KartuAktivasi } from "./kartu-aktivasi";
 
 export const metadata = { title: "Detail Klien" };
 
@@ -109,15 +110,11 @@ export default async function DetailKlienPage({
         </dl>
       </header>
 
-      {/* Kartu aktivasi (penerbit tautan undangan) menempati ruang ini pada
-          langkah berikutnya. Sampai itu ada, keadaan akun dinyatakan apa
-          adanya — bukan tombol yang belum menghubungi apa pun. */}
-      {!aktif && (
-        <p className="mb-4 rounded-2xl border border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] text-ink-soft">
-          Akun klien ini <b className="text-ink">belum aktif</b>. Ia baru bisa
-          masuk setelah menukarkan tautan aktivasi yang diterbitkan tim PADMA.
-        </p>
-      )}
+      {/* Kartu aktivasi hanya untuk klien yang BELUM tertaut. Menerbitkan
+          tautan untuk akun yang sudah aktif akan menghapus catatan siapa
+          menukarkan undangannya — server menolaknya, dan tombolnya pun tidak
+          ditawarkan di sini. */}
+      {!aktif && <KartuAktivasi clientId={klien.id} nama={klien.nama} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <FormEditKlien

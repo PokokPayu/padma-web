@@ -109,7 +109,17 @@ export async function seedUsers() {
   // Undangan aktivasi Rina — token yang nilainya diketahui test, diterbitkan
   // ulang setiap seed (upsert) sehingga `npm test` idempoten walau run
   // sebelumnya sudah memakai tokennya.
-  await createClientInvite(RINA_CLIENT_ID, { token: TOKEN_UNDANGAN_RINA });
+  //
+  // Upsert di atas selalu mengembalikan Rina ke keadaan BELUM tertaut, jadi
+  // penjaga "klien sudah tertaut" pada createClientInvite tidak pernah menyala
+  // di sini — dan bila suatu saat menyala, seed harus MATI, bukan diam: itu
+  // berarti keadaan awal dev/test tidak lagi seperti yang diasumsikan test.
+  const undanganRina = await createClientInvite(RINA_CLIENT_ID, {
+    token: TOKEN_UNDANGAN_RINA,
+  });
+  if (!undanganRina.ok) {
+    throw new Error(`undangan seed Rina ditolak: ${undanganRina.alasan}`);
+  }
 
   const { error: cpErr } = await admin.from("client_packages").upsert(
     {

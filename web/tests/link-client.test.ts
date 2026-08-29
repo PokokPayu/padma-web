@@ -69,8 +69,12 @@ describe("penautan akun klien wajib token undangan", () => {
   });
 
   it("token undangan yang sah + email cocok → tertaut", async () => {
-    const { token } = await createClientInvite(RINA_CLIENT_ID);
-    expect(await linkClientByInvite(createdUserId!, "rina@padma.test", token)).toBe(true);
+    const undangan = await createClientInvite(RINA_CLIENT_ID);
+    expect(undangan.ok, "penerbitan untuk klien belum tertaut harus berhasil").toBe(true);
+    if (!undangan.ok) return;
+    expect(
+      await linkClientByInvite(createdUserId!, "rina@padma.test", undangan.token),
+    ).toBe(true);
 
     const { data: c } = await admin
       .from("clients")
@@ -82,10 +86,26 @@ describe("penautan akun klien wajib token undangan", () => {
     expect(await isClientLinked(createdUserId!)).toBe(true);
   });
 
+  it("penerbitan ulang untuk klien yang SUDAH tertaut ditolak", async () => {
+    // Test sebelumnya baru saja menautkan Rina. Upsert undangan mengosongkan
+    // `used_at`/`used_by`, jadi "kirim ulang undangan" pada akun yang sudah
+    // aktif menghapus catatan siapa mengaktifkannya — tanpa memberi manfaat
+    // apa pun, karena penautan ulang memang selalu ditolak.
+    const ulang = await createClientInvite(RINA_CLIENT_ID);
+    expect(ulang.ok).toBe(false);
+    if (ulang.ok) return;
+    expect(ulang.alasan).toBe("sudah-tertaut");
+  });
+
   it("email tanpa data klien tetap gagal, bahkan dengan token klien lain", async () => {
-    const { token } = await createClientInvite(RINA_CLIENT_ID);
+    // `paksa` adalah jalan pintas seed/fixture — TIDAK pernah dicapai panel
+    // admin — dipakai di sini justru untuk memberi penyerang posisi TERKUAT:
+    // token yang benar-benar hidup di basis data untuk baris Rina.
+    const undangan = await createClientInvite(RINA_CLIENT_ID, { paksa: true });
+    expect(undangan.ok).toBe(true);
+    if (!undangan.ok) return;
     expect(
-      await linkClientByInvite(createdUserId!, "tidak-ada@padma.test", token),
+      await linkClientByInvite(createdUserId!, "tidak-ada@padma.test", undangan.token),
     ).toBe(false);
     expect(await linkClientByInvite(createdUserId!, "tidak-ada@padma.test", "")).toBe(
       false,

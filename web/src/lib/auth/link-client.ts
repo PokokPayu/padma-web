@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { INVITE_TTL_DAYS, tautanAktivasi } from "@/lib/auth/pesan-undangan";
 
 /**
  * PENAUTAN AKUN KLIEN — WAJIB TOKEN UNDANGAN SEKALI-PAKAI.
@@ -29,8 +30,14 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
  * bisa kambuh hanya dengan satu pemanggilan dari rute baru.
  */
 
-/** Masa berlaku default token undangan. */
-export const INVITE_TTL_DAYS = 14;
+/**
+ * Masa berlaku default token undangan. Nilainya tinggal di
+ * `@/lib/auth/pesan-undangan` (berkas murni tanpa impor) supaya kalimat "berlaku
+ * N hari" pada pesan WhatsApp — yang disusun komponen sisi klien — memakai angka
+ * yang sama persis dengan `expires_at` di sini. Diekspor ulang untuk pemanggil
+ * yang sudah ada.
+ */
+export { INVITE_TTL_DAYS };
 
 /** Nama cookie httpOnly tempat token dititipkan antara /aktivasi dan login. */
 export const COOKIE_UNDANGAN = "padma_undangan";
@@ -66,9 +73,13 @@ export function hashInviteToken(token: string): string {
   return createHash("sha256").update(token.trim()).digest("hex");
 }
 
-/** Tautan aktivasi siap-tempel ke pesan sambutan WhatsApp. */
+/**
+ * Tautan aktivasi siap-tempel ke pesan sambutan WhatsApp.
+ * Bentuknya dipegang satu tempat (`pesan-undangan.ts`) karena komponen sisi
+ * klien menyusun tautan yang sama tanpa boleh mengimpor berkas ini.
+ */
 export function inviteLink(origin: string, token: string): string {
-  return `${origin}/aktivasi?token=${encodeURIComponent(token)}`;
+  return tautanAktivasi(origin, token);
 }
 
 export type OpsiUndangan = {
@@ -76,24 +87,56 @@ export type OpsiUndangan = {
   token?: string;
   ttlDays?: number;
   expiresAt?: Date;
+  /**
+   * Menerbitkan undangan WALAU baris kliennya sudah tertaut.
+   *
+   * HANYA untuk seed dev dan fixture test yang perlu memegang token sah milik
+   * baris tertaut (mis. membuktikan bahwa `linkClientByInvite` tetap menolak
+   * perebutan meski tokennya benar). TIDAK PERNAH diteruskan dari panel admin:
+   * begitu ia bisa dicapai dari sana, penjaga di bawah tinggal satu parameter
+   * untuk dilewati.
+   */
+  paksa?: boolean;
 };
+
+export type HasilUndangan =
+  | { ok: true; token: string; expiresAt: Date }
+  | { ok: false; alasan: "klien-tidak-ditemukan" | "sudah-tertaut" };
 
 /**
  * Menerbitkan (atau menerbitkan ulang) undangan untuk satu baris klien.
  * Dipanggil dari server saat admin membuat/mengundang klien. Satu klien punya
  * paling banyak satu undangan hidup: menerbitkan ulang membatalkan yang lama
  * (upsert pada primary key `client_id`).
+ *
+ * PENJAGA "SUDAH TERTAUT". Upsert di bawah mengosongkan `used_at`/`used_by` —
+ * dan itulah satu-satunya catatan tentang siapa menukarkan undangan sebuah akun
+ * dan kapan. Sebelum penjaga ini ada, satu klik "kirim ulang undangan" pada
+ * klien yang sudah aktif menghapus jejak itu tanpa jejak lain: persis bukti yang
+ * dibutuhkan saat kepemilikan sebuah akun dipersengketakan. Penautan ulangnya
+ * sendiri memang sudah ditolak `linkClientByInvite` (baris tertaut tidak bisa
+ * direbut), jadi undangan baru itu tidak pernah berguna — ia hanya merusak.
  */
 export async function createClientInvite(
   clientId: string,
   opsi: OpsiUndangan = {},
-): Promise<{ token: string; expiresAt: Date }> {
+): Promise<HasilUndangan> {
   const token = opsi.token ?? generateInviteToken();
   const expiresAt =
     opsi.expiresAt ??
     new Date(Date.now() + (opsi.ttlDays ?? INVITE_TTL_DAYS) * 86_400_000);
 
   const admin = createAdminSupabase();
+
+  const { data: klien, error: klienErr } = await admin
+    .from("clients")
+    .select("id, user_id")
+    .eq("id", clientId)
+    .maybeSingle();
+  if (klienErr) throw klienErr;
+  if (!klien) return { ok: false, alasan: "klien-tidak-ditemukan" };
+  if (klien.user_id && !opsi.paksa) return { ok: false, alasan: "sudah-tertaut" };
+
   const { error } = await admin.from("client_invites").upsert(
     {
       client_id: clientId,
@@ -105,7 +148,7 @@ export async function createClientInvite(
     { onConflict: "client_id" },
   );
   if (error) throw error;
-  return { token, expiresAt };
+  return { ok: true, token, expiresAt };
 }
 
 /**

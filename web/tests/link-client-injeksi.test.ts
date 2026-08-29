@@ -71,10 +71,20 @@ async function userIdKlienSeed(email: string): Promise<string> {
   return user.id;
 }
 
-/** Token undangan SAH milik korban — penyerang diberi posisi terkuat. */
+/**
+ * Token undangan SAH milik korban — penyerang diberi posisi terkuat.
+ *
+ * `paksa` dipakai karena sebagian korban (Ananda) memang sudah tertaut, dan
+ * `createClientInvite` kini menolak penerbitan ulang untuk baris seperti itu
+ * demi menjaga catatan `used_at`/`used_by`. Jalan pintas itu hanya ada untuk
+ * seed & fixture seperti ini — panel admin tidak pernah bisa mencapainya —
+ * dan di sini justru dibutuhkan: yang sedang dibuktikan adalah bahwa token
+ * yang benar-benar sah pun tidak membuka jalan perebutan.
+ */
 async function tokenKorban(clientId: string): Promise<string> {
-  const { token } = await createClientInvite(clientId);
-  return token;
+  const undangan = await createClientInvite(clientId, { paksa: true });
+  if (!undangan.ok) throw new Error(`penerbitan token korban ditolak: ${undangan.alasan}`);
+  return undangan.token;
 }
 
 async function bersihkan() {
@@ -84,6 +94,10 @@ async function bersihkan() {
     .update({ user_id: null, linked_at: null })
     .eq("id", RINA_CLIENT_ID);
   await createClientInvite(RINA_CLIENT_ID, { token: TOKEN_UNDANGAN_RINA });
+  // Undangan yang diterbitkan paksa untuk Ananda (baris yang SUDAH tertaut)
+  // dibuang: klien aktif tidak boleh meninggalkan undangan hidup di basis data
+  // hanya karena sebuah test pernah membutuhkannya.
+  await admin.from("client_invites").delete().eq("client_id", ANANDA_CLIENT_ID);
   const { data } = await admin.auth.admin.listUsers();
   for (const u of data.users) {
     if (

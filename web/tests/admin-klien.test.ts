@@ -540,7 +540,9 @@ describe("berkas server action klien", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(2);
+    // buatKlien, perbaruiKlien, terbitkanUndangan. Angkanya sengaja PERSIS:
+    // action yang lahir tanpa penjaga peran adalah endpoint POST terbuka.
+    expect(jumlahAction).toBe(3);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

@@ -34,6 +34,7 @@ import {
   linkClientByInvite,
   generateInviteToken,
   normalizeEmail,
+  type OpsiUndangan,
 } from "@/lib/auth/link-client";
 import * as modulPenautan from "@/lib/auth/link-client";
 import { TOKEN_UNDANGAN_RINA } from "../scripts/seed-users";
@@ -95,6 +96,21 @@ async function hapusUser(email: string) {
   }
 }
 
+/**
+ * Menerbitkan undangan DAN memastikan penerbitannya tidak ditolak.
+ *
+ * `createClientInvite` kini menolak penerbitan untuk baris klien yang sudah
+ * tertaut (upsert-nya mengosongkan `used_at`/`used_by` — catatan siapa
+ * mengaktifkan akun itu). Penolakan yang lewat begitu saja akan membuat token
+ * bernilai `undefined` mengalir ke assertion negatif dan test lulus tanpa
+ * menguji apa pun; di sini ia menjadi kegagalan yang berisik.
+ */
+async function terbitkan(clientId: string, opsi?: OpsiUndangan) {
+  const hasil = await createClientInvite(clientId, opsi);
+  if (!hasil.ok) throw new Error(`penerbitan undangan ditolak: ${hasil.alasan}`);
+  return hasil;
+}
+
 async function barisKlien(id: string) {
   const { data, error } = await svc
     .from("clients")
@@ -135,9 +151,13 @@ async function bersihkan() {
     .eq("id", RINA_CLIENT_ID);
   await svc.from("clients").delete().in("id", KLIEN_UJI_IDS);
   for (const email of EMAIL_UJI) await hapusUser(email);
+  // Undangan yang diterbitkan paksa untuk Ananda (baris yang SUDAH tertaut)
+  // dibuang: klien aktif tidak boleh meninggalkan undangan hidup di basis data
+  // hanya karena sebuah test pernah membutuhkannya.
+  await svc.from("client_invites").delete().eq("client_id", ANANDA_CLIENT_ID);
   // Token undangan seed Rina dipulihkan agar run berikutnya berangkat dari
   // keadaan yang sama (test wajib idempoten).
-  await createClientInvite(RINA_CLIENT_ID, { token: TOKEN_UNDANGAN_RINA });
+  await terbitkan(RINA_CLIENT_ID, { token: TOKEN_UNDANGAN_RINA });
 }
 
 beforeAll(async () => {
@@ -256,7 +276,7 @@ describe("aturan validitas token undangan", () => {
   it("token benar TAPI email tidak cocok: ditolak, dan tidak dapat data apa pun", async () => {
     ids.penyusup = await buatUserTerkonfirmasi(EMAIL_PENYUSUP);
 
-    const { token } = await createClientInvite(KLIEN_UJI_ID);
+    const { token } = await terbitkan(KLIEN_UJI_ID);
     expect(await linkClientByInvite(ids.penyusup, EMAIL_PENYUSUP, token)).toBe(false);
 
     const klien = await barisKlien(KLIEN_UJI_ID);
@@ -273,7 +293,7 @@ describe("aturan validitas token undangan", () => {
   });
 
   it("token kedaluwarsa ditolak", async () => {
-    const { token } = await createClientInvite(KLIEN_KADALUARSA_ID, {
+    const { token } = await terbitkan(KLIEN_KADALUARSA_ID, {
       expiresAt: new Date(Date.now() - 60_000),
     });
     ids.kadaluarsa = await buatUserTerkonfirmasi(KLIEN_KADALUARSA_EMAIL);
@@ -283,7 +303,7 @@ describe("aturan validitas token undangan", () => {
     expect((await barisKlien(KLIEN_KADALUARSA_ID)).user_id).toBeNull();
 
     // Kontrol positif: token yang sama, masa berlaku wajar → tertaut.
-    const { token: baru, expiresAt } = await createClientInvite(KLIEN_KADALUARSA_ID);
+    const { token: baru, expiresAt } = await terbitkan(KLIEN_KADALUARSA_ID);
     expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
     expect(
       await linkClientByInvite(ids.kadaluarsa, KLIEN_KADALUARSA_EMAIL, baru),
@@ -318,8 +338,17 @@ describe("aturan validitas token undangan", () => {
   });
 
   it("klien yang sudah tertaut tidak bisa direbut lewat token baru", async () => {
-    const { token } = await createClientInvite(ANANDA_CLIENT_ID);
-    // Token sah, tapi barisnya sudah tertaut → penautan ulang ditolak.
+    // PAGAR PERTAMA: penerbitan biasa untuk baris yang sudah tertaut ditolak
+    // di sumbernya — sekaligus menjaga `used_at`/`used_by` dari terhapus.
+    const ditolak = await createClientInvite(ANANDA_CLIENT_ID);
+    expect(ditolak.ok).toBe(false);
+    if (!ditolak.ok) expect(ditolak.alasan).toBe("sudah-tertaut");
+
+    // PAGAR KEDUA: bahkan bila token yang hidup TETAP ada untuk baris itu
+    // (jalan pintas fixture `paksa`, tidak pernah tersedia dari panel admin),
+    // penautan ulangnya tetap ditolak. Dua pagar diuji terpisah supaya
+    // matinya salah satu tidak tersembunyi di balik yang lain.
+    const { token } = await terbitkan(ANANDA_CLIENT_ID, { paksa: true });
     expect(
       await linkClientByInvite(ids.rina, "ananda@padma.test", token),
     ).toBe(false);
@@ -336,7 +365,7 @@ describe("aturan validitas token undangan", () => {
       .from("clients")
       .update({ user_id: null, linked_at: null })
       .eq("id", KLIEN_UJI_ID);
-    const { token } = await createClientInvite(KLIEN_UJI_ID);
+    const { token } = await terbitkan(KLIEN_UJI_ID);
     const kapital = KLIEN_UJI_EMAIL.toUpperCase();
     expect(normalizeEmail(kapital)).toBe(KLIEN_UJI_EMAIL);
     expect(await linkClientByInvite(ids.klienUji, kapital, token)).toBe(true);

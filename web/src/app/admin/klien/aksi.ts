@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { buatPadmaId } from "@/lib/admin/padma-id";
-import { normalizeEmail } from "@/lib/auth/link-client";
+import { createClientInvite, normalizeEmail } from "@/lib/auth/link-client";
 
 /**
  * Jalur tulis panel admin untuk data klien.
@@ -32,6 +32,7 @@ import { normalizeEmail } from "@/lib/auth/link-client";
 type Gagal = { ok: false; pesan: string };
 type Dibuat = { ok: true; id: string; padmaId: string };
 type Diperbarui = { ok: true };
+type Diterbitkan = { ok: true; token: string; nama: string; email: string };
 
 // Rupa email diperiksa apa adanya — kepemilikan alamatnya dibuktikan kemudian
 // oleh token undangan, bukan oleh regex ini.
@@ -129,4 +130,56 @@ export async function perbaruiKlien(
   revalidatePath("/admin/klien");
   revalidatePath(`/admin/klien/${id}`);
   return { ok: true };
+}
+
+/**
+ * Menerbitkan tautan aktivasi sekali-pakai untuk satu klien.
+ *
+ * SATU-SATUNYA tempat service role dipakai di panel admin, dan itu terjadi di
+ * dalam `createClientInvite` — bukan lewat klien service role yang dibuat di
+ * berkas ini dan bisa dipakai query lain. Alasannya: `client_invites` sengaja
+ * tertutup untuk SELURUH peran API termasuk admin, sehingga membacanya lewat
+ * sesi pengguna menghasilkan 403, bukan array kosong. Tidak ada jalan lain
+ * selain menerbitkan token baru dan mengembalikan nilainya sekali di sini.
+ *
+ * Yang tersimpan di basis data hanyalah SHA-256 token. Nilai mentahnya hidup
+ * satu kali — pada nilai balik ini — lalu hanya ada di pesan WhatsApp yang
+ * disalin admin. Karena itu tidak ada halaman mana pun yang bisa menampilkannya
+ * ulang, dan menerbitkan tautan baru selalu membatalkan yang lama.
+ *
+ * Jalan pintas seed/fixture yang melewati penjaga "klien sudah tertaut" SENGAJA
+ * tidak pernah diteruskan dari sini — penjaga itu ada justru untuk melindungi
+ * catatan siapa mengaktifkan akun ini dari terhapus oleh satu klik "kirim
+ * ulang". Dijaga `tests/admin-aktivasi.test.ts` sebagai pemindaian berkas.
+ */
+export async function terbitkanUndangan(
+  clientId: string,
+): Promise<Diterbitkan | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  // Dibaca lewat SESI PENGGUNA lebih dulu: RLS yang memutuskan apakah pemanggil
+  // memang boleh melihat baris ini, sebelum service role menyentuh apa pun.
+  const supabase = await createServerSupabase();
+  const { data: klien } = await supabase
+    .from("clients")
+    .select("nama, email")
+    .eq("id", clientId)
+    .maybeSingle<{ nama: string; email: string }>();
+
+  if (!klien) return { ok: false, pesan: "Klien tidak ditemukan." };
+
+  const hasil = await createClientInvite(clientId);
+  if (!hasil.ok) {
+    return {
+      ok: false,
+      pesan:
+        hasil.alasan === "sudah-tertaut"
+          ? "Akun klien ini sudah aktif. Tautan baru tidak diterbitkan agar catatan aktivasinya tidak terhapus."
+          : "Klien tidak ditemukan.",
+    };
+  }
+
+  revalidatePath("/admin/klien");
+  revalidatePath(`/admin/klien/${clientId}`);
+  return { ok: true, token: hasil.token, nama: klien.nama, email: klien.email };
 }
