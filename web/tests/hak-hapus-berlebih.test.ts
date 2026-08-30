@@ -66,6 +66,17 @@ const HONOR_UJI = "99999999-9999-9999-9999-9999999999b1";
 /** Jauh di depan supaya tidak bertabrakan dengan tanggal test lain. */
 const TGL_PERMINTAAN = "2027-03-11";
 const PEKAN_HONOR = "2027-03-08";
+/**
+ * Senin yang SUDAH LEWAT, untuk tanda bayar yang disisipkan lewat peran API.
+ *
+ * `PEKAN_HONOR` di atas tetap dipakai fixture service role — jalur seed memang
+ * boleh menyemai pekan mana pun. Tetapi sejak migration `pengerasan_tabel_uang`,
+ * peran API tidak lagi bisa menandai pekan yang belum berjalan: menyatakan
+ * honor yang belum dikerjakan sudah dibayar adalah kebohongan PERMANEN, karena
+ * DELETE `honor_marks` sudah dicabut. Aturannya sama persis dengan
+ * `periksaPekan()` di src/app/owner/rekap/status.ts.
+ */
+const PEKAN_LEWAT = "2026-01-12"; // Senin
 
 let permintaanUji: string;
 
@@ -929,7 +940,36 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
     expect(data).not.toBeNull();
   });
 
-  it("KONTROL: owner TETAP bisa membaca, menambah, & mengubah rate card", async () => {
+  /**
+   * >>> ASSERTION DIPERKUAT, BUKAN DILONGGARKAN (30 Agu 2026) <<<
+   *
+   * Kedua KONTROL di bawah semula juga menuntut owner BISA meng-UPDATE baris
+   * tabel uang, dan itu memang keadaan repo saat migration
+   * `cabut_hak_hapus_berlebih` ditulis. Red team membuktikan bahwa kemampuan
+   * itu sendiri adalah lubangnya, lewat REST sebagai owner sungguhan:
+   *
+   *   PATCH service_rates?id=eq.<baris seed lama> {harga_klien:1,honor_mitra:1}
+   *     -> 200. Rekap pekan yang honornya SUDAH dibayarkan ikut bergeser,
+   *        tanpa satu pun INSERT — melanggar spec bagian 5.
+   *   PATCH service_rates?honor_mitra=gt.0 {honor_mitra:7}
+   *     -> 204, 13 baris. SELURUH rate card klinik tertimpa satu permintaan.
+   *   PATCH honor_marks?id=eq.<tanda lama> {dibayar_pada:'1999-01-01',
+   *                                         ditandai_oleh:<uid ADMIN>}
+   *     -> 200. "Bukti pembayaran" yang bisa ditulis ulang bukan bukti, dan
+   *        DELETE-nya sudah dicabut sehingga pemalsuannya permanen.
+   *
+   * Migration `pengerasan_tabel_uang` (20260830150000) menutupnya dengan
+   * TRIGGER, bukan `revoke update` — justru supaya bantahan berkas ini tetap
+   * berdiri: hak tabelnya TIDAK boleh dicabut, karena owner login sebagai peran
+   * `authenticated` yang sama, dan probe di bawah ("mencabutnya BENAR-BENAR
+   * melumpuhkan owner") membuktikannya. Peta hak non-DELETE tabel uang tetap
+   * dikunci apa adanya, dan yang berubah hanya KEMAMPUANNYA.
+   *
+   * Karena itu keduanya kini menuntut penolakan `42501` PLUS baris yang utuh
+   * sesudahnya, dan kontrol positif yang sebenarnya — owner tetap MEMBACA dan
+   * MENAMBAH — dipertahankan penuh.
+   */
+  it("KONTROL: owner TETAP bisa membaca & menambah tarif; MENIMPA baris lama ditolak", async () => {
     const o = await signInAs("owner@padma.test");
 
     const { data: baca, error: eBaca } = await o
@@ -950,18 +990,27 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
       .single();
     expect(eTambah).toBeNull();
 
-    const { data: ubah, error: eUbah } = await o
-      .from("service_rates")
-      .update({ harga_klien: 333000 })
-      .eq("id", tambah!.id)
-      .select("harga_klien");
-    expect(eUbah).toBeNull();
-    expect(ubah![0].harga_klien).toBe(333000);
+    try {
+      const { error: eUbah } = await o
+        .from("service_rates")
+        .update({ harga_klien: 333000 })
+        .eq("id", tambah!.id)
+        .select("harga_klien");
+      expect(eUbah?.code).toBe("42501");
 
-    await svc.from("service_rates").delete().eq("id", tambah!.id);
+      const { data: sesudah } = await svc
+        .from("service_rates")
+        .select("harga_klien, honor_mitra")
+        .eq("id", tambah!.id)
+        .single();
+      expect(sesudah!.harga_klien).toBe(222000);
+      expect(sesudah!.honor_mitra).toBe(90000);
+    } finally {
+      await svc.from("service_rates").delete().eq("id", tambah!.id);
+    }
   });
 
-  it("KONTROL: owner TETAP bisa membaca, menandai, & mengubah honor", async () => {
+  it("KONTROL: owner TETAP bisa membaca & menandai honor; MENIMPA tanda ditolak", async () => {
     const o = await signInAs("owner@padma.test");
 
     const { data: baca, error: eBaca } = await o.from("honor_marks").select("id, week_start");
@@ -970,19 +1019,28 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
 
     const { data: tanda, error: eTanda } = await o
       .from("honor_marks")
-      .insert({ partner_id: MITRA_SEED, week_start: PEKAN_HONOR })
-      .select("id")
+      .insert({ partner_id: MITRA_SEED, week_start: PEKAN_LEWAT })
+      .select("id, dibayar_pada")
       .single();
     expect(eTanda).toBeNull();
 
-    const { error: eUbah } = await o
-      .from("honor_marks")
-      .update({ dibayar_pada: "2027-03-09T00:00:00Z" })
-      .eq("id", tanda!.id)
-      .select("id");
-    expect(eUbah).toBeNull();
+    try {
+      const { error: eUbah } = await o
+        .from("honor_marks")
+        .update({ dibayar_pada: "2027-03-09T00:00:00Z" })
+        .eq("id", tanda!.id)
+        .select("id");
+      expect(eUbah?.code).toBe("42501");
 
-    await svc.from("honor_marks").delete().eq("id", tanda!.id);
+      const { data: sesudah } = await svc
+        .from("honor_marks")
+        .select("dibayar_pada")
+        .eq("id", tanda!.id)
+        .single();
+      expect(sesudah!.dibayar_pada).toBe(tanda!.dibayar_pada);
+    } finally {
+      await svc.from("honor_marks").delete().eq("id", tanda!.id);
+    }
   });
 
   it("admin TETAP buta terhadap tabel uang (money firewall tidak ikut bergeser)", async () => {

@@ -82,11 +82,24 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/admin/layanan` | Admin, Owner | Katalog layanan & paket per fase; pensiun lewat `aktif = false`, tanpa hapus |
 | `/admin/materi` | Admin, Owner | Materi panduan per layanan; metadata + isi disimpan satu aksi, nonaktif menutup isinya di RLS |
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
-| `/owner` | Owner | Rate card & rekap honor (Plan 5) |
+| `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
+| `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
+| `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
 
-Tidak ada satu pun nominal uang di rute `/admin/*`: `service_rates` menjawab
-admin dengan HTTP 200 + `[]` (kosong senyap, bukan error), dan panel admin tidak
-punya medan harga/honor mana pun.
+Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
+`service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
+error), dan panel admin tidak punya medan harga/honor mana pun. Sejak Plan 5,
+pagar itu punya bukti di lapisan render juga — `npm run test:e2e:owner` memindai
+HTML sembilan rute `/admin/**` dan enam rute `/passport/**` terhadap SELURUH
+nominal rate card, dengan kontrol positif di `/owner/tarif` supaya "nol nominal"
+tidak pernah hijau palsu karena pemindainya rusak.
+
+Integritas tabel uang ditegakkan basis data, bukan hanya server action (migration
+`20260830150000_pengerasan_tabel_uang`): `service_rates` dan `honor_marks`
+bersifat **append-only** bagi peran API — tarif hanya boleh maju, nilainya wajib
+wajar, `week_start` wajib Senin, `ditandai_oleh`/`dibayar_pada` direbut dari
+payload, dan setiap UPDATE ditolak `42501`. Alasannya: pemegang JWT owner selalu
+bisa memanggil PostgREST langsung dan melewati seluruh validator TypeScript.
 
 Catatan keamanan: `anon` tidak punya hak tabel pada `screenings` — penyimpanan
 skrining publik WAJIB lewat route handler dengan service role.
@@ -141,7 +154,7 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # kelima skrip di bawah, berurutan
+npm run test:e2e:semua    # keenam skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
@@ -192,8 +205,25 @@ npm run test:e2e:semua    # kelima skrip di bawah, berurutan
   `e2e-pelengkap-` / `E2E-PLKP`; `app_settings` dikembalikan persis dan baris
   `jejak_status_bayar` dihapus manual (tabel itu sengaja tanpa FK sehingga tidak
   ikut cascade — jejak yatim pernah menumpuk lintas run).
+- `npm run test:e2e:owner` — panel OWNER, satu-satunya layar yang menampilkan
+  nominal: `/owner` menampilkan ringkasan pekan → `/owner/rekap` mengelompokkan
+  honor per mitra per pekan dengan tarif **pada tanggal sesi** → `/owner/tarif`
+  menetapkan tarif baru sebagai **baris baru** (baris lama diperiksa utuh lewat
+  service role) → rekap pekan yang sudah lewat dibuktikan **tidak bergeser** →
+  "Tandai dibayar" melahirkan satu `honor_marks` ber-`week_start` Senin dan
+  ber-`ditandai_oleh` uid OWNER, lalu tombolnya lenyap dan tandanya bertahan
+  sesudah muat ulang (tidak ada jalur pembatalan) → owner mengklik jalan pulang
+  ke `/admin`. Ditutup pemindaian money firewall di lapisan render: admin
+  ditolak di `/owner`, dan HTML sembilan rute `/admin/**` + enam rute
+  `/passport/**` tidak memuat satu pun nominal rate card — dengan **kontrol
+  positif** yang menuntut nominal yang sama TERBACA di `/owner/tarif`, karena
+  assertion "nol nominal" yang selectornya rusak akan hijau tanpa menguji apa
+  pun. Sesi fixture-nya sengaja ditaruh di pekan LALU: kalau di pekan berjalan,
+  pembuktian "rekap lama tidak bergeser" akan merah setiap hari Senin. Data
+  ujinya berpenanda `e2e-owner-` / `E2E-OWNR` dan dibersihkan lewat service role
+  di awal DAN di akhir run.
 
-Catatan untuk kelima skrip: klik beruntun pada wizard/kartu harus menunggu
+Catatan untuk keenam skrip: klik beruntun pada wizard/kartu harus menunggu
 render berikutnya (mis. `Pertanyaan N dari`). Tombol jawaban adalah simpul DOM
 yang sama di semua pertanyaan, sehingga dua klik di frame yang sama memakai
 `indeks` lama — satu jawaban tertelan dan skenarionya merah secara acak.
