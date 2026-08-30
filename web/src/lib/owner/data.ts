@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { awalPekan, rentangPekan } from "./pekan";
 import {
   hitungRekap,
+  tarifPadaTanggal,
   type RekapPekan,
   type SesiRekap,
   type TandaBayar,
@@ -66,6 +67,122 @@ export async function ambilTarif(): Promise<TarifLayanan[]> {
     honorMitra: r.honor_mitra,
     berlakuSejak: r.berlaku_sejak,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// RATE CARD — tarif berlaku + riwayatnya, per layanan
+// ---------------------------------------------------------------------------
+
+export type TarifRiwayat = {
+  id: string;
+  hargaKlien: number;
+  honorMitra: number;
+  /** Angka PADMA per sesi. Dihitung di sini, TIDAK disimpan sebagai kolom. */
+  margin: number;
+  berlakuSejak: string;
+  /** Baris inilah yang menghargai sesi bertanggal `hariIni`. */
+  berlakuSekarang: boolean;
+  /** Sudah ditetapkan, tetapi `berlaku_sejak`-nya masih di depan. */
+  belumBerlaku: boolean;
+};
+
+export type BarisRateCard = {
+  serviceId: string;
+  namaLayanan: string;
+  namaFase: string;
+  aktif: boolean;
+  /** Tarif yang berlaku pada `hariIni`; `null` bila layanan belum bertarif. */
+  berlaku: TarifRiwayat | null;
+  /** SELURUH baris tarif layanan ini, terbaru di atas. */
+  riwayat: TarifRiwayat[];
+};
+
+type BarisFase = { id: string; nama: string; urutan: number };
+type BarisLayananRate = { id: string; phase_id: string; nama: string; aktif: boolean };
+
+/**
+ * Rate card untuk `/owner/tarif`: setiap layanan beserta tarif yang berlaku
+ * pada `hariIni` dan seluruh riwayatnya.
+ *
+ * `hariIni` WAJIB diberikan pemanggil (halaman meneruskan `hariIniJakarta()`),
+ * dengan alasan yang sama seperti `ringkasanPekanIni`: fungsi yang membaca jam
+ * sistem sendiri mustahil diuji pada tanggal tertentu, dan "tarif mana yang
+ * berlaku" justru pertanyaan yang paling perlu diuji lintas tanggal.
+ *
+ * Layanan yang BELUM bertarif tetap muncul dengan `berlaku: null` — bukan
+ * disaring keluar. Layanan yang hilang dari rate card adalah layanan yang tidak
+ * pernah bisa diberi tarif dari panel mana pun, dan sesinya akan terus muncul
+ * di rekap sebagai "tak bertarif" tanpa satu pun jalan perbaikan.
+ *
+ * `berlaku` dipilih dengan `tarifPadaTanggal()` yang sama persis dengan yang
+ * dipakai `hitungRekap()`. Menuliskan ulang aturan "berlaku_sejak terbesar yang
+ * ≤ tanggal" di sini akan melahirkan dua definisi yang berpisah diam-diam pada
+ * perubahan berikutnya — dan perpisahan itu berbentuk rate card yang
+ * menampilkan satu angka sementara honor dibayarkan dengan angka lain.
+ *
+ * Admin & klien yang memanggil fungsi ini memperoleh `berlaku: null` dan
+ * `riwayat: []` untuk SETIAP layanan — itu RLS yang menjawab, bukan penyaringan
+ * di sini.
+ */
+export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
+  const supabase = await createServerSupabase();
+
+  const [{ data: fase }, { data: layanan }, tarif] = await Promise.all([
+    supabase.from("phases").select("id, nama, urutan").order("urutan").returns<BarisFase[]>(),
+    supabase
+      .from("services")
+      .select("id, phase_id, nama, aktif")
+      // Yang masih ditawarkan di atas: halaman ini dibaca dari atas ke bawah
+      // untuk menjawab "berapa yang kami kenakan sekarang".
+      .order("aktif", { ascending: false })
+      .order("nama")
+      .returns<BarisLayananRate[]>(),
+    ambilTarif(),
+  ]);
+
+  const namaFase = new Map((fase ?? []).map((f) => [f.id, f.nama] as const));
+  const urutanFase = new Map((fase ?? []).map((f) => [f.id, f.urutan] as const));
+
+  const susun = (t: TarifRingkas, berlakuId: string | null): TarifRiwayat => ({
+    id: t.id,
+    hargaKlien: t.hargaKlien,
+    honorMitra: t.honorMitra,
+    margin: t.hargaKlien - t.honorMitra,
+    berlakuSejak: t.berlakuSejak,
+    berlakuSekarang: t.id === berlakuId,
+    belumBerlaku: t.berlakuSejak > hariIni,
+  });
+
+  // Fase dulu (urutan perjalanan klien), lalu yang masih aktif, lalu abjad.
+  // Diurutkan di sini dan bukan lewat `.order()` PostgREST: urutan fase hidup
+  // di kolom `phases.urutan`, tabel lain, yang tidak bisa dijadikan kunci urut
+  // tanpa embed — dan embed-nya akan menyaring baris menurut RLS tabel itu.
+  const terurut = [...(layanan ?? [])].sort((a, b) => {
+    const selisih = (urutanFase.get(a.phase_id) ?? 99) - (urutanFase.get(b.phase_id) ?? 99);
+    if (selisih !== 0) return selisih;
+    if (a.aktif !== b.aktif) return a.aktif ? -1 : 1;
+    return a.nama.localeCompare(b.nama, "id");
+  });
+
+  return terurut.map((l) => {
+    const berlaku = tarifPadaTanggal(tarif, l.id, hariIni);
+    const riwayat = tarif
+      .filter((t) => t.serviceId === l.id)
+      .map((t) => susun(t, berlaku?.id ?? null))
+      // `ambilTarif()` sudah mengurutkan menurun, tetapi urutan itu milik
+      // seluruh tabel; sesudah disaring per layanan ia ditegaskan ulang di sini
+      // supaya riwayat tidak pernah bergantung pada urutan baris PostgREST.
+      .sort((a, b) => (a.berlakuSejak > b.berlakuSejak ? -1 : a.berlakuSejak < b.berlakuSejak ? 1 : 0));
+
+    return {
+      serviceId: l.id,
+      namaLayanan: l.nama,
+      namaFase: namaFase.get(l.phase_id) ?? "Tanpa fase",
+      aktif: l.aktif,
+      berlaku: berlaku === null ? null : susun(berlaku, berlaku.id),
+      riwayat,
+    };
+  });
 }
 
 type BarisSesi = {
