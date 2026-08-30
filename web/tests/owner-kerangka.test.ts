@@ -1,0 +1,470 @@
+/**
+ * Penjagaan KERANGKA (shell) panel owner — `src/app/owner/layout.tsx`,
+ * `src/app/owner/_shell/nav-owner.tsx`, `src/app/owner/page.tsx`, dan lapisan
+ * data `src/lib/owner/data.ts`.
+ *
+ * Kenapa berkas ini ada — empat kelas regresi yang TIDAK menghasilkan error,
+ * hanya panel yang "kelihatan jalan" sambil berbohong:
+ *
+ *  1. Argumen penjaga peran. `src/app/owner/layout.tsx` wajib memanggil
+ *     `requireRole` TEPAT SATU KALI dengan daftar peran PERSIS `["owner"]`.
+ *     Menuliskannya `["admin","owner"]` (meniru panel admin, godaan paling
+ *     wajar saat menyalin shell-nya) membuka seluruh nominal uang PADMA kepada
+ *     admin tanpa satu pun test lain merah selain access-matrix-layouts.
+ *  2. Jalur data. Rekap owner wajib memakai SESI PENGGUNA. Di bawah service
+ *     role `user_role()` mengembalikan 'klien' dan RLS money firewall tidak
+ *     pernah ikut diperiksa — angkanya tetap keluar, tetapi keluar untuk
+ *     SIAPA PUN yang memanggil, dan halaman yang bocor akan terlihat benar.
+ *  3. Pekan berjalan. Ringkasan beranda mengelompokkan honor menurut Senin
+ *     kalender Jakarta. Sesi pekan LALU yang bocor ke kartu "pekan ini" tidak
+ *     menghasilkan error apa pun — hanya angka honor yang salah dibayarkan.
+ *  4. Sesi tak bertarif. Sesi yang lebih tua dari tarif paling awal TIDAK
+ *     boleh dihitung nol diam-diam: itu uang yang hilang tanpa jejak. Beranda
+ *     wajib menghitungnya sebagai peringatan, bukan menelannya.
+ *
+ * Ditambah pagar produk Task 3: owner hari ini tidak punya satu pun tautan
+ * klik dari `/owner` ke `/admin` (terverifikasi: 0 tautan) walau ia superset
+ * admin — jalan pulang itu dikunci di sini supaya tidak hilang lagi.
+ */
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminSupabase } from "@/lib/supabase/admin";
+import { awalPekan, geserHari, rentangPekan } from "@/lib/owner/pekan";
+import { hariIniJakarta } from "@/lib/passport/waktu";
+import { signInAs } from "./helpers/as-user";
+
+const AKAR = path.resolve(__dirname, "..");
+const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
+
+/** Semua berkas .ts/.tsx di bawah src/app/owner, rekursif. */
+function berkasOwner(rel = "src/app/owner"): string[] {
+  const hasil: string[] = [];
+  for (const entri of readdirSync(path.join(AKAR, rel), { withFileTypes: true })) {
+    const anak = `${rel}/${entri.name}`;
+    if (entri.isDirectory()) hasil.push(...berkasOwner(anak));
+    else if (/\.tsx?$/.test(entri.name)) hasil.push(anak);
+  }
+  return hasil;
+}
+
+// `createServerSupabase()` membaca cookies() dari next/headers, yang hanya
+// bermakna di dalam request scope. Seperti tests/admin-shell.test.ts, modulnya
+// diganti klien Supabase ber-SESI NYATA: seluruh query di bawah tetap melewati
+// RLS sebagai owner yang login — persis seperti di server.
+const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.sesi!,
+}));
+
+// usePathname hanya hidup di dalam App Router. `redirect` sengaja melempar:
+// bila requireRole sampai memanggilnya, test harus GAGAL keras, bukan diam-diam
+// merender panel uang untuk pengguna yang ditolak.
+const rute = vi.hoisted(() => ({ kini: "/owner" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => rute.kini,
+  redirect: (ke: string) => {
+    throw new Error(`redirect tak terduga ke ${ke}`);
+  },
+}));
+
+const admin = createAdminSupabase();
+
+// Fixture berprefiks PAD-UJI + dibersihkan afterAll (Global Constraints).
+const LAYANAN_UJI = "11111111-1111-1111-1111-1111111111f3";
+const LAYANAN_TANPA_TARIF = "11111111-1111-1111-1111-1111111112f3";
+const MITRA_A = "33333333-3333-3333-3333-3333333333f3";
+const MITRA_B = "33333333-3333-3333-3333-3333333334f3";
+const TARIF_UJI = "99999999-9999-9999-9999-9999999999f3";
+const KLIEN_UJI = "44444444-4444-4444-4444-4444444444f3";
+const PADMA_ID_UJI = "PAD-UJI-0003";
+const SESI = {
+  a1: "66666666-6666-6666-6666-6666666661f3",
+  a2: "66666666-6666-6666-6666-6666666662f3",
+  b1: "66666666-6666-6666-6666-6666666663f3",
+  pekanLalu: "66666666-6666-6666-6666-6666666664f3",
+  terjadwal: "66666666-6666-6666-6666-6666666665f3",
+  batal: "66666666-6666-6666-6666-6666666666f3",
+  takBertarif: "66666666-6666-6666-6666-6666666667f3",
+};
+
+// Tarif fixture: harga 400.000, honor 150.000 -> margin 250.000 per sesi.
+const HARGA = 400_000;
+const HONOR = 150_000;
+
+// Pekan berjalan menurut kalender Jakarta. SENIN dipakai sebagai tanggal sesi
+// (bukan hari acak dalam pekan) supaya tanggalnya tidak pernah jatuh di masa
+// depan — sesi "selesai" bertanggal besok akan menjadi fixture yang mustahil.
+const HARI_INI = hariIniJakarta();
+const SENIN = awalPekan(HARI_INI);
+const SENIN_LALU = geserHari(SENIN, -7);
+
+// `berlaku_sejak` jauh sebelum seluruh tanggal sesi fixture, sehingga tarif
+// yang terpilih selalu tarif ini — tidak bergantung pada tanggal `db reset`
+// (tarif seed lahir dengan `berlaku_sejak = current_date`).
+const BERLAKU_SEJAK = "2020-01-06";
+
+async function bersihkan() {
+  for (const id of Object.values(SESI)) {
+    await admin.from("sessions").delete().eq("id", id);
+    // Tabel jejak SENGAJA tanpa foreign key, jadi penghapusan sesi di atas
+    // TIDAK menyapunya. Sesi fixture lahir berstatus 'belum' (yang menurut
+    // migration tutup_celah_red_team bukan keputusan uang dan tidak dicatat),
+    // tetapi pembersihan ini tetap dijalankan: bila perilaku itu berubah,
+    // `npm test` tidak boleh menumpuk baris yatim tiap run.
+    await admin.from("jejak_status_bayar").delete().eq("sesi_id", id);
+  }
+  await admin.from("clients").delete().eq("id", KLIEN_UJI);
+  await admin.from("service_rates").delete().eq("id", TARIF_UJI);
+  await admin.from("service_rates").delete().eq("service_id", LAYANAN_UJI);
+  await admin.from("partners").delete().eq("id", MITRA_A);
+  await admin.from("partners").delete().eq("id", MITRA_B);
+  await admin.from("services").delete().eq("id", LAYANAN_UJI);
+  await admin.from("services").delete().eq("id", LAYANAN_TANPA_TARIF);
+}
+
+const { ambilRekap, ringkasanPekanIni } = await import("@/lib/owner/data");
+const { NavOwner } = await import("@/app/owner/_shell/nav-owner");
+
+type Ringkasan = Awaited<ReturnType<typeof ringkasanPekanIni>>;
+
+function markupNav(pathname: string): string {
+  rute.kini = pathname;
+  return renderToStaticMarkup(createElement(NavOwner));
+}
+
+let dasar: Ringkasan;
+let sesudah: Ringkasan;
+
+beforeAll(async () => {
+  await bersihkan();
+  ref.sesi = await signInAs("owner@padma.test");
+
+  // Diukur SEBELUM fixture masuk: seluruh assertion di bawah memakai SELISIH,
+  // sehingga angkanya tidak bergantung pada isi seed maupun tanggal db reset.
+  dasar = await ringkasanPekanIni(HARI_INI);
+
+  await admin.from("services").insert([
+    {
+      id: LAYANAN_UJI,
+      phase_id: "prekonsepsi",
+      nama: "PAD-UJI Layanan Rekap",
+      aktif: true,
+    },
+    {
+      id: LAYANAN_TANPA_TARIF,
+      phase_id: "prekonsepsi",
+      nama: "PAD-UJI Layanan Tanpa Tarif",
+      aktif: true,
+    },
+  ]);
+  await admin.from("partners").insert([
+    { id: MITRA_A, nama: "PAD-UJI Bidan Alfa", no_hp: "0811-0000-9001" },
+    { id: MITRA_B, nama: "PAD-UJI Bidan Beta", no_hp: "0811-0000-9002" },
+  ]);
+  await admin.from("service_rates").insert({
+    id: TARIF_UJI,
+    service_id: LAYANAN_UJI,
+    harga_klien: HARGA,
+    honor_mitra: HONOR,
+    berlaku_sejak: BERLAKU_SEJAK,
+  });
+  await admin.from("clients").insert({
+    id: KLIEN_UJI,
+    padma_id: PADMA_ID_UJI,
+    nama: "Uji Rekap Owner",
+    email: "uji-rekap-owner@padma.test",
+    phase_id: "prekonsepsi",
+  });
+
+  const dasarSesi = {
+    client_id: KLIEN_UJI,
+    service_id: LAYANAN_UJI,
+    // 'belum' = kelahiran tanpa keputusan uang; tidak menulis jejak audit.
+    status_bayar: "belum" as const,
+    catatan: "",
+    rekomendasi: "",
+  };
+  await admin.from("sessions").insert([
+    // Tiga sesi SELESAI di pekan berjalan: dua mitra A, satu mitra B.
+    { ...dasarSesi, id: SESI.a1, partner_id: MITRA_A, tanggal: SENIN, status: "selesai" },
+    { ...dasarSesi, id: SESI.a2, partner_id: MITRA_A, tanggal: SENIN, status: "selesai" },
+    { ...dasarSesi, id: SESI.b1, partner_id: MITRA_B, tanggal: SENIN, status: "selesai" },
+    // Pekan LALU — tidak boleh bocor ke kartu "pekan ini".
+    {
+      ...dasarSesi,
+      id: SESI.pekanLalu,
+      partner_id: MITRA_A,
+      tanggal: SENIN_LALU,
+      status: "selesai",
+    },
+    // Belum/tidak pernah dikerjakan — tidak menghasilkan honor.
+    { ...dasarSesi, id: SESI.terjadwal, partner_id: MITRA_A, tanggal: SENIN, status: "terjadwal" },
+    { ...dasarSesi, id: SESI.batal, partner_id: MITRA_A, tanggal: SENIN, status: "batal" },
+    // Selesai, tetapi layanannya tidak punya satu baris tarif pun.
+    {
+      ...dasarSesi,
+      id: SESI.takBertarif,
+      service_id: LAYANAN_TANPA_TARIF,
+      partner_id: MITRA_B,
+      tanggal: SENIN,
+      status: "selesai",
+    },
+  ]);
+
+  sesudah = await ringkasanPekanIni(HARI_INI);
+});
+
+afterAll(bersihkan);
+
+describe("ringkasan pekan berjalan — dihitung dari data, lewat RLS sesi owner", () => {
+  it("menghitung SENIN pekan berjalan menurut kalender Jakarta", () => {
+    expect(sesudah.senin).toBe(SENIN);
+    expect(sesudah.rentang).toBe(rentangPekan(SENIN));
+  });
+
+  it("hanya sesi SELESAI pekan ini yang dihitung (terjadwal & batal diabaikan)", () => {
+    // Empat sesi selesai ditambahkan di pekan ini (tiga bertarif + satu tak
+    // bertarif); terjadwal, batal, dan sesi pekan lalu TIDAK boleh ikut.
+    expect(sesudah.jumlahSesi).toBe(dasar.jumlahSesi + 4);
+  });
+
+  it("honor & harga memakai tarif yang berlaku pada tanggal sesi", () => {
+    expect(sesudah.totalHonor).toBe(dasar.totalHonor + 3 * HONOR);
+    expect(sesudah.totalHarga).toBe(dasar.totalHarga + 3 * HARGA);
+  });
+
+  it("margin adalah angka PADMA per pekan: harga klien − honor mitra", () => {
+    expect(sesudah.margin).toBe(sesudah.totalHarga - sesudah.totalHonor);
+    expect(sesudah.margin).toBe(dasar.margin + 3 * (HARGA - HONOR));
+  });
+
+  it("sesi tak bertarif DILAPORKAN, bukan dihitung nol diam-diam", () => {
+    expect(sesudah.jumlahTakBertarif).toBe(dasar.jumlahTakBertarif + 1);
+  });
+
+  it("menghitung jumlah mitra yang bekerja pekan ini", () => {
+    expect(sesudah.jumlahMitra).toBe(dasar.jumlahMitra + 2);
+  });
+
+  it("sesi pekan LALU tidak bocor ke pekan berjalan", async () => {
+    const rekap = await ambilRekap();
+    const pekanLalu = rekap.find((p) => p.senin === SENIN_LALU);
+    expect(pekanLalu, "pekan lalu hilang dari rekap").toBeDefined();
+    // Satu sesi mitra A di pekan lalu — honornya berdiri di embernya sendiri.
+    const barisA = pekanLalu!.perMitra.find((m) => m.partnerId === MITRA_A);
+    expect(barisA?.totalHonor).toBe(HONOR);
+    expect(barisA?.jumlahSesi).toBe(1);
+  });
+
+  it("pekan terbaru berada di atas", async () => {
+    const rekap = await ambilRekap();
+    const senin = rekap.map((p) => p.senin);
+    expect([...senin].sort().reverse()).toEqual(senin);
+  });
+
+  it("dihitung lewat sesi pengguna: admin tidak melihat satu nominal pun", async () => {
+    const sebelumnya = ref.sesi;
+    ref.sesi = await signInAs("admin@padma.test");
+    const milikAdmin = await ringkasanPekanIni(HARI_INI);
+    ref.sesi = sebelumnya;
+
+    // Bila lapisan data memakai service role, angka ini akan sama dengan angka
+    // owner. RLS money firewall memulangkan 0 baris tarif untuk admin, jadi
+    // seluruh nominalnya wajib nol.
+    expect(milikAdmin.totalHonor).toBe(0);
+    expect(milikAdmin.totalHarga).toBe(0);
+    expect(milikAdmin.margin).toBe(0);
+  });
+
+  it("tidak ada service role di lapisan data owner", () => {
+    const sumber = baca("src/lib/owner/data.ts");
+    expect(sumber).toContain("createServerSupabase");
+    expect(sumber).not.toContain("createAdminSupabase");
+    expect(sumber).not.toContain("SERVICE_ROLE");
+  });
+});
+
+describe("navigasi owner", () => {
+  const sumberNav = baca("src/app/owner/_shell/nav-owner.tsx");
+
+  it("client component (butuh usePathname)", () => {
+    expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
+  });
+
+  it("memuat tiga tujuan berbahasa Indonesia", () => {
+    const m = markupNav("/owner");
+    for (const [href, label] of [
+      ["/owner", "Beranda"],
+      ["/owner/rekap", "Rekap"],
+      ["/owner/tarif", "Tarif"],
+    ]) {
+      expect(m).toContain(`href="${href}"`);
+      expect(m).toContain(label);
+    }
+  });
+
+  it("menyediakan tab desktop DAN bottom bar mobile", () => {
+    const m = markupNav("/owner");
+    expect([...m.matchAll(/<nav\b/g)]).toHaveLength(2);
+    expect(m).toContain("sm:hidden"); // bottom bar mobile
+    expect(m).toContain("sm:flex"); // tab desktop
+    expect([...m.matchAll(/href="\/owner\/rekap"/g)]).toHaveLength(2);
+  });
+
+  it("kedua nav punya label aksesibilitas", () => {
+    const m = markupNav("/owner");
+    expect([...m.matchAll(/aria-label="[^"]+"/g)].length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("JALAN PULANG: owner punya tautan klik ke /admin di kedua nav", () => {
+    // Sebelum Task 3 ada NOL tautan dari /owner ke /admin walau owner adalah
+    // superset admin — satu-satunya jalan adalah mengetik URL sendiri.
+    const m = markupNav("/owner");
+    expect([...m.matchAll(/href="\/admin"/g)]).toHaveLength(2);
+    expect(m).toContain("Buka Panel Admin");
+  });
+
+  it("jumlah tautan dikunci persis (tujuan baru tidak boleh lolos diam-diam)", () => {
+    const m = markupNav("/owner");
+    // Tiga tujuan × dua nav + dua tautan jalan pulang.
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(3 * 2 + 2);
+  });
+
+  it("hanya SATU tujuan yang aktif di beranda", () => {
+    const m = markupNav("/owner");
+    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
+  });
+
+  it("sub-rute menyalakan tabnya sendiri, bukan Beranda", () => {
+    const m = markupNav("/owner/rekap");
+    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
+    for (const tag of m.match(/<a[^>]*>/g) ?? []) {
+      if (tag.includes('href="/owner"') && !tag.includes("/owner/")) {
+        expect(tag).not.toContain('aria-current="page"');
+      }
+    }
+  });
+
+  it("tautan /admin tidak pernah ditandai sebagai tab aktif", () => {
+    for (const p of ["/owner", "/owner/rekap", "/owner/tarif"]) {
+      for (const tag of markupNav(p).match(/<a[^>]*>/g) ?? []) {
+        if (tag.includes('href="/admin"')) {
+          expect(tag).not.toContain('aria-current="page"');
+        }
+      }
+    }
+  });
+});
+
+describe("layout owner", () => {
+  const sumberLayout = baca("src/app/owner/layout.tsx");
+
+  it("memanggil requireRole TEPAT SATU KALI dengan peran PERSIS owner", () => {
+    // Dikunci juga oleh access-matrix-layouts.test.ts; ditegaskan di sini
+    // karena Task 3 menyentuh persis berkas ini, dan "salin saja shell admin"
+    // membawa serta `["admin","owner"]` — yang berarti seluruh nominal PADMA
+    // terbuka untuk admin.
+    expect([...sumberLayout.matchAll(/requireRole\(/g)]).toHaveLength(1);
+    expect(sumberLayout).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
+    expect(sumberLayout).not.toContain('"admin"');
+  });
+
+  it("logout tetap <form method=\"post\">, bukan navigasi sisi klien", () => {
+    expect(sumberLayout).toMatch(/<form[^>]*action="\/auth\/keluar"[^>]*method="post"/);
+    expect(sumberLayout).not.toContain("router.push");
+  });
+
+  it("benar-benar merender navigasi di sekitar isi halaman", async () => {
+    const { default: OwnerLayout } = await import("@/app/owner/layout");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(
+      await OwnerLayout({ children: createElement("p", null, "ISI-UJI") }),
+    );
+    expect(m).toContain("ISI-UJI");
+    expect([...m.matchAll(/<nav\b/g)]).toHaveLength(2);
+    expect(m).toContain('href="/owner/rekap"');
+    expect(m).toContain('href="/admin"');
+  });
+
+  it("menyebut identitas pemakai dari nilai kembalian penjaga peran", async () => {
+    const { default: OwnerLayout } = await import("@/app/owner/layout");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerLayout({ children: null }));
+    expect(m).toContain("Masuk sebagai");
+    expect(m).toContain("Owner");
+  });
+
+  it("catatan money firewall DIBALIK: panel ini satu-satunya tempat nominal hidup", async () => {
+    const { default: OwnerLayout } = await import("@/app/owner/layout");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerLayout({ children: null }));
+    expect(m).toContain("satu-satunya");
+    // Catatan admin ("tidak ada angka uang di panel ini") tidak boleh ikut
+    // tersalin — di sini justru sebaliknya.
+    expect(m).not.toContain("tidak ada angka uang di panel ini");
+  });
+
+  it("tidak ada service role di seluruh src/app/owner/**", () => {
+    for (const berkas of berkasOwner()) {
+      expect(baca(berkas), `${berkas} memakai service role`).not.toContain(
+        "createAdminSupabase",
+      );
+      expect(baca(berkas), `${berkas} memakai service role`).not.toContain("SERVICE_ROLE");
+    }
+  });
+});
+
+describe("beranda owner", () => {
+  const sumberBeranda = baca("src/app/owner/page.tsx");
+
+  it("judulnya mengikuti template `%s · PADMA` (bukan judul penuh sendiri)", () => {
+    // Sebelum Task 3 berkas ini menulis "Panel Owner — PADMA", satu-satunya
+    // halaman yang memaksakan judul penuh dan karenanya keluar dari template
+    // root layout.
+    expect(sumberBeranda).toMatch(/metadata\s*=\s*\{\s*title:\s*"Panel Owner"\s*\}/);
+    expect(sumberBeranda).not.toContain("Panel Owner — PADMA");
+  });
+
+  it('teks "Panel Owner" tetap ada (dikunci tests/e2e/access-matrix.e2e.ts)', async () => {
+    const { default: OwnerPage } = await import("@/app/owner/page");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerPage());
+    expect(m).toContain("Panel Owner");
+  });
+
+  it("menampilkan ketiga angka pekan berjalan apa adanya", async () => {
+    const { default: OwnerPage } = await import("@/app/owner/page");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerPage());
+
+    // Dihitung ulang lewat lapisan data, bukan literal: kartu yang membeku
+    // pada angka contoh akan lolos seluruh assertion `toContain` biasa.
+    const kini = await ringkasanPekanIni(HARI_INI);
+    expect(m).toContain(`>${kini.jumlahSesi}<`);
+    for (const nominal of [kini.totalHonor, kini.margin]) {
+      expect(m).toContain(`Rp ${nominal.toLocaleString("id-ID")}`);
+    }
+    expect(m).toContain(kini.rentang);
+  });
+
+  it("nominal HIDUP di sini — panel ini memang satu-satunya tempatnya", async () => {
+    const { default: OwnerPage } = await import("@/app/owner/page");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerPage());
+    expect(m).toMatch(/Rp\s?\d/);
+  });
+
+  it("memperingatkan sesi tak bertarif, tidak menelannya diam-diam", async () => {
+    const { default: OwnerPage } = await import("@/app/owner/page");
+    rute.kini = "/owner";
+    const m = renderToStaticMarkup(await OwnerPage());
+    const kini = await ringkasanPekanIni(HARI_INI);
+    // Fixture menaruh tepat satu sesi tanpa tarif di pekan berjalan.
+    expect(kini.jumlahTakBertarif).toBeGreaterThan(0);
+    expect(m).toContain("belum bertarif");
+  });
+});
