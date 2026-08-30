@@ -118,6 +118,31 @@ function bagian(tgl: string): { hari: string; bulan: string; tahun: string } {
   };
 }
 
+const FMT_STEMPEL = new Intl.DateTimeFormat("id-ID", {
+  timeZone: ZONA,
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/**
+ * Label tanggal dari sebuah STEMPEL WAKTU (`timestamptz` yang dipulangkan
+ * PostgREST sebagai ISO), mis. "11 Mar 2024". Dipakai untuk `dibayar_pada`.
+ *
+ * Tanggalnya TIDAK boleh dipotong dari stringnya (`iso.slice(0, 10)`): stempel
+ * itu UTC, dan tanda bayar yang dipasang pukul 08.00 WIB tercatat sebagai
+ * 01.00Z hari yang sama — tetapi yang dipasang pukul 06.30 WIB tercatat
+ * 23.30Z HARI SEBELUMNYA. Memotong stringnya membuat sebagian tanda bayar
+ * tampil mundur sehari, dan tanda bayar adalah bukti kapan seorang bidan
+ * benar-benar menerima uangnya. `Date` di sini hanya alat FORMAT — tidak ada
+ * satu pun aritmatika tanggal yang bersandar padanya.
+ */
+export function stempelJakarta(iso: string): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "—";
+  return FMT_STEMPEL.format(new Date(ms)).replace(".", "");
+}
+
 /**
  * Label rentang pekan, mis. "24 – 30 Agu 2026". Bulan/tahun hanya diulang di
  * sisi kiri bila memang berbeda: "31 Agu – 6 Sep 2026",
