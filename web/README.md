@@ -60,6 +60,11 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
+PADMA v1 lengkap: **29 rute** (24 halaman + 5 route handler), tanpa satu pun
+halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
+rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
+sama-sama membuat `npm test` MERAH.
+
 | Rute | Akses | Isi |
 |---|---|---|
 | `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
@@ -85,6 +90,18 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
+| `/akun-belum-terhubung` | Publik | Halaman ramah bagi akun klien yang belum ditautkan tautan aktivasi |
+
+Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi
+didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
+
+| Rute | Akses | Isi |
+|---|---|---|
+| `/aktivasi` | Publik | GET tautan undangan: token dipindahkan dari URL ke cookie httpOnly berumur 1 jam, lalu diarahkan ke login — token tidak pernah ikut ke riwayat browser/Referer |
+| `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → penautan bertoken lalu `/passport` |
+| `/auth/callback` | Publik | GET callback OAuth Google: menukar `code` menjadi sesi, lalu meneruskan ke `/setelah-masuk` |
+| `/auth/keluar` | Terautentikasi | POST logout (form, bukan tautan) lalu kembali ke `/masuk` |
+| `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
@@ -143,6 +160,18 @@ Test yang menjaga keamanan:
   bab/URL video, dan halaman profil tetap read-only. Ingat: PostgREST menjawab
   200 + `[]` untuk UPDATE yang tertahan RLS, jadi test wajib membaca ulang
   nilainya dengan service role — bukan menyimpulkan dari status HTTP.
+- `tests/struktur-rls.test.ts` — invarian struktural: TIDAK ADA tabel `public`
+  tanpa row level security, dan satu-satunya tabel ber-RLS tanpa policy adalah
+  `client_invites` (sengaja terkunci mati — token undangan tersimpan sebagai
+  SHA-256 dan tidak boleh terbaca peran API mana pun). Tabel baru lahir TANPA
+  RLS dan `authenticated` mendapat SELECT/INSERT/UPDATE secara default;
+  kelalaian itu dulu lolos seluruh suite karena tidak ada yang menjaganya.
+- `tests/inventaris-rute.test.ts` — tabel rute README dicocokkan dua arah
+  dengan `src/app`. Rute yang tidak terdaftar adalah rute yang luput dari audit
+  permukaan serang — persis nasib `/aktivasi` (penukar token undangan) dan
+  `/api/skrining` (penulis ber-service-role) sebelum test ini ada. Sekaligus
+  menjaga keenam skrip E2E tetap terangkai ke `test:e2e:semua`: skrip yang ada
+  tetapi tidak terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,
