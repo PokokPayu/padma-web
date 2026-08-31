@@ -66,6 +66,8 @@ Setiap batasan di bawah berlaku untuk **semua** task. Semuanya adalah pelajaran 
 **Files:**
 - Create: `supabase/migrations/20260831100000_materi_banyak_layanan.sql`
 - Create: `tests/materi-banyak-layanan.test.ts`
+- Modify: `supabase/seed.sql` (menyisipkan `material_services`)
+- Modify: `src/lib/passport/data.ts` (dua embed `services(nama)` diberi petunjuk FK)
 
 **Interfaces:**
 - Consumes: tabel `materials`, `services`, `sessions`, `clients` yang sudah ada.
@@ -174,12 +176,16 @@ grant select on public.material_services to authenticated;
 
 -- Dibaca setiap pengguna login, PERSIS seperti materials.service_id yang
 -- digantikannya. Tidak ada perluasan keterbukaan di sini.
+-- `to authenticated` WAJIB, bukan gaya penulisan. Policy tanpa klausa itu lahir
+-- TO PUBLIC, yang mencakup peran `anon` — dan
+-- tests/hak-default-sequence-fungsi.test.ts menjaga agar policy pemanggil
+-- user_role() tidak pernah menyasar anon.
 create policy "materi-layanan: baca semua pengguna login"
-  on public.material_services for select
+  on public.material_services for select to authenticated
   using (auth.uid() is not null);
 
 create policy "materi-layanan: staf kelola"
-  on public.material_services for all
+  on public.material_services for all to authenticated
   using (public.user_role() in ('admin','owner'))
   with check (public.user_role() in ('admin','owner'));
 
@@ -225,15 +231,47 @@ create policy "video: klien dgn sesi selesai" on public.material_videos
 Run: `npx supabase db reset && npx vitest run tests/materi-banyak-layanan.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Seluruh suite tetap hijau**
+- [ ] **Step 5: Perbaiki embed yang menjadi ambigu**
 
-Run: `npx vitest run`
-Expected: 1358 lulus. `tests/rls-materi.test.ts` khususnya harus tetap hijau — gating-nya berpindah jalur tapi hasilnya identik.
+Tabel penghubung baru menciptakan **jalur relasi KEDUA** antara `materials` dan `services`. PostgREST tidak lagi bisa memilih, dan menolak embed-nya:
 
-- [ ] **Step 6: Commit**
+```
+PGRST201: Could not embed because more than one relationship was found for 'materials' and 'services'
+```
+
+Akibatnya `ambilDaftarMateri` & `ambilMateriDetail` mengembalikan **nol baris** — bukan error yang tampak di UI, melainkan daftar materi yang diam-diam kosong. Di `src/lib/passport/data.ts`, dua tempat (`ambilDaftarMateri` ~171 dan `ambilMateriDetail` ~224) diubah:
+
+```ts
+// FK disebut EKSPLISIT karena material_services melahirkan jalur relasi kedua
+// antara materials dan services. Tanpa petunjuk ini PostgREST menolak embed-nya
+// (PGRST201) dan daftar materi kembali NOL BARIS tanpa satu pun error di layar.
+"id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), ..."
+```
+
+**Hanya dua tempat itu.** Embed `services(nama)` lain di `src/lib/owner/data.ts`, `src/lib/admin/tagihan.ts`, dan `data.ts` baris ~88/~267 berangkat dari `sessions`/`service_rates`/`booking_requests` — satu jalur saja, tidak terpengaruh.
+
+- [ ] **Step 6: Sisipkan `material_services` di seed**
+
+`supabase db reset` menjalankan migrasi **sebelum** seed, jadi langkah migrasi data di dalam migration berjalan saat `materials` masih kosong. Tanpa sisipan di `supabase/seed.sql`, `material_services` kosong sesudah setiap reset dan seluruh gating materi klien mati:
+
+```sql
+-- Sisipan yang sama dengan langkah migrasi data di migration, dan itu memang
+-- disengaja: `supabase db reset` menjalankan migrasi SEBELUM seed, sehingga
+-- langkah di migration berjalan saat tabel ini masih kosong.
+insert into material_services (material_id, service_id)
+select id, service_id from materials
+on conflict (material_id, service_id) do nothing;
+```
+
+- [ ] **Step 7: Seluruh suite tetap hijau**
+
+Run: `npx supabase db reset && npx vitest run`
+Expected: **1362 lulus, 0 gagal**. `tests/rls-materi.test.ts` khususnya harus tetap hijau — gating-nya berpindah jalur tapi hasilnya identik.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add supabase/migrations/20260831100000_materi_banyak_layanan.sql tests/materi-banyak-layanan.test.ts
+git add supabase/migrations/20260831100000_materi_banyak_layanan.sql tests/materi-banyak-layanan.test.ts supabase/seed.sql src/lib/passport/data.ts
 git commit -m "feat(db): materi boleh milik banyak layanan lewat material_services"
 ```
 
@@ -1987,6 +2025,8 @@ export function saringDaftarMateri(daftar: MateriRingkas[]): MateriRingkas[] {
 Di `src/lib/passport/data.ts`:
 - `MateriRingkas`: ganti `jumlahBab: number` → `jumlahHalaman: number`, tambah `punyaLayanan: boolean`.
 - `ambilDaftarMateri`: ganti embed `material_chapters(id)` → `material_pages(halaman)`, tambah `material_services(service_id)`. `terbuka` untuk ebook = `halaman.length > 0`. `punyaLayanan` = `material_services.length > 0`. Terapkan `saringDaftarMateri` pada hasil akhir.
+
+  **WAJIB di task ini:** nama layanan berhenti dibaca lewat `services!materials_service_id_fkey(nama)` dan mulai dibaca lewat tabel penghubung. Petunjuk FK itu ditambahkan di Task 1 hanya sebagai penopang sementara — Task 11 menghapus `materials.service_id`, dan petunjuk yang menyebut FK yang sudah tidak ada akan mematahkan query. Karena satu materi kini bisa punya beberapa layanan, `namaLayanan` menjadi gabungan (`", "`) atau string kosong bila tidak ada layanan.
 - `MateriDetail`: ganti `bab: BabMateri[]` → `halaman: Array<{ halaman: number; lebar: number; tinggi: number }>`.
 - `ambilMateriDetail`: ganti embed `material_chapters(...)` → `material_pages(halaman, lebar, tinggi)`, urutkan menaik menurut `halaman`.
 
