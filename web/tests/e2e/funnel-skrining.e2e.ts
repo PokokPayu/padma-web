@@ -15,6 +15,7 @@
 import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
+import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
 
@@ -65,7 +66,7 @@ async function login(browser: Browser, email: string): Promise<BrowserContext> {
     page.waitForURL((u) => !u.pathname.startsWith("/masuk"), { timeout: 20_000 }),
     page.getByRole("button", { name: "Masuk", exact: true }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await tungguIsi(page);
   await page.close();
   return context;
 }
@@ -103,7 +104,7 @@ async function main() {
   // ---- 2. Wizard skrining: demam saat kehamilan = urgent ----
   await landing.getByRole("link", { name: /Mulai Skrining/i }).first().click();
   await landing.waitForURL(/\/skrining$/, { timeout: 20_000 });
-  await landing.waitForLoadState("networkidle");
+  await tungguIsi(landing);
   catat("2a. CTA landing membawa ke /skrining", true, landing.url());
 
   await landing.getByLabel("Nama panggilan").fill(NAMA_UJI);

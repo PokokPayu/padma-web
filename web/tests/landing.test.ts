@@ -112,6 +112,21 @@ describe("landing publik — jalur konversi", () => {
     expect(markup).toContain("Mulai Skrining");
   });
 
+  // Sebelum ini satu-satunya tautan ke /masuk terkubur di tengah halaman, di
+  // dalam bagian teaser passport. Klien LAMA yang datang untuk membuka
+  // passport-nya harus menggulir dulu untuk menemukannya — padahal ia justru
+  // pengunjung yang paling tahu apa yang ia cari. Jalan masuk itu kini juga ada
+  // di nav hero, tanpa menggeser "Mulai Skrining" sebagai aksi utama.
+  it("klien lama punya jalan masuk tanpa menggulir", () => {
+    const hero = sumberLanding["hero.tsx"];
+    expect(hero, "nav hero tidak menautkan /masuk").toContain('href="/masuk"');
+    expect(markup).toContain('href="/masuk"');
+    expect(markup).toContain("Masuk");
+    // Aksi utama tidak boleh ikut bergeser: skrining tetap satu-satunya tombol
+    // berlatar penuh di nav hero.
+    expect(hero).toContain("Mulai Skrining");
+  });
+
   it("nomor WA dibaca server dari app_settings, tidak ditulis keras", () => {
     expect(sumberHalaman).toContain("bacaPengaturan");
     expect(semuaSumberLanding).not.toMatch(/\b62\d{8,}\b/);

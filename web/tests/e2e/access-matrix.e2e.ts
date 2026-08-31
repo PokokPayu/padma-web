@@ -20,6 +20,7 @@ import { chromium, type Browser, type BrowserContext } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { createClientInvite, inviteLink } from "../../src/lib/auth/link-client";
 import { RINA_CLIENT_ID, TOKEN_UNDANGAN_RINA } from "../../scripts/seed-users";
+import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
 
@@ -106,7 +107,7 @@ async function login(
     page.waitForURL((u) => !u.pathname.startsWith("/masuk"), { timeout: 20_000 }),
     page.getByRole("button", { name: "Masuk", exact: true }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await tungguIsi(page);
   urlPendaratan = new URL(page.url()).pathname;
   console.log(`      [login ${email}] mendarat di ${page.url()}`);
   await page.close();

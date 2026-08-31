@@ -35,6 +35,7 @@
 import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
+import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
 
@@ -116,7 +117,7 @@ async function masukkanKredensial(page: Page, email: string) {
     ),
     page.getByRole("button", { name: "Masuk", exact: true }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await tungguIsi(page);
   console.log(`      [login ${email}] mendarat di ${page.url()}`);
 }
 
@@ -221,7 +222,7 @@ async function main() {
     // ================= 3. Terbitkan tautan aktivasi =================
     await barisKlien.first().getByRole("link", { name: PADMA_ID }).click();
     await kerja.waitForURL(/\/admin\/klien\/[0-9a-f-]{36}$/, { timeout: 20_000 });
-    await kerja.waitForLoadState("networkidle");
+    await tungguIsi(kerja);
 
     await kerja.getByRole("button", { name: "Terbitkan tautan aktivasi" }).click();
     const kotakPesan = kerja.locator("#pesan-aktivasi");

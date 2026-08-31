@@ -54,6 +54,7 @@
 import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
 
@@ -134,7 +135,7 @@ async function login(browser: Browser, email: string): Promise<BrowserContext> {
     ),
     page.getByRole("button", { name: "Masuk", exact: true }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await tungguIsi(page);
   console.log(`      [login ${email}] mendarat di ${page.url()}`);
   await page.close();
   return context;
@@ -437,7 +438,7 @@ async function main() {
       kerja.waitForURL(`${BASE}/admin/bayar`, { timeout: 20_000 }),
       kartuKlaim.click(),
     ]);
-    await kerja.waitForLoadState("networkidle");
+    await tungguIsi(kerja);
 
     const barisTagihan = kerja.locator(`[data-item="sesi:${idSesiUji}"]`);
     catat(

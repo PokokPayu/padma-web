@@ -52,6 +52,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { createClient } from "@supabase/supabase-js";
 import { awalPekan, geserHari } from "../../src/lib/owner/pekan";
 import { hariIniJakarta } from "../../src/lib/passport/waktu";
+import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
 
@@ -182,7 +183,7 @@ async function login(browser: Browser, email: string): Promise<BrowserContext> {
     ),
     page.getByRole("button", { name: "Masuk", exact: true }).click(),
   ]);
-  await page.waitForLoadState("networkidle");
+  await tungguIsi(page);
   console.log(`      [login ${email}] mendarat di ${page.url()}`);
   await page.close();
   return context;
@@ -368,7 +369,7 @@ async function main() {
       await page.getByLabel(`Honor mitra ${NAMA_LAYANAN}`).fill(String(HONOR_BARU));
       await page.getByLabel(`Tanggal berlaku tarif ${NAMA_LAYANAN}`).fill(HARI_INI);
       await page.getByRole("button", { name: "Simpan tarif" }).click();
-      await page.waitForLoadState("networkidle");
+      await tungguIsi(page);
       await page.waitForTimeout(600);
 
       const { data: barisTarif } = await admin
@@ -464,7 +465,7 @@ async function main() {
         page.waitForURL((u) => u.pathname === "/admin", { timeout: 20_000 }),
         page.getByRole("link", { name: /Buka Panel Admin/ }).first().click(),
       ]);
-      await page.waitForLoadState("networkidle");
+      await tungguIsi(page);
       const path = new URL(page.url()).pathname;
       const teks = await teksTerlihat(page);
       catat(
