@@ -56,6 +56,7 @@ create policy "materi-layanan: staf kelola"
 drop policy if exists "chapters: klien dgn sesi selesai" on public.material_chapters;
 create policy "chapters: klien dgn sesi selesai" on public.material_chapters
   for select
+  to authenticated
   using (exists (
     select 1
       from public.materials m
@@ -71,6 +72,7 @@ create policy "chapters: klien dgn sesi selesai" on public.material_chapters
 drop policy if exists "video: klien dgn sesi selesai" on public.material_videos;
 create policy "video: klien dgn sesi selesai" on public.material_videos
   for select
+  to authenticated
   using (exists (
     select 1
       from public.materials m

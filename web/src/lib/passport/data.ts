@@ -169,8 +169,10 @@ export async function ambilDaftarMateri(): Promise<MateriRingkas[]> {
     .from("materials")
     .select(
       // FK: materials.service_id → services — disambiguate dari material_services
-      // (migration 20260831100000 membuat jalur ke-2 materials→service_id;
-      // PostgREST tidak bisa tahu jalur mana yang dimaksud tanpa hint FK).
+      // Dua jalur POST ke services sekarang ada:
+      // (1) langsung lewat materials.service_id → services
+      // (2) lewat tabel penghubung: materials → material_services → services
+      // PostgREST tidak bisa tahu jalur mana yang dimaksud (PGRST201) tanpa hint FK.
       "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id), material_videos(material_id)",
     )
     // Policy chapters/videos kini ikut mengevaluasi materials.aktif (migration
@@ -225,8 +227,10 @@ export async function ambilMateriDetail(materialId: string): Promise<MateriDetai
     .from("materials")
     .select(
       // FK: materials.service_id → services — disambiguate dari material_services
-      // (migration 20260831100000 membuat jalur ke-2 materials→service_id;
-      // PostgREST tidak bisa tahu jalur mana yang dimaksud tanpa hint FK).
+      // Dua jalur ke services sekarang ada:
+      // (1) langsung lewat materials.service_id → services
+      // (2) lewat tabel penghubung: materials → material_services → services
+      // PostgREST tidak bisa tahu jalur mana yang dimaksud (PGRST201) tanpa hint FK.
       "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id, urutan, judul, isi), material_videos(url)",
     )
     .eq("id", materialId)
