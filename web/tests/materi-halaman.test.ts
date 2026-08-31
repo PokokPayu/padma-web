@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { querySql } from "./helpers/db";
+import { signInAs } from "./helpers/as-user";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const svc = () =>
@@ -83,5 +84,116 @@ describe("material_pages & RPC pengganti halaman", () => {
     expect(halamanB).toHaveLength(1);
 
     await db.from("materials").delete().in("id", [a, b]);
+  });
+});
+
+/**
+ * PENUTUPAN RADIUS — pre-review coordinator menemukan lubang di draft
+ * pertama migration ini: RPC `security invoker` memaksa tabel memberi
+ * `authenticated` hak DELETE langsung, dan policy "halaman: staf kelola"
+ * tidak menyempit ke satu materi. Diprobe nyata sebagai admin sungguhan:
+ *
+ *   DELETE /rest/v1/material_pages?halaman=gte.0   -> 2 baris tersapu
+ *   sisa material_pages di SELURUH basis data: 0
+ *
+ * Kelas bug persis `?urutan=gte.0` yang dulu menyapu seluruh bab
+ * `material_chapters`. Ditutup dengan pola yang sama: hak tabel tulis
+ * dicabut TOTAL dari `authenticated`, dan `ganti_halaman_materi` menjadi
+ * `security definer` yang memeriksa `user_role()` sendiri — SATU-SATUNYA
+ * jalur tulis yang tersisa. Describe ini membuktikan penutupannya, bukan
+ * hanya mengklaimnya.
+ */
+describe("penutupan radius: RPC adalah SATU-SATUNYA jalur tulis", () => {
+  it("admin TIDAK BISA menyapu halaman lewat REST langsung (bukan RPC)", async () => {
+    const db = svc();
+    const { data: layanan } = await db.from("services").select("id").limit(1).single();
+    const buat = async (judul: string) =>
+      (await db.from("materials")
+        .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+        .select("id").single()).data!.id;
+    const a = await buat("UJI-SAPU-A");
+    const b = await buat("UJI-SAPU-B");
+
+    await db.rpc("ganti_halaman_materi", {
+      p_material_id: a, p_halaman: [{ halaman: 1, objek: `${a}/0001.webp`, lebar: 10, tinggi: 10 }],
+    });
+    await db.rpc("ganti_halaman_materi", {
+      p_material_id: b, p_halaman: [{ halaman: 1, objek: `${b}/0001.webp`, lebar: 10, tinggi: 10 }],
+    });
+
+    // Ini persis probe coordinator: filter tautologis lewat REST langsung,
+    // sebagai admin sungguhan (JWT), bukan service role dan bukan RPC.
+    const admin = await signInAs("admin@padma.test");
+    const { error } = await admin.from("material_pages").delete().gte("halaman", 0);
+    expect(error?.code).toBe("42501");
+
+    // 42501 saja tidak membuktikan apa pun tanpa membaca ulang baris —
+    // pelajaran yang sudah tertulis berulang di hak-hapus-berlebih.test.ts.
+    const { data: sisa } = await db
+      .from("material_pages")
+      .select("material_id")
+      .in("material_id", [a, b]);
+    expect(sisa).toHaveLength(2);
+
+    await db.from("materials").delete().in("id", [a, b]);
+  });
+
+  it("klien tidak bisa memanggil RPC ganti_halaman_materi", async () => {
+    const db = svc();
+    const { data: layanan } = await db.from("services").select("id").limit(1).single();
+    const { data: m } = await db
+      .from("materials")
+      .insert({ judul: "UJI-KLIEN-RPC", tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+      .select("id").single();
+    await db.rpc("ganti_halaman_materi", {
+      p_material_id: m!.id,
+      p_halaman: [{ halaman: 1, objek: `${m!.id}/0001.webp`, lebar: 10, tinggi: 10 }],
+    });
+
+    const klien = await signInAs("ananda@padma.test");
+    const { error } = await klien.rpc("ganti_halaman_materi", {
+      p_material_id: m!.id,
+      p_halaman: [{ halaman: 1, objek: `${m!.id}/BAJAK.webp`, lebar: 1, tinggi: 1 }],
+    });
+    expect(error).not.toBeNull();
+
+    // Guard di dalam fungsi me-raise SEBELUM delete/insert apa pun berjalan —
+    // baris lama harus utuh dengan objek SEMULA, bukan sekadar "RPC menolak".
+    const { data: sisa } = await db.from("material_pages").select("objek").eq("material_id", m!.id);
+    expect(sisa).toHaveLength(1);
+    expect(sisa![0].objek).toBe(`${m!.id}/0001.webp`);
+
+    await db.from("materials").delete().eq("id", m!.id);
+  });
+
+  it("staf (admin) TETAP bisa memanggil RPC lewat SESI ASLI, bukan cuma service role", async () => {
+    // Krusial, bukan sekadar kelengkapan: memanggil lewat service role tidak
+    // pernah membuktikan guard `user_role() in ('admin','owner')` di DALAM
+    // fungsi benar-benar berjalan — service role menembus semuanya terlepas
+    // guard itu ada atau tidak. Task 2 pernah mengirim guard yang mati persis
+    // karena satu-satunya test-nya berjalan lewat service role. Hanya sesi
+    // JWT asli yang membuktikan cabang IZIN-nya, bukan hanya cabang radius.
+    const db = svc();
+    const { data: layanan } = await db.from("services").select("id").limit(1).single();
+    const { data: m } = await db
+      .from("materials")
+      .insert({ judul: "UJI-ADMIN-RPC", tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+      .select("id").single();
+
+    const admin = await signInAs("admin@padma.test");
+    const { data: n, error } = await admin.rpc("ganti_halaman_materi", {
+      p_material_id: m!.id,
+      p_halaman: [
+        { halaman: 1, objek: `${m!.id}/0001.webp`, lebar: 1600, tinggi: 2263 },
+        { halaman: 2, objek: `${m!.id}/0002.webp`, lebar: 1600, tinggi: 2263 },
+      ],
+    });
+    expect(error).toBeNull();
+    expect(n).toBe(2);
+
+    const { data: sisa } = await db.from("material_pages").select("halaman").eq("material_id", m!.id);
+    expect(sisa).toHaveLength(2);
+
+    await db.from("materials").delete().eq("id", m!.id);
   });
 });

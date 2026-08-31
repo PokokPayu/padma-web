@@ -1093,37 +1093,23 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
    * belum dibangun; itu jadi kandidat kuat begitu panel admin-nya ditulis, bila
    * radius satu permintaan ini ternyata jadi perhatian nyata di pemakaian.
    *
-   * `material_pages` (Task 3, migration `materi_halaman_pdf`) ditambahkan
-   * SADAR pula, tetapi alasannya BEDA BENTUK dari ketiganya di atas: bukan
-   * "belum sempat dipagari", melainkan KONSEKUENSI LANGSUNG dari satu pilihan
-   * desain yang disengaja. RPC penggantinya, `ganti_halaman_materi`, adalah
-   * `security invoker` (bukan `security definer` seperti `hapus_bab_materi` /
-   * `lepas_video_materi`) — persis supaya hak tulisnya diputuskan policy staf
-   * ("halaman: staf kelola"), bukan diberikan oleh fungsinya. Konsekuensi
-   * teknisnya: DELETE di dalam RPC berjalan sebagai peran PEMANGGIL, sehingga
-   * `authenticated` wajib memegang hak tabel DELETE secara langsung — tanpanya
-   * RPC-nya sendiri gagal 42501 untuk admin/owner sekalipun.
-   *
-   * RADIUSNYA, DITULISKAN JUJUR: di DALAM RPC, radiusnya terkunci ke
-   * `p_material_id` (diuji tests/materi-halaman.test.ts, "RPC TIDAK PERNAH
-   * menyentuh baris materi lain"). Tetapi policy "halaman: staf kelola" itu
-   * SENDIRI — beda dari RPC-nya — tidak menyempit ke satu materi; ia
-   * `for all using (user_role() in ('admin','owner'))` tanpa syarat
-   * `material_id` apa pun. Artinya staf yang memanggil PostgREST langsung
-   * (BUKAN lewat RPC) dengan filter tautologis —
-   * `DELETE material_pages?halaman=gte.0` — akan menyapu halaman SELURUH
-   * materi klinik dalam satu permintaan: KELAS BUG YANG SAMA PERSIS dengan
-   * `?urutan=gte.0` yang dulu menyapu seluruh bab `material_chapters` sebelum
-   * migration `batas_radius_hapus_isi_materi`. Task 3 SADAR akan ini dan
-   * sengaja tidak menutupnya dengan pola chapters/videos (revoke total +
-   * security definer) karena itu bertentangan dengan keputusan desain
-   * `security invoker` di atas. Bila jalur admin langsung ke tabel ini
-   * (di luar `ganti_halaman_materi`) pernah benar-benar dipakai produk, pagar
-   * yang sama seperti chapters/videos — cabut DELETE dari `authenticated`,
-   * pindahkan penghapusan tunggal ke RPC `security definer` — adalah
-   * langkah berikutnya yang sudah punya preseden persis di file ini.
+   * `material_pages` (Task 3, migration `materi_halaman_pdf`) SEMPAT masuk
+   * daftar ini saat draft pertama RPC-nya (`ganti_halaman_materi`) memakai
+   * `security invoker` — itu memaksa tabel memberi `authenticated` hak DELETE
+   * langsung, dan diprobe nyata SEBELUM dikirim untuk review: admin sungguhan
+   * memanggil `DELETE material_pages?halaman=gte.0` menyapu SELURUH halaman
+   * SELURUH materi dalam satu permintaan, karena policy "halaman: staf
+   * kelola" tidak menyempit ke satu materi — kelas bug persis `?urutan=gte.0`
+   * yang menjadi alasan daftar ini ada sama sekali. Ditutup dengan pola yang
+   * sama seperti chapters/videos, BUKAN dengan menuliskan alasannya di sini:
+   * `ganti_halaman_materi` menjadi `security definer` dan memeriksa
+   * `user_role()` sendiri, hak tabel insert/update/delete dicabut TOTAL dari
+   * `authenticated`, dan nama ini keluar dari daftar. Ditinggalkan sebagai
+   * catatan sejarah: bila radius per-materi pada tabel ini ATAU
+   * `material_assignments` di atas pernah butuh dibuka lagi lewat hak tabel
+   * langsung (bukan RPC), inilah preseden persis mengapa itu ditolak.
    */
-  const BOLEH_DELETE: string[] = ["material_assignments", "material_pages"];
+  const BOLEH_DELETE: string[] = ["material_assignments"];
 
   it("tidak ada satu tabel pun yang masih memberi DELETE ke authenticated", async () => {
     const baris = await querySql<{ table_name: string }>(`
