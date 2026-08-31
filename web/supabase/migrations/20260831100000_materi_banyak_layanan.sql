@@ -38,10 +38,12 @@ grant select on public.material_services to authenticated;
 -- digantikannya. Tidak ada perluasan keterbukaan di sini.
 create policy "materi-layanan: baca semua pengguna login"
   on public.material_services for select
+  to authenticated
   using (auth.uid() is not null);
 
 create policy "materi-layanan: staf kelola"
   on public.material_services for all
+  to authenticated
   using (public.user_role() in ('admin','owner'))
   with check (public.user_role() in ('admin','owner'));
 

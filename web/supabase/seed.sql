@@ -53,7 +53,9 @@ insert into materials (id, service_id, judul, tipe, deskripsi) values
   ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106',
    'Panduan ASI Perah','ebook','E-book penyimpanan & penanganan ASI perah.');
 
--- Migrasi data material_services: setiap materi lama menjadi tepat satu baris
+-- Migrasi data material_services: setiap materi lama menjadi tepat satu baris.
+-- INSERT ada di migration 20260831100000 DAN di sini: migration berjalan terlebih
+-- dahulu tetapi tables kosong, jadi insert di sini memastikan seed data terisi.
 insert into material_services (material_id, service_id)
 select id, service_id from materials
 on conflict (material_id, service_id) do nothing;

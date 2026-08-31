@@ -168,7 +168,10 @@ export async function ambilDaftarMateri(): Promise<MateriRingkas[]> {
   const { data } = await supabase
     .from("materials")
     .select(
-      "id, judul, tipe, deskripsi, services(nama), material_chapters(id), material_videos(material_id)",
+      // FK: materials.service_id → services — disambiguate dari material_services
+      // (migration 20260831100000 membuat jalur ke-2 materials→service_id;
+      // PostgREST tidak bisa tahu jalur mana yang dimaksud tanpa hint FK).
+      "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id), material_videos(material_id)",
     )
     // Policy chapters/videos kini ikut mengevaluasi materials.aktif (migration
     // gating_materi_hormati_aktif), sehingga ISI materi yang ditarik memang
@@ -221,7 +224,10 @@ export async function ambilMateriDetail(materialId: string): Promise<MateriDetai
   const { data } = await supabase
     .from("materials")
     .select(
-      "id, judul, tipe, deskripsi, services(nama), material_chapters(id, urutan, judul, isi), material_videos(url)",
+      // FK: materials.service_id → services — disambiguate dari material_services
+      // (migration 20260831100000 membuat jalur ke-2 materials→service_id;
+      // PostgREST tidak bisa tahu jalur mana yang dimaksud tanpa hint FK).
+      "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id, urutan, judul, isi), material_videos(url)",
     )
     .eq("id", materialId)
     .eq("aktif", true) // reader pun wajib menyaring sendiri
