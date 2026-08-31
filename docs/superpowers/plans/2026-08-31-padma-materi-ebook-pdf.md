@@ -386,6 +386,54 @@ describe("material_assignments — penugasan membuka isi tanpa sesi selesai", ()
     expect(data).toBe(true);
   });
 
+  it("ditugaskan_oleh DIPAKSA ke pemanggil sungguhan, bukan dari payload", async () => {
+    // Tes ini WAJIB memakai sesi JWT admin, bukan service role: lewat service
+    // role, "pagar bekerja" dan "pagar mati" menghasilkan hasil yang identik,
+    // sehingga bug-nya tak terlihat oleh konstruksi tesnya sendiri.
+    const db = svc();
+    const { data: profil } = await db.from("profiles").select("id, role");
+    const idAdmin = profil!.find((p) => p.role === "admin")!.id;
+    const idOwner = profil!.find((p) => p.role === "owner")!.id;
+
+    const c = await sesiKlien("admin@padma.test");
+    await c
+      .from("material_assignments")
+      .insert({ material_id: materiId, client_id: klienId, ditugaskan_oleh: idOwner })
+      .select("material_id");
+
+    const { data } = await db
+      .from("material_assignments")
+      .select("ditugaskan_oleh")
+      .eq("material_id", materiId)
+      .eq("client_id", klienId)
+      .single();
+    expect(data!.ditugaskan_oleh).toBe(idAdmin); // pemanggil sungguhan
+    expect(data!.ditugaskan_oleh).not.toBe(idOwner); // BUKAN yang dikirim payload
+  });
+
+  it("klien tidak bisa MENGHAPUS penugasan; staf bisa, tepat satu baris", async () => {
+    // Verb DELETE pada tabel ini punya hak tabel penuh (lihat BOLEH_DELETE di
+    // tests/hak-hapus-berlebih.test.ts), jadi yang menjaganya hanya policy.
+    // Pagar yang alasannya tertulis tetapi perilakunya tak teruji adalah pagar
+    // yang regresinya senyap.
+    const klien = await sesiKlien("ananda@padma.test");
+    const { data: gagal } = await klien
+      .from("material_assignments")
+      .delete()
+      .eq("material_id", materiId)
+      .select("material_id");
+    expect(gagal ?? []).toHaveLength(0);
+
+    const staf = await sesiKlien("admin@padma.test");
+    const { data: sukses } = await staf
+      .from("material_assignments")
+      .delete()
+      .eq("material_id", materiId)
+      .eq("client_id", klienId)
+      .select("material_id");
+    expect(sukses).toHaveLength(1);
+  });
+
   it("klien TIDAK boleh membaca tabel penugasan itu sendiri", async () => {
     const c = await sesiKlien("ananda@padma.test");
     const { data, error } = await c.from("material_assignments").select("material_id");
@@ -469,9 +517,32 @@ comment on table public.material_assignments is
 -- `ditugaskan_oleh` dipagari TRIGGER, bukan pencabutan grant kolom. Grant kolom
 -- mengikat pada KEHADIRAN kolom di payload sehingga `select *` ikut mati 42501;
 -- trigger mengikat pada NILAI. Pelajaran ini sudah tiga kali dibayar di repo ini.
+--
+-- DUA HAL DI TANDA TANGAN INI MENGIKAT, dan keduanya sudah pernah salah:
+--
+-- 1. `security invoker`, BUKAN `security definer`. Di dalam fungsi SECURITY
+--    DEFINER, `current_user` bernilai PEMILIK fungsi (`postgres`), bukan peran
+--    pemanggil — diuji: definer melihat `postgres`, invoker melihat
+--    `authenticated`. Dengan definer, pagar `current_user` di bawah SELALU lolos,
+--    penugasan paksa tidak pernah berjalan, dan `ditugaskan_oleh` bisa dipalsukan
+--    admin mana pun lewat POST langsung ke REST. Precedent-nya sudah tertulis di
+--    pengerasan_tabel_uang.sql: "BUKAN security definer: current_user harus tetap
+--    peran PEMANGGIL, karena justru itu yang membedakan jalur sah dari jalur
+--    terlarang."
+--
+-- 2. Pagar `current_user` itu WAJIB ADA. Menetapkan `auth.uid()` tanpa syarat
+--    membuat INSERT lewat service role gagal NOT NULL, sebab JWT service role
+--    tidak punya klaim `sub` sehingga `auth.uid()` bernilai NULL — dan itu
+--    mematahkan seed maupun pembersihan test.
 create or replace function public.paksa_aktor_penugasan()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security invoker set search_path = public as $$
 begin
+  -- Service role (seed & test) memasok aktornya sendiri; hanya pemegang JWT yang
+  -- dipaksa.
+  if current_user not in ('anon', 'authenticated', 'authenticator') then
+    return new;
+  end if;
+
   new.ditugaskan_oleh := auth.uid();
   return new;
 end $$;
@@ -487,7 +558,7 @@ grant select, insert, delete on public.material_assignments to authenticated;
 -- Hanya staf. Tidak ada policy untuk klien: hak tabelnya memang ada, tetapi
 -- tanpa policy tidak satu baris pun lolos RLS.
 create policy "penugasan: staf kelola"
-  on public.material_assignments for all
+  on public.material_assignments for all to authenticated
   using (public.user_role() in ('admin','owner'))
   with check (public.user_role() in ('admin','owner'));
 
