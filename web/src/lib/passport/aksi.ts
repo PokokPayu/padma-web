@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
+import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
 import { hariIniJakarta } from "./waktu";
@@ -23,11 +24,10 @@ type Berhasil = { ok: true };
 async function klienSaatIni(): Promise<string | null> {
   await requireRole(["klien"]);
 
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await penggunaSaatIni();
   if (!user) return null;
+
+  const supabase = await createServerSupabase();
 
   // Identitas klien selalu diturunkan dari SESI, tidak pernah dari parameter —
   // itulah yang membuat filter kepemilikan di bawah bermakna.

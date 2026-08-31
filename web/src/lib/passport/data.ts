@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
 
@@ -27,12 +29,15 @@ type BarisKlien = {
 // bukan UI. Service role DILARANG di jalur ini — ia menembus RLS dan akan
 // mengirim isi materi terkunci ke RSC payload, tempat penyaringan UI tidak
 // menolong apa pun.
-export async function ambilKlien(): Promise<KlienPassport | null> {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+// Di-cache karena layout DAN page sama-sama memanggilnya: layout butuh nama
+// untuk header, page butuh id untuk memfilter data. Keduanya benar sebagai
+// kode — tiap halaman harus berdiri sendiri, tidak boleh bergantung pada
+// layout sudah mengambilnya — dan cache per-request yang membuatnya gratis.
+export const ambilKlien = cache(async (): Promise<KlienPassport | null> => {
+  const user = await penggunaSaatIni();
   if (!user) return null;
+
+  const supabase = await createServerSupabase();
 
   const { data } = await supabase
     .from("clients")
@@ -52,7 +57,7 @@ export async function ambilKlien(): Promise<KlienPassport | null> {
     faseNama: data.phases?.nama ?? "",
     faseSanskrit: data.phases?.nama_sanskrit ?? "",
   };
-}
+});
 
 type BarisSesi = {
   id: string;

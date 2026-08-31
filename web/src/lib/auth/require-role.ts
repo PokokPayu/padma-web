@@ -1,20 +1,21 @@
 import { redirect } from "next/navigation";
-import { createServerSupabase } from "@/lib/supabase/server";
+import { penggunaSaatIni, profilSaatIni } from "./sesi";
 
 export type AppRole = "klien" | "admin" | "owner";
 
+/**
+ * Gerbang otorisasi sungguhan — inilah yang memverifikasi JWT ke server Auth,
+ * bukan proxy. Wajib dipanggil di dalam SETIAP server action, karena server
+ * action adalah endpoint POST tersendiri yang tidak terlindungi guard layout.
+ *
+ * Identitas dan peran diambil lewat helper ber-cache di ./sesi, jadi memanggil
+ * requireRole() beberapa kali dalam satu request hanya berbiaya sekali.
+ */
 export async function requireRole(allowed: AppRole[]) {
-  const supabase = await createServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await penggunaSaatIni();
   if (!user) redirect("/masuk");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, nama")
-    .eq("id", user.id)
-    .single();
+  const profile = await profilSaatIni();
   const role = (profile?.role ?? "klien") as AppRole;
 
   if (!allowed.includes(role)) redirect("/setelah-masuk");

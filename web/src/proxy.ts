@@ -28,13 +28,29 @@ export async function proxy(request: NextRequest) {
     },
   );
 
+  // Pemeriksaan OPTIMISTIK, sengaja tidak memverifikasi JWT ke server Auth.
+  //
+  // `getUser()` memanggil server Auth lewat jaringan (~53ms) setiap kali, dan
+  // proxy berjalan di SETIAP request — termasuk prefetch <Link>. Satu layar
+  // passport punya lima tautan di tab bar, jadi sekadar menampilkannya dulu
+  // membayar lima kali panggilan itu. Dokumentasi Next.js melarang ini secara
+  // eksplisit: proxy hanya boleh membaca sesi dari cookie, dan bukan tempat
+  // otorisasi. `getSession()` membaca cookie secara lokal tanpa jaringan.
+  //
+  // Penyegaran token tetap harus di sini: Server Component tidak boleh menulis
+  // cookie, jadi hanya proxy yang bisa menyimpan refresh token yang berotasi.
+  // `getSession()` menyegarkan sendiri saat token kedaluwarsa — sekali per jam,
+  // bukan sekali per request.
+  //
+  // Cookie palsu atau sesi basi lolos dari sini, lalu ditolak requireRole()
+  // yang memverifikasi sungguhan. Itu memang pembagian tugas yang dimaksud.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const path = request.nextUrl.pathname;
   const needsAuth = PROTECTED_PREFIXES.some((p) => path.startsWith(p));
-  if (needsAuth && !user) {
+  if (needsAuth && !session) {
     const url = request.nextUrl.clone();
     url.pathname = "/masuk";
     url.searchParams.set("lanjut", path);

@@ -34,6 +34,42 @@ function catat(nama: string, lolos: boolean, bukti: string) {
   console.log(`${lolos ? "PASS" : "FAIL"}  ${nama}\n      ${bukti}`);
 }
 
+/**
+ * Cookie sesi yang dikarang sendiri, mengaku ber-peran owner.
+ *
+ * Sejak proxy hanya melakukan pemeriksaan OPTIMISTIK (membaca cookie secara
+ * lokal, tanpa memverifikasi tanda tangan JWT ke server Auth — lihat komentar
+ * di src/proxy.ts), cookie semacam ini memang SENGAJA lolos dari proxy. Yang
+ * menghentikannya adalah requireRole(), satu-satunya tempat verifikasi
+ * sungguhan terjadi. Tes ini menjaga pembagian tugas itu: kalau seseorang kelak
+ * memindahkan otorisasi kembali ke proxy dan mengendurkan requireRole, di
+ * sinilah kebocorannya ketahuan.
+ */
+async function cekCookieKarangan(path: string) {
+  const isi = Buffer.from(
+    JSON.stringify({
+      access_token: "a.b.c",
+      refresh_token: "x",
+      expires_at: 9999999999,
+      user: { id: "00000000-0000-0000-0000-000000000000", role: "owner" },
+    }),
+  ).toString("base64");
+
+  const res = await fetch(`${BASE}${path}`, {
+    redirect: "manual",
+    headers: { cookie: `sb-127-auth-token=base64-${isi}` },
+  });
+  const lokasi = res.headers.get("location") ?? "";
+  const badan = res.status === 200 ? await res.text() : "";
+  const bocor = /Panel Owner|Panel Admin|honor/.test(badan);
+
+  catat(
+    `1b. cookie sesi karangan ber-peran owner DITOLAK di ${path}`,
+    lokasi.startsWith("/masuk") && !bocor,
+    `status ${res.status}, location: ${lokasi || "(tidak ada)"}, isi bocor: ${bocor}`,
+  );
+}
+
 /** Redirect mentah dari server, tanpa cookie sama sekali. */
 async function cekAnonim(path: string) {
   const res = await fetch(`${BASE}${path}`, { redirect: "manual" });
@@ -222,6 +258,7 @@ async function ujiAktivasiKlien(browser: Browser) {
 async function main() {
   // --- Skenario 1: tanpa login ---
   for (const p of ["/passport", "/admin", "/owner"]) await cekAnonim(p);
+  for (const p of ["/passport", "/admin", "/owner"]) await cekCookieKarangan(p);
 
   const browser = await chromium.launch();
   try {
