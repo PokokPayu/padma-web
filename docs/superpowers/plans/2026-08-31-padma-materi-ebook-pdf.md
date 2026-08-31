@@ -779,9 +779,15 @@ comment on column public.material_pages.objek is
 
 alter table public.material_pages enable row level security;
 revoke all on public.material_pages from anon, authenticated;
--- Hak tulis diberikan karena RPC di bawah `security invoker`: yang memutuskan
--- boleh-tidaknya adalah policy staf, bukan hak tabel ini.
-grant select, insert, update, delete on public.material_pages to authenticated;
+-- HANYA SELECT. Tidak ada hak tulis sama sekali untuk `authenticated`, dan itu
+-- keputusan yang sudah dibayar: memberi INSERT/UPDATE/DELETE demi RPC
+-- ber-`security invoker` membuka jalur REST langsung yang melewati RPC-nya.
+-- Dibuktikan sebagai admin: `DELETE /rest/v1/material_pages?halaman=gte.0`
+-- menyapu SELURUH halaman dari SELURUH materi dalam satu permintaan — persis
+-- kelas bug `?urutan=gte.0` yang pernah menghapus seluruh bab materi di repo
+-- ini. Satu-satunya jalan tulis kini RPC di bawah, yang radiusnya terikat
+-- parameter WAJIB.
+grant select on public.material_pages to authenticated;
 
 -- Gating IDENTIK dengan material_chapters, dan memakai FUNGSI YANG SAMA
 -- (`berhak_isi_materi`, lahir di migration penugasan). Menyalin ekspresinya ke
@@ -816,16 +822,32 @@ on conflict (id) do nothing;
 -- (`?urutan=gte.0`), dan pelajarannya adalah RPC. Fungsi ini menghapus banyak
 -- baris sekaligus, tetapi radiusnya terikat parameter WAJIB `p_material_id` —
 -- tidak ada filter yang bisa dibuat tautologis dari luar.
+-- `security definer` DI SINI, sementara `paksa_aktor_penugasan` justru
+-- `invoker` — keduanya berlawanan untuk alasan yang berlawanan, jadi JANGAN
+-- "diseragamkan":
+--   * definer di sini supaya fungsi ini bisa menjadi SATU-SATUNYA jalur tulis.
+--     Hak tulis tabelnya dicabut seluruhnya, sehingga tidak ada permintaan REST
+--     yang bisa menyentuh material_pages, dan radius setiap penulisan terikat
+--     parameter wajib `p_material_id`.
+--   * invoker di sana supaya `current_user` tetap peran PEMANGGIL — di dalam
+--     fungsi definer, `current_user` bernilai PEMILIK fungsi (`postgres`),
+--     yang mematikan pagarnya tanpa satu pun error.
 create or replace function public.ganti_halaman_materi(
   p_material_id uuid,
   p_halaman     jsonb
 ) returns int
-language plpgsql security invoker set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
 declare
   n int;
 begin
   if p_material_id is null then
     raise exception 'p_material_id wajib diisi';
+  end if;
+
+  -- Definer MENEMBUS RLS, jadi otorisasi wajib diperiksa di sini: tidak ada
+  -- policy yang akan menolak apa pun di dalam fungsi ini.
+  if public.user_role() not in ('admin','owner') then
+    raise exception 'hanya admin/owner boleh mengganti halaman materi';
   end if;
 
   delete from public.material_pages where material_id = p_material_id;
@@ -845,10 +867,13 @@ end $$;
 revoke all on function public.ganti_halaman_materi(uuid, jsonb) from public, anon;
 grant execute on function public.ganti_halaman_materi(uuid, jsonb) to authenticated;
 
--- `security invoker` disengaja: hak tulis tetap diputuskan policy staf, bukan
--- diberikan oleh fungsinya. `security definer` di sini akan membuat setiap klien
--- login bisa mengganti halaman materi mana pun.
 ```
+
+Tiga tes tambahan yang membuktikan radiusnya benar-benar tertutup — ketiganya memakai `signInAs` dari `tests/helpers/as-user.ts` supaya berjalan sebagai sesi JWT sungguhan:
+
+1. **Penyapuan sudah mustahil.** Dua materi, masing-masing satu halaman lewat RPC, lalu sebagai **admin** mencoba `.delete().gte("halaman", 0)`. Tidak ada baris terhapus dan kedua halaman selamat. Ini tes regresi untuk pembuktian di atas: ia HARUS merah bila hak tulisnya dikembalikan.
+2. **Klien tidak bisa memanggil RPC-nya** — pemeriksaan peran di dalam fungsi melempar, dan tidak ada baris berubah.
+3. **Staf tetap bisa**, dan minimal satu tes jalur bahagia berjalan lewat sesi JWT admin, bukan hanya service role. Di bawah service role, "pemeriksaan peran bekerja" dan "pemeriksaan peran tidak ada" terlihat identik — Task 2 mengirimkan pagar yang benar-benar mati justru karena satu-satunya tesnya berjalan sebagai service role.
 
 - [ ] **Step 4: Reset DB & jalankan test, pastikan HIJAU**
 
