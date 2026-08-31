@@ -60,7 +60,7 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **29 rute** (24 halaman + 5 route handler), tanpa satu pun
+PADMA v1 lengkap: **30 rute** (24 halaman + 6 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.
@@ -102,6 +102,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/auth/callback` | Publik | GET callback OAuth Google: menukar `code` menjadi sesi, lalu meneruskan ke `/setelah-masuk` |
 | `/auth/keluar` | Terautentikasi | POST logout (form, bukan tautan) lalu kembali ke `/masuk` |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
+| `/api/materi/[id]/halaman/[n]` | Klien | GET satu halaman e-book sebagai `image/webp` berwatermark identitas pembaca; hak diputuskan RLS lewat sesi klien SEBELUM service role menyentuh bucket privat `materi-halaman`; tidak berhak → 404 (bukan 401/403) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
