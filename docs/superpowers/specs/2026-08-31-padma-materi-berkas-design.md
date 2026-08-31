@@ -64,7 +64,17 @@ Keputusan diubah ke **R2** secara sadar, dengan model ancaman yang dinyatakan te
 
 Ganjarannya: R2 praktis gratis di skala PADMA — 10 GB penyimpanan gratis dan egress gratis, sementara video menyumbang ~40 GB egress sebulan yang justru akan mendorong tier Supabase naik bila di-host sendiri di sana.
 
-Yang harus dicatat karena mudah dilupakan: **egress gratis R2 hanya berlaku bila pasien mengambil berkasnya langsung dari R2.** Memproksinya lewat route kita demi menyembunyikan URL akan memindahkan egress itu menjadi bandwidth Vercel dan menghapus seluruh keunggulan biayanya, sambil menambah beban durasi eksekusi fungsi untuk menyalurkan video panjang. Jalur R2 yang paling murah memang jalur yang paling tidak terlindungi, dan design ini memilih jalur murah itu dengan mata terbuka.
+### Kenapa video disajikan LANGSUNG dari R2, bukan diproksi
+
+Video disajikan langsung: browser pasien mengambil berkasnya dari R2 lewat presigned URL, dan bytenya tidak pernah menyentuh server PADMA.
+
+Alternatifnya adalah memproksi lewat route kita. Perbandingan biayanya perlu ditulis tepat, sebab mudah salah: **egress R2 gratis ke mana pun** — ke browser pasien maupun ke server kita. Memproksi tidak memindahkan biaya dari R2; ia **memunculkan biaya baru di Vercel** yang tadinya nol, yaitu bandwidth Vercel→pasien plus waktu eksekusi fungsi selama menyalurkan video.
+
+Memproksi punya satu keunggulan nyata yang layak disebut: presigned URL bisa ditempel ke orang lain dan langsung bekerja, sementara URL yang diproksi menuntut cookie sesi pasien itu sehingga tidak berguna bagi orang lain.
+
+Keunggulan itu tetap ditolak, dan alasannya bukan biaya semata: pasien yang bisa mengunduh berkasnya juga bisa **mengirim berkasnya**. Mencegah tautan tersebar tidak banyak gunanya bila berkasnya sendiri bisa tersebar. Di bawah model ancaman M5 — yang dihalangi pasien awam, bukan pasien teknis — kedua jalur berakhir di tempat yang sama, jadi yang lebih sederhana dan lebih murah yang menang.
+
+**Kapan keputusan ini layak ditinjau ulang:** bila kelak jaminan video perlu diperkuat, jalan yang benar adalah pindah ke layanan streaming yang memecah video menjadi segmen (Cloudflare Stream / Bunny Stream), **bukan** memproksi R2. Memproksi menambah biaya untuk perlindungan yang hampir tidak bertambah.
 
 **Gambar halaman ebook TIDAK ikut ke R2**, dan alasannya bukan konsistensi yang setengah-setengah. Egress gratis R2 tidak memberi apa pun untuk gambar halaman, sebab bytenya selalu mengalir lewat route kita untuk dibakari watermark — di mana pun ia disimpan, egress-nya adalah storage→server, bukan storage→pasien. Membiarkannya di Supabase Storage juga menjaga satu sifat berharga: **rantai ebook bisa dikerjakan tanpa kredensial pihak ketiga sama sekali.**
 
@@ -346,7 +356,7 @@ Urutannya: rantai 1 lebih dulu. Model data dan penugasan yang dibangun di sana d
 ## 14. Di Luar Scope
 
 - Watermark per-pasien yang dibakar ke dalam **video** — butuh encode ulang per pasien.
-- **Transkode video & kualitas adaptif (HLS/DASH).** Butuh ffmpeg; konsekuensinya pasien di koneksi lambat tersendat, dan videonya tetap satu berkas utuh. Inilah yang ditukar demi biaya nol di M5, dan inilah pintu yang dibuka kembali bila kelak jaminan video ingin diperkuat: pindah ke layanan streaming (Cloudflare Stream / Bunny Stream), bukan menambal R2.
+- **Transkode video & kualitas adaptif (HLS/DASH).** Butuh ffmpeg; konsekuensinya pasien di koneksi lambat tersendat, dan videonya tetap satu berkas utuh. Inilah yang ditukar demi biaya nol di M5. Jalan naiknya dijelaskan di §3: pindah ke layanan streaming, bukan menambal R2.
 - **Thumbnail video otomatis.** Layanan streaming menghasilkannya sendiri; penyimpanan objek tidak. Pemutar memakai frame pertama.
 - Unggah video multipart untuk berkas > 500 MB.
 - Cache gambar ber-watermark per (materi, halaman, pasien). Sengaja tidak dulu; ditambahkan hanya bila pemrosesan gambar terbukti menjadi masalah nyata.
