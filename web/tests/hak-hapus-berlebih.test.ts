@@ -1063,7 +1063,7 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
    * alasannya di daftar ini — bukan diam-diam mewarisinya dari Supabase.
    */
   /**
-   * Kosong, dan itu keputusan yang sudah dibayar sekali.
+   * Pernah kosong, dan itu keputusan yang sudah dibayar sekali.
    *
    * Daftar ini pernah berisi `material_chapters` & `material_videos` dengan
    * alasan "menghapus satu bab menghapus satu bab". Alasannya SALAH: filter
@@ -1075,8 +1075,21 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
    * Sebelum menambahkan nama ke daftar ini: hak tabel TIDAK pernah membatasi
    * JUMLAH baris yang bisa hilang dalam satu permintaan. Bila radius itu yang
    * dipedulikan, hak tabel bukan alatnya.
+   *
+   * `material_assignments` (Task 2, migration `materi_penugasan`) ditambahkan
+   * SADAR, bukan warisan default privileges — bentuk risikonya sama persis
+   * dengan chapters/videos dulu: DELETE tanpa filter atau berfilter tautologis
+   * bisa menyapu SELURUH penugasan, bukan satu pasangan materi-klien. Yang
+   * membedakannya: barisnya bukan konten tulisan tangan maupun bukti finansial
+   * (bandingkan honor_marks) — ia murni TAUTAN admin<->klien, dan pulih dari
+   * penyapuan itu adalah INSERT ulang yang persis sama, tanpa isi apa pun yang
+   * hilang selamanya. Panel admin penugasan belum ada di Task 2 (baru tabel &
+   * RLS-nya), jadi jalur RPC berparameter tunggal senada
+   * `hapus_bab_materi`/`lepas_video_materi` belum dibangun; itu jadi kandidat
+   * kuat begitu panel admin-nya ditulis, bila radius satu permintaan ini
+   * ternyata jadi perhatian nyata di pemakaian.
    */
-  const BOLEH_DELETE: string[] = [];
+  const BOLEH_DELETE: string[] = ["material_assignments"];
 
   it("tidak ada satu tabel pun yang masih memberi DELETE ke authenticated", async () => {
     const baris = await querySql<{ table_name: string }>(`
