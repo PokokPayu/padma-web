@@ -54,6 +54,18 @@ export async function terbitkanUrlUnggahHalaman(
       .remove(lama.map((o) => `${materiId}/${o.name}`));
   }
 
+  // Baris dikosongkan BERSAMAAN dengan objeknya. Menghapus objek saja membuat
+  // baris lama menunjuk objek yang sudah tidak ada: pasien melihat halaman rusak
+  // sementara panel admin menyatakan materi ini punya isi — persis keadaan yang
+  // paling sulit disadari. Konsekuensi yang diterima sadar: unggah ulang yang
+  // gagal di tengah MENGOSONGKAN materi sampai dicoba lagi. Itu terlihat, jujur,
+  // dan bisa dipulihkan dengan mengulang unggahan.
+  const { error: bersih } = await supabase.rpc("ganti_halaman_materi", {
+    p_material_id: materiId,
+    p_halaman: [],
+  });
+  if (bersih) return { ok: false, pesan: "Gagal menyiapkan unggahan. Coba lagi." };
+
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
     const objek = namaObjekHalaman(materiId, halaman);
