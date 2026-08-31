@@ -64,6 +64,30 @@ Keputusan diubah ke **R2** secara sadar, dengan model ancaman yang dinyatakan te
 
 Ganjarannya: R2 praktis gratis di skala PADMA — 10 GB penyimpanan gratis dan egress gratis, sementara video menyumbang ~40 GB egress sebulan yang justru akan mendorong tier Supabase naik bila di-host sendiri di sana.
 
+### Apa yang R2 berikan, dan apa yang TIDAK
+
+Perlu ditulis tepat, sebab "CDN untuk video" adalah frasa yang menggabungkan dua lapisan berbeda dan hampir selalu dijual sebagai satu paket:
+
+| Lapisan | Artinya | Design ini |
+|---|---|---|
+| Jaringan pengiriman | Byte disajikan dari lokasi dekat penonton | Sebagian — lihat di bawah |
+| Transkode + segmentasi | Video dipecah menjadi potongan HLS, banyak kualitas, token per segmen | **Tidak** — itulah yang dilepas di M5 |
+
+Tanpa pembedaan ini, pembaca berikutnya akan menyimpulkan design ini menolak CDN untuk video. Yang ditolak lapisan keduanya.
+
+Presigned URL kita menembak endpoint API S3 milik R2 (`<akun>.r2.cloudflarestorage.com`). Permintaan ke endpoint itu **tidak** ikut di-cache di edge Cloudflare per objek. Yang benar-benar didapat:
+
+- **Egress nol.** Ini penentu biaya utamanya, dan ia tidak bergantung pada caching sama sekali.
+- Disajikan dari infrastruktur global Cloudflare, tetapi **berasal dari region bucket**, bukan dari edge terdekat penonton.
+- **HTTP Range request berfungsi**, sehingga menggeser posisi video tidak menuntut mengunduh dari awal.
+
+Jalan naik bila pemutaran kelak terasa lambat, diurutkan dari perubahan terkecil:
+
+1. **Custom domain R2 + Cloudflare Worker yang memvalidasi token**, lalu menyajikan objek dari R2 binding. Ini menambahkan cache edge **tanpa** membuat bucket-nya publik. Harganya satu permukaan deployment baru.
+2. **Pindah ke layanan streaming** (Cloudflare Stream / Bunny Stream), bila yang dibutuhkan bukan hanya kecepatan melainkan juga kualitas adaptif dan jaminan tidak-bisa-diunduh.
+
+Yang **tidak** boleh dilakukan: memberi bucket custom domain publik demi mendapat caching. Itu membuat setiap objek dapat ditonton siapa pun selamanya — jauh lebih buruk daripada presigned URL berumur 2 jam.
+
 ### Kenapa video disajikan LANGSUNG dari R2, bukan diproksi
 
 Video disajikan langsung: browser pasien mengambil berkasnya dari R2 lewat presigned URL, dan bytenya tidak pernah menyentuh server PADMA.
@@ -172,12 +196,15 @@ Byte video tidak pernah masuk Supabase maupun server PADMA. Ia tinggal di bucket
 
 ```
 padma-materi-video   (R2, privat — TIDAK punya public bucket URL maupun custom domain publik)
+                     location hint: apac                 <-- pasien ada di Indonesia
                      objek: {material_id}/{acak}.{ext}   (nama acak, bukan nama berkas admin)
                      hanya MIME video/mp4 & video/webm yang diterima
                      maksimum 500 MB per berkas
 ```
 
 Bucket ini **tidak boleh** diberi akses publik dalam bentuk apa pun. Satu-satunya jalan masuk adalah presigned URL yang diterbitkan server kita.
+
+`location hint: apac` bukan detail kosmetik. Karena presigned URL tidak di-cache di edge (lihat §3), setiap potongan video diambil dari region bucket-nya. Bucket yang lahir dengan region default berada di Amerika Utara, dan itu membuat setiap pasien Indonesia membayar latensi lintas benua untuk setiap Range request. Gejalanya bukan error melainkan video yang selalu terasa lambat mulai — kelas kegagalan yang paling sulit didiagnosis belakangan, justru karena tidak ada yang merah.
 
 Yang tersimpan di basis data hanya `material_videos.objek` (kunci objek, bukan URL) dan `mime`.
 
