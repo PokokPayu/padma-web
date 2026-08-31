@@ -1116,12 +1116,17 @@ describe("route halaman — pagar yang dibaca dari sumbernya", () => {
     expect(SUMBER).toMatch(/download\(\s*baris\.objek\s*\)/);
   });
 
-  it("header cache private+no-store, dan TIDAK PERNAH s-maxage", () => {
-    // Watermark per-pasien: satu header cache yang salah membuat CDN menyajikan
-    // halaman pasien A kepada pasien B.
-    expect(SUMBER).toContain("private, no-store");
-    expect(SUMBER).not.toContain("s-maxage");
-    expect(SUMBER).not.toContain("public, max-age");
+  it("Cache-Control tepat: private untuk CDN, max-age untuk peramban pasien", () => {
+    // Diikat pada NILAI headernya, bukan pada seluruh berkas: satu komentar yang
+    // menyebut "public" atau "no-store" akan memerahkan asersi yang memindai
+    // seluruh sumber, dan test yang merah karena komentar akan dilemahkan
+    // orang berikutnya — lalu pagar aslinya ikut hilang.
+    const cache = SUMBER.match(/"Cache-Control":\s*"([^"]+)"/)?.[1] ?? "";
+    // `private` menutup CDN: watermark per-pasien, sementara CDN menyimpan
+    // berdasarkan URL. `max-age` membiarkan peramban pasien memakai ulang apa
+    // yang sudah ia unduh — tanpa itu ebook 60 halaman (~18 MB) diunduh ulang
+    // setiap kali pasien menggulir balik.
+    expect(cache).toBe("private, max-age=900");
   });
 
   it("menjawab 404 saat tidak berhak, bukan 401/403", () => {
@@ -1198,10 +1203,18 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "image/webp",
-      // Watermark-nya per-pasien. `s-maxage` di sini akan membuat CDN Vercel
-      // menyajikan halaman ber-watermark pasien A kepada pasien B — itu
+      // `private` MENGIKAT: watermark-nya per-pasien, sementara CDN menyimpan
+      // berdasarkan URL. `s-maxage` atau `public` di sini akan membuat CDN
+      // Vercel menyajikan halaman ber-watermark pasien A kepada pasien B — itu
       // kebocoran identitas, bukan bug tampilan.
-      "Cache-Control": "private, no-store",
+      //
+      // `max-age` disengaja ADA, bukan `no-store`: peramban pasien sendiri
+      // boleh memakai ulang halaman yang sudah ia unduh. Tanpa itu, ebook 60
+      // halaman (~18 MB) diunduh ulang setiap kali pasien menggulir balik dan
+      // watermark yang sama dibakar berulang — tanpa menambah keamanan apa pun,
+      // sebab pasien memang berhak melihatnya dan gambarnya ber-watermark
+      // namanya sendiri.
+      "Cache-Control": "private, max-age=900",
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -2244,7 +2257,7 @@ Ikuti bentuk `tests/e2e/admin-pelengkap.e2e.ts` (fungsi `catat`, penanda data uj
 1. Admin membuat materi ebook **tanpa layanan**, lalu mengunggah PDF 3 halaman hasil `buatPdfUji(3)` yang ditulis ke berkas sementara dan diisikan lewat `setInputFiles`. Panel menampilkan "3 halaman tersimpan".
 2. Klien uji **belum berhak**: `GET /api/materi/{id}/halaman/1` menjawab **404**, dan query REST `material_pages` mengembalikan **0 baris**.
 3. Materi itu **tidak muncul** di `/passport/materi` (aturan M10 — tanpa layanan dan belum di-assign).
-4. Admin meng-assign klien itu. Sekarang `GET .../halaman/1` menjawab **200** dengan `content-type: image/webp`, dan headernya memuat `private, no-store` serta **tidak** memuat `s-maxage`.
+4. Admin meng-assign klien itu. Sekarang `GET .../halaman/1` menjawab **200** dengan `content-type: image/webp`, dan headernya memuat `private` beserta `max-age=900`, serta **tidak** memuat `s-maxage` maupun `public`.
 5. Materi muncul di `/passport/materi` dan reader menampilkan tiga halaman.
 6. **Dua klien berbeda menerima byte yang berbeda** untuk halaman yang sama — bukti watermark dibakar, bukan dilapiskan.
 7. **Objek storage tidak bisa diambil langsung**: `GET {SUPABASE_URL}/storage/v1/object/materi-halaman/{objek}` dengan anon key maupun JWT klien harus gagal.
@@ -2289,8 +2302,11 @@ catat(
   `panjang ${a.byte.length} vs ${b.byte.length}; identik: ${a.byte.equals(b.byte)}`,
 );
 catat(
-  "4b. header cache private+no-store, tanpa s-maxage",
-  a.cache.includes("private") && a.cache.includes("no-store") && !a.cache.includes("s-maxage"),
+  "4b. cache private (CDN tertutup) dan peramban pasien boleh memakai ulang",
+  a.cache.includes("private") &&
+    a.cache.includes("max-age=900") &&
+    !a.cache.includes("s-maxage") &&
+    !a.cache.includes("public"),
   `cache-control: ${a.cache}`,
 );
 ```
@@ -2320,7 +2336,7 @@ git commit -m "test(e2e): rantai penuh materi PDF — gating, watermark, dan obj
 
 **Yang paling mudah salah di rencana ini**, diurutkan menurut biaya bila terlewat:
 
-1. **`Cache-Control` pada route halaman.** `private, no-store`, tanpa pengecualian. Watermark-nya per-pasien; satu `s-maxage` membuat CDN menyajikan halaman pasien A kepada pasien B.
+1. **`Cache-Control` pada route halaman:** `private, max-age=900`. `private` tidak boleh hilang dan `s-maxage`/`public` tidak boleh muncul — watermark-nya per-pasien, dan satu di antara dua kata itu membuat CDN menyajikan halaman pasien A kepada pasien B. `max-age` sebaliknya memang harus ADA: ia yang mencegah ebook 60 halaman diunduh ulang setiap kali pasien menggulir balik.
 2. **Urutan RLS lalu service role** di route halaman. Membalik urutannya berarti service role mengambil objek sebelum ada yang memeriksa hak — dan service role menembus semua pagar.
 3. **Nama policy saat menulis ulang.** Nama baru = policy lama tetap hidup berdampingan = celah tetap terbuka tanpa error.
 4. **`revoke` grant default pada tiga tabel baru.** Mudah terlewat karena tidak ada gejalanya sampai seseorang mencobanya.

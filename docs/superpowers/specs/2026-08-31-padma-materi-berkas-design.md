@@ -221,11 +221,15 @@ Halaman reader mengambil daftar halaman lewat query ber-RLS (`material_pages`), 
 2. Query `material_pages` untuk `(id, n)` **memakai sesi pengguna itu**, bukan service role. **RLS-lah hakim haknya, bukan `if` di kode kita.** Tidak ada baris → 404.
 3. Baru sesudah hak terbukti: service role mengunduh objek pada `objek` dari baris yang diloloskan RLS itu.
 4. Bakar watermark identitas pasien ke dalam gambar dengan `sharp`: teks `<nama> · <PADMA ID>` berulang secara diagonal (-24°), opasitas **0,08**, tinggi huruf **1,6% lebar halaman** sehingga terbaca setara di halaman ukuran apa pun. Sudut, opasitas, dan bunyi teksnya sengaja sama dengan komponen `Watermark` yang sudah ada, supaya tampilannya tidak berubah bagi pasien — yang berubah hanya bahwa kini ia ada **di dalam** gambar, bukan di atasnya.
-5. Kirim `image/webp` dengan `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`.
+5. Kirim `image/webp` dengan `Cache-Control: private, max-age=900`, `X-Content-Type-Options: nosniff`.
 
 Urutan langkah 2 dan 3 mengikat: service role menyentuh storage **hanya sesudah** basis data memutuskan.
 
-`private, no-store` juga bukan kehati-hatian berlebihan. Watermark-nya per-pasien; satu header cache yang salah membuat CDN Vercel menyajikan halaman ber-watermark pasien A kepada pasien B. Itu kebocoran rekam identitas, bukan bug tampilan. `s-maxage` **tidak boleh** pernah muncul di route ini, dan test menjaganya.
+**`private` adalah bagian yang mengikat, dan alasannya bukan penghematan.** Watermark-nya per-pasien, sementara CDN menyimpan berdasarkan URL: dua pasien yang meminta URL yang sama harus menerima byte yang berbeda. Satu halaman yang tersimpan di cache bersama akan disajikan kepada pasien lain lengkap dengan nama pasien pertama — itu kebocoran identitas, bukan bug tampilan. `s-maxage` dan `public` karena itu **tidak boleh** pernah muncul di route ini, dan test menjaganya.
+
+**`max-age=900` sengaja MENGIZINKAN cache peramban pasien sendiri.** Pilihan awal `no-store` ditolak sesudah dihitung: `no-store` juga melarang peramban pasien menyimpannya, sehingga ebook 60 halaman (~18 MB) diunduh ulang dari nol setiap kali pasien menggulir balik, dan server membakar watermark yang sama berulang kali. Itu tidak menambah keamanan apa pun — pasien memang berhak melihat halaman itu, dan yang tersimpan di perangkatnya ber-watermark namanya sendiri.
+
+Yang dilepas dengan sadar: gambar ber-watermark tertinggal di cache perangkat sampai 15 menit sesudah dibaca, sehingga bisa ditemukan orang lain yang memakai perangkat yang sama. Untuk audiens klinik yang mungkin memakai komputer keluarga, itu risiko nyata tapi kecil, dan isinya ber-watermark nama pasien itu sendiri.
 
 Deterrent tambahan di layar, yang jujur disebut deterrent: menu klik-kanan dimatikan, gambar tidak bisa di-drag, teks tidak bisa diseleksi.
 
@@ -332,7 +336,7 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 **Unit / integrasi (Vitest, terhadap Postgres lokal):**
 
 - Watermark: dua pasien berbeda pada halaman yang sama menghasilkan **byte yang berbeda**. Ini bukti bahwa watermark benar-benar dibakar, bukan lapisan CSS.
-- Header: route halaman mengirim tepat `private, no-store`, dan **tidak pernah** memuat `s-maxage`.
+- Header: route halaman memuat `private` dan **tidak pernah** memuat `s-maxage` maupun `public` — dua kata itulah yang akan membuat CDN menyimpan halaman ber-watermark satu pasien lalu menyajikannya ke pasien lain.
 - Path: route tidak pernah memakai nilai dari input sebagai path objek.
 - Gating: klien tanpa sesi `selesai` dan tanpa assignment mendapat **0 baris** `material_pages` lewat REST; sesudah di-assign, mendapat barisnya. Diuji lewat REST, bukan lewat UI.
 - `materials.aktif = false` menutup isi lewat REST, sementara baris `materials`-nya tetap terbaca (menghindari kelas bug `partner_publik`).
