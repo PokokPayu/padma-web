@@ -168,6 +168,7 @@ async function bersihkan() {
   const semua = [MATERI_EBOOK, MATERI_VIDEO, MATERI_KOSONG];
   await admin.from("material_videos").delete().in("material_id", semua);
   await admin.from("material_chapters").delete().in("material_id", semua);
+  await admin.from("material_services").delete().in("material_id", semua);
   await admin.from("materials").delete().in("id", semua);
   // Materi yang lahir dari action di berkas ini (id-nya digenerate basis data).
   const { data: sisa } = await admin
@@ -178,6 +179,7 @@ async function bersihkan() {
   if (idSisa.length > 0) {
     await admin.from("material_videos").delete().in("material_id", idSisa);
     await admin.from("material_chapters").delete().in("material_id", idSisa);
+    await admin.from("material_services").delete().in("material_id", idSisa);
     await admin.from("materials").delete().in("id", idSisa);
   }
 }
@@ -210,6 +212,12 @@ async function pasangFixture() {
       deskripsi: "fixture tanpa isi",
       aktif: false,
     },
+  ]);
+  // migration 20260831100000: material_services join table diperlukan untuk RLS gating
+  await admin.from("material_services").insert([
+    { material_id: MATERI_EBOOK, service_id: SVC_TERBUKA },
+    { material_id: MATERI_VIDEO, service_id: SVC_TERBUKA },
+    { material_id: MATERI_KOSONG, service_id: SVC_TERBUKA },
   ]);
   await admin.from("material_chapters").insert([
     { id: BAB_1, material_id: MATERI_EBOOK, urutan: 1, judul: "PAD-UJI Bab Satu", isi: "Isi bab satu." },
