@@ -81,12 +81,25 @@ Presigned URL kita menembak endpoint API S3 milik R2 (`<akun>.r2.cloudflarestora
 - Disajikan dari infrastruktur global Cloudflare, tetapi **berasal dari region bucket**, bukan dari edge terdekat penonton.
 - **HTTP Range request berfungsi**, sehingga menggeser posisi video tidak menuntut mengunduh dari awal.
 
-Jalan naik bila pemutaran kelak terasa lambat, diurutkan dari perubahan terkecil:
+### Jalan naik bila pemutaran kelak terasa lambat
 
-1. **Custom domain R2 + Cloudflare Worker yang memvalidasi token**, lalu menyajikan objek dari R2 binding. Ini menambahkan cache edge **tanpa** membuat bucket-nya publik. Harganya satu permukaan deployment baru.
-2. **Pindah ke layanan streaming** (Cloudflare Stream / Bunny Stream), bila yang dibutuhkan bukan hanya kecepatan melainkan juga kualitas adaptif dan jaminan tidak-bisa-diunduh.
+**Prasyarat sebelum menempuh salah satunya: UKUR dulu.** Latensi video belum pernah diukur dari Indonesia, dan menambah vendor untuk memperbaiki sesuatu yang belum terbukti bermasalah adalah kompleksitas spekulatif — setiap vendor tambahan adalah satu tempat lagi yang bisa salah konfigurasi. Yang diukur: waktu dari klik sampai frame pertama, dan waktu tunggu sesudah menggeser posisi.
+
+Satu hal yang **tidak** akan menolong, dan perlu ditulis supaya tidak dicoba: menaruh CDN biasa di depan presigned URL memberi **nol** manfaat. Setiap presigned URL punya tanda tangan berbeda di query string, jadi setiap permintaan adalah cache miss dan CDN-nya hanya menambah satu lompatan.
+
+Yang bisa bekerja, diurutkan dari perubahan terkecil:
+
+1. **Custom domain R2 + Cloudflare Worker yang memvalidasi token**, menyajikan objek dari R2 binding. Menambahkan cache edge tanpa membuat bucket publik.
+
+   **PERINGATAN yang harus diverifikasi lebih dulu:** Terms of Service Cloudflare membatasi penyajian konten video dalam jumlah besar lewat CDN mereka pada paket non-Enterprise. Design saat ini tidak menyentuh batasan itu karena presigned URL menembak endpoint API S3 milik R2, bukan memproksi lewat CDN — tetapi jalan naik ini justru memasukkan video ke jalur CDN Cloudflare. R2 kemungkinan dikecualikan (Cloudflare memasarkannya untuk media), tetapi itu **belum diverifikasi** dan tidak boleh dianggap pasti. Periksa ToS yang berlaku sebelum menempuh jalur ini.
+
+2. **CloudFront signed URL dengan R2 sebagai origin**, dengan tanda tangan **dikeluarkan dari cache key** sehingga satu objek di-cache sekali lalu melayani banyak permintaan bertanda tangan berbeda. Hasilnya privat, ter-cache di edge, dan tier "always free" CloudFront (~1 TB/bulan) melampaui kebutuhan PADMA; egress R2 ke CloudFront juga nol. Harganya: satu vendor keempat, sepasang kunci penanda tangan lagi, dan satu distribusi untuk dirawat.
+
+3. **Pindah ke layanan streaming** (Cloudflare Stream / Bunny Stream), bila yang dibutuhkan bukan hanya kecepatan melainkan juga kualitas adaptif dan jaminan tidak-bisa-diunduh.
 
 Yang **tidak** boleh dilakukan: memberi bucket custom domain publik demi mendapat caching. Itu membuat setiap objek dapat ditonton siapa pun selamanya — jauh lebih buruk daripada presigned URL berumur 2 jam.
+
+**Catatan tentang daftar "CDN gratis" di internet.** Kolom "mendukung video streaming" pada daftar semacam itu hampir selalu berarti "boleh menyalurkan berkas video", BUKAN "menyediakan transkode + segmentasi HLS". Tidak satu pun tier gratis yang ditemukan memberi transkode gratis, jadi keputusan M5 tidak berubah karena daftar mana pun. Harga dan ToS di daftar komunitas juga cepat basi — pakai sebagai petunjuk untuk diperiksa, bukan sebagai fakta.
 
 ### Kenapa video disajikan LANGSUNG dari R2, bukan diproksi
 
