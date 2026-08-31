@@ -53,6 +53,11 @@ insert into materials (id, service_id, judul, tipe, deskripsi) values
   ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106',
    'Panduan ASI Perah','ebook','E-book penyimpanan & penanganan ASI perah.');
 
+-- Migrasi data material_services: setiap materi lama menjadi tepat satu baris
+insert into material_services (material_id, service_id)
+select id, service_id from materials
+on conflict (material_id, service_id) do nothing;
+
 -- URL video hidup di tabel tergating `material_videos`, BUKAN di `materials`
 -- (lihat migration gate_material_video).
 insert into material_videos (material_id, url) values
