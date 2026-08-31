@@ -31,7 +31,9 @@ Bagian ini didahulukan karena seluruh design di bawah bergantung padanya, dan ka
 
 **Batas yang diterima secara sadar:**
 
-- **Video kurang bisa dilacak dibanding ebook.** Membakar watermark per-pasien ke video berarti meng-encode ulang seluruh video untuk setiap pasien — tidak proporsional untuk satu klinik. Video memakai lapisan watermark di layar, yang hilang bila pasien merekam layarnya. Konsekuensinya: **kebocoran video mungkin tidak bisa dilacak.**
+- **Video hanya dilindungi terhadap pasien awam, bukan terhadap pasien teknis.** Ini batas terbesar di seluruh design ini dan tidak boleh dihaluskan. Video disimpan sebagai satu berkas utuh di Cloudflare R2 dan disajikan lewat presigned URL berumur pendek. Pasien yang mengklik kanan tidak mendapat pilihan simpan, dan tidak ada tombol unduh di pemutarnya — tetapi pasien yang membuka DevTools dapat menemukan URL itu dan mengunduh videonya utuh selama URL-nya masih berlaku. **Jaminan "tidak ada berkas utuh yang bisa disalin" berlaku untuk ebook, TIDAK untuk video.**
+- **Kebocoran video tidak bisa dilacak.** Membakar watermark per-pasien ke video berarti meng-encode ulang seluruh video untuk setiap pasien — tidak proporsional untuk satu klinik. Video memakai lapisan watermark di layar, yang hilang begitu videonya diunduh atau layarnya direkam.
+- **Video tidak ditranskode, sehingga tidak ada kualitas adaptif.** Pasien di koneksi lambat menerima berkas dengan kualitas yang sama seperti pasien di koneksi cepat, dan akan tersendat. Ini konsekuensi langsung dari memilih penyimpanan objek alih-alih layanan streaming.
 - **Halaman ebook adalah gambar, bukan teks.** Teksnya tidak bisa disalin, tidak bisa dicari, dan **tidak terbaca pembaca layar**. Ini kerugian aksesibilitas yang nyata, dan ia adalah konsekuensi langsung dari syarat "tidak boleh ada teks yang bisa disebar utuh" — dua hal itu tidak bisa dimiliki sekaligus. Judul dan deskripsi materi tetap berupa teks sungguhan.
 - **Resolusi terkunci saat unggah.** Karena PDF asli tidak disimpan, merender ulang ke resolusi lebih tinggi menuntut admin mengunggah ulang.
 
@@ -43,8 +45,8 @@ Bagian ini didahulukan karena seluruh design di bawah bergantung padanya, dan ka
 | M2 | Tempat rasterisasi | **Browser admin** lewat PDF.js. Menghindari binary native (pdfium/poppler) yang merepotkan di Vercel serverless |
 | M3 | PDF asli | **Tidak disimpan sama sekali.** Berkas yang paling tidak boleh bocor sebaiknya tidak pernah ada di server kita |
 | M4 | Watermark ebook | **Dibakar per-pasien** ke dalam gambar halaman saat disajikan. Bukan lapisan CSS — lapisan CSS hilang saat gambar disimpan, sehingga kebocoran jadi tidak terlacak |
-| M5 | Bentuk video | Diunggah admin dari panel PADMA, lalu **disimpan & dialirkan Cloudflare Stream** dengan `requireSignedURLs` dan playback token berumur pendek |
-| M6 | Watermark video | Hanya lapisan di layar. Lihat batas yang diterima di §2 |
+| M5 | Bentuk video | Diunggah admin dari panel PADMA, disimpan sebagai berkas di **Cloudflare R2** (bucket privat), disajikan lewat **presigned URL berumur pendek**. Bukan layanan streaming — lihat alasan & konsekuensinya di bawah tabel |
+| M6 | Watermark video | Hanya lapisan di layar, dan ia hilang bila videonya diunduh. Lihat batas yang diterima di §2 |
 | M7 | Jalur berkas besar | Unggahan **tidak menumpang server kita** — langsung dari browser admin ke Supabase Storage (gambar halaman) dan ke Cloudflare (video). Batas body request Vercel 4,5 MB |
 | M8 | Materi terbuka | **Otomatis** bila ada sesi `selesai` pada salah satu layanan materi itu, **atau** di-assign eksplisit ke klien tersebut. Satu policy dengan OR |
 | M9 | Materi ↔ Layanan | **Banyak-ke-banyak dan opsional.** `materials.service_id` dihapus, diganti `material_services`. Materi boleh lahir tanpa layanan — admin wajar ingin menumpuk bahan dulu |
@@ -53,6 +55,18 @@ Bagian ini didahulukan karena seluruh design di bawah bergantung padanya, dan ka
 ### Kenapa M8 mempertahankan jalur otomatis
 
 Permintaan awalnya adalah penugasan manual saja. Jalur otomatis dipertahankan karena mode kegagalannya berbeda kelas: admin yang lupa meng-assign tidak menghasilkan error, peringatan, maupun gejala apa pun — hanya pasien yang diam-diam tidak pernah melihat materinya, dan tidak ada seorang pun yang tahu. Jalur otomatis adalah jaring untuk kelalaian itu; penugasan manual di atasnya memberi admin kendali penuh tanpa menghapus jaringnya.
+
+### Kenapa M5 memilih penyimpanan objek, bukan layanan streaming
+
+Pilihan awal design ini adalah Cloudflare **Stream**, yang mentranskode video menjadi HLS tersegmentasi sehingga tidak pernah ada satu berkas utuh yang bisa disalin. Itu satu-satunya cara jaminan "tidak bisa diunduh" bertahan penuh pada video. Biayanya ~$5–10/bulan.
+
+Keputusan diubah ke **R2** secara sadar, dengan model ancaman yang dinyatakan terbuka: **yang perlu dihalangi adalah pasien awam, bukan pasien teknis.** Pasien yang tidak menemukan tombol unduh dan tidak mendapat menu klik-kanan sudah berhenti di situ, dan itu mencakup hampir seluruh pasien klinik. Pasien yang membuka DevTools berada di kategori berbeda dan tidak dianggap sebagai lawan yang harus dikalahkan.
+
+Ganjarannya: R2 praktis gratis di skala PADMA — 10 GB penyimpanan gratis dan egress gratis, sementara video menyumbang ~40 GB egress sebulan yang justru akan mendorong tier Supabase naik bila di-host sendiri di sana.
+
+Yang harus dicatat karena mudah dilupakan: **egress gratis R2 hanya berlaku bila pasien mengambil berkasnya langsung dari R2.** Memproksinya lewat route kita demi menyembunyikan URL akan memindahkan egress itu menjadi bandwidth Vercel dan menghapus seluruh keunggulan biayanya, sambil menambah beban durasi eksekusi fungsi untuk menyalurkan video panjang. Jalur R2 yang paling murah memang jalur yang paling tidak terlindungi, dan design ini memilih jalur murah itu dengan mata terbuka.
+
+**Gambar halaman ebook TIDAK ikut ke R2**, dan alasannya bukan konsistensi yang setengah-setengah. Egress gratis R2 tidak memberi apa pun untuk gambar halaman, sebab bytenya selalu mengalir lewat route kita untuk dibakari watermark — di mana pun ia disimpan, egress-nya adalah storage→server, bukan storage→pasien. Membiarkannya di Supabase Storage juga menjaga satu sifat berharga: **rantai ebook bisa dikerjakan tanpa kredensial pihak ketiga sama sekali.**
 
 ### Kenapa M10 mengubah tampilan klien
 
@@ -105,10 +119,16 @@ create table material_assignments (
 ### Yang berubah
 
 ```sql
-alter table material_videos rename column url to stream_uid;
+alter table material_videos rename column url to objek;
+alter table material_videos add  column mime text not null default 'video/mp4'
+  check (mime in ('video/mp4', 'video/webm'));
 ```
 
-Kolomnya berhenti menjadi URL dan menjadi UID Cloudflare Stream. Namanya ikut berganti karena nama yang berbohong tentang isinya adalah bug yang menunggu.
+Kolomnya berhenti menjadi URL dan menjadi **kunci objek di bucket R2** — bentuk yang sama dengan `material_pages.objek`, dan dengan alasan yang sama: kunci objek tanpa hak akses bucket tidak berguna bagi siapa pun, sementara URL yang terbaca lewat RLS langsung menjadi tautan siap sebar.
+
+Namanya sengaja `objek`, bukan `stream_uid`. Nama kedua itu menyebut vendor dan teknologi yang tidak lagi dipakai, dan nama yang berbohong tentang isinya adalah bug yang menunggu — kelas kesalahan yang persis sudah terjadi di proyek ini lewat `materials.video_url`.
+
+`mime` disimpan karena tanpa transkode, berkas datang apa adanya: peramban perlu diberi tahu tipenya, dan `check` constraint-nya menjaga agar hanya dua tipe yang benar-benar didukung `<video>` yang bisa masuk.
 
 ### Kenapa `material_pages` menyimpan path, bukan URL
 
@@ -138,7 +158,20 @@ Bucket ini privat **dan sengaja tidak diberi policy `storage.objects` untuk pera
 
 ### Video
 
-Byte video tidak pernah masuk Supabase maupun server PADMA. Yang tersimpan di basis data hanya `material_videos.stream_uid`.
+Byte video tidak pernah masuk Supabase maupun server PADMA. Ia tinggal di bucket R2 privat:
+
+```
+padma-materi-video   (R2, privat — TIDAK punya public bucket URL maupun custom domain publik)
+                     objek: {material_id}/{acak}.{ext}   (nama acak, bukan nama berkas admin)
+                     hanya MIME video/mp4 & video/webm yang diterima
+                     maksimum 500 MB per berkas
+```
+
+Bucket ini **tidak boleh** diberi akses publik dalam bentuk apa pun. Satu-satunya jalan masuk adalah presigned URL yang diterbitkan server kita.
+
+Yang tersimpan di basis data hanya `material_videos.objek` (kunci objek, bukan URL) dan `mime`.
+
+Nama objeknya **acak, bukan nama berkas yang diunggah admin**. Nama asli sering memuat hal yang tidak perlu ikut tersebar — judul draf, nama orang, nomor revisi — dan nama acak juga menutup kemungkinan menebak objek lain di bucket yang sama.
 
 ## 6. Alur Unggah (Panel Admin)
 
@@ -157,15 +190,14 @@ Kegagalan di tengah karena itu tidak pernah menghasilkan materi setengah terisi:
 
 ### Video
 
-1. Admin memilih berkas video.
-2. Server action memanggil Cloudflare `stream/direct_upload` dengan `requireSignedURLs: true`, menerima `uploadURL` + `uid`.
-3. Browser mengunggah berkas langsung ke `uploadURL`.
-4. Server action menyimpan `uid` ke `material_videos.stream_uid`.
-5. Cloudflare memproses secara asinkron. Panel admin menampilkan keadaan "masih diproses" berdasarkan status yang dibaca dari Cloudflare, dan reader pasien menanganinya juga.
+1. Admin memilih berkas video. Browser menolak lebih dulu apa pun yang bukan `video/mp4` atau `video/webm`, atau yang lebih besar dari **500 MB**, dengan pesan yang menyebut angkanya.
+2. Browser **memeriksa posisi atom `moov`** pada MP4 dengan membaca struktur box di awal berkas. Bila `moov` berada di akhir (bukan "faststart"), admin **diperingatkan** — bukan diblokir — bahwa video akan lambat mulai diputar karena peramban harus mengunduh seluruh berkas dulu. Karena design ini tidak mentranskode apa pun, ini satu-satunya kesempatan menangkap masalah itu, dan membiarkannya lolos berarti pasien melihat pemutar yang menggantung tanpa sebab yang jelas.
+3. Server action `requireRole(["admin","owner"])` menerbitkan **presigned PUT URL** ke R2 untuk objek yang **path-nya ditentukan server**, lalu browser mengunggah berkas langsung ke URL itu. Berkasnya tidak menumpang server kita.
+4. Setelah unggahan sukses, satu server action menyimpan nama objek + MIME ke `material_videos`.
 
-**`requireSignedURLs: true` wajib di setiap video.** Tanpanya, `uid` saja sudah cukup menjadi URL publik yang bisa ditonton siapa pun.
+Tidak ada tahap pemrosesan asinkron: begitu unggahan selesai, videonya siap ditonton. Ini penyederhanaan nyata dibanding layanan streaming — dan sekaligus alasan tidak ada kualitas adaptif.
 
-**Verifikasi API Cloudflare adalah tugas implementasi pertama.** Nama medan dan bentuk respons di atas berasal dari pemahaman umum API-nya, bukan dari pengujian terhadap akun sungguhan — dan tanpa kredensial ia tidak bisa diuji. Tugas pertama rencana implementasi karena itu adalah spike terhadap akun Cloudflare nyata untuk memastikan bentuk request/response, cara menandatangani playback token, dan perilaku `readyToStream`. Detail di dokumen ini tunduk pada hasil spike itu.
+**Verifikasi API R2 adalah tugas implementasi pertama rantai video.** R2 memakai API yang kompatibel dengan S3, dan bentuk presigned URL beserta perilaku Range request-nya harus dipastikan terhadap bucket sungguhan sebelum sisanya dibangun. Tanpa kredensial ia tidak bisa diuji, jadi detail di dokumen ini tunduk pada hasil spike itu.
 
 ## 7. Alur Baca (Passport Pasien)
 
@@ -189,9 +221,19 @@ Deterrent tambahan di layar, yang jujur disebut deterrent: menu klik-kanan dimat
 
 ### Video
 
-Server component membuat playback token untuk `stream_uid`, lalu merender player Cloudflare dengan token itu, ditumpuk lapisan watermark identitas pasien.
+Server component **memeriksa hak lewat query ber-RLS ke `material_videos`** — sama seperti route halaman ebook, RLS-lah hakimnya. Hanya sesudah barisnya kembali, ia menerbitkan **presigned GET URL** ke R2 untuk objek pada baris itu, lalu merender `<video>` yang menunjuk URL tersebut, ditumpuk lapisan watermark identitas pasien.
 
-**Umur token: 4 jam.** Angkanya adalah kompromi dua arah yang perlu disebut terbuka. Terlalu pendek, token kedaluwarsa di tengah tontonan dan permintaan segmen HLS mulai gagal — pasien melihat video macet tanpa sebab yang jelas. Terlalu panjang, token yang dibocorkan bisa dipakai orang lain selama sisa umurnya. Empat jam menampung video terpanjang yang realistis untuk materi klinik berikut jeda pause, sambil menutup jendela penyalahgunaannya dalam hitungan jam, bukan hari. Token diterbitkan ulang setiap kali halaman reader dibuka, jadi pasien sendiri tidak pernah menyentuh batas itu.
+Video disajikan **langsung dari R2 ke pasien**, tidak diproksi. Itu memang yang membuatnya gratis, dan sekaligus yang membuat URL-nya bisa ditemukan lewat DevTools — konsekuensi yang diterima di §2.
+
+**Umur presigned URL: 2 jam.** Kompromi dua arahnya perlu disebut terbuka. Terlalu pendek, URL kedaluwarsa di tengah tontonan dan pemutar berhenti tanpa sebab yang jelas bagi pasien, terutama bila ia mem-pause lama. Terlalu panjang, URL yang tersebar bisa dipakai siapa pun selama sisa umurnya. Dua jam menampung satu sesi menonton berikut jeda, sambil menutup jendelanya dalam hitungan jam, bukan hari. URL diterbitkan ulang setiap kali halaman reader dibuka, jadi pasien yang memuat ulang selalu mendapat yang baru.
+
+**Pengerasan pemutar**, yang jujur disebut deterrent dan bukan proteksi:
+
+- `controlsList="nodownload"` menghilangkan tombol unduh dari pemutar bawaan Chrome & Edge.
+- `disablePictureInPicture` menutup jalur pintas yang sering dilupakan.
+- Menu klik-kanan pada elemen `<video>` dimatikan. Ini yang menutup **"Save Video As…"** di Firefox dan Safari, yang tidak menghormati `controlsList` — tanpa ini, pertahanan terhadap pasien awam justru bocor tepat di dua peramban itu.
+
+Ketiganya bersama-sama berarti pasien awam tidak menemukan satu pun jalan unduh di antarmuka. Itu batas jaminannya, dan tidak lebih dari itu.
 
 ## 8. Keamanan
 
@@ -203,7 +245,10 @@ Pagar di bawah sebagian besar adalah pelajaran mahal dari proyek ini sendiri, bu
 - **Tabel baru lahir tanpa RLS, dan `authenticated` mendapat SELECT/INSERT/UPDATE secara default.** Ketiga tabel baru harus mengaktifkan RLS dan mencabut grant default itu secara eksplisit di migrasinya. Ini sudah pernah terlewat di proyek ini.
 - **Grant kolom mengikat pada KEHADIRAN kolom di payload, sementara trigger mengikat pada PERUBAHAN NILAI.** Pelajaran ini berlaku di sini: mengamankan `material_assignments.ditugaskan_oleh` dilakukan dengan trigger yang memaksanya `= auth.uid()`, bukan dengan mencabut grant kolom — mencabut grant kolom sudah tiga kali mematahkan `select *` di proyek ini.
 - **PostgREST menjawab HTTP 200 + `[]` untuk UPDATE yang ditolak RLS**, bukan error. Setiap action penugasan wajib `.select("id")` dan memeriksa panjangnya.
-- **Kredensial Cloudflare tidak pernah ber-prefix `NEXT_PUBLIC_`.** Token API-nya bisa menghapus seluruh video pustaka; ia hanya hidup di server.
+- **Kunci R2 tidak pernah ber-prefix `NEXT_PUBLIC_`.** Ia bisa membaca dan menghapus seluruh pustaka video; ia hanya hidup di server.
+- **Presigned URL adalah tautan unduhan, dan diperlakukan sebagai rahasia berumur pendek.** Ia tidak boleh masuk log, tidak boleh masuk pesan galat yang tampil ke pasien, dan tidak boleh disimpan di basis data. Yang tersimpan hanya kunci objeknya; URL-nya lahir per permintaan dan mati bersama umurnya.
+- **Hak video diperiksa lewat RLS sebelum URL diterbitkan.** Presigned URL dibuat service role, jadi ia menembus segala pagar — karena itu ia hanya boleh dibuat sesudah query ber-RLS mengembalikan barisnya. Urutan ini sama mengikatnya dengan urutan pada route halaman ebook.
+- **Bucket R2 tidak boleh punya akses publik dalam bentuk apa pun** — bukan public bucket URL, bukan custom domain publik. Satu setelan itu saja akan membuat seluruh pustaka video terbuka untuk siapa pun tanpa satu pun baris kode berubah.
 - **Money firewall.** Tidak satu pun kolom baru memuat kata yang dipindai `tests/money-firewall-struktural.test.ts` (`bayar|harga|honor|tarif|biaya|total|nominal|amount|price|fee|rate|cost|payment`). Ini diperiksa, bukan diasumsikan.
 - **`material_assignments` tidak boleh dibaca klien sama sekali.** Ia hanya perlu dievaluasi di dalam policy isi materi. Klien tidak butuh tahu alasan materinya terbuka, dan tidak memberi hak baca berarti satu permukaan lebih sedikit.
 - **`material_services` boleh dibaca setiap pengguna login**, persis seperti `materials.service_id` yang digantikannya. Tidak ada perluasan keterbukaan di sini — hanya bentuknya yang berubah.
@@ -227,7 +272,7 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 
 ### Panel admin
 
-- **Daftar materi** — menandai materi tanpa layanan dengan label **"Tanpa layanan · hanya lewat assign"**, dan menandai materi tanpa isi (0 halaman / belum ada `stream_uid`) sebagai **"Belum ada isi"**. Keduanya keadaan yang harus terlihat, bukan tersembunyi.
+- **Daftar materi** — menandai materi tanpa layanan dengan label **"Tanpa layanan · hanya lewat assign"**, dan menandai materi tanpa isi (0 halaman / belum ada objek video) sebagai **"Belum ada isi"**. Keduanya keadaan yang harus terlihat, bukan tersembunyi.
 - **Formulir materi** — judul, tipe, deskripsi, **pilihan layanan berganda yang opsional**, dan medan isi sesuai tipe: input PDF untuk ebook, input video untuk video. Formulir tetap satu langkah (metadata + isi bersama), mengikuti alasan yang sudah tercatat di formulir yang ada: materi yang tersimpan tanpa isi terkunci selamanya tanpa satu pun error.
 - **Penugasan pasien** — di halaman materi: daftar pasien yang di-assign, plus pencarian untuk menambah. Ditampilkan juga (bacaan saja) pasien yang sudah otomatis berhak lewat layanan, supaya admin tidak meng-assign ulang sesuatu yang sudah terbuka.
 - **Halaman layanan** — daftar bacaan "materi yang termasuk layanan ini", supaya konfigurasinya bisa dilihat dari sisi layanan meski dikelola dari sisi materi.
@@ -236,7 +281,7 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 
 - **Daftar materi** — mengikuti M10.
 - **Reader ebook** — halaman berurutan, lazy-load, dengan penunjuk "halaman n dari N". Watermark sudah ada di dalam gambar.
-- **Reader video** — player Cloudflare + lapisan watermark; keadaan "masih diproses" bila Cloudflare belum siap.
+- **Reader video** — elemen `<video>` yang dikeraskan (`controlsList="nodownload"`, `disablePictureInPicture`, menu klik-kanan dimatikan) + lapisan watermark identitas.
 
 ## 10. Error Handling & Empty State
 
@@ -246,9 +291,11 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 | PDF gagal dibaca PDF.js (rusak/terenkripsi) | Pesan yang menyebut sebabnya; tidak ada yang tersimpan |
 | Unggahan gagal di tengah | Tidak ada baris halaman tercatat; materi berstatus "Belum ada isi" di panel admin. Admin mengulang dari awal |
 | Materi tanpa isi dibuka pasien yang berhak | Halaman ramah "isi materi sedang disiapkan", bukan 404 dan bukan reader kosong |
-| Video belum selesai diproses Cloudflare | "Video sedang diproses, coba beberapa menit lagi" |
+| Berkas video bukan MP4/WebM, atau > 500 MB | Ditolak di browser sebelum apa pun terkirim, dengan pesan yang menyebut batasnya |
+| MP4 tanpa faststart (`moov` di akhir) | Admin **diperingatkan**, tidak diblokir: video akan lambat mulai diputar |
 | Pasien tidak berhak membuka route halaman | 404, tanpa membedakan "tidak ada" dari "tidak berhak" |
-| Cloudflare tidak bisa dihubungi saat membuat token | Reader menampilkan galat yang bisa dicoba ulang; sisa passport tetap jalan |
+| R2 tidak bisa dihubungi saat menerbitkan presigned URL | Reader menampilkan galat yang bisa dicoba ulang; sisa passport tetap jalan. Pesan galatnya **tidak memuat URL maupun kunci objek** |
+| Presigned URL kedaluwarsa di tengah tontonan | Pemutar berhenti; pasien memuat ulang halaman dan mendapat URL baru. Disebut di UI sebagai saran memuat ulang, bukan dibiarkan diam |
 
 ## 11. Testing
 
@@ -268,7 +315,9 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 
 Rantai penuh: admin mengunggah PDF kecil yang dibuat oleh test itu sendiri → pasien tanpa hak menerima **404** di route halaman → admin meng-assign → pasien menerima **200** → dua pasien berbeda menerima gambar ber-byte berbeda → **URL storage langsung ke objeknya gagal**.
 
-Video dipisahkan ke skrip tersendiri yang **melewatkan dirinya** bila kredensial Cloudflare tidak ada, supaya suite tetap bisa jalan di mesin tanpa akun Cloudflare.
+Video dipisahkan ke skrip tersendiri yang **melewatkan dirinya** bila kredensial R2 tidak ada, supaya suite tetap bisa jalan di mesin tanpa akun Cloudflare. Yang dibuktikannya: pasien tanpa hak **tidak pernah menerima presigned URL** (bukan sekadar tidak melihat pemutar), pasien berhak menerima URL yang benar-benar bisa diputar, dan objek R2 **tidak bisa diambil tanpa tanda tangan**.
+
+Satu test yang wajib ada dan mudah terlupa: **presigned URL tidak boleh muncul di log server maupun di pesan galat.** Ia tautan unduhan; membocorkannya ke log berarti membocorkan videonya ke siapa pun yang bisa membaca log.
 
 ## 12. Env & Konfigurasi
 
@@ -276,26 +325,30 @@ Seluruhnya **server-only**; tidak satu pun ber-prefix `NEXT_PUBLIC_`.
 
 | Variabel | Guna |
 |---|---|
-| `CF_ACCOUNT_ID` | Akun Cloudflare pemilik pustaka Stream |
-| `CF_STREAM_API_TOKEN` | Membuat direct-upload URL & membaca status video |
-| `CF_STREAM_CUSTOMER_CODE` | Subdomain pemutar (`customer-<code>.cloudflarestream.com`) |
-| `CF_STREAM_KEY_ID` | ID kunci penanda tangan playback token |
-| `CF_STREAM_KEY_JWK` | Kunci privat penanda tangan playback token |
+| `R2_ACCOUNT_ID` | Akun Cloudflare pemilik bucket |
+| `R2_BUCKET_VIDEO` | Nama bucket video (privat) |
+| `R2_ACCESS_KEY_ID` | Kunci akses S3-compatible |
+| `R2_SECRET_ACCESS_KEY` | Rahasia akses S3-compatible |
 
-Dependensi baru: `pdfjs-dist` (browser admin, rasterisasi) dan `sharp` (server, membakar watermark).
+Kunci R2 di atas bisa membaca **dan menghapus** seluruh pustaka video, jadi ia hanya hidup di server. Bila Cloudflare mengizinkan, terbitkan token yang dilingkup hanya ke bucket ini — bukan token akun penuh.
+
+Dependensi baru: `pdfjs-dist` (browser admin, rasterisasi), `sharp` (server, membakar watermark), dan klien S3 untuk R2 (`@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`) — hanya dipakai rantai video.
 
 ## 13. Catatan Lingkup untuk Rencana Implementasi
 
 Design ini sengaja menutupi dua rantai yang **saling bebas**, dan keduanya sebaiknya menjadi dua rencana implementasi terpisah:
 
 1. **Rantai ebook PDF** — migrasi model data (termasuk pembongkaran `material_chapters` dan `materials.service_id`), bucket, rasterisasi di browser admin, route halaman ber-watermark, reader pasien, penugasan, dan aturan tampilan M10. Rantai ini **tidak butuh kredensial pihak ketiga mana pun**, jadi ia bisa selesai dan terbukti utuh lebih dulu.
-2. **Rantai video Cloudflare** — spike API, unggah direct, playback token, reader video. Rantai ini **terhenti tanpa akun Cloudflare**, jadi menaruhnya di rencana yang sama akan membuat seluruh pekerjaan menunggu satu kredensial.
+2. **Rantai video R2** — spike API S3-compatible, presigned PUT untuk unggah, presigned GET untuk tonton, pemeriksaan `moov`, pengerasan pemutar. Rantai ini **terhenti tanpa akun Cloudflare + bucket R2**, jadi menaruhnya di rencana yang sama akan membuat seluruh pekerjaan menunggu satu kredensial — walaupun kredensialnya gratis.
 
 Urutannya: rantai 1 lebih dulu. Model data dan penugasan yang dibangun di sana dipakai ulang oleh rantai 2, dan `material_videos` yang ada sekarang tetap berfungsi dengan URL penyedia sampai rantai 2 dikerjakan.
 
 ## 14. Di Luar Scope
 
 - Watermark per-pasien yang dibakar ke dalam **video** — butuh encode ulang per pasien.
+- **Transkode video & kualitas adaptif (HLS/DASH).** Butuh ffmpeg; konsekuensinya pasien di koneksi lambat tersendat, dan videonya tetap satu berkas utuh. Inilah yang ditukar demi biaya nol di M5, dan inilah pintu yang dibuka kembali bila kelak jaminan video ingin diperkuat: pindah ke layanan streaming (Cloudflare Stream / Bunny Stream), bukan menambal R2.
+- **Thumbnail video otomatis.** Layanan streaming menghasilkannya sendiri; penyimpanan objek tidak. Pemutar memakai frame pertama.
+- Unggah video multipart untuk berkas > 500 MB.
 - Cache gambar ber-watermark per (materi, halaman, pasien). Sengaja tidak dulu; ditambahkan hanya bila pemrosesan gambar terbukti menjadi masalah nyata.
 - Lapisan teks ebook untuk pencarian & pembaca layar — ditolak sadar di §2 karena mengembalikan teks yang bisa disebar utuh.
 - Merender ulang PDF ke resolusi lain tanpa unggah ulang — konsekuensi M3.
