@@ -1081,13 +1081,17 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
    * dengan chapters/videos dulu: DELETE tanpa filter atau berfilter tautologis
    * bisa menyapu SELURUH penugasan, bukan satu pasangan materi-klien. Yang
    * membedakannya: barisnya bukan konten tulisan tangan maupun bukti finansial
-   * (bandingkan honor_marks) — ia murni TAUTAN admin<->klien, dan pulih dari
-   * penyapuan itu adalah INSERT ulang yang persis sama, tanpa isi apa pun yang
-   * hilang selamanya. Panel admin penugasan belum ada di Task 2 (baru tabel &
-   * RLS-nya), jadi jalur RPC berparameter tunggal senada
-   * `hapus_bab_materi`/`lepas_video_materi` belum dibangun; itu jadi kandidat
-   * kuat begitu panel admin-nya ditulis, bila radius satu permintaan ini
-   * ternyata jadi perhatian nyata di pemakaian.
+   * (bandingkan honor_marks) — ia murni TAUTAN admin<->klien. Itu TIDAK berarti
+   * penyapuan itu tanpa ongkos: tidak ada tabel riwayat/audit di belakangnya,
+   * jadi "pulih" berarti admin menulis ulang penugasan dari ingatannya sendiri
+   * atau catatan eksternal — bukan jaring pengaman basis data. Yang membuatnya
+   * tetap beda kelas dari chapters/videos hanyalah SIFAT kehilangannya: status
+   * akses yang bisa (walau merepotkan) disusun ulang manusia, bukan teks
+   * karangan atau bukti bayar yang lenyap permanen begitu barisnya hilang.
+   * Panel admin penugasan belum ada di Task 2 (baru tabel & RLS-nya), jadi
+   * jalur RPC berparameter tunggal senada `hapus_bab_materi`/`lepas_video_materi`
+   * belum dibangun; itu jadi kandidat kuat begitu panel admin-nya ditulis, bila
+   * radius satu permintaan ini ternyata jadi perhatian nyata di pemakaian.
    */
   const BOLEH_DELETE: string[] = ["material_assignments"];
 
