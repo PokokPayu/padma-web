@@ -13,13 +13,27 @@ describe("route halaman — pagar yang dibaca dari sumbernya", () => {
     expect(SUMBER).toMatch(/export const runtime = ["']nodejs["']/);
   });
 
-  it("hak diputuskan RLS lewat sesi pengguna, BUKAN service role", () => {
-    const posisiSesi = SUMBER.indexOf("createServerSupabase");
-    const posisiAdmin = SUMBER.indexOf("createAdminSupabase");
-    expect(posisiSesi).toBeGreaterThan(-1);
-    expect(posisiAdmin).toBeGreaterThan(-1);
-    // Service role hanya boleh menyentuh storage SESUDAH basis data memutuskan.
-    expect(posisiSesi).toBeLessThan(posisiAdmin);
+  it("hak diputuskan RLS lewat sesi pengguna SEBELUM service role menyentuh storage", () => {
+    // Diikat pada BADAN fungsi, bukan seluruh berkas: `indexOf` atas seluruh
+    // sumber menemukan baris IMPORT, sehingga asersinya hanya mencerminkan urutan
+    // import dan tetap hijau walau kedua pemanggilan di dalam GET ditukar —
+    // persis properti yang seharusnya ia jaga.
+    const badan = SUMBER.slice(SUMBER.indexOf("export async function GET"));
+    const sesi = badan.indexOf("createServerSupabase(");
+    const query = badan.indexOf('.from("material_pages")');
+    const admin = badan.indexOf("createAdminSupabase(");
+    const unduh = badan.indexOf(".download(");
+
+    expect(sesi).toBeGreaterThan(-1);
+    expect(query).toBeGreaterThan(-1);
+    expect(admin).toBeGreaterThan(-1);
+    expect(unduh).toBeGreaterThan(-1);
+
+    // Urutannya ADALAH properti keamanannya: sesi pengguna -> RLS memutuskan ->
+    // baru service role mengunduh objeknya.
+    expect(sesi).toBeLessThan(query);
+    expect(query).toBeLessThan(admin);
+    expect(admin).toBeLessThan(unduh);
   });
 
   it("path objek diambil dari baris DB, tidak pernah dari parameter", () => {
