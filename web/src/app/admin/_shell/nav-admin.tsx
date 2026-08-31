@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MenuAkun } from "@/app/_shell/menu-akun";
 import { Lotus } from "@/app/_landing/lotus";
 import type { Antrean } from "@/lib/admin/antrean";
 
@@ -162,7 +163,15 @@ function Badge({ jumlah, gelap }: { jumlah: number; gelap: boolean }) {
   );
 }
 
-export function NavAdmin({ antrean }: { antrean: Antrean }) {
+export function NavAdmin({
+  antrean,
+  nama,
+  peran,
+}: {
+  antrean: Antrean;
+  nama: string;
+  peran: string;
+}) {
   const pathname = usePathname();
   return (
     <>
@@ -189,6 +198,10 @@ export function NavAdmin({ antrean }: { antrean: Antrean }) {
             </Link>
           );
         })}
+
+        {/* Pemisah: yang di kanan bukan tab, melainkan identitas & jalan keluar. */}
+        <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-black/10" />
+        <MenuAkun nama={nama} peran={peran} />
       </nav>
 
       {/* Bottom bar mobile */}

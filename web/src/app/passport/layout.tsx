@@ -22,20 +22,9 @@ export default async function PassportLayout({
   return (
     <div className="min-h-screen bg-paper">
       <div className="mx-auto max-w-3xl px-4 pb-36 pt-8 sm:pb-16">
-        <div className="mb-5 flex items-center justify-between">
-          <span className="text-[13px] text-ink-soft">
-            Masuk sebagai <b className="text-ink">{klien.nama}</b> · Klien
-          </span>
-          {/* Logout tetap <form method="post">: navigasi dokumen penuh
-              menghapus Client Cache. Jangan diganti navigasi sisi klien —
-              sisa data passport pemakai sebelumnya bisa ikut tertinggal. */}
-          <form action="/auth/keluar" method="post">
-            <button className="text-[13px] font-bold text-leaf underline underline-offset-4">
-              Keluar
-            </button>
-          </form>
-        </div>
-        <NavPassport />
+        {/* Identitas & jalan keluar kini di dalam kartu nav (MenuAkun), bukan
+            strip terpisah di atasnya. Di mobile jalan keluarnya ada di Profil. */}
+        <NavPassport nama={klien.nama} />
         {children}
       </div>
     </div>

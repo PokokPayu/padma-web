@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MenuAkun } from "@/app/_shell/menu-akun";
 import { Lotus } from "@/app/_landing/lotus";
 
 type Ikon = "lotus" | "rekap" | "tarif" | "admin";
@@ -79,7 +80,7 @@ export function aktifkan(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function NavOwner() {
+export function NavOwner({ nama }: { nama: string }) {
   const pathname = usePathname();
   return (
     <>
@@ -114,6 +115,10 @@ export function NavOwner() {
           <Ikon jenis="admin" className="h-4 w-4" />
           {PULANG.label} →
         </Link>
+
+        {/* Pemisah: yang di kanan bukan tab, melainkan identitas & jalan keluar. */}
+        <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-black/10" />
+        <MenuAkun nama={nama} peran="Owner" />
       </nav>
 
       {/* Bottom bar mobile */}

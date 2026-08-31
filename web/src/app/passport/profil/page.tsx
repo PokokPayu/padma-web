@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ambilKlien } from "@/lib/passport/data";
+import { TombolKeluar } from "@/app/_shell/tombol-keluar";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Profil" };
@@ -38,14 +39,7 @@ export default async function HalamanProfil() {
         Ada data yang berubah? Hubungi tim PADMA via WhatsApp — demi keamanan,
         perubahan data dilakukan oleh admin.
       </p>
-      {/* Logout tetap <form method="post">: navigasi dokumen penuh menghapus
-          Client Cache. Jangan diganti navigasi sisi klien — sisa data passport
-          pemakai sebelumnya bisa ikut tertinggal. */}
-      <form action="/auth/keluar" method="post" className="mt-4">
-        <button className="min-h-[44px] rounded-xl border border-black/10 px-4 py-2.5 text-sm font-bold">
-          Keluar dari akun
-        </button>
-      </form>
+      <TombolKeluar />
     </section>
   );
 }

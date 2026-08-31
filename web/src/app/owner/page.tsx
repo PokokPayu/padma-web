@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { ringkasanPekanIni } from "@/lib/owner/data";
 import { formatRupiah } from "@/lib/owner/rupiah";
 import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
+import { TombolKeluar } from "@/app/_shell/tombol-keluar";
 
 // Judul mengandalkan template `%s · PADMA` di root layout. Sebelum ini berkas
 // inilah satu-satunya halaman yang memaksakan judul penuh sendiri — lengkap
@@ -129,6 +130,8 @@ export default async function OwnerPage() {
         menaikkan tarif hari ini tidak menggeser satu angka pun di pekan yang
         sudah lewat.
       </p>
+
+      <TombolKeluar />
     </main>
   );
 }

@@ -25,22 +25,9 @@ export default async function OwnerLayout({
   return (
     <div className="min-h-screen bg-paper">
       <div className="mx-auto max-w-6xl px-4 pb-36 pt-6 sm:pb-10">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <span className="text-[13px] text-ink-soft">
-            Masuk sebagai <b className="text-ink">{nama}</b> · Owner
-          </span>
-          {/* Logout tetap <form method="post">: navigasi dokumen penuh
-              menghapus Client Cache. Jangan diganti navigasi sisi klien —
-              sisa data panel pemakai sebelumnya bisa ikut tertinggal, dan di
-              panel inilah sisa itu berupa nominal uang. */}
-          <form action="/auth/keluar" method="post">
-            <button className="text-[13px] font-bold text-leaf underline underline-offset-4">
-              Keluar
-            </button>
-          </form>
-        </div>
-
-        <NavOwner />
+        {/* Identitas & jalan keluar kini di dalam kartu nav (MenuAkun), bukan
+            strip terpisah di atasnya. Di mobile jalan keluarnya ada di Beranda. */}
+        <NavOwner nama={nama} />
         {children}
 
         {/* Kebalikan persis dari catatan di panel admin ("tidak ada angka uang

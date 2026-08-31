@@ -52,7 +52,9 @@ const { NavPassport } = await import("@/app/passport/nav");
 
 function markupNav(pathname: string): string {
   rute.kini = pathname;
-  return renderToStaticMarkup(createElement(NavPassport));
+  return renderToStaticMarkup(
+    createElement(NavPassport, { nama: "Ananda Putri" }),
+  );
 }
 
 describe("layout passport — resolusi klien", () => {
@@ -102,11 +104,33 @@ describe("shell passport — pagar keamanan", () => {
     }
   });
 
-  it("logout tetap <form method=\"post\">, bukan router.push()", () => {
-    expect(sumberLayout).toMatch(
-      /<form[^>]*action="\/auth\/keluar"[^>]*method="post"/,
-    );
-    expect(sumberLayout).not.toContain("router.push");
+  // Logout tidak lagi ditulis di layout: ia pindah ke komponen shell bersama —
+  // menu akun di dalam kartu nav, dan tombol versi mobile di halaman akun.
+  // Penjaganya ikut pindah ke sana; yang dijaga tetap sama persis, yaitu
+  // navigasi dokumen penuh, bukan navigasi sisi klien yang menyisakan Client
+  // Cache milik pemakai sebelumnya.
+  it("logout tetap <form method=\"post\">, bukan navigasi sisi klien", () => {
+    for (const berkas of [
+      "src/app/_shell/menu-akun.tsx",
+      "src/app/_shell/tombol-keluar.tsx",
+    ]) {
+      const sumber = baca(berkas);
+      expect(sumber, berkas).toMatch(
+        /<form[^>]*action="\/auth\/keluar"[^>]*method="post"/,
+      );
+      expect(sumber, berkas).not.toContain("router.push");
+    }
+    // Dan layout tidak boleh menumbuhkan jalan keluarnya sendiri lagi.
+    expect(sumberLayout).not.toContain("/auth/keluar");
+  });
+
+  // Keluhan yang memicu perubahan ini: ada satu baris teks mengapung di atas
+  // kartu nav yang tidak pernah ada di prototipe. Identitas tetap WAJIB tampil
+  // — owner adalah superset admin dan boleh membuka /admin, jadi ia perlu tahu
+  // sedang memakai akun apa — tetapi tempatnya kini di dalam kartu nav.
+  it("identitas tidak lagi berupa strip terpisah di atas kartu nav", () => {
+    expect(sumberLayout).not.toContain("Masuk sebagai");
+    expect(baca("src/app/_shell/menu-akun.tsx")).toContain("Masuk sebagai");
   });
 
   it("nav tidak memaksa prefetch reader materi", () => {

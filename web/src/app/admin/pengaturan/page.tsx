@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { daftarSetelanAdmin } from "@/lib/admin/pengaturan";
 import { KartuSetelan } from "./form-pengaturan";
+import { TombolKeluar } from "@/app/_shell/tombol-keluar";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pengaturan" };
@@ -45,6 +46,8 @@ export default async function PengaturanPage() {
         tertutup ia akan menjadi tempat paling mudah menyelundupkan data yang
         seharusnya tidak pernah tampil di panel admin.
       </p>
+
+      <TombolKeluar />
     </main>
   );
 }

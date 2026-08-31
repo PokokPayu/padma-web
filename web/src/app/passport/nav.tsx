@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MenuAkun } from "@/app/_shell/menu-akun";
 import { Lotus } from "@/app/_landing/lotus";
 
 type Ikon = "lotus" | "cal" | "book" | "qr" | "user";
@@ -69,7 +70,7 @@ export function aktifkan(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function NavPassport() {
+export function NavPassport({ nama }: { nama: string }) {
   const pathname = usePathname();
   return (
     <>
@@ -94,6 +95,10 @@ export function NavPassport() {
             </Link>
           );
         })}
+
+        {/* Pemisah: yang di kanan bukan tab, melainkan identitas & jalan keluar. */}
+        <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-black/10" />
+        <MenuAkun nama={nama} peran="Klien" />
       </nav>
 
       {/* Bottom bar mobile */}
