@@ -1753,7 +1753,14 @@ describe("aksi penugasan — pagar struktural", () => {
   });
 
   it("ditugaskan_oleh tidak pernah dikirim dari kode — trigger yang mengisinya", () => {
-    expect(SUMBER).not.toContain("ditugaskan_oleh");
+    // Diikat pada payload insert, BUKAN pada seluruh berkas: komentar yang
+    // menjelaskan kenapa kolom itu tidak dikirim justru memuat namanya, dan
+    // asersi yang memindai seluruh sumber akan merah karena komentar. Test yang
+    // merah karena komentar akan dilemahkan orang berikutnya — lalu pagar
+    // aslinya ikut hilang.
+    const payload = SUMBER.match(/\.insert\(\{([^}]*)\}\)/)?.[1] ?? "";
+    expect(payload).toContain("material_id");
+    expect(payload).not.toContain("ditugaskan_oleh");
   });
 });
 ```
@@ -2223,9 +2230,26 @@ async function gantiLayananMateri(materiId: string, idLayanan: string[]) {
 
 Di `supabase/seed.sql`: hapus seluruh `insert into material_chapters`, dan ganti dengan `insert into material_services` untuk tiap materi. Halaman ebook demo **tidak diisi lewat SQL** — ia lahir dari unggahan admin, dan seed yang mengarangnya akan menunjuk objek yang tidak ada di bucket. Materi ebook demo karena itu berstatus "Belum ada isi" sampai diunggah, dan itu keadaan yang jujur.
 
-- [ ] **Step 6: Bereskan test yang menyebut bab**
+- [ ] **Step 6: Bereskan test yang menyebut bab atau `service_id`**
 
 Jalankan `grep -rln "material_chapters" tests/` dan perbaiki setiap berkas: yang menguji gating bab dialihkan ke `material_pages`, yang menguji CRUD bab dihapus bersama fiturnya.
+
+**Dua berkas WAJIB disebut karena ia lahir dari rencana ini sendiri dan pasti merah:**
+
+1. **`tests/materi-penugasan.test.ts`** (dari Task 2) — dua hal patah sekaligus:
+   - `beforeAll` menyisipkan `materials` dengan `service_id`, kolom yang baru saja dihapus. Hapus medan itu; sesudah migrasi ini, materi memang boleh lahir tanpa layanan, sehingga `delete().eq("material_id", ...)` pada `material_services` juga tidak lagi diperlukan.
+   - Seluruh asersinya menguji gating lewat `material_chapters`. Alihkan ke `material_pages`, dengan baris uji disisipkan lewat RPC:
+
+   ```ts
+   await db.rpc("ganti_halaman_materi", {
+     p_material_id: materiId,
+     p_halaman: [{ halaman: 1, objek: `${materiId}/0001.webp`, lebar: 10, tinggi: 10 }],
+   });
+   ```
+
+   Lalu asersinya membaca `material_pages` alih-alih `material_chapters`. Perilaku yang diuji **identik** — kedua tabel memakai policy `berhak_isi_materi` yang sama — jadi cakupannya tidak berkurang. **Buktikan itu**: jalankan tesnya SEBELUM dan SESUDAH menghapus baris `material_assignments`, dan pastikan ia merah tanpa penugasan lalu hijau dengannya. Tes gating yang hijau di kedua keadaan tidak menguji apa pun.
+
+2. **`tests/materi-halaman.test.ts`** (dari Task 3) — helper `buat()` dan dua insert `materials` lainnya menyertakan `service_id`. Hapus medan itu beserta query `services` yang hanya melayaninya.
 
 - [ ] **Step 7: Verifikasi menyeluruh**
 
