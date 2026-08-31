@@ -27,14 +27,26 @@ comment on table public.material_assignments is
 -- mengikat pada KEHADIRAN kolom di payload sehingga `select *` ikut mati 42501;
 -- trigger mengikat pada NILAI. Pelajaran ini sudah tiga kali dibayar di repo ini.
 --
--- Peran API dilewatkan lewat `current_user`, pola PERSIS sama dengan
--- `jaga_tanda_honor()` (honor_marks.ditandai_oleh): service role (seed data,
--- test fixture, pemindahan data lama) harus tetap bisa menentukan
--- `ditugaskan_oleh` sendiri, dan JWT service role tidak punya klaim `sub` —
--- tanpa pelewatan ini `auth.uid()` bernilai NULL untuknya dan INSERT gagal
--- kena NOT NULL, bukan tergantikan actor yang benar.
+-- BUKAN `security definer` — ini KRUSIAL, bukan gaya. Di dalam fungsi
+-- SECURITY DEFINER, `current_user` adalah PEMILIK fungsi (postgres), BUKAN
+-- peran pemanggil (diverifikasi langsung lewat transaksi rollback:
+-- `security definer` -> current_user terlihat 'postgres'; invoker rights ->
+-- current_user terlihat 'authenticated'). Guard di bawah bergantung MUTLAK
+-- pada `current_user` == peran pemanggil untuk membedakan permintaan API
+-- (anon/authenticated/authenticator, yang WAJIB dipaksa) dari service
+-- role/migration/seed (yang DILEWATKAN). Dengan `security definer`,
+-- `current_user` selalu 'postgres' — di LUAR ketiga nama itu — sehingga
+-- cabang "not in" selalu true, cabang pemaksaan TIDAK PERNAH tercapai, dan
+-- `ditugaskan_oleh` bisa dipalsukan bebas lewat payload oleh admin/owner mana
+-- pun (with check policy hanya memeriksa PERAN pemanggil, bukan nilai kolom
+-- ini). Fungsi ini juga tidak pernah butuh elevasi: ia hanya membaca
+-- `auth.uid()` dan menulis ke NEW. Pola & alasannya kini PERSIS sama dengan
+-- `jaga_tanda_honor()` (honor_marks.ditandai_oleh) dan `guard_tarif_maju()` di
+-- migration `pengerasan_tabel_uang` — keduanya juga bukan security definer,
+-- dengan alasan yang sama persis: "current_user harus tetap peran PEMANGGIL,
+-- karena justru itu yang membedakan jalur sah dari jalur terlarang."
 create or replace function public.paksa_aktor_penugasan()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if current_user not in ('anon', 'authenticated', 'authenticator') then
     return new;
