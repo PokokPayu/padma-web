@@ -399,8 +399,22 @@ describe("layout admin", () => {
     expect(m).toContain('href="/admin/skrining"');
   });
 
-  it("tidak ada service role di seluruh src/app/admin/**", () => {
+  it("tidak ada service role di seluruh src/app/admin/**, kecuali titik yang plan sebut eksplisit", () => {
+    // Rencana materi-ebook-pdf (Global Constraints) menulis ulang pagar ini
+    // sendiri: "createAdminSupabase() hanya boleh dipakai di titik yang
+    // disebut eksplisit oleh task, dan hanya SESUDAH hak diputuskan RLS."
+    // `unggah.ts` (Task 7) adalah titik itu — BUKAN pelonggaran pagar ini.
+    //
+    // Bucket `materi-halaman` SENGAJA lahir tanpa satu pun policy
+    // storage.objects (migration materi_halaman_pdf): authenticated dan anon
+    // tidak punya hak apa pun di sana sama sekali, jadi tidak ada RLS untuk
+    // "dilewati" — service role satu-satunya cara menyentuh objeknya, titik.
+    // Hak yang MEMANG diputuskan RLS (materi ini ada & terlihat peran staf)
+    // tetap dicek lewat createServerSupabase() lebih dulu; admin.storage baru
+    // lahir sesudahnya. Lihat komentar di dalam unggah.ts sendiri.
+    const DIKECUALIKAN = new Set(["src/app/admin/materi/unggah.ts"]);
     for (const berkas of berkasAdmin()) {
+      if (DIKECUALIKAN.has(berkas)) continue;
       expect(baca(berkas), `${berkas} memakai service role`).not.toContain(
         "createAdminSupabase",
       );
