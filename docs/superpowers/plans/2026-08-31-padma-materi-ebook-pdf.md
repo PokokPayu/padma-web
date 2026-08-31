@@ -1400,6 +1400,7 @@ git commit -m "feat(materi): route penyaji halaman ebook ber-watermark"
 **Files:**
 - Create: `src/app/admin/materi/unggah.ts`
 - Create: `tests/materi-unggah-aksi.test.ts`
+- Modify: `tests/admin-shell.test.ts` — pagar repo "tidak ada service role di `src/app/admin/**`" perlu pengecualian satu path untuk `unggah.ts`. Bucket `materi-halaman` lahir tanpa satu pun policy `storage.objects`, jadi tidak ada RLS untuk dilewati di sana: service role adalah satu-satunya cara menyentuh objeknya. Pengecualiannya WAJIB satu path persis, bukan pola direktori.
 
 **Interfaces:**
 - Consumes: `namaObjekHalaman`, `MAKS_HALAMAN` (Task 4); RPC `ganti_halaman_materi` (Task 3).
@@ -1440,10 +1441,17 @@ describe("aksi unggah halaman — pagar struktural", () => {
   });
 
   it("pencatatan memakai RPC, bukan delete lalu insert dari klien", () => {
-    // DELETE dari klien menuntut filter, dan filter tautologis pernah menghapus
-    // SELURUH bab materi di repo ini.
-    expect(SUMBER).toContain("ganti_halaman_materi");
-    expect(SUMBER).not.toMatch(/from\("material_pages"\)\s*\.delete\(/);
+    // Kedua asersi menerima kutip TUNGGAL maupun GANDA. Versi yang hanya
+    // mengenali kutip ganda terbukti bisa dielakkan hanya dengan mengganti gaya
+    // kutip — pada pagar yang justru menjaga kelas bug terburuk di repo ini:
+    // satu filter tautologis pernah menghapus SELURUH bab materi.
+    //
+    // Yang pertama menuntut RPC benar-benar DIPANGGIL, bukan sekadar namanya
+    // muncul; penyebutan di dalam komentar saja pernah cukup membuatnya hijau.
+    expect(SUMBER).toMatch(/\.rpc\(\s*['"]ganti_halaman_materi['"]/);
+    expect(SUMBER).not.toMatch(
+      /from\(\s*['"]material_pages['"]\s*\)\s*\.?\s*delete\s*\(/,
+    );
   });
 });
 ```
@@ -1512,6 +1520,18 @@ export async function terbitkanUrlUnggahHalaman(
       .from(BUCKET)
       .remove(lama.map((o) => `${materiId}/${o.name}`));
   }
+
+  // Baris dikosongkan BERSAMAAN dengan objeknya. Menghapus objek saja membuat
+  // baris lama menunjuk objek yang sudah tidak ada — dan itu hanya terlihat
+  // pada UNGGAH ULANG, bukan unggahan pertama: pasien melihat halaman rusak
+  // sementara panel admin menyatakan materi ini punya isi. Konsekuensi yang
+  // diterima sadar: unggah ulang yang gagal di tengah MENGOSONGKAN materi
+  // sampai dicoba lagi — terlihat, jujur, dan pulih dengan mengulang unggahan.
+  const { error: bersih } = await supabase.rpc("ganti_halaman_materi", {
+    p_material_id: materiId,
+    p_halaman: [],
+  });
+  if (bersih) return { ok: false, pesan: "Gagal menyiapkan unggahan. Coba lagi." };
 
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
