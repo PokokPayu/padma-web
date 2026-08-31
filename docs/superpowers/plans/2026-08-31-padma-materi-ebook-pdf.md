@@ -197,7 +197,7 @@ create policy "materi-layanan: staf kelola"
 -- lama tetap terbuka tanpa satu pun error.
 drop policy if exists "chapters: klien dgn sesi selesai" on public.material_chapters;
 create policy "chapters: klien dgn sesi selesai" on public.material_chapters
-  for select
+  for select to authenticated
   using (exists (
     select 1
       from public.materials m
@@ -205,14 +205,23 @@ create policy "chapters: klien dgn sesi selesai" on public.material_chapters
       join public.sessions s
         on s.service_id = ms.service_id and s.status = 'selesai'
       join public.clients c on c.id = s.client_id
-     where m.id = material_id
+
+-- KUALIFIKASI `material_chapters.material_id` MENGIKAT, bukan gaya penulisan.
+-- Subquery ini men-join `material_services as ms`, dan `ms` adalah SATU-SATUNYA
+-- tabel di FROM-nya yang punya kolom bernama `material_id`. SQL mengikat nama
+-- tak berkualifikasi ke FROM terdalam lebih dulu, jadi `where m.id = material_id`
+-- akan mengikat ke `ms.material_id` — bukan ke baris tabel luar. Klausanya lalu
+-- menjadi TAUTOLOGIS (sebab `ms.material_id = m.id` sudah dipaksa join di atas),
+-- dan SETIAP baris material_chapters terbuka bagi klien mana pun yang punya satu
+-- sesi selesai pada materi aktif apa pun. Tidak ada error, tidak ada gejala.
+     where m.id = material_chapters.material_id
        and m.aktif = true
        and c.user_id = auth.uid()
   ));
 
 drop policy if exists "video: klien dgn sesi selesai" on public.material_videos;
 create policy "video: klien dgn sesi selesai" on public.material_videos
-  for select
+  for select to authenticated
   using (exists (
     select 1
       from public.materials m
@@ -220,7 +229,8 @@ create policy "video: klien dgn sesi selesai" on public.material_videos
       join public.sessions s
         on s.service_id = ms.service_id and s.status = 'selesai'
       join public.clients c on c.id = s.client_id
-     where m.id = material_id
+     -- alasan kualifikasi sama persis dengan policy chapters di atas
+     where m.id = material_videos.material_id
        and m.aktif = true
        and c.user_id = auth.uid()
   ));
