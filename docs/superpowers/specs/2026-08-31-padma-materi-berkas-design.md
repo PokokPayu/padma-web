@@ -31,7 +31,7 @@ Bagian ini didahulukan karena seluruh design di bawah bergantung padanya, dan ka
 
 **Batas yang diterima secara sadar:**
 
-- **Video hanya dilindungi terhadap pasien awam, bukan terhadap pasien teknis.** Ini batas terbesar di seluruh design ini dan tidak boleh dihaluskan. Video disimpan sebagai satu berkas utuh di Cloudflare R2 dan disajikan lewat presigned URL berumur pendek. Pasien yang mengklik kanan tidak mendapat pilihan simpan, dan tidak ada tombol unduh di pemutarnya — tetapi pasien yang membuka DevTools dapat menemukan URL itu dan mengunduh videonya utuh selama URL-nya masih berlaku. **Jaminan "tidak ada berkas utuh yang bisa disalin" berlaku untuk ebook, TIDAK untuk video.**
+- **Video hanya dilindungi terhadap pasien yang penasaran, bukan terhadap pasien yang punya alatnya.** Ini batas terbesar di seluruh design ini dan tidak boleh dihaluskan. Video disimpan sebagai satu berkas utuh di Cloudflare R2 dan disajikan lewat presigned URL berumur pendek. Klik kanan, tekan lama, tombol unduh pemutar, view-source, dan panel Elements semuanya ditutup (§7) — tetapi **satu ekstensi pengunduh video mengalahkan semuanya tanpa keahlian apa pun.** Menghalangi ekstensi menuntut video tersegmentasi atau DRM, yang justru dilepas saat memilih penyimpanan objek. **Jaminan "tidak ada berkas utuh yang bisa disalin" berlaku untuk ebook, TIDAK untuk video.**
 - **Kebocoran video tidak bisa dilacak.** Membakar watermark per-pasien ke video berarti meng-encode ulang seluruh video untuk setiap pasien — tidak proporsional untuk satu klinik. Video memakai lapisan watermark di layar, yang hilang begitu videonya diunduh atau layarnya direkam.
 - **Video tidak ditranskode, sehingga tidak ada kualitas adaptif.** Pasien di koneksi lambat menerima berkas dengan kualitas yang sama seperti pasien di koneksi cepat, dan akan tersendat. Ini konsekuensi langsung dari memilih penyimpanan objek alih-alih layanan streaming.
 - **Halaman ebook adalah gambar, bukan teks.** Teksnya tidak bisa disalin, tidak bisa dicari, dan **tidak terbaca pembaca layar**. Ini kerugian aksesibilitas yang nyata, dan ia adalah konsekuensi langsung dari syarat "tidak boleh ada teks yang bisa disebar utuh" — dua hal itu tidak bisa dimiliki sekaligus. Judul dan deskripsi materi tetap berupa teks sungguhan.
@@ -237,13 +237,33 @@ Video disajikan **langsung dari R2 ke pasien**, tidak diproksi. Itu memang yang 
 
 **Umur presigned URL: 2 jam.** Kompromi dua arahnya perlu disebut terbuka. Terlalu pendek, URL kedaluwarsa di tengah tontonan dan pemutar berhenti tanpa sebab yang jelas bagi pasien, terutama bila ia mem-pause lama. Terlalu panjang, URL yang tersebar bisa dipakai siapa pun selama sisa umurnya. Dua jam menampung satu sesi menonton berikut jeda, sambil menutup jendelanya dalam hitungan jam, bukan hari. URL diterbitkan ulang setiap kali halaman reader dibuka, jadi pasien yang memuat ulang selalu mendapat yang baru.
 
+**URL tidak boleh ikut ter-render ke HTML.** Elemen `<video>` dirender **tanpa** atribut `src`. URL-nya diambil komponen klien sesudah halaman hidup, lalu dipasang lewat **properti** `video.src`, bukan atribut. Dua akibatnya penting: URL tidak pernah muncul di **view-source** (Ctrl+U), dan karena properti tidak menulis balik ke DOM, ia juga **tidak muncul di panel Elements DevTools**. Ia hanya hidup di memori JS dan di tab Network.
+
+Ini menutup jalur termudah yang tersisa. Merender `<video src="...">` dari server membuat URL bisa ditemukan dengan Ctrl+U lalu Ctrl+F — tiga langkah, tanpa perlu tahu apa itu DevTools.
+
 **Pengerasan pemutar**, yang jujur disebut deterrent dan bukan proteksi:
 
 - `controlsList="nodownload"` menghilangkan tombol unduh dari pemutar bawaan Chrome & Edge.
 - `disablePictureInPicture` menutup jalur pintas yang sering dilupakan.
 - Menu klik-kanan pada elemen `<video>` dimatikan. Ini yang menutup **"Save Video As…"** di Firefox dan Safari, yang tidak menghormati `controlsList` — tanpa ini, pertahanan terhadap pasien awam justru bocor tepat di dua peramban itu.
+- `-webkit-touch-callout: none` menutup menu tekan-lama di peramban seluler, yang di sebagian Android menawarkan "unduh video".
 
-Ketiganya bersama-sama berarti pasien awam tidak menemukan satu pun jalan unduh di antarmuka. Itu batas jaminannya, dan tidak lebih dari itu.
+### Tangga usaha: apa yang harus dilakukan seseorang untuk mendapat videonya
+
+Bagian ini ada supaya jaminannya tidak pernah dibaca lebih besar daripada kenyataannya.
+
+| Cara | Berhasil | Keahlian yang dibutuhkan |
+|---|---|---|
+| Klik kanan / tekan lama | Tidak | — |
+| Tombol unduh di pemutar | Tidak | — |
+| View-source (Ctrl+U) atau panel Elements | Tidak | — ditutup oleh pemasangan `src` lewat properti |
+| **Ekstensi pengunduh video** | **Ya** | **Nol** |
+| DevTools → tab Network | Ya | Sedang |
+| Rekam layar | Ya | Nol, kualitas turun |
+
+**Baris keempat adalah batas sesungguhnya, dan ia tidak bisa ditutup.** Ekstensi pengunduh membaca elemen media di halaman lalu menawarkan tombol unduh; pasien yang tidak paham teknis sama sekali, tetapi kebetulan sudah memasang ekstensi semacam itu, mendapat videonya dengan satu klik. Memproksi lewat server kita tidak menolong — permintaan ekstensi berasal dari peramban yang sama dan membawa cookie sesi pasien itu.
+
+Satu-satunya hal yang benar-benar menghalangi ekstensi adalah video tersegmentasi (HLS) atau DRM, dan keduanya dilepas saat M5 memilih penyimpanan objek. Jadi kalimat yang benar tentang video adalah: **aman terhadap pasien yang penasaran, tidak aman terhadap pasien yang sudah punya alatnya.**
 
 ## 8. Keamanan
 
