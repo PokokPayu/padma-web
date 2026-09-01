@@ -59,6 +59,16 @@ export function PengunggahPdf({
           const i = berikutnya++;
           const h = halaman[i];
           const u = daftarUnggahan[i];
+          // `u.objek` berakhiran `.webp` (namaObjekHalaman) TAPI itu KONVENSI
+          // PENAMAAN, bukan jaminan isi byte: bila peramban admin tidak
+          // mendukung ekspor WebP, canvas.toBlob() di pdf-klien.ts diam-diam
+          // menghasilkan PNG (bukan gagal — lihat komentar di sana), dan PNG
+          // itulah yang terunggah di bawah path `.webp`. Ini AMAN: rute
+          // penyaji (api/materi/[id]/halaman/[n]/route.ts) selalu mendekode
+          // ulang lewat sharp() lalu memaksa .webp({...}) saat membakar
+          // watermark — sharp membaca byte sungguhan, bukan ekstensi nama
+          // berkas — jadi objek berisi PNG tetap sampai ke pasien sebagai
+          // WebP asli.
           const { error } = await supabase.storage
             .from(BUCKET)
             .uploadToSignedUrl(u.objek, u.token, h.blob);

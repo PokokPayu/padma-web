@@ -30,11 +30,30 @@ describe("pengunggah PDF — pagar struktural", () => {
     // ditolak SEBELUM peramban membuang waktu & memori merender halamannya;
     // urutan itu hanya terbukti lewat posisi panggilan sungguhan, bukan sekadar
     // penyebutan nama.
-    const posPeriksa = s.indexOf("periksaBerkasPdf(berkas");
-    const posRasterisasi = s.indexOf("rasterisasiPdf(berkas");
+    // Regex bertoleransi spasi/baris-baru (\s*), bukan indexOf literal: sebuah
+    // line-wrap Prettier di antara "(" dan "berkas" akan mematahkan indexOf
+    // literal dan membuat test merah karena format, bukan karena properti yang
+    // dijaga — persis pola yang sudah dipakai di asersi KONKURENSI_UNGGAH di
+    // bawah.
+    const posPeriksa = s.search(/periksaBerkasPdf\(\s*berkas/);
+    const posRasterisasi = s.search(/rasterisasiPdf\(\s*berkas/);
     expect(posPeriksa).toBeGreaterThan(-1);
     expect(posRasterisasi).toBeGreaterThan(-1);
     expect(posPeriksa).toBeLessThan(posRasterisasi);
+
+    // Urutan di atas murah tapi rendah taruhannya. Urutan yang SUNGGUH
+    // berbahaya: pemeriksaan MAKS_HALAMAN atas JUMLAH HALAMAN HASIL
+    // RASTERISASI SUNGGUHAN wajib mendahului terbitkanUrlUnggahHalaman(),
+    // sebab aksi itu MENGHAPUS baris & objek materi yang sudah ada (lihat
+    // unggah.ts) SEBELUM tahu apakah PDF penggantinya layak diterima.
+    // Terbalik = e-book lama yang berfungsi lenyap demi PDF yang lantas
+    // ditolak — dan baris materinya berakhir "belum ada isi", bukan
+    // setengah terisi (state paling sulit disadari).
+    const posBatasHalaman = s.search(/halaman\.length\s*>\s*MAKS_HALAMAN/);
+    const posTerbitkanUrl = s.search(/terbitkanUrlUnggahHalaman\(\s*materiId/);
+    expect(posBatasHalaman).toBeGreaterThan(-1);
+    expect(posTerbitkanUrl).toBeGreaterThan(-1);
+    expect(posBatasHalaman).toBeLessThan(posTerbitkanUrl);
   });
 
   it("pencatatan baris hanya terjadi setelah seluruh unggahan sukses", () => {
