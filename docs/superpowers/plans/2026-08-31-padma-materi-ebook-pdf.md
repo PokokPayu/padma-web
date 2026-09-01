@@ -1515,23 +1515,42 @@ export async function terbitkanUrlUnggahHalaman(
   // meninggalkan sampah, dan halaman lama yang tersisa akan bercampur dengan
   // yang baru bila PDF penggantinya lebih pendek.
   const { data: lama } = await admin.storage.from(BUCKET).list(materiId);
-  if (lama && lama.length > 0) {
-    await admin.storage
-      .from(BUCKET)
-      .remove(lama.map((o) => `${materiId}/${o.name}`));
-  }
-
-  // Baris dikosongkan BERSAMAAN dengan objeknya. Menghapus objek saja membuat
-  // baris lama menunjuk objek yang sudah tidak ada — dan itu hanya terlihat
-  // pada UNGGAH ULANG, bukan unggahan pertama: pasien melihat halaman rusak
-  // sementara panel admin menyatakan materi ini punya isi. Konsekuensi yang
-  // diterima sadar: unggah ulang yang gagal di tengah MENGOSONGKAN materi
-  // sampai dicoba lagi — terlihat, jujur, dan pulih dengan mengulang unggahan.
+  // URUTANNYA MENGIKAT: baris dikosongkan DULU, objek dihapus SESUDAHNYA.
+  //
+  // Kebalikannya pernah ditulis dan salah. Bila objek dihapus lebih dulu lalu
+  // pengosongan baris yang gagal — timeout, blip jaringan — objeknya sudah
+  // hilang sementara baris lama tetap ada, menunjuk objek yang tidak ada lagi:
+  // pasien melihat halaman rusak sementara panel admin menyatakan materi ini
+  // PUNYA isi. Itu persis keadaan yang pengosongan ini dibuat untuk mencegah.
+  //
+  // Dengan urutan ini kedua mode gagalnya jinak:
+  //   * pengosongan baris gagal -> belum ada yang dihapus, keadaan lama utuh,
+  //     ulangi bersih. Kegagalannya inert.
+  //   * penghapusan objek gagal -> baris sudah kosong, jadi materi jujur
+  //     terbaca "belum ada isi"; paling banter tersisa objek yatim yang tidak
+  //     ditunjuk siapa pun dan tersapu percobaan berikutnya.
   const { error: bersih } = await supabase.rpc("ganti_halaman_materi", {
     p_material_id: materiId,
     p_halaman: [],
   });
-  if (bersih) return { ok: false, pesan: "Gagal menyiapkan unggahan. Coba lagi." };
+  if (bersih) {
+    return { ok: false, pesan: "Gagal mengosongkan halaman lama. Materi belum berubah — coba lagi." };
+  }
+
+  // Hasil `.remove()` WAJIB ditangkap. Membuangnya membuat kegagalan
+  // penghapusan tak terlihat sama sekali di berkas yang seluruh gunanya
+  // menjaga storage dan baris tetap sepakat.
+  if (lama && lama.length > 0) {
+    const { error: hapus } = await admin.storage
+      .from(BUCKET)
+      .remove(lama.map((o) => `${materiId}/${o.name}`));
+    if (hapus) {
+      return {
+        ok: false,
+        pesan: "Halaman lama sudah kosong, tetapi sebagian objek lama gagal dihapus. Aman diunggah ulang.",
+      };
+    }
+  }
 
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
