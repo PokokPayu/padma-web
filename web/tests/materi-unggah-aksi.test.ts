@@ -66,4 +66,36 @@ describe("aksi unggah halaman — pagar struktural", () => {
     expect(SUMBER).toMatch(/\.rpc\(\s*['"]ganti_halaman_materi['"]/);
     expect(SUMBER).not.toMatch(/from\(\s*['"]material_pages['"]\s*\)\s*\.?\s*delete\s*\(/);
   });
+
+  it("baris material_pages dikosongkan SEBELUM objek storage lama dihapus", () => {
+    // Urutan ini terikat pada jalur GAGAL, bukan jalur sukses — keduanya
+    // berakhir sama saat sukses, jadi tes yang hanya melihat hasil akhir
+    // tidak akan pernah menangkap regresi ini (Ruling T7-D).
+    //
+    // Bila objek storage dihapus DULU dan RPC pengosongan baris inilah yang
+    // gagal sesudahnya (blip PostgREST, timeout, koneksi habis), objeknya
+    // sudah lenyap sementara baris material_pages lama masih menunjuknya:
+    // pasien melihat halaman rusak sementara panel admin menyatakan materi
+    // ini punya isi — dan review pernah menemukan pesan galatnya identik
+    // dengan jalur gagal yang aman, sehingga tidak ada yang bisa membedakan
+    // keduanya. Membalik urutan — kosongkan baris DULU, baru hapus objek —
+    // membuat kegagalan RPC pengosongan INERT (belum ada yang tersentuh sama
+    // sekali) dan menyisakan hanya mode gagal lunak (baris sudah kosong,
+    // paling buruk objek yatim menumpuk sebentar, disapu percobaan
+    // berikutnya). Tes ini mengunci urutan itu supaya edit berikutnya tidak
+    // bisa menukarnya balik tanpa disadari — diam-diam mengembalikan kelas
+    // bug yang perbaikan ini ada untuk menutupnya.
+    const aksi = [...SUMBER.matchAll(/export async function (\w+)/g)];
+    const iniIdx = aksi.findIndex((m) => m[1] === "terbitkanUrlUnggahHalaman");
+    expect(iniIdx, "terbitkanUrlUnggahHalaman tidak ditemukan").toBeGreaterThanOrEqual(0);
+    const mulai = aksi[iniIdx].index!;
+    const akhir = iniIdx + 1 < aksi.length ? aksi[iniIdx + 1].index! : SUMBER.length;
+    const tubuh = SUMBER.slice(mulai, akhir);
+
+    const idxKosongkanBaris = tubuh.search(/\.rpc\(\s*['"]ganti_halaman_materi['"]/);
+    const idxHapusObjek = tubuh.indexOf(".remove(");
+    expect(idxKosongkanBaris, "panggilan ganti_halaman_materi(...) tidak ditemukan di badan fungsi").toBeGreaterThanOrEqual(0);
+    expect(idxHapusObjek, "panggilan storage .remove( tidak ditemukan di badan fungsi").toBeGreaterThanOrEqual(0);
+    expect(idxKosongkanBaris, "baris harus dikosongkan SEBELUM objek storage dihapus").toBeLessThan(idxHapusObjek);
+  });
 });

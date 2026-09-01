@@ -44,27 +44,57 @@ export async function terbitkanUrlUnggahHalaman(
 
   const admin = createAdminSupabase();
 
-  // Objek lama dibersihkan lebih dulu: unggahan sebelumnya yang gagal di tengah
-  // meninggalkan sampah, dan halaman lama yang tersisa akan bercampur dengan
-  // yang baru bila PDF penggantinya lebih pendek.
-  const { data: lama } = await admin.storage.from(BUCKET).list(materiId);
-  if (lama && lama.length > 0) {
-    await admin.storage
-      .from(BUCKET)
-      .remove(lama.map((o) => `${materiId}/${o.name}`));
-  }
-
-  // Baris dikosongkan BERSAMAAN dengan objeknya. Menghapus objek saja membuat
-  // baris lama menunjuk objek yang sudah tidak ada: pasien melihat halaman rusak
-  // sementara panel admin menyatakan materi ini punya isi — persis keadaan yang
-  // paling sulit disadari. Konsekuensi yang diterima sadar: unggah ulang yang
-  // gagal di tengah MENGOSONGKAN materi sampai dicoba lagi. Itu terlihat, jujur,
-  // dan bisa dipulihkan dengan mengulang unggahan.
+  // Baris dikosongkan LEBIH DULU, baru objek storage-nya — sengaja dibalik
+  // dari urutan yang terasa wajar ("hapus objek dulu, baru barisnya"). Kedua
+  // urutan berakhir sama saat SUKSES; bedanya ada di jalur GAGAL.
+  //
+  // Bila RPC pengosongan ini yang gagal (blip PostgREST, timeout, koneksi
+  // habis), belum satu objek pun tersentuh — keadaan lama utuh, dan mengulang
+  // percobaan ini bersih tanpa sisa. Kegagalannya jadi INERT.
+  //
+  // Urutan LAMA (objek dihapus dulu, baris belakangan) membuat kegagalan di
+  // titik ini berarti objek sudah lenyap sementara baris lama masih
+  // menunjuknya: pasien melihat halaman rusak sementara panel admin
+  // menyatakan materi ini berisi — dan pesan galatnya saat itu tidak bisa
+  // dibedakan dari kegagalan yang aman. Membalik urutan menutup keadaan itu
+  // sepenuhnya: satu-satunya mode gagal yang tersisa sesudah baris ini adalah
+  // penghapusan objek di bawah gagal SESUDAH baris sudah kosong — lunak,
+  // karena materi sudah jujur terbaca "belum ada isi" dan objek yatimnya
+  // dibersihkan sendiri oleh percobaan berikutnya (lihat komentar di bawah).
   const { error: bersih } = await supabase.rpc("ganti_halaman_materi", {
     p_material_id: materiId,
     p_halaman: [],
   });
-  if (bersih) return { ok: false, pesan: "Gagal menyiapkan unggahan. Coba lagi." };
+  if (bersih) {
+    return {
+      ok: false,
+      pesan: "Gagal mengosongkan halaman lama. Materi belum berubah — coba lagi.",
+    };
+  }
+
+  // Objek lama dibersihkan SESUDAH barisnya kosong (lihat urutan di atas).
+  // Tujuannya tidak berubah dari semula: unggahan sebelumnya yang gagal di
+  // tengah meninggalkan sampah, dan halaman lama yang tersisa akan bercampur
+  // dengan yang baru bila PDF penggantinya lebih pendek.
+  //
+  // Hasil `.remove()` WAJIB ditangkap (dulu dibuang total, tanpa
+  // destructure). Kegagalannya di titik ini adalah mode gagal LUNAK — tapi
+  // lunak tidak berarti boleh senyap. Admin dan pemantauan berhak tahu objek
+  // yatim mungkin tersisa, lewat pesan yang berbeda dari kegagalan di atas,
+  // bukan sekadar diam seolah tidak terjadi apa-apa.
+  const { data: lama } = await admin.storage.from(BUCKET).list(materiId);
+  if (lama && lama.length > 0) {
+    const { error: hapus } = await admin.storage
+      .from(BUCKET)
+      .remove(lama.map((o) => `${materiId}/${o.name}`));
+    if (hapus) {
+      return {
+        ok: false,
+        pesan:
+          "Halaman lama sudah kosong, tetapi sebagian objek lama gagal dihapus. Aman diunggah ulang.",
+      };
+    }
+  }
 
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
