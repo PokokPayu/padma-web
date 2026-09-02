@@ -149,6 +149,36 @@ describe("material_assignments — penugasan membuka isi tanpa sesi selesai", ()
          and grantee = 'anon'`);
     expect(anon).toEqual([]);
   });
+
+  it("paksa_aktor_penugasan(): ACL PERSIS sama dengan jaga_tanda_honor() & guard_tarif_maju() (Fix 5)", async () => {
+    // Migration 20260831110000 (klaim di komentar `paksa_aktor_penugasan`,
+    // baris 30-47) menyatakan pola & alasan `security invoker`-nya "PERSIS
+    // sama" dengan `jaga_tanda_honor()` (honor_marks.ditandai_oleh) dan
+    // `guard_tarif_maju()` (migration pengerasan_tabel_uang) — benar untuk
+    // pilihan invoker-nya, tapi migration itu lupa satu baris yang KEDUA
+    // fungsi pembanding itu sama-sama punya:
+    // `revoke all on function ... from public, anon, authenticated`.
+    // Ditutup terlambat lewat migration terpisah (lihat komentarnya) —
+    // baris ini membuktikan ketiganya SEKARANG persis sama, bukan cuma
+    // pilihan `security invoker`-nya.
+    const acl = await querySql<{ grantee: string; privilege_type: string }>(`
+      select grantee, privilege_type from information_schema.role_routine_grants
+       where routine_schema = 'public' and routine_name = 'paksa_aktor_penugasan'
+       order by grantee`);
+    const grantees = acl.map((r) => r.grantee).sort();
+    expect(grantees).not.toContain("authenticated");
+    expect(grantees).not.toContain("anon");
+
+    const pembanding = await querySql<{ routine_name: string; grantee: string }>(`
+      select routine_name, grantee from information_schema.role_routine_grants
+       where routine_schema = 'public'
+         and routine_name in ('jaga_tanda_honor', 'guard_tarif_maju')
+       order by routine_name, grantee`);
+    const grupPembanding = (nama: string) =>
+      pembanding.filter((r) => r.routine_name === nama).map((r) => r.grantee).sort();
+    expect(grantees).toEqual(grupPembanding("jaga_tanda_honor"));
+    expect(grantees).toEqual(grupPembanding("guard_tarif_maju"));
+  });
 });
 
 describe("material_assignments — ditugaskan_oleh tidak bisa dipalsukan lewat payload", () => {

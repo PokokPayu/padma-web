@@ -1,0 +1,37 @@
+-- supabase/migrations/20260903000000_kunci_paksa_aktor_penugasan.sql
+-- ============================================================================
+-- paksa_aktor_penugasan(): REVOKE yang tertinggal dari migration aslinya
+-- ============================================================================
+-- Migration materi_penugasan (20260831110000) menulis komentar panjang yang
+-- mengklaim pola & alasan `security invoker` pada `paksa_aktor_penugasan()`
+-- "PERSIS sama" dengan `jaga_tanda_honor()` (honor_marks.ditandai_oleh) dan
+-- `guard_tarif_maju()` (migration pengerasan_tabel_uang) — kedua fungsi itu
+-- "juga bukan security definer, dengan alasan yang sama persis". Klaim itu
+-- BENAR untuk pilihan `security invoker`-nya, tapi migration aslinya lupa
+-- satu baris yang kedua fungsi pembanding itu SAMA-SAMA punya:
+--
+--   revoke all on function ... from public, anon, authenticated;
+--
+-- (lihat `guard_tarif_maju()` & `jaga_tanda_honor()` di migration
+-- `pengerasan_tabel_uang`). Tanpa baris itu, `paksa_aktor_penugasan()`
+-- mewarisi hak EXECUTE bawaan Postgres ke PUBLIC — ACL-nya BEDA dari kedua
+-- fungsi yang komentarnya klaim "persis sama", membuat klaim itu tidak
+-- akurat walau tidak berbahaya (lihat di bawah).
+--
+-- Ditutup di migration TERPISAH, bukan menyunting migration lama (migrasi
+-- lama tidak boleh disunting — riwayatnya immutable). Terlambat karena baru
+-- terlihat saat review akhir branch materi-ebook-pdf membandingkan ACL
+-- ketiga fungsi ini berdampingan, bukan saat migration aslinya ditulis.
+--
+-- HARMLESS di lapisan privilege sebelum baris ini pun: Postgres menolak
+-- pemanggilan LANGSUNG atas fungsi `returns trigger` apa pun haknya (ia
+-- hanya bisa dijalankan lewat mesin trigger, bukan dipanggil seperti fungsi
+-- biasa), dan revoke EXECUTE di bawah TIDAK mematikan trigger yang sudah
+-- terpasang — `guard_tarif_maju()` & `jaga_tanda_honor()` sudah membuktikan
+-- itu berjalan sejak migration `pengerasan_tabel_uang` tanpa mematikan
+-- trigger-nya sendiri, dan `tests/materi-penugasan.test.ts` (describe
+-- "material_assignments — ditugaskan_oleh tidak bisa dipalsukan lewat
+-- payload") tetap hijau sesudah baris ini diterapkan. Baris ini murni
+-- menutup GAP KLAIM di komentar migration lama, bukan menutup lubang
+-- keamanan yang sungguhan bisa dieksploitasi.
+revoke all on function public.paksa_aktor_penugasan() from public, anon, authenticated;
