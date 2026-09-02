@@ -403,16 +403,58 @@ async function main() {
 
     await halamanReader.goto(`${BASE}/passport/materi/${materiId}`, { waitUntil: "networkidle" });
     await tungguIsi(halamanReader);
+    // Sama seperti pemeriksaan 3e di passport.e2e.ts (dan untuk alasan yang
+    // sama): menghitung KEHADIRAN tag <img> saja lolos vakum — React menulis
+    // atribut `src` pada tag <img> APA PUN nasib permintaannya di baliknya,
+    // tag itu tetap ada di DOM walau rutenya membalas 403/404. Sudah
+    // materially tercakup checks 4a & 6 di skrip ini (keduanya membuktikan
+    // byte WebP SAH lewat rute yang sama), tapi pemeriksaan INI SENDIRI perlu
+    // dikencangkan supaya bentuknya konsisten: yang membedakan "termuat" dari
+    // "gagal senyap" adalah PIKSEL SUNGGUHAN — `naturalWidth`/`naturalHeight`
+    // tetap 0 pada gambar yang gagal dimuat, tidak peduli isi atribut `src`.
+    // Ditunggu per halaman lewat `waitForFunction` (menunggu `img.complete`),
+    // bukan dibaca sekali segera sesudah goto — supaya tidak balapan dengan
+    // permintaan gambar yang belum tuntas.
     let jumlahImg = 0;
+    let jumlahBerpiksel = 0;
+    const detilHalaman: string[] = [];
     for (const n of [1, 2, 3]) {
-      jumlahImg += await halamanReader
-        .locator(`img[src="/api/materi/${materiId}/halaman/${n}"]`)
-        .count();
+      const selektor = `img[src="/api/materi/${materiId}/halaman/${n}"]`;
+      const ada = await halamanReader.locator(selektor).count();
+      jumlahImg += ada;
+      if (ada !== 1) {
+        detilHalaman.push(`halaman ${n}: ${ada} tag <img> (bukan 1)`);
+        continue;
+      }
+      let dimensi = { naturalWidth: 0, naturalHeight: 0 };
+      try {
+        await halamanReader.waitForFunction(
+          (sel) => {
+            const el = document.querySelector(sel) as HTMLImageElement | null;
+            return !!el && el.complete;
+          },
+          selektor,
+          { timeout: 15_000 },
+        );
+        dimensi = await halamanReader.locator(selektor).evaluate((el) => ({
+          naturalWidth: (el as HTMLImageElement).naturalWidth,
+          naturalHeight: (el as HTMLImageElement).naturalHeight,
+        }));
+      } catch (e) {
+        detilHalaman.push(
+          `halaman ${n}: gagal menunggu load (${e instanceof Error ? e.message : String(e)})`,
+        );
+        continue;
+      }
+      if (dimensi.naturalWidth > 0 && dimensi.naturalHeight > 0) jumlahBerpiksel++;
+      detilHalaman.push(
+        `halaman ${n}: naturalWidth=${dimensi.naturalWidth} naturalHeight=${dimensi.naturalHeight}`,
+      );
     }
     catat(
-      "5b. reader menampilkan TEPAT 3 elemen <img> lewat rute bergerbang",
-      jumlahImg === 3,
-      `${jumlahImg} dari 3 <img> halaman ditemukan`,
+      "5b. reader menampilkan TEPAT 3 elemen <img> BERISI PIKSEL SUNGGUHAN lewat rute bergerbang (bukan cuma tag <img> yang ditulis)",
+      jumlahImg === 3 && jumlahBerpiksel === 3,
+      detilHalaman.join("; "),
     );
     await halamanReader.close();
 
