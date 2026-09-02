@@ -72,19 +72,43 @@ type BarisMateri = {
   tipe: TipeMateri;
   deskripsi: string;
   aktif: boolean;
+  // Embed AGREGAT (lihat dokblok fungsi), bukan isi: selalu tepat SATU objek
+  // `{ count }`, tidak pernah larik baris `material_pages` sungguhan.
+  material_pages: Array<{ count: number }>;
 };
 type BarisTautan = { material_id: string; service_id: string };
-type BarisHalaman = { material_id: string };
 type BarisVideo = { material_id: string; url: string };
 type BarisLayanan = { id: string; nama: string; aktif: boolean };
 
 /**
  * Seluruh materi klinik, dikelompokkan di bawah layanan yang menautkannya.
  *
- * Lima query, digabung di JS. Embed PostgREST (`materials(material_pages(*))`)
- * akan lebih ringkas dan gagal SENYAP: isinya tetap keluar, hanya saja disaring
- * lewat jalur embed yang arah RLS-nya tidak pernah kita kendalikan. Peta di
- * bawah dibangun dari baris yang benar-benar terbaca.
+ * EMPAT query, digabung di JS.
+ *
+ * Jumlah halaman diambil lewat embed AGREGAT `material_pages(count)`, BUKAN
+ * `material_pages(*)` atau query `select("material_id")` terpisah yang
+ * menarik satu baris per halaman. Bedanya krusial, bukan kosmetik:
+ *   • PostgREST (`db-max-rows`, 1000 di config.toml & container ini) memotong
+ *     BARIS yang dikembalikan, tidak pernah nilai agregat. Query lama menarik
+ *     satu baris `material_id` PER HALAMAN dari SELURUH klinik tanpa `.range()`
+ *     — begitu total baris `material_pages` klinik melewati 1000 (kira-kira
+ *     empat e-book penuh), halaman di luar 1000 pertama lenyap dari peta yang
+ *     dibangun di JS, dan setiap materi yang barisnya jatuh sesudah potongan
+ *     itu MELAPORKAN `jumlahHalaman: 0` -> `lengkap: false` di panel ini,
+ *     padahal `aktifkanMateri` (yang memakai `count: "exact", head: true`
+ *     BERSKOP satu materi — juga kebal dari `max_rows` karena tidak menarik
+ *     baris sama sekali) tetap menjawab benar. Dua panel yang sama-sama
+ *     membaca data yang sama, berbeda jawaban — dan yang salah adalah yang
+ *     terlihat, yang mengundang admin mengunggah ulang materi yang sebenarnya
+ *     sudah lengkap.
+ *   • `material_pages(count)` TIDAK menarik `objek`/`halaman` sama sekali —
+ *     hanya satu integer per materi, dihitung Postgres sendiri di balik RLS
+ *     yang sama (`halaman: staf kelola` / `halaman: klien berhak`) yang sudah
+ *     menyaring query lama. Ini BUKAN `materials(material_pages(*))` yang
+ *     komentar versi sebelumnya sengaja menolak: itu menarik ISI (setiap
+ *     `objek`, byte penuntun ke bucket privat) lewat arah embed yang RLS-nya
+ *     tidak pernah diaudit terpisah. Agregat count tidak punya "isi" untuk
+ *     bocor — cuma angka.
  *
  * Layanan diambil UTUH — termasuk yang sudah dipensiunkan. Materi milik layanan
  * nonaktif tetap harus bisa disunting; menyembunyikannya berarti isi yang
@@ -93,7 +117,7 @@ type BarisLayanan = { id: string; nama: string; aktif: boolean };
 export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
   const supabase = await createServerSupabase();
 
-  const [{ data: layanan }, { data: materi }, { data: tautan }, { data: halaman }, { data: video }] =
+  const [{ data: layanan }, { data: materi }, { data: tautan }, { data: video }] =
     await Promise.all([
       supabase
         .from("services")
@@ -103,7 +127,7 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
         .returns<BarisLayanan[]>(),
       supabase
         .from("materials")
-        .select("id, judul, tipe, deskripsi, aktif")
+        .select("id, judul, tipe, deskripsi, aktif, material_pages(count)")
         .order("aktif", { ascending: false })
         .order("judul")
         .returns<BarisMateri[]>(),
@@ -111,10 +135,6 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
         .from("material_services")
         .select("material_id, service_id")
         .returns<BarisTautan[]>(),
-      supabase
-        .from("material_pages")
-        .select("material_id")
-        .returns<BarisHalaman[]>(),
       supabase
         .from("material_videos")
         .select("material_id, url")
@@ -128,17 +148,15 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
     layananPerMateri.set(t.material_id, daftar);
   }
 
-  const halamanPer = new Map<string, number>();
-  for (const h of halaman ?? []) {
-    halamanPer.set(h.material_id, (halamanPer.get(h.material_id) ?? 0) + 1);
-  }
-
   const videoPer = new Map<string, string>();
   for (const v of video ?? []) videoPer.set(v.material_id, v.url);
 
   const materiById = new Map<string, MateriKelola>();
   for (const m of materi ?? []) {
-    const jumlahHalaman = halamanPer.get(m.id) ?? 0;
+    // Embed agregat: selalu satu objek `{ count }` (LEFT JOIN, bukan INNER —
+    // materi tanpa satu pun halaman tetap menjawab `count: 0`, tidak pernah
+    // larik kosong tanpa objek sama sekali).
+    const jumlahHalaman = m.material_pages[0]?.count ?? 0;
     const url = videoPer.get(m.id) ?? null;
     materiById.set(m.id, {
       id: m.id,

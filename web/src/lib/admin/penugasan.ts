@@ -48,14 +48,33 @@ export async function daftarPenugasan(materiId: string): Promise<{
   const idLayanan = materi?.aktif ? (layanan ?? []).map((l) => l.service_id) : [];
   let otomatis: PasienRingkas[] = [];
   if (idLayanan.length > 0) {
-    const { data } = await supabase
-      .from("sessions")
-      .select("client_id, clients(nama, padma_id)")
-      .eq("status", "selesai")
-      .in("service_id", idLayanan)
-      .returns<BarisOtomatis[]>();
+    // `.range()` dipaginasi sampai HABIS — jangan berasumsi seluruh sesi
+    // `selesai` milik layanan-layanan ini muat dalam satu jawaban PostgREST.
+    // `max_rows` (1000, config.toml & container ini) memotong BARIS, dan
+    // query ini menarik SATU BARIS PER SESI, bukan per klien: satu layanan
+    // yang sudah lama berjalan bisa saja punya >1000 sesi selesai dari klien
+    // yang jauh lebih sedikit (dedup ke klien terjadi di JS SESUDAH baris
+    // terbaca, lihat `unik` di bawah). Baris yang lenyap di potongan pertama
+    // berarti klien yang sebenarnya berhak otomatis lenyap dari panel ini —
+    // bukan lubang RLS (`berhak_isi_materi()` tetap menjawab benar), tapi
+    // panel yang berbohong ke admin. Kelas cacat yang sama dengan
+    // `daftarMateriAdmin` (lihat komentarnya di materi-admin.ts).
+    const LIMIT = 1000;
+    const semuaBaris: BarisOtomatis[] = [];
+    for (let offset = 0; ; offset += LIMIT) {
+      const { data: potongan } = await supabase
+        .from("sessions")
+        .select("client_id, clients(nama, padma_id)")
+        .eq("status", "selesai")
+        .in("service_id", idLayanan)
+        .range(offset, offset + LIMIT - 1)
+        .returns<BarisOtomatis[]>();
+      if (!potongan || potongan.length === 0) break;
+      semuaBaris.push(...potongan);
+      if (potongan.length < LIMIT) break;
+    }
     const unik = new Map<string, PasienRingkas>();
-    for (const r of data ?? []) {
+    for (const r of semuaBaris) {
       if (!r.clients) continue;
       unik.set(r.client_id, {
         clientId: r.client_id, nama: r.clients.nama, padmaId: r.clients.padma_id,
