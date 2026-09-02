@@ -8,7 +8,9 @@
  *      catatan bidan baru terlihat sesudah kartunya diketuk.
  *   3. Materi tergating: isi bab & URL video tidak pernah ikut ke halaman
  *      daftar, materi terkunci ditolak MESKI URL-nya diakses langsung, reader
- *      yang berhak berwatermark identitas, dan tidak ada aksi unduh.
+ *      e-book yang berhak menampilkan gambar halaman (Task 10 — watermark-nya
+ *      sudah dibakar SERVER ke dalam gambar, bukan lagi lapisan CSS di DOM),
+ *      dan tidak ada aksi unduh.
  *   4. Klaim bayar hanya membawa status ke `menunggu_verifikasi`, tidak pernah
  *      ke `lunas`.
  *   5. Permintaan jadwal dari klien selalu berstatus `menunggu`.
@@ -213,15 +215,23 @@ async function main() {
         : "ditolak dengan halaman ramah",
     );
 
-    // reader materi yang berhak + watermark
+    // reader materi yang berhak — gambar halaman (Task 10)
     await page.goto(`${BASE}/passport/materi/${MATERI_TERBUKA}`, {
       waitUntil: "networkidle",
     });
-    const teksReader = await teksTerlihat(page);
+    // Watermark kini dibakar SERVER ke dalam byte gambar (lihat
+    // src/lib/materi/watermark.ts) — tidak lagi teks yang bisa dibaca dari
+    // DOM, jadi tidak bisa lagi dicek lewat teksTerlihat/hitung seperti
+    // reader bab lama. Yang dibuktikan di sini adalah gambar halamannya
+    // sungguhan dimuat lewat rute bergerbang RLS
+    // `/api/materi/{id}/halaman/{n}`, bukan isi mentah dari storage.
+    const gambarHalaman = await page
+      .locator(`img[src="/api/materi/${MATERI_TERBUKA}/halaman/1"]`)
+      .count();
     catat(
-      "3e. reader menampilkan bab & watermark identitas berulang",
-      teksReader.includes("Mengenal Fase Siklus") && hitung(teksReader, PADMA_ID) >= 10,
-      `PADMA ID muncul ${hitung(teksReader, PADMA_ID)}× (watermark)`,
+      "3e. reader e-book menampilkan gambar halaman lewat rute bergerbang",
+      gambarHalaman === 1,
+      `${gambarHalaman} elemen <img> halaman 1 ditemukan`,
     );
     // Aksi unduh dicari sebagai ELEMEN, bukan sebagai kata: halaman ini memang
     // menulis kalimat "tidak ada berkas yang bisa diunduh", dan pencarian kata
