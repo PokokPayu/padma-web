@@ -24,16 +24,19 @@ async function sesiKlien(email: string) {
  * Materi baru TANPA tautan layanan sama sekali — dipakai berulang di describe
  * bawah supaya jalur otomatis (sesi selesai) pasti tertutup dan satu-satunya
  * cara membuka isinya benar-benar hanya lewat material_assignments.
+ *
+ * Sejak Task 11, materi memang BOLEH lahir tanpa satu pun layanan
+ * (materials.service_id tunggal sudah digantikan material_services, yang
+ * boleh nol baris) — tidak perlu lagi menyisipkan lalu menghapus tautan
+ * seperti sebelum kolom itu dibongkar.
  */
 async function materiTanpaLayanan(judul: string): Promise<string> {
   const db = svc();
-  const { data: layanan } = await db.from("services").select("id").limit(1).single();
   const { data: m } = await db
     .from("materials")
-    .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+    .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true })
     .select("id")
     .single();
-  await db.from("material_services").delete().eq("material_id", m!.id);
   return m!.id as string;
 }
 
@@ -44,30 +47,26 @@ describe("material_assignments — penugasan membuka isi tanpa sesi selesai", ()
   beforeAll(async () => {
     const db = svc();
     // Materi yang TIDAK punya layanan sama sekali: satu-satunya jalan bukanya
-    // adalah penugasan, sehingga test ini tidak bisa lolos lewat jalur otomatis.
-    // `materials.service_id` masih NOT NULL sampai Task 11, jadi ia wajib diisi.
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
+    // adalah penugasan, sehingga test ini tidak bisa lolos lewat jalur
+    // otomatis. Sejak Task 11 itu keadaan SAH dari lahir — tidak perlu lagi
+    // menyisipkan lalu menghapus tautan material_services.
     const { data: m } = await db
       .from("materials")
-      .insert({
-        judul: "UJI-ASSIGN", tipe: "ebook", deskripsi: "", aktif: true,
-        service_id: layanan!.id,
-      })
+      .insert({ judul: "UJI-ASSIGN", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id")
       .single();
     materiId = m!.id;
-    // Tautan layanan DIHAPUS supaya jalur otomatis benar-benar tertutup — kalau
-    // tidak, test ini bisa lolos lewat sesi selesai dan tidak membuktikan apa pun
-    // tentang penugasan.
-    await db.from("material_services").delete().eq("material_id", materiId);
     const { data: k } = await db
       .from("clients")
       .select("id")
       .eq("email", "ananda@padma.test")
       .single();
     klienId = k!.id;
-    await db.from("material_chapters").insert({
-      material_id: materiId, urutan: 1, judul: "Bab uji", isi: "ISI-RAHASIA-ASSIGN",
+    // Baris uji disisipkan lewat RPC — satu-satunya jalur tulis
+    // `material_pages` sejak Task 3/11 — bukan INSERT langsung.
+    await db.rpc("ganti_halaman_materi", {
+      p_material_id: materiId,
+      p_halaman: [{ halaman: 1, objek: `${materiId}/0001.webp`, lebar: 10, tinggi: 10 }],
     });
   });
 
@@ -75,22 +74,22 @@ describe("material_assignments — penugasan membuka isi tanpa sesi selesai", ()
     await svc().from("materials").delete().eq("id", materiId);
   });
 
-  it("tanpa penugasan, klien tidak membaca satu bab pun", async () => {
+  it("tanpa penugasan, klien tidak membaca satu halaman pun", async () => {
     const c = await sesiKlien("ananda@padma.test");
-    const { data } = await c.from("material_chapters").select("isi").eq("material_id", materiId);
+    const { data } = await c.from("material_pages").select("halaman").eq("material_id", materiId);
     expect(data ?? []).toHaveLength(0);
   });
 
-  it("sesudah ditugaskan, klien membaca babnya", async () => {
+  it("sesudah ditugaskan, klien membaca halamannya", async () => {
     const db = svc();
     const { data: staf } = await db.from("profiles").select("id").eq("role", "admin").single();
     await db.from("material_assignments").insert({
       material_id: materiId, client_id: klienId, ditugaskan_oleh: staf!.id,
     });
     const c = await sesiKlien("ananda@padma.test");
-    const { data } = await c.from("material_chapters").select("isi").eq("material_id", materiId);
+    const { data } = await c.from("material_pages").select("halaman, objek").eq("material_id", materiId);
     expect(data).toHaveLength(1);
-    expect(data![0].isi).toContain("ISI-RAHASIA-ASSIGN");
+    expect(data![0].objek).toBe(`${materiId}/0001.webp`);
   });
 
   it("fungsi hak menjawab true walau klien tidak boleh membaca tabel penugasan", async () => {
@@ -118,7 +117,7 @@ describe("material_assignments — penugasan membuka isi tanpa sesi selesai", ()
     await db.from("materials").update({ aktif: false }).eq("id", materiId);
     const c = await sesiKlien("ananda@padma.test");
 
-    const { data: isi } = await c.from("material_chapters").select("isi").eq("material_id", materiId);
+    const { data: isi } = await c.from("material_pages").select("halaman").eq("material_id", materiId);
     expect(isi ?? []).toHaveLength(0);
 
     // Baris `materials` sendiri HARUS tetap terbaca. Menutupnya akan mengulangi

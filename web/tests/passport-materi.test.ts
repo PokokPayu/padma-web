@@ -18,7 +18,7 @@
  *     kerangka kosong, atau lebih buruk: menyimpulkan berhak dari kolom lain.
  *     Akses langsung ke URL materi terkunci diuji apa adanya.
  *  3. `materials.aktif` disaring DUA LAPIS. Sejak migration
- *     `gating_materi_hormati_aktif`, policy baca klien pada `material_chapters`
+ *     `gating_materi_hormati_aktif`, policy baca klien pada `material_pages`
  *     & `material_videos` ikut mengevaluasi `materials.aktif` — materi yang
  *     ditarik admin benar-benar berhenti dijawab basis data. Query aplikasi
  *     TETAP menyaringnya sendiri, di daftar MAUPUN di reader: lapis itu yang
@@ -96,11 +96,11 @@ function esc(teks: string): string {
     .replace(/'/g, "&#x27;");
 }
 
-/** SELURUH isi bab yang ada di basis data, dibaca menembus RLS (pembanding). */
-async function semuaIsiBab(): Promise<Array<{ judul: string; isi: string }>> {
-  const { data, error } = await svc.from("material_chapters").select("judul, isi");
+/** SELURUH kunci objek halaman yang ada di basis data, dibaca menembus RLS (pembanding). */
+async function semuaObjekHalaman(): Promise<string[]> {
+  const { data, error } = await svc.from("material_pages").select("objek");
   if (error) throw error;
-  return data as Array<{ judul: string; isi: string }>;
+  return (data as Array<{ objek: string }>).map((p) => p.objek);
 }
 
 /** SELURUH URL video yang ada di basis data, dibaca menembus RLS (pembanding). */
@@ -109,9 +109,6 @@ async function semuaUrlVideo(): Promise<string[]> {
   if (error) throw error;
   return (data as Array<{ url: string }>).map((v) => v.url);
 }
-
-/** Baris pertama isi bab — cuplikan yang cukup khas untuk dicari di markup. */
-const cuplikan = (isi: string) => isi.split("\n")[0].slice(0, 60);
 
 describe("daftar materi — apa yang klien lihat", () => {
   it("seluruh materi aktif tampil, terkunci maupun tidak", async () => {
@@ -184,17 +181,12 @@ describe("daftar materi — pagar kebocoran (halaman ini tidak boleh membawa isi
     expect(m.toLowerCase()).not.toContain("vimeo.com");
   });
 
-  it("tidak memuat SATU PUN potongan isi bab, terbuka maupun terkunci", async () => {
+  it("tidak memuat SATU PUN kunci objek halaman, terbuka maupun terkunci", async () => {
     const m = await markupDaftar();
-    const bab = await semuaIsiBab();
-    expect(bab.length).toBeGreaterThanOrEqual(4); // seed memang berisi
-    for (const b of bab) {
-      expect(m, `isi bab "${b.judul}" bocor ke halaman daftar`).not.toContain(
-        esc(cuplikan(b.isi)),
-      );
-      expect(m, `judul bab "${b.judul}" bocor ke halaman daftar`).not.toContain(
-        esc(b.judul),
-      );
+    const objek = await semuaObjekHalaman();
+    expect(objek.length).toBeGreaterThanOrEqual(1); // seed memang berisi
+    for (const o of objek) {
+      expect(m, `kunci objek "${o}" bocor ke halaman daftar`).not.toContain(o);
     }
   });
 
@@ -296,7 +288,7 @@ describe("reader materi — e-book yang sudah terbuka (M10: gambar halaman, buka
     expect(m).toContain("Panduan Siklus Subur"); // judul materi
     expect(m).toContain("Sankalpa Fertility Massage"); // nama layanan
     expect(m).toContain("E-Book · baca di aplikasi");
-    expect(m).toContain("E-book 3 bab tentang membaca siklus."); // deskripsi seed
+    expect(m).toContain("E-book bergambar tentang membaca siklus."); // deskripsi seed
 
     // Urutannya mengikat: pasien yang mulai menggulir ke bawah harus sudah
     // MELIHAT jalan keluarnya sebelum tiba di gambar halaman pertama, bukan
@@ -324,29 +316,24 @@ describe("reader materi — e-book berhak tapi isi belum diunggah (M10, keadaan 
 
   beforeAll(async () => {
     const db = svc;
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const { data: staf } = await db.from("profiles").select("id").eq("role", "admin").single();
     const { data: klien } = await db
       .from("clients")
       .select("id")
       .eq("email", "ananda@padma.test")
       .single();
+    // Materi lahir TANPA layanan sama sekali sejak Task 11 (materials.service_id
+    // sudah dihapus) — tidak perlu lagi menyisipkan lalu menghapus tautan
+    // material_services seperti sebelumnya. Berhak lewat PENUGASAN, bukan sesi
+    // selesai: materi ini tidak dikaitkan ke layanan mana pun yang pernah
+    // Ananda jalani.
     const { data: m } = await db
       .from("materials")
-      .insert({
-        judul: "UJI-BELUM-UNGGAH",
-        tipe: "ebook",
-        deskripsi: "",
-        aktif: true,
-        service_id: layanan!.id, // NOT NULL sampai Task 11
-      })
+      .insert({ judul: "UJI-BELUM-UNGGAH", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id")
       .single();
     materiId = m!.id as string;
     // Sengaja TIDAK ada baris material_pages sama sekali — itulah keadaan 2.
-    // Berhak lewat PENUGASAN, bukan sesi selesai: materi ini tidak dikaitkan
-    // ke layanan mana pun yang pernah Ananda jalani.
-    await db.from("material_services").delete().eq("material_id", materiId);
     await db
       .from("material_assignments")
       .insert({ material_id: materiId, client_id: klien!.id, ditugaskan_oleh: staf!.id });
@@ -412,17 +399,21 @@ describe("reader materi — yang belum terbuka (akses langsung ke URL)", () => {
     expect(m).toContain("Panduan ASI Perah"); // judulnya boleh — hanya meta
 
     const { data } = await svc
-      .from("material_chapters")
-      .select("judul, isi")
+      .from("material_pages")
+      .select("halaman, objek")
       .eq("material_id", TERKUNCI_EBOOK);
-    const bab = data as Array<{ judul: string; isi: string }>;
-    expect(bab.length).toBeGreaterThan(0); // babnya memang ada di basis data
-    for (const b of bab) {
-      expect(m, `isi bab terkunci "${b.judul}" bocor lewat akses langsung`).not.toContain(
-        esc(cuplikan(b.isi)),
+    const halaman = data as Array<{ halaman: number; objek: string }>;
+    // Seed MEMANG menaruh baris material_pages untuk materi ini (lihat
+    // supabase/seed.sql) — persis supaya pemeriksaan di bawah membuktikan RLS
+    // benar-benar menutup, bukan lolos kebetulan karena tidak ada apa pun yang
+    // bisa bocor.
+    expect(halaman.length).toBeGreaterThan(0);
+    for (const h of halaman) {
+      expect(m, `kunci objek terkunci "${h.objek}" bocor lewat akses langsung`).not.toContain(
+        h.objek,
       );
-      expect(m).not.toContain(esc(b.judul));
     }
+    expect(m).not.toMatch(/<img\b/);
     expect(m).toMatch(/href="\/passport\/materi"/); // tetap ada jalan kembali
   });
 
@@ -448,10 +439,13 @@ describe("reader materi — yang belum terbuka (akses langsung ke URL)", () => {
       // menyembunyikan kartu sementara isinya tetap bisa diambil dengan satu
       // permintaan REST. Sejak migration `gating_materi_hormati_aktif`, policy
       // baca klien ikut mengevaluasi `materials.aktif`, jadi yang dijaga di
-      // sini MENGUAT: babnya tidak lagi dijawab basis data sama sekali.
+      // sini MENGUAT: halamannya tidak lagi dijawab basis data sama sekali.
+      // TERBUKA_EBOOK punya 3 halaman SUNGGUHAN (lihat seed) yang biasanya
+      // terbaca Ananda — percobaan ini membuktikan aktif=false menutupnya,
+      // bukan sekadar "materi ini kebetulan tidak ada isinya".
       const { data, error } = await ref.klien!
-        .from("material_chapters")
-        .select("id")
+        .from("material_pages")
+        .select("halaman")
         .eq("material_id", TERBUKA_EBOOK);
       expect(error).toBeNull();
       expect(data ?? []).toHaveLength(0);
@@ -504,9 +498,9 @@ describe("materi — pagar sumber", () => {
 
   it("halaman daftar tidak pernah menyentuh pengambil detail materi", () => {
     // Satu pemanggilan `ambilMateriDetail` di halaman daftar sudah cukup untuk
-    // menarik seluruh isi bab ke payload halaman yang paling sering dibuka.
+    // menarik seluruh gambar halaman ke payload halaman yang paling sering dibuka.
     expect(sumberDaftar).not.toContain("ambilMateriDetail");
-    expect(sumberDaftar).not.toContain("material_chapters");
+    expect(sumberDaftar).not.toContain("material_pages");
     expect(sumberDaftar).not.toContain("material_videos");
   });
 

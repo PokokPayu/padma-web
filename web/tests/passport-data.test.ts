@@ -41,28 +41,38 @@ describe("invarian query passport (lewat RLS sesi klien)", () => {
     expect(data![0].nama).toBeTruthy();
   });
 
-  it("daftar materi TIDAK memuat isi bab maupun URL video", async () => {
+  it("daftar materi TIDAK memuat URL video (embed material_videos hanya material_id)", async () => {
+    // `material_pages(halaman)` — BUKAN `objek` — sengaja dipilih di sini,
+    // persis seperti query sungguhan `ambilDaftarMateri()`: `halaman` cuma
+    // penghitung, dan `objek` (kunci storage) memang TIDAK diminta sama
+    // sekali. Materi TERBUKA (mis. …702) LEGITIM boleh membawa `halaman`-nya
+    // sendiri di sini — Ananda berhak melihatnya; yang tidak boleh bocor
+    // adalah `objek`/`url`, dan itulah yang diperiksa di bawah.
     const k = await signInAs("ananda@padma.test");
     const { data, error } = await k
       .from("materials")
-      .select("id, judul, tipe, deskripsi, service_id, material_chapters(id), material_videos(material_id)")
+      .select("id, judul, tipe, deskripsi, material_pages(halaman), material_videos(material_id)")
       .eq("aktif", true);
     expect(error).toBeNull();
     const json = JSON.stringify(data);
     expect(json).not.toContain("vimeo.com");
-    expect(json.toLowerCase()).not.toContain("\"isi\"");
+    expect(json.toLowerCase()).not.toContain("\"objek\"");
+    expect(json.toLowerCase()).not.toContain("\"url\"");
   });
 
-  it("materi terkunci: judul terlihat, isi kosong", async () => {
+  it("materi terkunci: judul terlihat, halaman kosong", async () => {
     const k = await signInAs("ananda@padma.test");
     const { data } = await k
       .from("materials")
-      .select("judul, service_id, material_chapters(id), material_videos(material_id)")
+      .select("judul, material_pages(halaman), material_videos(material_id)")
       .eq("aktif", true);
     const adaTerkunci = data!.some(
-      (m) => (m.material_chapters as unknown[]).length === 0 && m.material_videos === null,
+      (m) => (m.material_pages as unknown[]).length === 0 && m.material_videos === null,
     );
-    expect(adaTerkunci).toBe(true); // seed menyediakan materi Lactation Hero yang belum dijalani
+    // Seed MEMANG menaruh satu baris material_pages untuk materi ebook
+    // terkunci ini (lihat supabase/seed.sql) — RLS-lah yang mengosongkan
+    // embed di atas untuk Ananda, bukan ketiadaan baris di basis data.
+    expect(adaTerkunci).toBe(true);
   });
 
   it("embed material_videos berbentuk OBJEK/null, bukan array", async () => {

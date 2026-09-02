@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
+import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
 import { AksiLayanan, AksiPaket, FormLayananBaru, type PilihanFase } from "./form-layanan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -30,8 +31,12 @@ function PillAktif({ aktif }: { aktif: boolean }) {
 export default async function LayananPage() {
   await requireRole(["admin", "owner"]);
 
-  const katalog = await daftarKatalogAdmin();
+  const [katalog, materiPerLayanan] = await Promise.all([
+    daftarKatalogAdmin(),
+    daftarMateriAdmin(),
+  ]);
   const pilihanFase: PilihanFase[] = katalog.map((f) => ({ id: f.id, nama: f.nama }));
+  const materiPerId = new Map(materiPerLayanan.map((l) => [l.id, l.materi]));
 
   return (
     <main>
@@ -130,6 +135,37 @@ export default async function LayananPage() {
                       ))}
                     </ul>
                   )}
+
+                  {/*
+                    Bacaan saja, sengaja. Keterkaitan materi<->layanan
+                    (`material_services`) dikelola dari modul Materi — bukan
+                    di sini — supaya tidak ada dua tempat yang bisa menulis
+                    satu relasi. Tapi admin yang membuka layar layanan wajib
+                    bisa MELIHAT "layanan ini include materi apa saja" tanpa
+                    berpindah modul; tanpa daftar ini, tidak ada satu pun
+                    layar yang menjawab pertanyaan itu dari sisi layanan.
+                  */}
+                  <div className="mt-3 border-t border-black/5 pt-3">
+                    <p className="text-[11.5px] font-bold uppercase tracking-wide text-ink-soft">
+                      Materi yang termasuk layanan ini
+                    </p>
+                    {(materiPerId.get(l.id) ?? []).length === 0 ? (
+                      <p className="mt-1 text-[12.5px] italic text-ink-soft">
+                        Belum ada materi yang menautkan layanan ini.
+                      </p>
+                    ) : (
+                      <ul className="mt-1 grid gap-1">
+                        {(materiPerId.get(l.id) ?? []).map((m) => (
+                          <li key={m.id} className="text-[12.5px] text-ink">
+                            {m.judul}{" "}
+                            {!m.aktif && (
+                              <span className="text-[11px] font-bold text-clay">(nonaktif)</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

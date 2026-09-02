@@ -251,8 +251,8 @@ export type MateriDetail = {
   videoUrl: string | null;
   /**
    * Dari RPC `berhak_isi_materi` (security definer) — SATU sumber kebenaran
-   * yang sama dipakai policy RLS `material_pages`/`material_chapters`/
-   * `material_videos`. Tanpa ini, "tidak berhak" dan "berhak tapi isinya
+   * yang sama dipakai policy RLS `material_pages`/`material_videos`. Tanpa
+   * ini, "tidak berhak" dan "berhak tapi isinya
    * belum diunggah admin" terlihat identik dari sisi query: keduanya nol
    * baris. Pasien yang sebenarnya berhak akan dibohongi kalimat "terbuka
    * setelah layanan terkait Anda jalani".

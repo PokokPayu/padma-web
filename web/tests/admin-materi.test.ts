@@ -1,30 +1,36 @@
 /**
- * Modul Materi panel admin — metadata + ISI dalam satu aksi, dan gating yang
- * benar-benar menutup di lapisan basis data.
+ * Modul Materi panel admin — metadata + isi yang tidak pernah terbit setengah
+ * jadi, dan gating yang benar-benar menutup di lapisan basis data.
  *
- * Empat cacat senyap yang dijaga berkas ini. Semuanya sudah terverifikasi hidup
- * sebelum modul ini lahir, dan tidak satu pun menghasilkan error:
+ * Sejak Task 11, `material_chapters` & `materials.service_id` sudah dibongkar:
+ * isi e-book adalah gambar halaman (`material_pages`, ditulis lewat RPC
+ * `ganti_halaman_materi` dari `<PengunggahPdf/>`), dan satu materi boleh
+ * menempel ke NOL ATAU LEBIH layanan lewat `material_services`. Cacat senyap
+ * yang dijaga berkas ini, terverifikasi hidup sebelum modul ini lahir dan
+ * tidak satu pun menghasilkan error:
  *
- *  1. MATERI SETENGAH JADI TERKUNCI PERMANEN. Materi bertipe `video` tanpa baris
- *     `material_videos` (atau `ebook` tanpa satu pun bab) terkunci selamanya
- *     untuk SETIAP klien yang sebenarnya berhak — tanpa error — dan kartunya
- *     berbohong: "Terbuka setelah layanan terkait selesai", padahal layanannya
- *     sudah selesai. Hal yang sama terjadi bila `tipe` diubah `ebook`→`video`
- *     tanpa isinya. Karena itu metadata & isi disimpan dalam SATU aksi, materi
- *     LAHIR NONAKTIF sampai isinya benar-benar mendarat, dan tidak ada jalan di
- *     modul ini yang bisa menerbitkan materi kosong.
+ *  1. MATERI SETENGAH JADI TERKUNCI PERMANEN. Materi bertipe `video` tanpa
+ *     baris `material_videos` (atau `ebook` tanpa satu pun halaman) terkunci
+ *     selamanya untuk SETIAP klien yang sebenarnya berhak — tanpa error — dan
+ *     kartunya berbohong: "Terbuka setelah layanan terkait selesai", padahal
+ *     layanannya sudah selesai. Karena itu materi LAHIR NONAKTIF, dan tidak
+ *     ada jalan di modul ini yang bisa menerbitkan materi kosong. Untuk video
+ *     isinya masih bisa disertakan di aksi PENCIPTAAN yang sama; untuk ebook
+ *     TIDAK BISA (unggahan PDF butuh `materiId` yang belum ada), jadi materi
+ *     ebook baru selalu nonaktif sampai halamannya diunggah lewat panel
+ *     "Kelola isi" dan diterbitkan lewat aksi terpisah.
  *
- *  2. POLICY CHAPTERS/VIDEOS TIDAK MENGEVALUASI `materials.aktif`. Sebelum
+ *  2. POLICY HALAMAN/VIDEO TIDAK MENGEVALUASI `materials.aktif`. Sebelum
  *     migration `gating_materi_hormati_aktif`, admin menonaktifkan materi dan
- *     klien TETAP membaca seluruh babnya beserta URL videonya lewat PostgREST
- *     langsung — hanya kartunya yang hilang dari UI. Tombol "Nonaktifkan"
- *     lahir di modul ini, jadi ia wajib benar sejak hari pertama.
+ *     klien TETAP membaca seluruh halamannya beserta URL videonya lewat
+ *     PostgREST langsung — hanya kartunya yang hilang dari UI.
  *
- *  3. PENGHAPUSAN ISI HANYA LEWAT RPC BERPARAMETER TUNGGAL. Verba DELETE atas
- *     `material_chapters`/`material_videos` sudah dicabut dari peran API
- *     (filter PostgREST adalah pilihan pemanggil, bukan pembatas baris). Nama
- *     argumennya MENGIKAT — salah nama menghasilkan 404 PGRST202, bukan 400 —
- *     dan `data === null` berarti "tidak ada yang cocok", yaitu SUKSES.
+ *  3. RADIUS TAUTAN LAYANAN TERKUNCI `material_id`. `gantiLayananMateri`
+ *     menulis ulang `material_services` lewat hapus-lalu-sisip yang
+ *     radiusnya terikat parameter WAJIB — bukan filter yang bisa dibuat
+ *     tautologis. Repo ini pernah kehilangan SELURUH bab materi lewat satu
+ *     filter longgar (`?urutan=gte.0`); describe "radius tautan layanan"
+ *     membuktikan materi SAUDARA tidak ikut tersapu saat satu materi diubah.
  *
  *  4. `material_videos` pada embed PostgREST adalah OBJEK atau `null`, BUKAN
  *     array. `video.length === 0` selalu salah dan membuat setiap materi video
@@ -50,17 +56,15 @@ const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 const SVC_TERBUKA = "11111111-1111-1111-1111-111111111101";
 // Layanan 1106 Lactation Hero — Ananda tidak pernah menjalaninya.
 const SVC_TERKUNCI = "11111111-1111-1111-1111-111111111106";
+// Layanan 1102 PADMA Flow Yoga — dipakai murni sebagai layanan KEDUA pada
+// pengujian "materi boleh menempel ke lebih dari satu layanan".
+const SVC_KEDUA = "11111111-1111-1111-1111-111111111102";
 const TAK_ADA_SVC = "11111111-1111-1111-1111-1111111119ff";
 
 const MATERI_EBOOK = "77777777-7777-7777-7777-7777777779a1";
 const MATERI_VIDEO = "77777777-7777-7777-7777-7777777779a2";
 const MATERI_KOSONG = "77777777-7777-7777-7777-7777777779a3";
 const TAK_ADA_MATERI = "77777777-7777-7777-7777-7777777779ff";
-
-const BAB_1 = "88888888-8888-8888-8888-8888888889a1";
-const BAB_2 = "88888888-8888-8888-8888-8888888889a2";
-const BAB_3 = "88888888-8888-8888-8888-8888888889a3";
-const TAK_ADA_BAB = "88888888-8888-8888-8888-8888888889ff";
 
 const URL_UJI = "https://vimeo.com/pad-uji-materi-9a02";
 
@@ -94,13 +98,10 @@ const {
   perbaruiMateri,
   aktifkanMateri,
   nonaktifkanMateri,
-  tambahBab,
-  perbaruiBab,
-  hapusBab,
   gantiVideo,
   lepasVideo,
 } = await import("@/app/admin/materi/aksi");
-const { daftarMateriAdmin } = await import("@/lib/admin/materi-admin");
+const { daftarMateriAdmin, TANPA_LAYANAN_ID } = await import("@/lib/admin/materi-admin");
 const { periksaUrlVideo } = await import("@/app/admin/materi/status");
 const { default: MateriPage } = await import("@/app/admin/materi/page");
 
@@ -114,20 +115,22 @@ const SEMUA_SUMBER = [sumberAksi, sumberHalaman, sumberForm, sumberStatus, sumbe
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
 
-function formulir(isi: Record<string, string>): FormData {
+/** `v` boleh string tunggal atau array — array dikirim sebagai medan berulang (checkbox `service_id`). */
+function formulir(isi: Record<string, string | string[]>): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries(isi)) fd.set(k, v);
+  for (const [k, v] of Object.entries(isi)) {
+    for (const nilai of Array.isArray(v) ? v : [v]) fd.append(k, nilai);
+  }
   return fd;
 }
 
 async function barisMateri(id: string) {
   const { data } = await admin
     .from("materials")
-    .select("id, service_id, judul, tipe, deskripsi, aktif")
+    .select("id, judul, tipe, deskripsi, aktif")
     .eq("id", id)
     .maybeSingle<{
       id: string;
-      service_id: string;
       judul: string;
       tipe: string;
       deskripsi: string;
@@ -136,13 +139,21 @@ async function barisMateri(id: string) {
   return data;
 }
 
-async function babMateri(materiId: string) {
+async function layananMateri(materiId: string): Promise<string[]> {
   const { data } = await admin
-    .from("material_chapters")
-    .select("id, urutan, judul, isi")
+    .from("material_services")
+    .select("service_id")
+    .eq("material_id", materiId);
+  return (data ?? []).map((r) => r.service_id as string).sort();
+}
+
+async function halamanMateri(materiId: string) {
+  const { data } = await admin
+    .from("material_pages")
+    .select("halaman, objek")
     .eq("material_id", materiId)
-    .order("urutan");
-  return (data ?? []) as Array<{ id: string; urutan: number; judul: string; isi: string }>;
+    .order("halaman");
+  return (data ?? []) as Array<{ halaman: number; objek: string }>;
 }
 
 async function videoMateri(materiId: string) {
@@ -167,7 +178,7 @@ async function bersihkan() {
   // sebuah FK diubah, dan sisanya baru terlihat beberapa run kemudian.
   const semua = [MATERI_EBOOK, MATERI_VIDEO, MATERI_KOSONG];
   await admin.from("material_videos").delete().in("material_id", semua);
-  await admin.from("material_chapters").delete().in("material_id", semua);
+  await admin.from("material_pages").delete().in("material_id", semua);
   await admin.from("material_services").delete().in("material_id", semua);
   await admin.from("materials").delete().in("id", semua);
   // Materi yang lahir dari action di berkas ini (id-nya digenerate basis data).
@@ -178,7 +189,7 @@ async function bersihkan() {
   const idSisa = (sisa ?? []).map((m) => m.id as string);
   if (idSisa.length > 0) {
     await admin.from("material_videos").delete().in("material_id", idSisa);
-    await admin.from("material_chapters").delete().in("material_id", idSisa);
+    await admin.from("material_pages").delete().in("material_id", idSisa);
     await admin.from("material_services").delete().in("material_id", idSisa);
     await admin.from("materials").delete().in("id", idSisa);
   }
@@ -188,7 +199,6 @@ async function pasangFixture() {
   await admin.from("materials").insert([
     {
       id: MATERI_EBOOK,
-      service_id: SVC_TERBUKA,
       judul: "PAD-UJI E-Book Materi",
       tipe: "ebook",
       deskripsi: "fixture e-book",
@@ -196,7 +206,6 @@ async function pasangFixture() {
     },
     {
       id: MATERI_VIDEO,
-      service_id: SVC_TERBUKA,
       judul: "PAD-UJI Video Materi",
       tipe: "video",
       deskripsi: "fixture video",
@@ -206,7 +215,6 @@ async function pasangFixture() {
       // Materi setengah jadi yang SENGAJA dibuat lewat service role: modul ini
       // tidak boleh punya satu pun jalan untuk melahirkannya.
       id: MATERI_KOSONG,
-      service_id: SVC_TERBUKA,
       judul: "PAD-UJI Materi Tanpa Isi",
       tipe: "ebook",
       deskripsi: "fixture tanpa isi",
@@ -219,11 +227,14 @@ async function pasangFixture() {
     { material_id: MATERI_VIDEO, service_id: SVC_TERBUKA },
     { material_id: MATERI_KOSONG, service_id: SVC_TERBUKA },
   ]);
-  await admin.from("material_chapters").insert([
-    { id: BAB_1, material_id: MATERI_EBOOK, urutan: 1, judul: "PAD-UJI Bab Satu", isi: "Isi bab satu." },
-    { id: BAB_2, material_id: MATERI_EBOOK, urutan: 2, judul: "PAD-UJI Bab Dua", isi: "Isi bab dua." },
-    { id: BAB_3, material_id: MATERI_EBOOK, urutan: 3, judul: "PAD-UJI Bab Tiga", isi: "Isi bab tiga." },
-  ]);
+  await admin.rpc("ganti_halaman_materi", {
+    p_material_id: MATERI_EBOOK,
+    p_halaman: [
+      { halaman: 1, objek: `${MATERI_EBOOK}/0001.webp`, lebar: 10, tinggi: 10 },
+      { halaman: 2, objek: `${MATERI_EBOOK}/0002.webp`, lebar: 10, tinggi: 10 },
+      { halaman: 3, objek: `${MATERI_EBOOK}/0003.webp`, lebar: 10, tinggi: 10 },
+    ],
+  });
   await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, url: URL_UJI });
 }
 
@@ -264,11 +275,11 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     expect(layanan.materi.map((m) => m.id)).toContain(MATERI_EBOOK);
   });
 
-  it("membawa bab e-book terurut dan URL video sebagai OBJEK, bukan array", async () => {
+  it("membawa jumlah halaman e-book dan URL video sebagai OBJEK, bukan array", async () => {
     const daftar = await daftarMateriAdmin();
     const semua = daftar.flatMap((l) => l.materi);
     const ebook = semua.find((m) => m.id === MATERI_EBOOK)!;
-    expect(ebook.bab.map((b) => b.urutan)).toEqual([1, 2, 3]);
+    expect(ebook.jumlahHalaman).toBe(3);
     expect(ebook.videoUrl).toBeNull();
 
     const video = semua.find((m) => m.id === MATERI_VIDEO)!;
@@ -276,7 +287,7 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     // akan membuat setiap materi video tampak belum punya isi.
     expect(video.videoUrl).toBe(URL_UJI);
     expect(Array.isArray(video.videoUrl)).toBe(false);
-    expect(video.bab).toEqual([]);
+    expect(video.jumlahHalaman).toBe(0);
   });
 
   it("menandai materi yang isinya BELUM lengkap — kartu tidak boleh berbohong", async () => {
@@ -287,9 +298,57 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     expect(semua.find((m) => m.id === MATERI_KOSONG)!.lengkap).toBe(false);
   });
 
+  it("satu materi boleh muncul di bawah LEBIH dari satu kelompok layanan", async () => {
+    // Headline perubahan Task 11: materials.service_id (satu materi, satu
+    // layanan) sudah diganti material_services (banyak-ke-banyak).
+    const { error } = await admin
+      .from("material_services")
+      .insert({ material_id: MATERI_EBOOK, service_id: SVC_KEDUA });
+    expect(error).toBeNull();
+    try {
+      const daftar = await daftarMateriAdmin();
+      const terbuka = daftar.find((l) => l.id === SVC_TERBUKA)!;
+      const kedua = daftar.find((l) => l.id === SVC_KEDUA)!;
+      expect(terbuka.materi.map((m) => m.id)).toContain(MATERI_EBOOK);
+      expect(kedua.materi.map((m) => m.id)).toContain(MATERI_EBOOK);
+      const ebookDiKedua = kedua.materi.find((m) => m.id === MATERI_EBOOK)!;
+      expect(ebookDiKedua.layananId.slice().sort()).toEqual(
+        [SVC_TERBUKA, SVC_KEDUA].sort(),
+      );
+    } finally {
+      await admin
+        .from("material_services")
+        .delete()
+        .eq("material_id", MATERI_EBOOK)
+        .eq("service_id", SVC_KEDUA);
+    }
+  });
+
+  it("materi TANPA layanan sama sekali muncul di kelompok sentinel 'Tanpa layanan'", async () => {
+    const { data: yatim } = await admin
+      .from("materials")
+      .insert({ judul: "PAD-UJI Materi Yatim Layanan", tipe: "ebook", deskripsi: "", aktif: false })
+      .select("id")
+      .single();
+    try {
+      const daftar = await daftarMateriAdmin();
+      const sentinel = daftar.find((l) => l.id === TANPA_LAYANAN_ID)!;
+      expect(sentinel.nama).toBe("Tanpa layanan");
+      expect(sentinel.materi.map((m) => m.id)).toContain(yatim!.id);
+      expect(sentinel.materi.find((m) => m.id === yatim!.id)!.layananId).toEqual([]);
+      // Dan TIDAK muncul di kelompok layanan sungguhan mana pun.
+      for (const l of daftar) {
+        if (l.id === TANPA_LAYANAN_ID) continue;
+        expect(l.materi.map((m) => m.id)).not.toContain(yatim!.id);
+      }
+    } finally {
+      await admin.from("materials").delete().eq("id", yatim!.id);
+    }
+  });
+
   it("dibaca lewat sesi pengguna: klien tidak melihat isi materi terkunci", async () => {
-    // Bila lapisan ini memakai service role, seluruh bab & URL tetap keluar
-    // untuk siapa pun dan RLS tidak pernah ikut diperiksa.
+    // Bila lapisan ini memakai service role, seluruh halaman & URL tetap
+    // keluar untuk siapa pun dan RLS tidak pernah ikut diperiksa.
     ref.sesi = sesiKlien;
     const daftar = await daftarMateriAdmin();
     const semua = daftar.flatMap((l) => l.materi);
@@ -302,28 +361,61 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
 });
 
 // ---------------------------------------------------------------------------
-// PAGAR UTAMA 1: metadata + isi dalam SATU aksi
+// PAGAR UTAMA 1: materi tidak pernah terbit setengah jadi
 // ---------------------------------------------------------------------------
 
-describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
-  it("e-book TIDAK bisa disimpan tanpa satu pun bab", async () => {
-    const sebelum = await jumlahMateri();
+describe("simpanMateri — materi tidak pernah terbit setengah jadi", () => {
+  it("e-book baru lahir NONAKTIF tanpa isi — unggahannya menyusul lewat panel", async () => {
+    // Ini bentuk baru dari pagar lama: dulu (bab teks) e-book TANPA isi
+    // ditolak SEKETIKA di aksi ini. Sejak isi e-book adalah unggahan PDF yang
+    // butuh materiId (belum ada pada langkah "materi baru"), aksinya TIDAK
+    // BISA lagi menuntut isi di permintaan yang sama — jadi pagarnya bergeser
+    // ke fail-closed di sisi lain: materi tetap lahir, tapi SELALU nonaktif,
+    // dan aktifkanMateri (diuji terpisah di bawah) menolak menerbitkannya.
     const hasil = await simpanMateri(
       formulir({
-        service_id: SVC_TERBUKA,
-        judul: "PAD-UJI E-Book Tanpa Bab",
+        judul: "PAD-UJI E-Book Baru Tanpa Isi",
         tipe: "ebook",
-        deskripsi: "seharusnya ditolak",
-        bab_judul: "",
-        bab_isi: "",
+        deskripsi: "",
+        service_id: [SVC_TERKUNCI],
       }),
     );
-    expect(hasil.ok).toBe(false);
-    if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/bab/i);
-    // Ditolak SEBELUM menyentuh basis data — bukan "disimpan lalu dibatalkan":
-    // hak DELETE atas `materials` sudah dicabut, jadi tidak ada jalan mundur.
-    expect(await jumlahMateri()).toBe(sebelum);
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+
+    expect(await barisMateri(hasil.id)).toMatchObject({
+      judul: "PAD-UJI E-Book Baru Tanpa Isi",
+      tipe: "ebook",
+      aktif: false,
+    });
+    expect(await halamanMateri(hasil.id)).toHaveLength(0);
+
+    const tolak = await aktifkanMateri(hasil.id);
+    expect(tolak.ok).toBe(false);
+  });
+
+  it("materi boleh lahir TANPA layanan sama sekali", async () => {
+    const hasil = await simpanMateri(
+      formulir({ judul: "PAD-UJI Tanpa Layanan Sekali", tipe: "ebook", deskripsi: "" }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    expect(await layananMateri(hasil.id)).toEqual([]);
+  });
+
+  it("materi boleh lahir menempel ke LEBIH dari satu layanan sekaligus", async () => {
+    const hasil = await simpanMateri(
+      formulir({
+        judul: "PAD-UJI Video Dua Layanan",
+        tipe: "video",
+        deskripsi: "",
+        service_id: [SVC_TERKUNCI, SVC_KEDUA],
+        video_url: "https://player.vimeo.com/video/998811",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    expect(await layananMateri(hasil.id)).toEqual([SVC_KEDUA, SVC_TERKUNCI].sort());
   });
 
   it("video TIDAK bisa disimpan tanpa URL", async () => {
@@ -373,31 +465,6 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
     expect(data ?? []).toHaveLength(0);
   });
 
-  it("e-book tersimpan bersama bab pertamanya dalam satu aksi, dan langsung aktif", async () => {
-    const hasil = await simpanMateri(
-      formulir({
-        service_id: SVC_TERKUNCI,
-        judul: "PAD-UJI E-Book Baru",
-        tipe: "ebook",
-        deskripsi: "Deskripsi uji",
-        bab_judul: "Bab Pembuka",
-        bab_isi: "Isi bab pembuka yang cukup panjang untuk dibaca.",
-      }),
-    );
-    expect(hasil.ok).toBe(true);
-    if (!hasil.ok) return;
-
-    expect(await barisMateri(hasil.id)).toMatchObject({
-      service_id: SVC_TERKUNCI,
-      judul: "PAD-UJI E-Book Baru",
-      tipe: "ebook",
-      aktif: true,
-    });
-    const bab = await babMateri(hasil.id);
-    expect(bab).toHaveLength(1);
-    expect(bab[0].judul).toBe("Bab Pembuka");
-  });
-
   it("video tersimpan bersama URL-nya dalam satu aksi, dan langsung aktif", async () => {
     const hasil = await simpanMateri(
       formulir({
@@ -425,8 +492,6 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
         judul: "PAD-UJI Materi Yatim",
         tipe: "ebook",
         deskripsi: "",
-        bab_judul: "Bab",
-        bab_isi: "isi",
       }),
     );
     expect(hasil.ok).toBe(false);
@@ -442,8 +507,6 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
         judul: "PAD-UJI Tipe Karangan",
         tipe: "podcast",
         deskripsi: "",
-        bab_judul: "Bab",
-        bab_isi: "isi",
       }),
     );
     expect(hasil.ok).toBe(false);
@@ -456,8 +519,6 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
         judul: "PAD-UJI Materi Revalidate",
         tipe: "ebook",
         deskripsi: "",
-        bab_judul: "Bab",
-        bab_isi: "isi bab",
       }),
     );
     for (const p of ["/admin/materi", "/passport/materi"]) {
@@ -474,8 +535,6 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
           judul: "PAD-UJI Dari Klien",
           tipe: "ebook",
           deskripsi: "",
-          bab_judul: "Bab",
-          bab_isi: "isi",
         }),
       ),
     ).rejects.toThrow(/REDIRECT/);
@@ -489,11 +548,11 @@ describe("simpanMateri — tidak ada materi yang lahir setengah jadi", () => {
 });
 
 describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
-  it("mengubah judul, deskripsi, dan layanan tanpa menyentuh keadaan aktif", async () => {
+  it("mengubah judul & deskripsi tanpa menyentuh keadaan aktif ataupun layanannya", async () => {
     const hasil = await perbaruiMateri(
       MATERI_EBOOK,
       formulir({
-        service_id: SVC_TERBUKA,
+        service_id: SVC_TERBUKA, // TIDAK berubah — beberapa test di berkas ini bergantung padanya
         judul: "PAD-UJI E-Book Materi Baru",
         tipe: "ebook",
         deskripsi: "deskripsi baru",
@@ -506,6 +565,7 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
       deskripsi: "deskripsi baru",
       aktif: true,
     });
+    expect(await layananMateri(MATERI_EBOOK)).toEqual([SVC_TERBUKA]);
   });
 
   it("ebook → video TANPA URL ditolak, dan tipenya TIDAK berubah", async () => {
@@ -526,7 +586,7 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
     expect(await videoMateri(MATERI_EBOOK)).toBeNull();
   });
 
-  it("video → ebook TANPA bab ditolak, dan tipenya TIDAK berubah", async () => {
+  it("video → ebook TANPA halaman ditolak, dan tipenya TIDAK berubah", async () => {
     const hasil = await perbaruiMateri(
       MATERI_VIDEO,
       formulir({
@@ -534,12 +594,39 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
         judul: "PAD-UJI Video Materi",
         tipe: "ebook",
         deskripsi: "",
-        bab_judul: "",
-        bab_isi: "",
       }),
     );
     expect(hasil.ok).toBe(false);
+    if (!hasil.ok) expect(hasil.pesan).toMatch(/e-book|pdf/i);
     expect((await barisMateri(MATERI_VIDEO))!.tipe).toBe("video");
+  });
+
+  it("video → ebook DITERIMA ketika materi itu SENDIRI sudah punya halaman tersisa", async () => {
+    // Isi e-book tidak bisa disertakan di aksi ini (butuh materiId untuk
+    // mengunggah), jadi perpindahan TIDAK menuntut isi baru — ia menuntut
+    // BUKTI bahwa materiId ini sendiri sudah punya halaman, entah dari
+    // unggahan lewat panel "Kelola isi" SEBELUM formulir ini disimpan, atau
+    // sisa dari saat tipenya dulu ebook.
+    const { data: m } = await admin
+      .from("materials")
+      .insert({ judul: "PAD-UJI Video Jadi Ebook", tipe: "video", deskripsi: "", aktif: false })
+      .select("id")
+      .single();
+    const id = m!.id as string;
+    try {
+      await admin.rpc("ganti_halaman_materi", {
+        p_material_id: id,
+        p_halaman: [{ halaman: 1, objek: `${id}/0001.webp`, lebar: 5, tinggi: 5 }],
+      });
+      const hasil = await perbaruiMateri(
+        id,
+        formulir({ judul: "PAD-UJI Video Jadi Ebook", tipe: "ebook", deskripsi: "" }),
+      );
+      expect(hasil.ok).toBe(true);
+      expect((await barisMateri(id))!.tipe).toBe("ebook");
+    } finally {
+      await admin.from("materials").delete().eq("id", id);
+    }
   });
 
   it("ebook → video DENGAN URL berpindah lengkap dengan isinya", async () => {
@@ -577,6 +664,23 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
     expect(hasil.ok).toBe(false);
   });
 
+  it("menolak layanan yang tidak ada, tautan lama materinya TIDAK berubah", async () => {
+    const sebelum = await layananMateri(MATERI_EBOOK);
+    const hasil = await perbaruiMateri(
+      MATERI_EBOOK,
+      formulir({
+        service_id: [SVC_TERBUKA, TAK_ADA_SVC],
+        judul: "PAD-UJI E-Book Materi Baru",
+        tipe: "ebook",
+        deskripsi: "deskripsi baru",
+      }),
+    );
+    expect(hasil.ok).toBe(false);
+    if (hasil.ok) return;
+    expect(hasil.pesan).toMatch(/layanan/i);
+    expect(await layananMateri(MATERI_EBOOK)).toEqual(sebelum);
+  });
+
   it("PENJAGA PERAN: klien yang login tidak bisa memanggil action ini", async () => {
     ref.sesi = sesiKlien;
     await expect(
@@ -594,13 +698,65 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// PAGAR UTAMA 3: radius tautan layanan terkunci material_id
+// ---------------------------------------------------------------------------
+
+describe("radius tautan layanan: mengubah satu materi tidak menyapu materi saudara", () => {
+  let materiA = "";
+  let materiB = "";
+
+  beforeAll(async () => {
+    const [{ data: a }, { data: b }] = await Promise.all([
+      admin
+        .from("materials")
+        .insert({ judul: "PAD-UJI Radius A", tipe: "ebook", deskripsi: "", aktif: false })
+        .select("id")
+        .single(),
+      admin
+        .from("materials")
+        .insert({ judul: "PAD-UJI Radius B", tipe: "ebook", deskripsi: "", aktif: false })
+        .select("id")
+        .single(),
+    ]);
+    materiA = a!.id as string;
+    materiB = b!.id as string;
+    await admin.from("material_services").insert([
+      { material_id: materiA, service_id: SVC_TERBUKA },
+      { material_id: materiB, service_id: SVC_TERKUNCI },
+    ]);
+  });
+
+  afterAll(async () => {
+    await admin.from("materials").delete().in("id", [materiA, materiB]);
+  });
+
+  it("gantiLayananMateri (lewat perbaruiMateri) hanya menyentuh materiId yang diminta", async () => {
+    const hasil = await perbaruiMateri(
+      materiA,
+      formulir({
+        service_id: [SVC_KEDUA],
+        judul: "PAD-UJI Radius A",
+        tipe: "ebook",
+        deskripsi: "",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    expect(await layananMateri(materiA)).toEqual([SVC_KEDUA]);
+    // Materi SAUDARA (tautan layanan lain, dibuat pada permintaan yang
+    // berbeda) tidak boleh ikut tersapu — kelas bug persis `?urutan=gte.0`
+    // yang menjadi alasan pola hapus-lalu-sisip ini terikat parameter.
+    expect(await layananMateri(materiB)).toEqual([SVC_TERKUNCI]);
+  });
+});
+
 describe("aktifkanMateri menolak menerbitkan materi kosong", () => {
   it("materi tanpa isi TIDAK bisa diaktifkan — kartunya akan berbohong", async () => {
     expect((await barisMateri(MATERI_KOSONG))!.aktif).toBe(false);
     const hasil = await aktifkanMateri(MATERI_KOSONG);
     expect(hasil.ok).toBe(false);
     if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/isi|bab/i);
+    expect(hasil.pesan).toMatch(/isi/i);
     expect((await barisMateri(MATERI_KOSONG))!.aktif).toBe(false);
   });
 
@@ -643,13 +799,13 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
     await admin.from("materials").update({ aktif: true }).in("id", [MATERI_EBOOK, MATERI_VIDEO]);
   });
 
-  it("klien membaca bab & URL selama materi masih aktif (alur sah tidak rusak)", async () => {
-    const bab = await sesiKlien
-      .from("material_chapters")
-      .select("id")
+  it("klien membaca halaman & URL selama materi masih aktif (alur sah tidak rusak)", async () => {
+    const halaman = await sesiKlien
+      .from("material_pages")
+      .select("halaman")
       .eq("material_id", MATERI_EBOOK);
-    expect(bab.error).toBeNull();
-    expect(bab.data ?? []).toHaveLength(3);
+    expect(halaman.error).toBeNull();
+    expect(halaman.data ?? []).toHaveLength(3);
 
     const video = await sesiKlien
       .from("material_videos")
@@ -658,18 +814,18 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
     expect(video.data ?? []).toHaveLength(1);
   });
 
-  it("sesudah dinonaktifkan, klien TIDAK bisa lagi membaca babnya lewat REST langsung", async () => {
+  it("sesudah dinonaktifkan, klien TIDAK bisa lagi membaca halamannya lewat REST langsung", async () => {
     ref.sesi = sesiAdmin;
     expect((await nonaktifkanMateri(MATERI_EBOOK)).ok).toBe(true);
 
     // Bukan "hilang dari UI" — hilang dari jawaban PostgREST itu sendiri.
     const { data, error } = await sesiKlien
-      .from("material_chapters")
-      .select("id, judul, isi")
+      .from("material_pages")
+      .select("halaman, objek")
       .eq("material_id", MATERI_EBOOK);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
-    expect(JSON.stringify(data)).not.toContain("Isi bab satu.");
+    expect(JSON.stringify(data)).not.toContain(`${MATERI_EBOOK}/0001.webp`);
   });
 
   it("sesudah dinonaktifkan, URL videonya pun tidak lagi terbaca klien", async () => {
@@ -705,8 +861,8 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
 
   it("admin TETAP bisa membaca isi materi nonaktif — kalau tidak, ia tak bisa memperbaikinya", async () => {
     const { data } = await sesiAdmin
-      .from("material_chapters")
-      .select("id")
+      .from("material_pages")
+      .select("halaman")
       .eq("material_id", MATERI_EBOOK);
     expect(data ?? []).toHaveLength(3);
   });
@@ -715,109 +871,10 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
     ref.sesi = sesiAdmin;
     expect((await aktifkanMateri(MATERI_EBOOK)).ok).toBe(true);
     const { data } = await sesiKlien
-      .from("material_chapters")
-      .select("id")
+      .from("material_pages")
+      .select("halaman")
       .eq("material_id", MATERI_EBOOK);
     expect(data ?? []).toHaveLength(3);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PAGAR UTAMA 3: penghapusan isi hanya lewat RPC berparameter tunggal
-// ---------------------------------------------------------------------------
-
-describe("mengelola bab e-book", () => {
-  it("tambahBab menambahkan bab pada urutan berikutnya", async () => {
-    const hasil = await tambahBab(
-      MATERI_EBOOK,
-      formulir({ judul: "PAD-UJI Bab Empat", isi: "Isi bab empat." }),
-    );
-    expect(hasil.ok).toBe(true);
-    const bab = await babMateri(MATERI_EBOOK);
-    expect(bab).toHaveLength(4);
-    expect(bab[3].urutan).toBe(4);
-    expect(bab[3].judul).toBe("PAD-UJI Bab Empat");
-  });
-
-  it("perbaruiBab mengubah judul, isi, dan urutan", async () => {
-    const hasil = await perbaruiBab(
-      BAB_2,
-      formulir({ judul: "PAD-UJI Bab Dua Baru", isi: "Isi bab dua yang baru.", urutan: "2" }),
-    );
-    expect(hasil.ok).toBe(true);
-    const bab = (await babMateri(MATERI_EBOOK)).find((b) => b.id === BAB_2)!;
-    expect(bab.judul).toBe("PAD-UJI Bab Dua Baru");
-    expect(bab.isi).toBe("Isi bab dua yang baru.");
-  });
-
-  it("bab kosong ditolak — bab tanpa isi adalah halaman kosong di reader klien", async () => {
-    const hasil = await tambahBab(MATERI_EBOOK, formulir({ judul: "PAD-UJI Bab Hampa", isi: "" }));
-    expect(hasil.ok).toBe(false);
-    expect((await babMateri(MATERI_EBOOK)).map((b) => b.judul)).not.toContain(
-      "PAD-UJI Bab Hampa",
-    );
-  });
-
-  it("hapusBab lewat RPC menghapus TEPAT SATU baris", async () => {
-    const sebelum = await babMateri(MATERI_EBOOK);
-    expect(sebelum.length).toBeGreaterThan(1);
-
-    const hasil = await hapusBab(BAB_3);
-    expect(hasil.ok).toBe(true);
-
-    const sesudah = await babMateri(MATERI_EBOOK);
-    expect(sesudah).toHaveLength(sebelum.length - 1);
-    expect(sesudah.map((b) => b.id)).not.toContain(BAB_3);
-    // Bab lain di materi yang sama TIDAK ikut tersapu — inilah yang membedakan
-    // RPC berparameter tunggal dari DELETE berfilter.
-    expect(sesudah.map((b) => b.id)).toContain(BAB_1);
-    expect(sesudah.map((b) => b.id)).toContain(BAB_2);
-  });
-
-  it("bab yang sudah lebih dulu hilang bukan kegagalan (data === null berarti sukses)", async () => {
-    const hasil = await hapusBab(TAK_ADA_BAB);
-    expect(hasil.ok).toBe(true);
-  });
-
-  it("bab TERAKHIR sebuah e-book aktif TIDAK bisa dihapus", async () => {
-    // Menghapusnya membuat materi aktif tanpa isi: terkunci permanen bagi
-    // seluruh klien yang berhak, tanpa error, dengan kartu yang berbohong.
-    const { data: baru } = await admin
-      .from("material_chapters")
-      .insert({
-        material_id: MATERI_KOSONG,
-        urutan: 1,
-        judul: "PAD-UJI Bab Tunggal",
-        isi: "satu-satunya",
-      })
-      .select("id")
-      .single();
-    await admin.from("materials").update({ aktif: true }).eq("id", MATERI_KOSONG);
-    try {
-      const hasil = await hapusBab(baru!.id as string);
-      expect(hasil.ok).toBe(false);
-      if (hasil.ok) return;
-      expect(hasil.pesan).toMatch(/nonaktif|terakhir|satu/i);
-      expect(await babMateri(MATERI_KOSONG)).toHaveLength(1);
-    } finally {
-      await admin.from("materials").update({ aktif: false }).eq("id", MATERI_KOSONG);
-      await admin.from("material_chapters").delete().eq("material_id", MATERI_KOSONG);
-    }
-  });
-
-  it("PENJAGA PERAN: klien yang login tidak bisa menghapus bab", async () => {
-    ref.sesi = sesiKlien;
-    await expect(hapusBab(BAB_1)).rejects.toThrow(/REDIRECT/);
-    expect((await babMateri(MATERI_EBOOK)).map((b) => b.id)).toContain(BAB_1);
-  });
-
-  it("memanggil RPC dengan nama argumen yang MENGIKAT", () => {
-    // Salah nama argumen menghasilkan 404 PGRST202 — bukan 400 — dan pesannya
-    // tidak menyebut argumen mana yang salah.
-    expect(sumberAksi).toContain('rpc("hapus_bab_materi"');
-    expect(sumberAksi).toMatch(/bab_id:/);
-    expect(sumberAksi).toContain('rpc("lepas_video_materi"');
-    expect(sumberAksi).toMatch(/materi_id:/);
   });
 });
 
@@ -879,20 +936,20 @@ describe("mengelola video materi", () => {
 // ---------------------------------------------------------------------------
 
 describe("invarian: tidak ada satu pun materi AKTIF tanpa isi", () => {
-  it("setiap materi aktif punya bab (ebook) atau URL video (video)", async () => {
+  it("setiap materi aktif punya halaman (ebook) atau URL video (video)", async () => {
     const { data: materi } = await admin
       .from("materials")
       .select("id, judul, tipe")
       .eq("aktif", true);
-    const { data: bab } = await admin.from("material_chapters").select("material_id");
+    const { data: halaman } = await admin.from("material_pages").select("material_id");
     const { data: video } = await admin.from("material_videos").select("material_id");
 
-    const punyaBab = new Set((bab ?? []).map((b) => b.material_id as string));
+    const punyaHalaman = new Set((halaman ?? []).map((h) => h.material_id as string));
     const punyaVideo = new Set((video ?? []).map((v) => v.material_id as string));
 
     for (const m of materi ?? []) {
       const lengkap =
-        m.tipe === "ebook" ? punyaBab.has(m.id as string) : punyaVideo.has(m.id as string);
+        m.tipe === "ebook" ? punyaHalaman.has(m.id as string) : punyaVideo.has(m.id as string);
       expect(lengkap, `materi aktif "${m.judul}" tidak punya isi`).toBe(true);
     }
   });
@@ -904,10 +961,23 @@ describe("invarian: tidak ada satu pun materi AKTIF tanpa isi", () => {
 
 describe("halaman materi (/admin/materi)", () => {
   let markup = "";
+  let materiTanpaLayananId = "";
 
   beforeAll(async () => {
     ref.sesi = sesiAdmin;
+    // Materi tanpa layanan sungguhan, dirender bersama sisanya, supaya
+    // markup halaman ini bisa diperiksa terhadap pill "Tanpa layanan".
+    const { data } = await admin
+      .from("materials")
+      .insert({ judul: "PAD-UJI Tanpa Layanan Markup", tipe: "ebook", deskripsi: "", aktif: false })
+      .select("id")
+      .single();
+    materiTanpaLayananId = data!.id as string;
     markup = renderToStaticMarkup(await MateriPage());
+  });
+
+  afterAll(async () => {
+    await admin.from("materials").delete().eq("id", materiTanpaLayananId);
   });
 
   it("mengelompokkan materi di bawah nama layanannya", () => {
@@ -921,22 +991,34 @@ describe("halaman materi (/admin/materi)", () => {
     expect(markup).toContain("Aktifkan");
   });
 
-  it("menandai materi yang isinya belum lengkap, bukan mendiamkannya", () => {
-    expect(markup).toContain("PAD-UJI Materi Tanpa Isi");
-    expect(markup).toMatch(/belum ada isi|belum punya isi/i);
+  it("menandai materi tanpa layanan sama sekali — bukan tersembunyi diam-diam", () => {
+    expect(markup).toContain("PAD-UJI Tanpa Layanan Markup");
+    expect(markup).toContain("Tanpa layanan · hanya lewat assign");
   });
 
-  it("menyebut jumlah bab e-book dan keberadaan video", () => {
-    expect(markup).toMatch(/\d+ bab/);
+  it("menandai materi yang isinya belum lengkap, bukan mendiamkannya", () => {
+    expect(markup).toContain("PAD-UJI Materi Tanpa Isi");
+    expect(markup).toMatch(/belum ada isi|belum punya isi|Belum ada isi/i);
+  });
+
+  it("menyebut jumlah halaman e-book dan keberadaan video", () => {
+    expect(markup).toMatch(/\d+ halaman/);
     expect(markup).toMatch(/video/i);
   });
 
-  it("menyediakan jalan menambah materi beserta isinya dalam satu formulir", () => {
+  it("menyediakan jalan menambah materi, isinya diunggah lewat PengunggahPdf", () => {
     expect(markup).toContain("Materi baru");
     expect(sumberForm).toContain('name="judul"');
     expect(sumberForm).toContain('name="tipe"');
-    expect(sumberForm).toContain('name="bab_isi"');
     expect(sumberForm).toContain('name="video_url"');
+    expect(sumberForm).toContain("PengunggahPdf");
+    expect(sumberForm).not.toContain('name="bab_isi"');
+    expect(sumberForm).not.toContain('name="bab_judul"');
+  });
+
+  it("menyediakan panel penugasan manual per materi", () => {
+    expect(markup).toContain("Kelola penugasan");
+    expect(sumberHalaman).toContain("daftarPenugasan");
   });
 
   it("menjelaskan bahwa materi tidak dihapus, hanya dinonaktifkan", () => {
@@ -986,7 +1068,10 @@ describe("berkas server action materi", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(9);
+    // simpanMateri, perbaruiMateri, aktifkanMateri, nonaktifkanMateri,
+    // gantiVideo, lepasVideo — tambahBab/perbaruiBab/hapusBab sudah dibongkar
+    // bersama material_chapters di Task 11.
+    expect(jumlahAction).toBe(6);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -999,11 +1084,20 @@ describe("berkas server action materi", () => {
     expect(sumberLib).toContain("createServerSupabase");
   });
 
-  it("TIDAK ada satu pun .delete() — penghapusan isi hanya lewat RPC", () => {
-    // Verba DELETE atas tabel isi sudah dicabut dari peran API: `.delete()` di
-    // sini bukan sekadar berbahaya, ia PASTI gagal 42501 di layar admin.
+  it("penghapusan ISI (halaman/video) tidak lewat verba DELETE — hanya RPC atau tabel penghubung berlingkup", () => {
+    // `material_services` (tautan materi<->layanan) BEDA KELAS dari isi
+    // materi: policy "materi-layanan: staf kelola" memang memberi staf hak
+    // DELETE di tabel itu, dan `gantiLayananMateri` memakainya lewat radius
+    // yang terkunci `.eq("material_id", materiId)` — bukan filter yang bisa
+    // dibuat tautologis (lihat describe "radius tautan layanan" di atas).
+    // Yang TETAP dilarang adalah DELETE pada
+    // `materials`/`material_pages`/`material_videos`: hak tabelnya sudah
+    // dicabut total dari peran API, dan `.delete()` di sana PASTI gagal
+    // 42501 di layar admin.
     for (const sumber of SEMUA_SUMBER) {
-      expect(sumber).not.toContain(".delete(");
+      expect(sumber).not.toMatch(/\.from\(\s*["']materials["']\s*\)[\s\S]{0,60}\.delete\(/);
+      expect(sumber).not.toMatch(/\.from\(\s*["']material_pages["']\s*\)[\s\S]{0,60}\.delete\(/);
+      expect(sumber).not.toMatch(/\.from\(\s*["']material_videos["']\s*\)[\s\S]{0,60}\.delete\(/);
     }
   });
 

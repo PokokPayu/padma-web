@@ -6,11 +6,9 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import {
   LABEL_ISI,
   periksaDeskripsi,
-  periksaIsiBab,
   periksaJudul,
   periksaTipe,
   periksaUrlVideo,
-  periksaUrutan,
   type TipeMateri,
 } from "./status";
 
@@ -24,39 +22,43 @@ import {
  *     langsung, jadi `requireRole(["admin","owner"])` ditulis DI DALAM setiap
  *     action — bukan sekali di puncak modul.
  *
- *  2. METADATA DAN ISI DISIMPAN DALAM SATU AKSI. Materi bertipe `video` tanpa
- *     baris `material_videos` — atau `ebook` tanpa satu pun bab — terkunci
- *     SELAMANYA bagi setiap klien yang sebenarnya berhak, tanpa satu pun error,
- *     sementara kartunya berbunyi "Terbuka setelah layanan terkait selesai"
- *     padahal layanannya sudah selesai. Karena itu isinya divalidasi SEBELUM
- *     baris apa pun lahir, dan mengubah `tipe` wajib disertai isi tipe barunya.
+ *  2. METADATA & ISI VIDEO DISIMPAN DALAM SATU AKSI; ISI E-BOOK TIDAK BISA.
+ *     Sejak Task 11, isi e-book adalah gambar halaman yang diunggah lewat
+ *     `<PengunggahPdf materiId=... />` — dan unggahan itu BUTUH `materiId`
+ *     yang belum ada pada langkah "materi baru". Karena itu materi `ebook`
+ *     SELALU lahir tanpa isi; yang tetap dipertahankan dari pola lama adalah
+ *     video (URL-nya bisa disertakan langsung, tidak perlu materiId lebih
+ *     dulu) dan jaminan GAGAL-TERTUTUP di bawah (3): materi tanpa isi tidak
+ *     pernah bisa diterbitkan lewat jalur mana pun di berkas ini.
  *
- *  3. MATERI LAHIR NONAKTIF. Insert `materials` dan insert isinya adalah dua
- *     permintaan; tidak ada transaksi yang membungkusnya, dan hak DELETE atas
- *     `materials` sudah dicabut sehingga tidak ada jalan mundur. Jadi urutannya
- *     dibuat GAGAL-TERTUTUP: baris lahir `aktif = false`, isinya dipasang, dan
- *     hanya sesudah isi mendarat materinya diterbitkan. Kegagalan di tengah
- *     menyisakan materi nonaktif — tidak terlihat klien, dan bisa diperbaiki
- *     dari halaman ini — bukan kartu yang berbohong.
+ *  3. MATERI LAHIR NONAKTIF. Insert `materials` dan insert isinya adalah
+ *     permintaan terpisah; tidak ada transaksi yang membungkusnya, dan hak
+ *     DELETE atas `materials` sudah dicabut sehingga tidak ada jalan mundur.
+ *     Jadi urutannya dibuat GAGAL-TERTUTUP: baris lahir `aktif = false`, dan
+ *     hanya materi video yang isinya lengkap SEKETIKA yang diterbitkan
+ *     otomatis di aksi yang sama. Materi ebook (dan materi video yang gagal
+ *     di tengah) menyisakan baris nonaktif — tidak terlihat klien, dan bisa
+ *     diperbaiki dari halaman ini — bukan kartu yang berbohong.
  *
  *  4. `aktifkanMateri` MENOLAK materi tanpa isi. Tanpa itu, pagar (2) & (3)
  *     bisa dilewati hanya dengan satu klik lanjutan.
  *
- *  5. TIDAK ADA PENGHAPUSAN LEWAT VERBA DELETE. Hak DELETE atas `materials`,
- *     `material_chapters`, dan `material_videos` sudah dicabut dari peran API:
- *     jawabannya 403/42501, bukan "0 baris". Penghapusan isi hanya lewat RPC
- *     berparameter tunggal `hapus_bab_materi(bab_id)` dan
- *     `lepas_video_materi(materi_id)` — nama argumennya MENGIKAT (salah nama
- *     menghasilkan 404 PGRST202, bukan 400), dan `data === null` berarti "tidak
- *     ada yang cocok", yaitu SUKSES: bab yang sudah lebih dulu dihapus rekan
- *     sekerja tidak perlu memunculkan layar merah.
+ *  5. TIDAK ADA PENGHAPUSAN LEWAT VERBA DELETE. Hak DELETE atas `materials`
+ *     dan `material_videos` sudah dicabut dari peran API: jawabannya
+ *     403/42501, bukan "0 baris". Video hanya bisa dilepas lewat RPC
+ *     berparameter tunggal `lepas_video_materi(materi_id)` — nama argumennya
+ *     MENGIKAT (salah nama menghasilkan 404 PGRST202, bukan 400), dan
+ *     `data === null` berarti "tidak ada yang cocok", yaitu SUKSES. Halaman
+ *     e-book memakai pola serupa tapi lewat RPC-nya SENDIRI
+ *     (`ganti_halaman_materi`, lihat `./unggah.ts`) — bukan verba di berkas ini.
  *
  *  6. UPDATE yang tertahan dijawab PostgREST 200 + []. Melaporkan "berhasil"
  *     tanpa memeriksa panjangnya adalah kebohongan senyap.
  *
  *  7. Sesi pengguna, bukan service role. Di bawah service role `user_role()`
  *     mengembalikan 'klien' dan `auth.uid()` NULL: policy "materials: staf
- *     kelola", "chapters: staf", dan "video: staf" tidak pernah ikut diperiksa.
+ *     kelola", "materi-layanan: staf kelola", dan "video: staf" tidak pernah
+ *     ikut diperiksa.
  *
  * Berkas `"use server"` hanya boleh mengekspor fungsi async — label, batas, dan
  * validator murni tinggal di `./status`.
@@ -87,6 +89,37 @@ async function layananAda(layananId: string): Promise<boolean> {
   return data !== null;
 }
 
+/**
+ * Menulis ulang seluruh tautan layanan sebuah materi lewat hapus-lalu-sisip
+ * yang RADIUSNYA TERIKAT `materiId` — parameter wajib, bukan filter yang bisa
+ * dibuat tautologis. Repo ini pernah kehilangan SELURUH bab materi lewat satu
+ * filter longgar (`?urutan=gte.0`); `.eq("material_id", materiId)` di bawah
+ * adalah pelajaran itu diterapkan di sini.
+ */
+async function gantiLayananMateri(
+  materiId: string,
+  idLayanan: string[],
+): Promise<Berhasil | Gagal> {
+  const supabase = await createServerSupabase();
+  const { error: hapus } = await supabase
+    .from("material_services")
+    .delete()
+    .eq("material_id", materiId); // radius terikat SATU materi
+  if (hapus) return { ok: false, pesan: "Gagal memperbarui layanan materi." };
+
+  if (idLayanan.length === 0) return { ok: true };
+
+  const { data, error } = await supabase
+    .from("material_services")
+    .insert(idLayanan.map((service_id) => ({ material_id: materiId, service_id })))
+    .select("material_id");
+  // PostgREST menjawab 200 + [] untuk tulis yang ditolak RLS, bukan error.
+  if (error || !data || data.length !== idLayanan.length) {
+    return { ok: false, pesan: "Gagal menyimpan layanan materi." };
+  }
+  return { ok: true };
+}
+
 type Materi = { id: string; tipe: TipeMateri; aktif: boolean };
 
 async function ambilMateri(id: string): Promise<Materi | null> {
@@ -103,9 +136,10 @@ async function ambilMateri(id: string): Promise<Materi | null> {
 async function punyaIsi(id: string, tipe: TipeMateri): Promise<boolean> {
   const supabase = await createServerSupabase();
   if (tipe === "ebook") {
+    // Isi e-book kini gambar halaman (material_pages), bukan bab teks.
     const { count } = await supabase
-      .from("material_chapters")
-      .select("id", { count: "exact", head: true })
+      .from("material_pages")
+      .select("material_id", { count: "exact", head: true })
       .eq("material_id", id);
     return (count ?? 0) > 0;
   }
@@ -122,15 +156,20 @@ async function punyaIsi(id: string, tipe: TipeMateri): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * Mendaftarkan materi baru BESERTA isinya.
+ * Mendaftarkan materi baru.
  *
- * Formulirnya satu, dan itu bukan pilihan tata letak: materi yang tersimpan
- * tanpa isi adalah materi yang terkunci permanen dan berbohong di kartunya.
+ * Layanan: nol atau lebih. Kosong adalah pilihan SAH — admin wajar ingin
+ * menumpuk bahan dulu, dan materi tanpa layanan tetap bisa dibuka lewat
+ * penugasan. Daftar materi menandainya "Tanpa layanan · hanya lewat assign"
+ * supaya keadaan itu terlihat, bukan tersembunyi.
  */
 export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> {
   await requireRole(["admin", "owner"]);
 
-  const layananId = String(formData.get("service_id") ?? "").trim();
+  const idLayanan = formData
+    .getAll("service_id")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
   const judul = periksaJudul(String(formData.get("judul") ?? ""));
   const tipe = periksaTipe(String(formData.get("tipe") ?? ""));
   const deskripsi = periksaDeskripsi(String(formData.get("deskripsi") ?? ""));
@@ -139,41 +178,36 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
   if (!tipe.ok) return { ok: false, pesan: tipe.pesan };
   if (!deskripsi.ok) return { ok: false, pesan: deskripsi.pesan };
 
-  // Isi diperiksa SEBELUM satu baris pun lahir. Hak DELETE atas `materials`
-  // sudah dicabut dari peran API, jadi "simpan dulu, batalkan kalau gagal"
-  // bukan pilihan yang tersedia — dan tidak seharusnya menjadi pilihan.
-  let babJudul = "";
-  let babIsi = "";
+  // Isi diperiksa SEBELUM satu baris pun lahir — TAPI hanya untuk video. Isi
+  // e-book kini gambar halaman yang diunggah lewat PengunggahPdf, dan
+  // unggahan itu butuh materiId yang belum ada di langkah ini: materi ebook
+  // karena itu SELALU lahir nonaktif tanpa isi, isinya menyusul lewat panel
+  // "Kelola isi" begitu id-nya ada.
   let videoUrl = "";
-  if (tipe.nilai === "ebook") {
-    const j = periksaJudul(String(formData.get("bab_judul") ?? ""));
-    const i = periksaIsiBab(String(formData.get("bab_isi") ?? ""));
-    if (!j.ok) return { ok: false, pesan: `Bab pertama: ${j.pesan}` };
-    if (!i.ok) return { ok: false, pesan: `Bab pertama: ${i.pesan}` };
-    babJudul = j.nilai;
-    babIsi = i.nilai;
-  } else {
+  if (tipe.nilai === "video") {
     const u = periksaUrlVideo(String(formData.get("video_url") ?? ""));
     if (!u.ok) return { ok: false, pesan: u.pesan };
     videoUrl = u.nilai;
   }
 
-  // Foreign key memang menolak `service_id` yang tidak ada, tetapi pesannya
-  // adalah kode Postgres — bukan kalimat yang boleh dibaca admin klinik.
-  if (!(await layananAda(layananId))) {
-    return { ok: false, pesan: "Layanan tidak dikenal. Pilih layanan induk materi ini." };
+  // Setiap id layanan diperiksa keberadaannya. FK memang menolak yang tidak
+  // ada, tetapi yang sampai ke layar admin dari FK hanyalah kode 23503.
+  for (const id of idLayanan) {
+    if (!(await layananAda(id))) {
+      return { ok: false, pesan: "Layanan yang dipilih tidak ditemukan." };
+    }
   }
 
   const supabase = await createServerSupabase();
 
   // `aktif: false` ditulis MATI di sini — kebalikan dari modul Layanan, dan
-  // sengaja. Insert materi dan insert isinya adalah dua permintaan tanpa
-  // transaksi yang membungkusnya; bila yang kedua gagal, satu-satunya keadaan
-  // yang boleh tersisa adalah keadaan yang tidak terlihat klien.
+  // sengaja. Insert materi dan insert isinya (bila video) adalah dua
+  // permintaan tanpa transaksi yang membungkusnya; bila yang kedua gagal,
+  // satu-satunya keadaan yang boleh tersisa adalah keadaan yang tidak
+  // terlihat klien.
   const { data, error } = await supabase
     .from("materials")
     .insert({
-      service_id: layananId,
       judul: judul.nilai,
       tipe: tipe.nilai,
       deskripsi: deskripsi.nilai,
@@ -185,18 +219,16 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
   if (error || !data) return { ok: false, pesan: "Gagal menyimpan materi." };
   const id = data.id as string;
 
-  if (tipe.nilai === "ebook") {
-    const { error: eBab } = await supabase
-      .from("material_chapters")
-      .insert({ material_id: id, urutan: 1, judul: babJudul, isi: babIsi });
-    if (eBab) {
-      segarkanMateri(id);
-      return {
-        ok: false,
-        pesan: "Materi tersimpan NONAKTIF karena bab pertamanya gagal disimpan. Tambahkan babnya, lalu aktifkan materi ini.",
-      };
-    }
-  } else {
+  const layananHasil = await gantiLayananMateri(id, idLayanan);
+  if (!layananHasil.ok) {
+    segarkanMateri(id);
+    return {
+      ok: false,
+      pesan: "Materi tersimpan NONAKTIF karena layanannya gagal ditautkan. Atur layanannya, lalu lengkapi isinya.",
+    };
+  }
+
+  if (tipe.nilai === "video") {
     const { error: eVideo } = await supabase
       .from("material_videos")
       .insert({ material_id: id, url: videoUrl });
@@ -207,34 +239,47 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
         pesan: "Materi tersimpan NONAKTIF karena URL videonya gagal disimpan. Pasang URL-nya, lalu aktifkan materi ini.",
       };
     }
-  }
 
-  const { data: terbit } = await supabase
-    .from("materials")
-    .update({ aktif: true })
-    .eq("id", id)
-    .select("id");
-  if ((terbit ?? []).length === 0) {
-    return {
-      ok: false,
-      pesan: "Isi materi tersimpan, tetapi materinya belum bisa diterbitkan. Aktifkan dari daftar.",
-    };
+    const { data: terbit } = await supabase
+      .from("materials")
+      .update({ aktif: true })
+      .eq("id", id)
+      .select("id");
+    if ((terbit ?? []).length === 0) {
+      return {
+        ok: false,
+        pesan: "Isi materi tersimpan, tetapi materinya belum bisa diterbitkan. Aktifkan dari daftar.",
+      };
+    }
   }
+  // ebook: materinya sengaja tetap nonaktif di sini. Isinya diunggah lewat
+  // PengunggahPdf sesudah materiId ini ada (panel "Kelola isi"), lalu
+  // diterbitkan lewat aktifkanMateri — yang menolak menerbitkan ebook tanpa
+  // satu pun halaman.
 
   segarkanMateri(id);
   return { ok: true, id };
 }
 
 /**
- * Mengubah identitas materi — dan, bila `tipe` berpindah, ISI tipe barunya
- * dalam permintaan yang sama.
+ * Mengubah identitas materi — dan, bila `tipe` berpindah, memastikan ISI
+ * tipe barunya sudah ada sebelum perpindahan itu diizinkan.
  *
- * `ebook` → `video` tanpa URL adalah bentuk paling halus dari materi setengah
- * jadi: tipe berpindah, isi lama menjadi tidak terpakai, dan seluruh klien yang
- * berhak melihat kartu terkunci selamanya tanpa satu pun error. Isi lama
- * SENGAJA tidak disapu — penghapusannya punya action tersendiri, satu baris
- * sekali panggil, dan bab yang tertinggal tidak pernah terbaca karena reader
- * memilih bentuk tampilan menurut `tipe`.
+ * `ebook` → `video` tanpa URL, atau `video` → `ebook` tanpa satu pun halaman,
+ * adalah bentuk paling halus dari materi setengah jadi: tipe berpindah, isi
+ * lama menjadi tidak terpakai, dan seluruh klien yang berhak melihat kartu
+ * terkunci selamanya tanpa satu pun error.
+ *
+ * Untuk `video`, isinya bisa disertakan LANGSUNG di aksi ini (URL tinggal
+ * ditulis). Untuk `ebook`, isinya gambar halaman yang butuh unggahan berkas
+ * lewat PengunggahPdf — sesuatu yang tidak bisa terjadi di dalam SATU
+ * permintaan server action. Karena itu perpindahan ke `ebook` hanya diterima
+ * bila materi ITU SENDIRI sudah punya halaman (sisa unggahan sebelumnya, atau
+ * baru saja diunggah admin lewat panel "Kelola isi" SEBELUM formulir ini
+ * disimpan — keduanya memakai `materiId` yang sama, jadi urutan itu sah).
+ * Isi lama yang tidak lagi cocok tipenya SENGAJA tidak disapu — penghapusannya
+ * punya jalurnya sendiri, dan isi yang tertinggal tidak pernah terbaca karena
+ * reader memilih bentuk tampilan menurut `tipe`.
  */
 export async function perbaruiMateri(
   id: string,
@@ -242,7 +287,10 @@ export async function perbaruiMateri(
 ): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
 
-  const layananId = String(formData.get("service_id") ?? "").trim();
+  const idLayanan = formData
+    .getAll("service_id")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
   const judul = periksaJudul(String(formData.get("judul") ?? ""));
   const tipe = periksaTipe(String(formData.get("tipe") ?? ""));
   const deskripsi = periksaDeskripsi(String(formData.get("deskripsi") ?? ""));
@@ -254,8 +302,10 @@ export async function perbaruiMateri(
   const materi = await ambilMateri(id);
   if (!materi) return { ok: false, pesan: "Materi tidak ditemukan." };
 
-  if (!(await layananAda(layananId))) {
-    return { ok: false, pesan: "Layanan tidak dikenal. Pilih layanan induk materi ini." };
+  for (const layananId of idLayanan) {
+    if (!(await layananAda(layananId))) {
+      return { ok: false, pesan: "Layanan yang dipilih tidak ditemukan." };
+    }
   }
 
   const supabase = await createServerSupabase();
@@ -274,23 +324,18 @@ export async function perbaruiMateri(
         .upsert({ material_id: id, url: u.nilai }, { onConflict: "material_id" })
         .select("material_id");
       if (error) return { ok: false, pesan: "Gagal menyimpan URL video materi." };
-    } else {
-      const j = periksaJudul(String(formData.get("bab_judul") ?? ""));
-      const i = periksaIsiBab(String(formData.get("bab_isi") ?? ""));
-      if (!j.ok || !i.ok) {
-        return {
-          ok: false,
-          pesan: `Mengubah tipe ke E-Book wajib disertai ${LABEL_ISI.ebook}.`,
-        };
-      }
-      if (!(await punyaIsi(id, "ebook"))) {
-        const { error } = await supabase
-          .from("material_chapters")
-          .insert({ material_id: id, urutan: 1, judul: j.nilai, isi: i.nilai })
-          .select("id");
-        if (error) return { ok: false, pesan: "Gagal menyimpan bab pertama materi." };
-      }
+    } else if (!(await punyaIsi(id, "ebook"))) {
+      return {
+        ok: false,
+        pesan: `Mengubah tipe ke E-Book wajib disertai ${LABEL_ISI.ebook}. Simpan tipenya di sini, lalu unggah PDF-nya lewat "Kelola isi" sebelum menerbitkan materinya.`,
+      };
     }
+  }
+
+  const layananHasil = await gantiLayananMateri(id, idLayanan);
+  if (!layananHasil.ok) {
+    segarkanMateri(id);
+    return layananHasil;
   }
 
   // Medan `aktif` yang ikut dikirim browser diabaikan tanpa pernah masuk
@@ -298,7 +343,6 @@ export async function perbaruiMateri(
   const { data, error } = await supabase
     .from("materials")
     .update({
-      service_id: layananId,
       judul: judul.nilai,
       tipe: tipe.nilai,
       deskripsi: deskripsi.nilai,
@@ -352,10 +396,11 @@ export async function aktifkanMateri(id: string): Promise<Berhasil | Gagal> {
  * Menarik materi.
  *
  * Sejak migration `gating_materi_hormati_aktif`, ini benar-benar menutup
- * isinya: policy baca klien pada `material_chapters` & `material_videos` ikut
- * mengevaluasi `materials.aktif`, jadi babnya hilang dari jawaban PostgREST —
- * bukan sekadar dari kartu di UI. Baris `materials` sendiri tetap terbaca, dan
- * itu disengaja: menutupnya akan mengulangi bug `partner_publik`.
+ * isinya: policy baca klien pada `material_pages` & `material_videos` ikut
+ * mengevaluasi `materials.aktif`, jadi halamannya hilang dari jawaban
+ * PostgREST — bukan sekadar dari kartu di UI. Baris `materials` sendiri
+ * tetap terbaca, dan itu disengaja: menutupnya akan mengulangi bug
+ * `partner_publik`.
  */
 export async function nonaktifkanMateri(id: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
@@ -372,128 +417,6 @@ export async function nonaktifkanMateri(id: string): Promise<Berhasil | Gagal> {
   }
 
   segarkanMateri(id);
-  return { ok: true };
-}
-
-// ---------------------------------------------------------------------------
-// Bab e-book
-// ---------------------------------------------------------------------------
-
-export async function tambahBab(
-  materiId: string,
-  formData: FormData,
-): Promise<Berhasil | Gagal> {
-  await requireRole(["admin", "owner"]);
-
-  const judul = periksaJudul(String(formData.get("judul") ?? ""));
-  const isi = periksaIsiBab(String(formData.get("isi") ?? ""));
-  if (!judul.ok) return { ok: false, pesan: `Judul bab: ${judul.pesan}` };
-  if (!isi.ok) return { ok: false, pesan: isi.pesan };
-
-  const materi = await ambilMateri(materiId);
-  if (!materi) return { ok: false, pesan: "Materi tidak ditemukan." };
-  if (materi.tipe !== "ebook") {
-    return { ok: false, pesan: "Bab hanya berlaku untuk materi bertipe E-Book." };
-  }
-
-  const supabase = await createServerSupabase();
-
-  // Urutan dihitung server, tidak pernah diterima dari formulir: dua bab
-  // beruntutan yang lahir dengan urutan sama akan tampil dengan susunan yang
-  // berubah-ubah tiap kali halaman dimuat.
-  const { data: terakhir } = await supabase
-    .from("material_chapters")
-    .select("urutan")
-    .eq("material_id", materiId)
-    .order("urutan", { ascending: false })
-    .limit(1);
-  const urutan = ((terakhir ?? [])[0]?.urutan ?? 0) + 1;
-
-  const { data, error } = await supabase
-    .from("material_chapters")
-    .insert({ material_id: materiId, urutan, judul: judul.nilai, isi: isi.nilai })
-    .select("id");
-
-  if (error || (data ?? []).length === 0) {
-    return { ok: false, pesan: "Gagal menyimpan bab." };
-  }
-
-  segarkanMateri(materiId);
-  return { ok: true };
-}
-
-export async function perbaruiBab(
-  babId: string,
-  formData: FormData,
-): Promise<Berhasil | Gagal> {
-  await requireRole(["admin", "owner"]);
-
-  const judul = periksaJudul(String(formData.get("judul") ?? ""));
-  const isi = periksaIsiBab(String(formData.get("isi") ?? ""));
-  const urutan = periksaUrutan(String(formData.get("urutan") ?? ""));
-  if (!judul.ok) return { ok: false, pesan: `Judul bab: ${judul.pesan}` };
-  if (!isi.ok) return { ok: false, pesan: isi.pesan };
-  if (!urutan.ok) return { ok: false, pesan: urutan.pesan };
-
-  const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("material_chapters")
-    .update({ judul: judul.nilai, isi: isi.nilai, urutan: urutan.nilai })
-    .eq("id", babId)
-    .select("id, material_id");
-
-  if (error || (data ?? []).length === 0) {
-    return { ok: false, pesan: "Bab tidak ditemukan atau gagal diperbarui." };
-  }
-
-  segarkanMateri((data ?? [])[0].material_id as string);
-  return { ok: true };
-}
-
-/**
- * Menghapus SATU bab.
- *
- * Lewat RPC berparameter tunggal, bukan verba DELETE: hak DELETE atas
- * `material_chapters` sudah dicabut dari peran API karena filter PostgREST
- * adalah pilihan pemanggil, bukan pembatas baris — satu permintaan
- * `DELETE ...?urutan=gte.0` pernah menyapu seluruh bab seluruh materi klinik.
- * Nama argumen `bab_id` MENGIKAT: salah nama menghasilkan 404 PGRST202.
- *
- * Bab terakhir sebuah e-book yang sedang TERBIT ditolak: menghapusnya membuat
- * materi aktif tanpa isi — terkunci permanen bagi seluruh klien yang berhak,
- * tanpa error, dengan kartu yang berbohong.
- */
-export async function hapusBab(babId: string): Promise<Berhasil | Gagal> {
-  await requireRole(["admin", "owner"]);
-  const supabase = await createServerSupabase();
-
-  const { data: bab } = await supabase
-    .from("material_chapters")
-    .select("id, material_id")
-    .eq("id", babId)
-    .maybeSingle<{ id: string; material_id: string }>();
-
-  if (bab) {
-    const materi = await ambilMateri(bab.material_id);
-    const { count } = await supabase
-      .from("material_chapters")
-      .select("id", { count: "exact", head: true })
-      .eq("material_id", bab.material_id);
-
-    if (materi?.tipe === "ebook" && materi.aktif && (count ?? 0) <= 1) {
-      return {
-        ok: false,
-        pesan: "Ini bab terakhir materi yang sedang terbit. Nonaktifkan materinya lebih dulu bila hendak menarik seluruh isinya.",
-      };
-    }
-  }
-
-  const { error } = await supabase.rpc("hapus_bab_materi", { bab_id: babId });
-  if (error) return { ok: false, pesan: "Gagal menghapus bab." };
-
-  // `data === null` berarti "tidak ada yang cocok" — bab yang sudah lebih dulu
-  // dihapus rekan sekerja tidak perlu memunculkan layar merah.
-  segarkanMateri(bab?.material_id);
   return { ok: true };
 }
 

@@ -1,28 +1,28 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   aktifkanMateri,
   gantiVideo,
-  hapusBab,
   lepasVideo,
   nonaktifkanMateri,
-  perbaruiBab,
   perbaruiMateri,
   simpanMateri,
-  tambahBab,
 } from "./aksi";
+import { cabutTugasMateri, tugaskanMateri } from "./penugasan-aksi";
+import type { PasienRingkas } from "@/lib/admin/penugasan";
+import type { KlienPilihan } from "@/lib/admin/materi-admin";
 import {
   LABEL_ISI,
   LABEL_TIPE,
   PANJANG_DESKRIPSI_MAKS,
-  PANJANG_ISI_BAB_MAKS,
   PANJANG_JUDUL_MAKS,
   PENYEDIA_VIDEO,
   TIPE_SAH,
-  URUTAN_BAB_MAKS,
   type TipeMateri,
 } from "./status";
+import { PengunggahPdf } from "./pengunggah-pdf";
 
 const KELAS_MEDAN =
   "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
@@ -33,18 +33,59 @@ const KELAS_TOMBOL_UTAMA =
   "rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60";
 
 export type PilihanLayanan = { id: string; nama: string };
-export type BabProp = { id: string; urutan: number; judul: string; isi: string };
 
 /**
- * Medan ISI materi — bab pertama untuk e-book, URL untuk video.
- *
- * Ia hidup di dalam formulir yang SAMA dengan metadata, dan itu bukan pilihan
- * tata letak: materi yang tersimpan tanpa isi terkunci selamanya bagi setiap
- * klien yang berhak, tanpa satu pun error, sementara kartunya berbunyi "Terbuka
- * setelah layanan terkait selesai" padahal layanannya sudah selesai. Formulir
- * dua langkah adalah cara paling wajar melahirkan keadaan itu.
+ * Daftar checkbox layanan — NOL ATAU LEBIH boleh dicentang. Materi tanpa
+ * layanan sama sekali adalah keadaan SAH sejak Task 11 (materi.service_id
+ * tunggal sudah digantikan `material_services`, yang boleh nol baris): admin
+ * wajar ingin menumpuk bahan dulu, dan materi seperti itu tetap bisa dibuka
+ * lewat penugasan manual. Karena itu TIDAK ADA satu pun checkbox di sini yang
+ * `required`.
  */
-function MedanIsi({ tipe }: { tipe: TipeMateri }) {
+function CentangLayanan({
+  layanan,
+  terpilih,
+  labelUntuk,
+}: {
+  layanan: PilihanLayanan[];
+  terpilih: string[];
+  labelUntuk: (nama: string) => string;
+}) {
+  return (
+    <fieldset className="mt-3">
+      <legend className={KELAS_LABEL}>Layanan (boleh lebih dari satu, atau tidak sama sekali)</legend>
+      <div className="mt-1.5 grid gap-1.5 rounded-lg border border-black/15 bg-white p-2.5 sm:grid-cols-2">
+        {layanan.map((l) => (
+          <label key={l.id} className="flex items-center gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              name="service_id"
+              value={l.id}
+              defaultChecked={terpilih.includes(l.id)}
+              aria-label={labelUntuk(l.nama)}
+            />
+            {l.nama}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Medan ISI materi — URL untuk video, unggahan PDF untuk e-book.
+ *
+ * Video: URL-nya bisa disertakan LANGSUNG di formulir mana pun, materi baru
+ * maupun sunting, karena tidak butuh apa pun selain teks.
+ *
+ * E-book: isinya gambar halaman lewat `<PengunggahPdf/>`, dan unggahan itu
+ * BUTUH `materiId` yang sudah ada di basis data. Pada formulir "materi baru"
+ * id itu belum ada — jadi cabang ini hanya menjelaskan bahwa unggahannya
+ * menyusul sesudah materi tersimpan. Pada formulir SUNTING (materiId sudah
+ * ada, baik untuk materi ebook lama maupun yang baru dipindah tipenya)
+ * `<PengunggahPdf/>` tampil sungguhan.
+ */
+function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
   if (tipe === "video") {
     return (
       <label className="mt-3 block">
@@ -63,32 +104,16 @@ function MedanIsi({ tipe }: { tipe: TipeMateri }) {
       </label>
     );
   }
-  return (
-    <div className="mt-3 grid gap-3">
-      <label>
-        <span className={KELAS_LABEL}>Judul bab pertama</span>
-        <input
-          name="bab_judul"
-          type="text"
-          required
-          minLength={2}
-          maxLength={PANJANG_JUDUL_MAKS}
-          placeholder="mis. Mengenal Fase Siklus"
-          className={KELAS_MEDAN}
-        />
-      </label>
-      <label>
-        <span className={KELAS_LABEL}>Isi bab pertama</span>
-        <textarea
-          name="bab_isi"
-          rows={5}
-          required
-          maxLength={PANJANG_ISI_BAB_MAKS}
-          className={KELAS_MEDAN}
-        />
-      </label>
-    </div>
-  );
+  if (!materiId) {
+    return (
+      <p className="mt-3 rounded-lg bg-black/5 px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft">
+        Berkas PDF diunggah SESUDAH materi ini tersimpan — simpan dulu, lalu
+        buka &quot;Kelola isi&quot; pada baris materinya. Materi lahir
+        nonaktif sampai halamannya ada.
+      </p>
+    );
+  }
+  return <PengunggahPdf materiId={materiId} />;
 }
 
 /**
@@ -135,26 +160,9 @@ export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
       }
       className="w-full rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
     >
-      <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">
-        Materi baru — metadata dan isinya disimpan sekaligus
-      </h2>
+      <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">Materi baru</h2>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label>
-          <span className={KELAS_LABEL}>Layanan induk</span>
-          <select
-            name="service_id"
-            required
-            defaultValue={layanan[0]?.id ?? ""}
-            className={KELAS_MEDAN}
-          >
-            {layanan.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nama}
-              </option>
-            ))}
-          </select>
-        </label>
         <label>
           <span className={KELAS_LABEL}>Judul materi</span>
           <input
@@ -167,23 +175,24 @@ export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
             className={KELAS_MEDAN}
           />
         </label>
+        <label>
+          <span className={KELAS_LABEL}>Tipe materi</span>
+          <select
+            name="tipe"
+            value={tipe}
+            onChange={(e) => setTipe(e.target.value as TipeMateri)}
+            className={KELAS_MEDAN}
+          >
+            {TIPE_SAH.map((t) => (
+              <option key={t} value={t}>
+                {LABEL_TIPE[t]} — wajib {LABEL_ISI[t]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      <label className="mt-3 block">
-        <span className={KELAS_LABEL}>Tipe materi</span>
-        <select
-          name="tipe"
-          value={tipe}
-          onChange={(e) => setTipe(e.target.value as TipeMateri)}
-          className={KELAS_MEDAN}
-        >
-          {TIPE_SAH.map((t) => (
-            <option key={t} value={t}>
-              {LABEL_TIPE[t]} — wajib {LABEL_ISI[t]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CentangLayanan layanan={layanan} terpilih={[]} labelUntuk={(nama) => `Layanan ${nama}`} />
 
       <label className="mt-3 block">
         <span className={KELAS_LABEL}>Deskripsi singkat (opsional)</span>
@@ -239,8 +248,11 @@ export function AksiMateri({
   lengkap,
   layananId,
   layanan,
-  bab,
+  jumlahHalaman,
   videoUrl,
+  ditugaskan,
+  otomatis,
+  pilihanKlien,
 }: {
   id: string;
   judul: string;
@@ -248,14 +260,18 @@ export function AksiMateri({
   tipe: TipeMateri;
   aktif: boolean;
   lengkap: boolean;
-  layananId: string;
+  layananId: string[];
   layanan: PilihanLayanan[];
-  bab: BabProp[];
+  jumlahHalaman: number;
   videoUrl: string | null;
+  ditugaskan: PasienRingkas[];
+  otomatis: PasienRingkas[];
+  pilihanKlien: KlienPilihan[];
 }) {
   const [ubah, setUbah] = useState(false);
   const [tipeBaru, setTipeBaru] = useState<TipeMateri>(tipe);
   const [isi, setIsi] = useState(false);
+  const [tugas, setTugas] = useState(false);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -275,18 +291,6 @@ export function AksiMateri({
         }
         className="grid gap-2"
       >
-        <select
-          name="service_id"
-          defaultValue={layananId}
-          aria-label={`Layanan materi ${judul}`}
-          className={KELAS_MEDAN}
-        >
-          {layanan.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.nama}
-            </option>
-          ))}
-        </select>
         <input
           name="judul"
           type="text"
@@ -318,6 +322,11 @@ export function AksiMateri({
             </option>
           ))}
         </select>
+        <CentangLayanan
+          layanan={layanan}
+          terpilih={layananId}
+          labelUntuk={(nama) => `Layanan ${nama} untuk materi ${judul}`}
+        />
         {tipeBaru !== tipe && (
           <>
             <span className="text-[12px] text-clay">
@@ -325,7 +334,7 @@ export function AksiMateri({
               materinya berubah menjadi kartu terkunci yang tidak akan pernah
               terbuka bagi klien yang sudah berhak.
             </span>
-            <MedanIsi tipe={tipeBaru} />
+            <MedanIsi tipe={tipeBaru} materiId={id} />
           </>
         )}
         {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
@@ -373,6 +382,9 @@ export function AksiMateri({
         <button type="button" onClick={() => setIsi((t) => !t)} className={KELAS_TOMBOL_KECIL}>
           {isi ? "Tutup isi" : "Kelola isi"}
         </button>
+        <button type="button" onClick={() => setTugas((t) => !t)} className={KELAS_TOMBOL_KECIL}>
+          {tugas ? "Tutup penugasan" : "Kelola penugasan"}
+        </button>
         {!lengkap && (
           <span className="text-[12px] font-semibold text-clay">
             Materi ini belum ada isinya ({LABEL_ISI[tipe]}) — belum bisa diterbitkan.
@@ -380,11 +392,18 @@ export function AksiMateri({
         )}
       </span>
 
-      {isi && tipe === "ebook" && (
-        <IsiEbook materiId={id} judulMateri={judul} bab={bab} />
-      )}
+      {isi && tipe === "ebook" && <IsiEbook materiId={id} jumlahHalaman={jumlahHalaman} />}
       {isi && tipe === "video" && (
         <IsiVideo materiId={id} judulMateri={judul} aktif={aktif} videoUrl={videoUrl} />
+      )}
+      {tugas && (
+        <PanelPenugasan
+          materiId={id}
+          judulMateri={judul}
+          ditugaskan={ditugaskan}
+          otomatis={otomatis}
+          pilihan={pilihanKlien}
+        />
       )}
 
       {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
@@ -392,190 +411,139 @@ export function AksiMateri({
   );
 }
 
-function IsiEbook({
+/**
+ * Panel penugasan manual per materi.
+ *
+ * `otomatis` ditampilkan bacaan saja — tanpanya admin akan meng-assign ulang
+ * pasien yang materinya memang sudah terbuka lewat sesi selesai, lalu bingung
+ * kenapa tidak ada yang berubah. Klien yang sudah punya akses (otomatis
+ * ATAUPUN sudah ditugaskan) tidak ditawarkan lagi di daftar pilih "Tugaskan":
+ * itu kenyamanan tampilan, BUKAN pagar keamanan — server tetap menolak
+ * duplikat lewat kode 23505 apa pun yang dikirim.
+ */
+function PanelPenugasan({
   materiId,
   judulMateri,
-  bab,
+  ditugaskan,
+  otomatis,
+  pilihan,
 }: {
   materiId: string;
   judulMateri: string;
-  bab: BabProp[];
+  ditugaskan: PasienRingkas[];
+  otomatis: PasienRingkas[];
+  pilihan: KlienPilihan[];
 }) {
-  const [tambah, setTambah] = useState(false);
+  const router = useRouter();
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
+  const [klienBaru, setKlienBaru] = useState("");
+
+  const sudahPunyaAkses = new Set([
+    ...ditugaskan.map((p) => p.clientId),
+    ...otomatis.map((p) => p.clientId),
+  ]);
+  const bisaDitugaskan = pilihan.filter((k) => !sudahPunyaAkses.has(k.id));
 
   return (
     <div className="rounded-xl border border-black/10 bg-paper p-3">
-      <ul className="grid gap-2">
-        {bab.map((b) => (
-          <BarisBab key={b.id} bab={b} judulMateri={judulMateri} />
+      <p className={KELAS_LABEL}>Penugasan manual</p>
+      {otomatis.length > 0 && (
+        <p className="mt-1 text-[11.5px] text-ink-soft">
+          Sudah terbuka otomatis (sesi layanan selesai): {otomatis.map((p) => p.nama).join(", ")}.
+        </p>
+      )}
+      <ul className="mt-2 grid gap-1.5">
+        {ditugaskan.length === 0 && (
+          <li className="text-[12px] text-ink-soft">Belum ada penugasan manual.</li>
+        )}
+        {ditugaskan.map((p) => (
+          <li
+            key={p.clientId}
+            className="flex items-center justify-between gap-2 text-[12.5px] text-ink"
+          >
+            <span>
+              {p.nama} <span className="font-mono text-[11px] text-ink-soft">{p.padmaId}</span>
+            </span>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                mulai(async () => {
+                  const r = await cabutTugasMateri(materiId, p.clientId);
+                  if (!r.ok) {
+                    setPesan(r.pesan);
+                  } else {
+                    setPesan(null);
+                    router.refresh();
+                  }
+                })
+              }
+              className={KELAS_TOMBOL_KECIL}
+            >
+              Cabut
+            </button>
+          </li>
         ))}
       </ul>
 
-      {pesan && <p className="mt-2 text-[12px] font-semibold text-clay">{pesan}</p>}
-
-      {tambah ? (
-        <form
-          action={(fd) =>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <select
+          value={klienBaru}
+          onChange={(e) => setKlienBaru(e.target.value)}
+          aria-label={`Tugaskan materi ${judulMateri} ke klien`}
+          className={KELAS_MEDAN}
+        >
+          <option value="">Pilih klien…</option>
+          {bisaDitugaskan.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.nama} · {k.padmaId}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={pending || !klienBaru}
+          onClick={() =>
             mulai(async () => {
-              const r = await tambahBab(materiId, fd);
-              if (r.ok) {
-                setPesan(null);
-                setTambah(false);
-              } else {
+              const r = await tugaskanMateri(materiId, klienBaru);
+              if (!r.ok) {
                 setPesan(r.pesan);
+              } else {
+                setPesan(null);
+                setKlienBaru("");
+                router.refresh();
               }
             })
           }
-          className="mt-3 grid gap-2"
+          className={KELAS_TOMBOL_UTAMA}
         >
-          {/* Urutan bab TIDAK ada di sini: ia dihitung server sebagai
-              nomor berikutnya. Dua bab yang lahir dengan urutan sama tampil
-              berganti-ganti susunan tiap kali halaman dimuat. */}
-          <input
-            name="judul"
-            type="text"
-            required
-            minLength={2}
-            maxLength={PANJANG_JUDUL_MAKS}
-            placeholder="Judul bab baru"
-            aria-label={`Judul bab baru ${judulMateri}`}
-            className={KELAS_MEDAN}
-          />
-          <textarea
-            name="isi"
-            rows={4}
-            required
-            maxLength={PANJANG_ISI_BAB_MAKS}
-            placeholder="Isi bab"
-            aria-label={`Isi bab baru ${judulMateri}`}
-            className={KELAS_MEDAN}
-          />
-          <span className="flex gap-2">
-            <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>
-              {pending ? "Menyimpan…" : "Simpan bab"}
-            </button>
-            <button type="button" onClick={() => setTambah(false)} className={KELAS_TOMBOL_KECIL}>
-              Batal
-            </button>
-          </span>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setTambah(true)}
-          className={`mt-3 ${KELAS_TOMBOL_KECIL}`}
-        >
-          + Bab
+          Tugaskan
         </button>
-      )}
+      </div>
+      {pesan && <p className="mt-2 text-[12px] font-semibold text-clay">{pesan}</p>}
     </div>
   );
 }
 
-function BarisBab({ bab, judulMateri }: { bab: BabProp; judulMateri: string }) {
-  const [ubah, setUbah] = useState(false);
-  const [pending, mulai] = useTransition();
-  const [pesan, setPesan] = useState<string | null>(null);
-
-  if (ubah) {
-    return (
-      <li>
-        <form
-          action={(fd) =>
-            mulai(async () => {
-              const r = await perbaruiBab(bab.id, fd);
-              if (r.ok) {
-                setPesan(null);
-                setUbah(false);
-              } else {
-                setPesan(r.pesan);
-              }
-            })
-          }
-          className="grid gap-2"
-        >
-          <input
-            name="urutan"
-            type="number"
-            required
-            min={1}
-            max={URUTAN_BAB_MAKS}
-            defaultValue={bab.urutan}
-            aria-label={`Urutan bab ${bab.judul}`}
-            className={KELAS_MEDAN}
-          />
-          <input
-            name="judul"
-            type="text"
-            required
-            minLength={2}
-            maxLength={PANJANG_JUDUL_MAKS}
-            defaultValue={bab.judul}
-            aria-label={`Judul bab ${bab.judul}`}
-            className={KELAS_MEDAN}
-          />
-          <textarea
-            name="isi"
-            rows={5}
-            required
-            maxLength={PANJANG_ISI_BAB_MAKS}
-            defaultValue={bab.isi}
-            aria-label={`Isi bab ${bab.judul}`}
-            className={KELAS_MEDAN}
-          />
-          {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
-          <span className="flex gap-2">
-            <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>
-              {pending ? "Menyimpan…" : "Simpan"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setUbah(false);
-                setPesan(null);
-              }}
-              className={KELAS_TOMBOL_KECIL}
-            >
-              Batal
-            </button>
-          </span>
-        </form>
-      </li>
-    );
-  }
-
+/**
+ * Panel isi e-book: jumlah halaman yang sudah tersimpan, dan tempat mengunggah
+ * penggantinya. `PengunggahPdf` menulis lewat server action-nya sendiri
+ * (`./unggah.ts`, RPC `ganti_halaman_materi`) — bukan lewat `aksi.ts` — jadi
+ * jumlah di sini disegarkan lewat `router.refresh()` sesudah unggahan selesai,
+ * bukan lewat state lokal yang mudah menyimpang dari basis data.
+ */
+function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman: number }) {
+  const router = useRouter();
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 pb-2">
-      <span className="min-w-[160px] flex-1">
-        <b className="text-[13px] text-ink">
-          {bab.urutan}. {bab.judul}
-        </b>
-        <span className="block text-[11.5px] text-ink-soft">
-          {bab.isi.length} karakter · materi {judulMateri}
-        </span>
-      </span>
-      <span className="flex gap-2">
-        <button type="button" onClick={() => setUbah(true)} className={KELAS_TOMBOL_KECIL}>
-          Ubah
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            mulai(async () => {
-              const r = await hapusBab(bab.id);
-              setPesan(r.ok ? null : r.pesan);
-            })
-          }
-          className={KELAS_TOMBOL_KECIL}
-        >
-          Hapus bab
-        </button>
-      </span>
-      {pesan && <span className="w-full text-[12px] font-semibold text-clay">{pesan}</span>}
-    </li>
+    <div className="rounded-xl border border-black/10 bg-paper p-3">
+      <p className="text-[13px] text-ink">
+        {jumlahHalaman > 0
+          ? `${jumlahHalaman} halaman tersimpan.`
+          : "Belum ada halaman — unggah PDF-nya di bawah."}
+      </p>
+      <PengunggahPdf materiId={materiId} onSelesai={() => router.refresh()} />
+    </div>
   );
 }
 

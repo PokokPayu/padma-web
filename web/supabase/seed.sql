@@ -43,22 +43,28 @@ insert into app_settings (key, value) values ('nomor_wa','6287778400200');
 -- Dua layanan sengaja dipakai untuk menguji gating materi:
 --   * 1101 Sankalpa Fertility Massage — Ananda punya sesi `selesai` (TERBUKA)
 --   * 1106 Lactation Hero            — Ananda tidak punya sesi apa pun (TERKUNCI)
-insert into materials (id, service_id, judul, tipe, deskripsi) values
-  ('77777777-7777-7777-7777-777777777701','11111111-1111-1111-1111-111111111101',
+insert into materials (id, judul, tipe, deskripsi) values
+  ('77777777-7777-7777-7777-777777777701',
    'Pijat Mandiri Prekonsepsi','video','Panduan video pijat perut mandiri 12 menit.'),
-  ('77777777-7777-7777-7777-777777777702','11111111-1111-1111-1111-111111111101',
-   'Panduan Siklus Subur','ebook','E-book 3 bab tentang membaca siklus.'),
-  ('77777777-7777-7777-7777-777777777703','11111111-1111-1111-1111-111111111106',
+  ('77777777-7777-7777-7777-777777777702',
+   'Panduan Siklus Subur','ebook','E-book bergambar tentang membaca siklus.'),
+  ('77777777-7777-7777-7777-777777777703',
    'Teknik Pelekatan Menyusui','video','Panduan video pelekatan & posisi menyusui.'),
-  ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106',
+  ('77777777-7777-7777-7777-777777777704',
    'Panduan ASI Perah','ebook','E-book penyimpanan & penanganan ASI perah.');
 
--- Migrasi data material_services: setiap materi lama menjadi tepat satu baris.
--- INSERT ada di migration 20260831100000 DAN di sini: migration berjalan terlebih
--- dahulu tetapi tables kosong, jadi insert di sini memastikan seed data terisi.
-insert into material_services (material_id, service_id)
-select id, service_id from materials
-on conflict (material_id, service_id) do nothing;
+-- Materi <-> layanan. Sampai Task 11 ini hidup di kolom tunggal
+-- `materials.service_id`; kolom itu sudah dihapus (migration
+-- materi_hapus_bab_teks), jadi tautannya ditulis LANGSUNG ke sini alih-alih
+-- disalin dari kolom yang sudah tidak ada. Empat materi seed masing-masing
+-- menempel tepat satu layanan, persis seperti sebelumnya — materi BOLEH
+-- punya nol layanan sejak migration materi_banyak_layanan, tapi tidak ada
+-- alasan demo ini memulainya kosong.
+insert into material_services (material_id, service_id) values
+  ('77777777-7777-7777-7777-777777777701','11111111-1111-1111-1111-111111111101'),
+  ('77777777-7777-7777-7777-777777777702','11111111-1111-1111-1111-111111111101'),
+  ('77777777-7777-7777-7777-777777777703','11111111-1111-1111-1111-111111111106'),
+  ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106');
 
 -- URL video hidup di tabel tergating `material_videos`, BUKAN di `materials`
 -- (lihat migration gate_material_video).
@@ -66,26 +72,9 @@ insert into material_videos (material_id, url) values
   ('77777777-7777-7777-7777-777777777701','https://vimeo.com/padma-sankalpa-001'),
   ('77777777-7777-7777-7777-777777777703','https://vimeo.com/RAHASIA-123');
 
--- Isi bab ditulis pantas-baca, bukan placeholder: reader materi adalah salah
--- satu layar yang paling lama dipandangi saat demo. Bab ketiga ditambahkan
--- karena deskripsi materi …702 menjanjikan "3 bab" sementara seed lama hanya
--- membuat dua — ketidakcocokan yang langsung terlihat di kartu materi.
-insert into material_chapters (id, material_id, urutan, judul, isi) values
-  ('88888888-8888-8888-8888-888888888801','77777777-7777-7777-7777-777777777702',1,
-   'Mengenal Fase Siklus',
-   E'Siklus haid terbagi menjadi beberapa fase, dan masing-masing punya peran berbeda dalam perjalanan promil Anda.\n\nFase menstruasi menandai awal siklus. Setelahnya tubuh memasuki fase folikular, saat sel telur dipersiapkan. Puncaknya adalah ovulasi — inilah jendela paling subur. Setelah ovulasi, tubuh masuk fase luteal sampai siklus berikutnya dimulai.\n\nMencatat panjang siklus Anda selama tiga bulan akan sangat membantu tim PADMA menyesuaikan layanan. Bawa catatan itu ke sesi berikutnya.'),
-  ('88888888-8888-8888-8888-888888888802','77777777-7777-7777-7777-777777777702',2,
-   'Menandai Masa Subur',
-   E'Tubuh memberi tanda saat memasuki masa subur, dan tanda-tanda ini bisa dikenali tanpa alat khusus.\n\nLendir serviks berubah menjadi lebih bening dan elastis, mirip putih telur mentah. Sebagian perempuan merasakan nyeri ringan di salah satu sisi perut bawah. Suhu tubuh basal juga naik tipis setelah ovulasi.\n\nTidak semua orang merasakan semuanya, dan itu normal. Yang penting adalah mengenali pola tubuh Anda sendiri — bukan membandingkannya dengan orang lain.'),
-  ('88888888-8888-8888-8888-888888888804','77777777-7777-7777-7777-777777777702',3,
-   'Kapan Perlu Berkonsultasi',
-   E'Skrining PADMA adalah alat keselamatan awal, bukan pengganti pemeriksaan dokter.\n\nSegera periksakan diri bila Anda mengalami perdarahan di luar pola biasa, nyeri panggul yang menetap, atau siklus yang tiba-tiba berubah drastis. Bila Anda dan pasangan sudah berusaha selama satu tahun tanpa hasil — atau enam bulan bila usia Anda di atas 35 tahun — konsultasi ke dokter kandungan adalah langkah yang tepat.\n\nSampaikan juga kepada tim PADMA agar layanan Anda bisa disesuaikan.'),
-  ('88888888-8888-8888-8888-888888888803','77777777-7777-7777-7777-777777777704',1,
-   'Menyimpan ASI Perah',
-   E'Isi bab ini sengaja hanya untuk klien yang sudah menjalani layanan Lactation Hero. Bila Anda dapat membacanya tanpa pernah menjalani layanan tersebut, gating materi sedang bocor.');
-
--- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi, bukan teks
--- bab). Hanya materi TERBUKA (…702) yang diberi baris `material_pages`: tanpa
+-- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi; bab teks
+-- sudah dibongkar total di Task 11, material_chapters tidak ada lagi). Hanya
+-- materi TERBUKA (…702) yang diberi baris `material_pages`: tanpa
 -- ini reader-nya akan selalu jatuh ke keadaan "berhak tapi isi belum
 -- diunggah" (M10, keadaan 2) walau Ananda sudah menyelesaikan layanannya —
 -- padahal seed ini justru dipakai untuk membuktikan keadaan 3 ("berhak DAN
@@ -109,3 +98,15 @@ insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
   ('77777777-7777-7777-7777-777777777702',1,'77777777-7777-7777-7777-777777777702/0001.webp',1600,2263),
   ('77777777-7777-7777-7777-777777777702',2,'77777777-7777-7777-7777-777777777702/0002.webp',1600,2263),
   ('77777777-7777-7777-7777-777777777702',3,'77777777-7777-7777-7777-777777777702/0003.webp',1600,2263);
+
+-- Materi TERKUNCI (…704) MEMANG dapat baris juga — beda dari draf pertama
+-- migration Task 10, dan sengaja. "Aktif" tanpa satu pun halaman adalah
+-- persis kelas bug yang rencana ini bongkar berulang kali: kartu yang
+-- menjanjikan isi padahal kosong. Objeknya BOLEH fiktif (tidak diunggah
+-- `unggahHalamanMateriDemo()`) karena — TIDAK SEPERTI …702 — materi ini
+-- terbukti tidak pernah bisa dibuka siapa pun di data demo: Ananda tidak
+-- pernah menjalani Lactation Hero, jadi `berhak_isi_materi` menutupnya di
+-- keadaan 1 SEBELUM baris ini pernah dijawab ke klien mana pun. Tidak ada
+-- `<img>` yang bisa 404 kalau rute halamannya tidak pernah tercapai.
+insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
+  ('77777777-7777-7777-7777-777777777704',1,'77777777-7777-7777-7777-777777777704/0001.webp',1600,2263);

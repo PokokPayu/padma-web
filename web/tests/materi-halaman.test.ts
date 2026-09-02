@@ -19,10 +19,9 @@ describe("material_pages & RPC pengganti halaman", () => {
 
   it("RPC mengganti seluruh halaman satu materi dalam satu transaksi", async () => {
     const db = svc();
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const { data: m } = await db
       .from("materials")
-      .insert({ judul: "UJI-HAL", tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+      .insert({ judul: "UJI-HAL", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id").single();
 
     const { data: n1 } = await db.rpc("ganti_halaman_materi", {
@@ -61,10 +60,9 @@ describe("material_pages & RPC pengganti halaman", () => {
 
   it("RPC TIDAK PERNAH menyentuh baris materi lain", async () => {
     const db = svc();
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const buat = async (judul: string) =>
       (await db.from("materials")
-        .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+        .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true })
         .select("id").single()).data!.id;
     const a = await buat("UJI-RADIUS-A");
     const b = await buat("UJI-RADIUS-B");
@@ -106,10 +104,9 @@ describe("material_pages & RPC pengganti halaman", () => {
 describe("penutupan radius: RPC adalah SATU-SATUNYA jalur tulis", () => {
   it("admin TIDAK BISA menyapu halaman lewat REST langsung (bukan RPC)", async () => {
     const db = svc();
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const buat = async (judul: string) =>
       (await db.from("materials")
-        .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+        .insert({ judul, tipe: "ebook", deskripsi: "", aktif: true })
         .select("id").single()).data!.id;
     const a = await buat("UJI-SAPU-A");
     const b = await buat("UJI-SAPU-B");
@@ -140,10 +137,9 @@ describe("penutupan radius: RPC adalah SATU-SATUNYA jalur tulis", () => {
 
   it("klien tidak bisa memanggil RPC ganti_halaman_materi", async () => {
     const db = svc();
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const { data: m } = await db
       .from("materials")
-      .insert({ judul: "UJI-KLIEN-RPC", tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+      .insert({ judul: "UJI-KLIEN-RPC", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id").single();
     await db.rpc("ganti_halaman_materi", {
       p_material_id: m!.id,
@@ -174,10 +170,9 @@ describe("penutupan radius: RPC adalah SATU-SATUNYA jalur tulis", () => {
     // karena satu-satunya test-nya berjalan lewat service role. Hanya sesi
     // JWT asli yang membuktikan cabang IZIN-nya, bukan hanya cabang radius.
     const db = svc();
-    const { data: layanan } = await db.from("services").select("id").limit(1).single();
     const { data: m } = await db
       .from("materials")
-      .insert({ judul: "UJI-ADMIN-RPC", tipe: "ebook", deskripsi: "", aktif: true, service_id: layanan!.id })
+      .insert({ judul: "UJI-ADMIN-RPC", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id").single();
 
     const admin = await signInAs("admin@padma.test");
@@ -195,5 +190,26 @@ describe("penutupan radius: RPC adalah SATU-SATUNYA jalur tulis", () => {
     expect(sisa).toHaveLength(2);
 
     await db.from("materials").delete().eq("id", m!.id);
+  });
+});
+
+describe("Task 11 — bab teks & materials.service_id sudah dibongkar", () => {
+  it("material_chapters dan materials.service_id sudah tidak ada", async () => {
+    const db = svc();
+    const { error: bab } = await db.from("material_chapters").select("id").limit(1);
+    expect(bab).toBeTruthy(); // relasi hilang -> PostgREST menjawab error
+
+    const { data: m } = await db.from("materials").select("*").limit(1).single();
+    expect(Object.keys(m!)).not.toContain("service_id");
+  });
+
+  it("materi boleh lahir TANPA layanan sama sekali", async () => {
+    const db = svc();
+    const { data, error } = await db
+      .from("materials")
+      .insert({ judul: "UJI-TANPA-LAYANAN", tipe: "ebook", deskripsi: "", aktif: true })
+      .select("id").single();
+    expect(error).toBeNull();
+    await db.from("materials").delete().eq("id", data!.id);
   });
 });

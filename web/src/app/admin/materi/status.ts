@@ -25,15 +25,13 @@ export const LABEL_TIPE: Record<TipeMateri, string> = {
 
 /** Kalimat yang menjelaskan ISI apa yang wajib menyertai tiap tipe. */
 export const LABEL_ISI: Record<TipeMateri, string> = {
-  ebook: "minimal satu bab",
+  ebook: "satu berkas PDF",
   video: "satu URL video",
 };
 
 export const PANJANG_JUDUL_MINIMAL = 2;
 export const PANJANG_JUDUL_MAKS = 120;
 export const PANJANG_DESKRIPSI_MAKS = 500;
-export const PANJANG_ISI_BAB_MAKS = 20000;
-export const URUTAN_BAB_MAKS = 99;
 
 /**
  * Penyedia video yang diizinkan.
@@ -104,26 +102,3 @@ export function periksaUrlVideo(mentah: string): Periksa<string> {
   return { ok: true, nilai };
 }
 
-export function periksaIsiBab(mentah: string): Periksa<string> {
-  const nilai = mentah.trim();
-  if (nilai.length === 0) {
-    // Bab tanpa isi bukan bab: reader klien akan merender judul di atas halaman
-    // kosong, dan tidak ada satu pun error yang menjelaskannya.
-    return { ok: false, pesan: "Isi bab tidak boleh kosong." };
-  }
-  if (nilai.length > PANJANG_ISI_BAB_MAKS) {
-    return { ok: false, pesan: `Isi bab maksimal ${PANJANG_ISI_BAB_MAKS} karakter.` };
-  }
-  return { ok: true, nilai };
-}
-
-export function periksaUrutan(mentah: string): Periksa<number> {
-  const teks = mentah.trim();
-  if (!/^\d+$/.test(teks)) return { ok: false, pesan: "Urutan bab harus berupa angka bulat." };
-  const nilai = Number(teks);
-  if (nilai < 1) return { ok: false, pesan: "Urutan bab minimal 1." };
-  if (nilai > URUTAN_BAB_MAKS) {
-    return { ok: false, pesan: `Urutan bab maksimal ${URUTAN_BAB_MAKS}.` };
-  }
-  return { ok: true, nilai };
-}

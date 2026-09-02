@@ -4,7 +4,8 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 const TABLES = [
   "profiles", "phases", "services", "packages", "partners", "app_settings",
   "clients", "client_packages", "sessions", "screenings", "booking_requests",
-  "materials", "material_chapters", "material_videos", "service_rates", "honor_marks",
+  "materials", "material_services", "material_pages", "material_assignments",
+  "material_videos", "service_rates", "honor_marks",
 ] as const;
 
 describe("skema database", () => {

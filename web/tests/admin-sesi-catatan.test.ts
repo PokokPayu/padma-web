@@ -291,22 +291,22 @@ describe("menyelesaikan sesi mengalir ke passport klien", () => {
 
   it("materi layanan itu ikut TERBUKA untuk klien — sebelumnya terkunci", async () => {
     // Lactation Hero sengaja tidak pernah dijalani Ananda di seed, dan
-    // materinya punya bab. Ini membuat gating benar-benar berpindah keadaan,
-    // bukan sekadar "0 sebelum, 0 sesudah".
-    const bacaBab = async () => {
+    // materinya punya halaman (lihat supabase/seed.sql). Ini membuat gating
+    // benar-benar berpindah keadaan, bukan sekadar "0 sebelum, 0 sesudah".
+    const bacaHalaman = async () => {
       const { data } = await sesiKlien
-        .from("material_chapters")
-        .select("id")
+        .from("material_pages")
+        .select("halaman")
         .eq("material_id", MATERI_TERKUNCI);
       return (data ?? []).length;
     };
 
-    expect(await bacaBab()).toBe(0); // terkunci
+    expect(await bacaHalaman()).toBe(0); // terkunci
 
     const id = await buatSesi("terjadwal", { denganPaket: true, serviceId: SVC_MATERI });
     await selesaikanSesi(id, fdSelesai("Sesi laktasi pertama."));
 
-    expect(await bacaBab()).toBeGreaterThan(0); // terbuka
+    expect(await bacaHalaman()).toBeGreaterThan(0); // terbuka
   });
 
   it("sesi BATAL tidak menambah progres maupun badge", async () => {

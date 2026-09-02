@@ -1,26 +1,19 @@
 // tests/materi-banyak-layanan.test.ts
 import { describe, it, expect } from "vitest";
-import { createClient } from "@supabase/supabase-js";
 import { querySql } from "./helpers/db";
 
-const svc = () =>
-  createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
 describe("material_services — materi boleh milik banyak layanan", () => {
-  it("setiap materi lama termigrasi menjadi tepat satu baris", async () => {
-    const db = svc();
-    const { data: materi } = await db.from("materials").select("id, service_id");
-    const { data: tautan } = await db.from("material_services").select("material_id, service_id");
-    expect(materi!.length).toBeGreaterThan(0);
-    for (const m of materi!) {
-      const cocok = (tautan ?? []).filter(
-        (t) => t.material_id === m.id && t.service_id === m.service_id,
-      );
-      expect(cocok, `materi ${m.id} tidak termigrasi`).toHaveLength(1);
-    }
-  });
+  // Test "setiap materi lama termigrasi menjadi tepat satu baris" (yang pernah
+  // hidup di sini) DIHAPUS, bukan diadaptasi: ia membuktikan backfill satu kali
+  // milik migration `materi_banyak_layanan` (menyalin `materials.service_id`
+  // lama ke `material_services`) benar-benar berjalan. Task 11 menghapus
+  // KOLOM `materials.service_id` itu sendiri — tidak ada lagi sisi sumber untuk
+  // dibandingkan, dan sejak Task 11 setiap materi BARU lahir langsung lewat
+  // `material_services` (nol baris pun sah), jadi tidak ada lagi "materi lama"
+  // yang perlu dibuktikan bermigrasi. Perilaku yang tersisa & masih relevan
+  // (RLS, grant, materi boleh menempel banyak layanan) diuji di describe ini
+  // dan di tests/admin-materi.test.ts ("satu materi boleh muncul di bawah
+  // LEBIH dari satu kelompok layanan").
 
   it("RLS menyala", async () => {
     // Tabel baru lahir TANPA RLS. Ini pemeriksaan yang sudah pernah menyelamatkan
@@ -31,13 +24,22 @@ describe("material_services — materi boleh milik banyak layanan", () => {
     expect(baris[0].relrowsecurity).toBe(true);
   });
 
-  it("authenticated hanya memegang SELECT — hak tulis default dicabut", async () => {
+  it("authenticated memegang SELECT, INSERT & DELETE — TIDAK UPDATE", async () => {
+    // Sampai Task 10, hanya SELECT: aplikasi masih menulis lewat kolom tunggal
+    // `materials.service_id`, jadi tidak ada jalur pengguna yang menulis tabel
+    // ini sama sekali. Task 11 memindahkan penulisan tautan materi<->layanan
+    // ke sini (`gantiLayananMateri`, hapus-lalu-sisip berlingkup material_id,
+    // lewat SESI PENGGUNA — bukan service role), dan Postgres menuntut hak
+    // tabel di samping policy RLS-nya. UPDATE sengaja TIDAK diberikan:
+    // `gantiLayananMateri` hanya pernah delete lalu insert, primary key
+    // gabungan (material_id, service_id) membuat "ubah baris yang ada" tidak
+    // pernah dipakai.
     const baris = await querySql<{ privilege_type: string }>(`
       select privilege_type from information_schema.role_table_grants
        where table_schema = 'public' and table_name = 'material_services'
          and grantee = 'authenticated'
        order by privilege_type`);
-    expect(baris.map((b) => b.privilege_type)).toEqual(["SELECT"]);
+    expect(baris.map((b) => b.privilege_type)).toEqual(["DELETE", "INSERT", "SELECT"]);
   });
 
   it("anon tidak memegang hak apa pun", async () => {

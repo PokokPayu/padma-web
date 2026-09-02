@@ -23,7 +23,6 @@ const svc = createAdminSupabase();
 const ANANDA = "44444444-4444-4444-4444-444444444401";
 const PAKET_ANANDA = "55555555-5555-5555-5555-555555555501";
 const SVC_LACTATION = "11111111-1111-1111-1111-111111111106";
-const MATERI_TERBUKA_EBOOK = "77777777-7777-7777-7777-777777777702";
 
 // Tanggal acuan disuntikkan, TIDAK dibaca dari jam mesin: test tidak boleh
 // mulai gagal sendiri hanya karena hari berganti (lihat Pagar Waktu).
@@ -141,28 +140,20 @@ describe("seed demo — pagar yang tidak boleh tertabrak saat memperkaya", () =>
 });
 
 describe("seed demo — materi", () => {
-  it("jumlah bab e-book cocok dengan yang dijanjikan deskripsinya", async () => {
-    const { data } = await svc
-      .from("materials")
-      .select("deskripsi, material_chapters(id)")
-      .eq("id", MATERI_TERBUKA_EBOOK)
-      .single();
-
-    const dijanjikan = /(\d+)\s*bab/i.exec(data!.deskripsi);
-    expect(dijanjikan).not.toBeNull();
-    expect((data!.material_chapters as unknown[]).length).toBe(Number(dijanjikan![1]));
-  });
-
-  it("isi bab materi terbuka pantas dibaca, bukan placeholder", async () => {
-    const { data } = await svc
-      .from("material_chapters")
-      .select("isi")
-      .eq("material_id", MATERI_TERBUKA_EBOOK);
-
-    expect((data ?? []).length).toBeGreaterThanOrEqual(3);
-    expect((data ?? []).every((b) => b.isi.length >= 200)).toBe(true);
-    expect((data ?? []).some((b) => /dummy|lorem/i.test(b.isi))).toBe(false);
-  });
+  // Dua test yang pernah hidup di sini DIHAPUS, bukan diadaptasi:
+  //
+  //  * "jumlah bab e-book cocok dengan yang dijanjikan deskripsinya" — bab
+  //    teks dibongkar total di Task 11; deskripsi seed tidak lagi menjanjikan
+  //    angka "N bab" apa pun ("E-book bergambar tentang membaca siklus."),
+  //    jadi tidak ada lagi janji untuk dicocokkan.
+  //  * "isi bab materi terbuka pantas dibaca, bukan placeholder" — isi e-book
+  //    kini GAMBAR halaman (`material_pages.objek`, byte di storage), bukan
+  //    teks tersimpan di baris basis data. Tidak ada lagi "isi" bertipe teks
+  //    untuk diperiksa panjang/dummy-nya. Penggantinya — membuktikan objek
+  //    demo di storage BENAR-BENAR berkas gambar sungguhan, bukan stub atau
+  //    404 — sudah hidup di tests/materi-route-halaman.test.ts, yang
+  //    memanggil rute penyaji halaman sungguhan dan memeriksa magic number
+  //    byte WEBP/RIFF yang kembali.
 
   it("katalog materi aktif minimal empat, dengan yang terbuka dan yang terkunci", async () => {
     const { ambilDaftarMateri } = await import("@/lib/passport/data");

@@ -8,7 +8,7 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
  *
  * Temuan auditor: `service_rates`, `honor_marks`, dan `material_videos` sudah
  * dicabut hak `anon`-nya, tetapi tabel data pasien (`clients`, `sessions`,
- * `screenings`, `materials`, `material_chapters`, `profiles`, dan kerabatnya)
+ * `screenings`, `materials`, `material_pages`, `profiles`, dan kerabatnya)
  * masih memegang GRANT `anon` PENUH — SELECT sampai TRUNCATE. Keamanannya
  * bergantung 100% pada KETIADAAN policy RLS yang mengizinkan anon.
  *
@@ -45,7 +45,9 @@ const TABEL_TERTUTUP_ANON = [
   "booking_requests",
   // materi (isi berbayar)
   "materials",
-  "material_chapters",
+  "material_services",
+  "material_pages",
+  "material_assignments",
   "material_videos",
   // internal
   "partners",
@@ -133,7 +135,9 @@ describe("GRANT anon — perilaku lewat REST: ditolak 42501, bukan '0 baris'", (
     "screenings",
     "booking_requests",
     "materials",
-    "material_chapters",
+    "material_services",
+    "material_pages",
+    "material_assignments",
     "material_videos",
     "partners",
     "app_settings",

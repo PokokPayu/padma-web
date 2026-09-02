@@ -59,7 +59,6 @@ const LAYANAN_UJI = "11111111-1111-1111-1111-1111111119a1";
 const PAKET_UJI = "22222222-2222-2222-2222-2222222229a1";
 const MITRA_UJI = "33333333-3333-3333-3333-3333333339a1";
 const MATERI_UJI = "77777777-7777-7777-7777-7777777779a1";
-const BAB_UJI = "88888888-8888-8888-8888-8888888889a1";
 const TARIF_UJI = "99999999-9999-9999-9999-9999999999a1";
 const HONOR_UJI = "99999999-9999-9999-9999-9999999999b1";
 
@@ -106,7 +105,6 @@ beforeAll(async () => {
   await svc.from("materials").upsert(
     {
       id: MATERI_UJI,
-      service_id: LAYANAN_UJI,
       judul: "PAD-UJI Materi",
       tipe: "ebook",
       deskripsi: "fixture",
@@ -114,9 +112,9 @@ beforeAll(async () => {
     },
     { onConflict: "id" },
   );
-  await svc.from("material_chapters").upsert(
-    { id: BAB_UJI, material_id: MATERI_UJI, urutan: 1, judul: "PAD-UJI Bab", isi: "isi" },
-    { onConflict: "id" },
+  await svc.from("material_services").upsert(
+    { material_id: MATERI_UJI, service_id: LAYANAN_UJI },
+    { onConflict: "material_id,service_id" },
   );
   await svc.from("material_videos").upsert(
     { material_id: MATERI_UJI, url: "https://vimeo.com/pad-uji-hak-hapus" },
@@ -166,7 +164,8 @@ afterAll(async () => {
   await svc.from("honor_marks").delete().eq("id", HONOR_UJI);
   await svc.from("service_rates").delete().eq("id", TARIF_UJI);
   await svc.from("material_videos").delete().eq("material_id", MATERI_UJI);
-  await svc.from("material_chapters").delete().eq("material_id", MATERI_UJI);
+  await svc.from("material_pages").delete().eq("material_id", MATERI_UJI);
+  await svc.from("material_services").delete().eq("material_id", MATERI_UJI);
   await svc.from("materials").delete().eq("id", MATERI_UJI);
   await svc.from("partners").delete().eq("id", MITRA_UJI);
   await svc.from("packages").delete().eq("id", PAKET_UJI);
@@ -183,7 +182,8 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
     expect(error?.code).toBe("42501");
 
     // 42501 tanpa pembacaan ulang tidak membuktikan apa pun: yang dijaga
-    // bukan kode errornya, melainkan bab & video yang tidak ikut tersapu.
+    // bukan kode errornya, melainkan tautan layanan & video yang tidak ikut
+    // tersapu.
     const { data: materi } = await svc
       .from("materials")
       .select("id")
@@ -191,11 +191,11 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
       .maybeSingle();
     expect(materi).not.toBeNull();
 
-    const { data: bab } = await svc
-      .from("material_chapters")
-      .select("id")
+    const { data: tautan } = await svc
+      .from("material_services")
+      .select("service_id")
       .eq("material_id", MATERI_UJI);
-    expect(bab).toHaveLength(1);
+    expect(tautan).toHaveLength(1);
 
     const { data: video } = await svc
       .from("material_videos")
@@ -232,54 +232,21 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
     expect(ubah![0].aktif).toBe(true);
   });
 
-  it("KONTROL: penyuntingan ISI materi tetap hidup — tanpa verba DELETE", async () => {
-    // Bab dan URL video adalah ISI yang ditulis klinik sendiri: tidak ada
-    // riwayat klien, tidak ada bukti, dan semuanya bisa ditulis ulang.
-    // Menyunting bab yang keliru memang pekerjaan sah — dan itulah yang tetap
-    // dijaga hidup di sini.
+  it("KONTROL: penyuntingan video materi tetap hidup — tanpa verba DELETE", async () => {
+    // URL video adalah ISI yang ditulis klinik sendiri: tidak ada riwayat
+    // klien, tidak ada bukti, dan semuanya bisa ditulis ulang.
+    //
+    // (Bab teks & `material_chapters` sudah dibongkar total di Task 11 —
+    // padanan test ini untuk halaman e-book, "RPC adalah SATU-SATUNYA jalur
+    // tulis", sudah hidup di tests/materi-halaman.test.ts sejak Task 3, jadi
+    // tidak diulang di sini.)
     //
     // Yang BERUBAH sejak migration `batas_radius_hapus_isi_materi`: jalur
-    // penghapusannya bukan lagi verba DELETE peran API (satu filter tautologis
-    // menyapu seluruh bab klinik — lihat describe "radius satu permintaan"),
-    // melainkan RPC berparameter tunggal. Assertion di bawah karena itu lebih
-    // KETAT, bukan lebih longgar: DELETE langsung wajib ditolak, DAN
-    // penyuntingannya wajib tetap bisa dikerjakan.
+    // penghapusan video bukan lagi verba DELETE peran API, melainkan RPC
+    // berparameter tunggal. Assertion di bawah karena itu lebih KETAT, bukan
+    // lebih longgar: DELETE langsung wajib ditolak, DAN penyuntingannya wajib
+    // tetap bisa dikerjakan.
     const a = await signInAs("admin@padma.test");
-
-    const { data: babBaru } = await svc
-      .from("material_chapters")
-      .insert({ material_id: MATERI_UJI, urutan: 9, judul: "PAD-UJI Bab Keliru", isi: "x" })
-      .select("id")
-      .single();
-
-    const { error: eBab } = await a
-      .from("material_chapters")
-      .delete()
-      .eq("id", babBaru!.id);
-    expect(eBab?.code).toBe("42501");
-
-    // Menyunting isinya (bentuk penyuntingan yang paling sering dipakai) tetap
-    // lolos tanpa satu pun hak tambahan.
-    const { data: sunting, error: eSunting } = await a
-      .from("material_chapters")
-      .update({ judul: "PAD-UJI Bab Disunting", isi: "y" })
-      .eq("id", babBaru!.id)
-      .select("id, judul");
-    expect(eSunting).toBeNull();
-    expect(sunting![0].judul).toBe("PAD-UJI Bab Disunting");
-
-    // Dan menghapusnya tetap bisa — lewat pintu yang radiusnya terkunci.
-    const { data: terhapus, error: eRpc } = await a.rpc("hapus_bab_materi", {
-      bab_id: babBaru!.id,
-    });
-    expect(eRpc).toBeNull();
-    expect(terhapus).toBe(babBaru!.id);
-    const { data: sisaBab } = await svc
-      .from("material_chapters")
-      .select("id")
-      .eq("id", babBaru!.id)
-      .maybeSingle();
-    expect(sisaBab).toBeNull();
 
     // Video: DELETE langsung ditolak, penggantian URL lewat upsert tetap jalan,
     // pelepasan lewat RPC tetap jalan.
@@ -341,46 +308,39 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
  * Karena itu assertion di bawah TIDAK berhenti pada kode error: yang diperiksa
  * adalah JUMLAH BARIS sesudahnya. 204 bukan bukti terhapus, dan 42501 bukan
  * bukti selamat — hanya hitungan baris yang membuktikan keduanya.
+ *
+ * `material_chapters` sendiri sudah dibongkar total di Task 11. Empat test
+ * yang dulu membuktikan radius ini khusus untuknya ("satu filter tautologis
+ * TIDAK menyapu seluruh bab", padanan "owner", "KONTROL: penyuntingan isi
+ * TETAP hidup", "klien tidak bisa memanggil RPC hapus_bab_materi") DIHAPUS,
+ * bukan diadaptasi ke `material_pages`: kelas bug PERSIS yang sama (satu
+ * filter tautologis `?halaman=gte.0` menyapu SELURUH halaman SELURUH materi)
+ * sudah diprobe nyata dan ditutup di migration `materi_halaman_pdf`, dan
+ * dibuktikan di tests/materi-halaman.test.ts describe "penutupan radius: RPC
+ * adalah SATU-SATUNYA jalur tulis" — termasuk padanan admin/klien/owner yang
+ * sama persis, lewat sesi JWT sungguhan, bukan service role. Mengulanginya di
+ * sini hanya akan menjadi dua tempat yang harus disepakatkan setiap kali
+ * radiusnya berubah. Yang tersisa di describe ini murni video, yang TIDAK
+ * disentuh Task 11 sama sekali.
  */
 describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
   /**
    * Jaring pengaman. Bila pagar radiusnya BELUM ada (jalur MERAH), permintaan
-   * di bawah benar-benar menghapus seluruh bab/video klinik — dan seluruh
-   * suite lain (passport-materi, rls-materi, passport-seed-demo) ikut mati
-   * karena keadaan basis data rusak, bukan karena bugnya sendiri. Snapshot
-   * diambil lewat service role sebelum percobaan dan dipulihkan apa pun
-   * hasilnya.
+   * di bawah benar-benar menghapus seluruh video klinik — dan seluruh suite
+   * lain (passport-materi, rls-materi, passport-seed-demo) ikut mati karena
+   * keadaan basis data rusak, bukan karena bugnya sendiri. Snapshot diambil
+   * lewat service role sebelum percobaan dan dipulihkan apa pun hasilnya.
    */
   async function denganPemulihanIsiMateri(fn: () => Promise<void>) {
-    const { data: babAwal } = await svc.from("material_chapters").select("*");
     const { data: videoAwal } = await svc.from("material_videos").select("*");
     try {
       await fn();
     } finally {
-      if (babAwal?.length) {
-        await svc.from("material_chapters").upsert(babAwal, { onConflict: "id" });
-      }
       if (videoAwal?.length) {
         await svc.from("material_videos").upsert(videoAwal, { onConflict: "material_id" });
       }
     }
   }
-
-  it("admin: satu filter tautologis TIDAK menyapu seluruh bab", async () => {
-    await denganPemulihanIsiMateri(async () => {
-      const { data: sebelum } = await svc.from("material_chapters").select("id");
-      expect(sebelum!.length).toBeGreaterThan(1); // percobaannya harus bermakna
-
-      const a = await signInAs("admin@padma.test");
-      await a.from("material_chapters").delete().gte("urutan", 0);
-
-      const { data: sesudah } = await svc.from("material_chapters").select("id");
-      expect(
-        sesudah!.length,
-        "satu permintaan HTTP tidak boleh menghapus lebih dari yang dimaksudkan",
-      ).toBe(sebelum!.length);
-    });
-  });
 
   it("admin: satu filter tautologis TIDAK menyapu seluruh video", async () => {
     await denganPemulihanIsiMateri(async () => {
@@ -393,38 +353,6 @@ describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
       const { data: sesudah } = await svc.from("material_videos").select("material_id");
       expect(sesudah!.length).toBe(sebelum!.length);
     });
-  });
-
-  it("owner pun tidak bisa (peran SQL-nya sama; ini bukan pagar khusus admin)", async () => {
-    await denganPemulihanIsiMateri(async () => {
-      const { data: sebelum } = await svc.from("material_chapters").select("id");
-      const o = await signInAs("owner@padma.test");
-      await o.from("material_chapters").delete().gte("urutan", 0);
-      const { data: sesudah } = await svc.from("material_chapters").select("id");
-      expect(sesudah!.length).toBe(sebelum!.length);
-    });
-  });
-
-  it("KONTROL: penyuntingan isi TETAP hidup — satu panggilan menghapus TEPAT satu bab", async () => {
-    // Pagar radius tidak boleh menjadi larangan menyunting. Jalannya dipindah
-    // ke RPC berparameter TUNGGAL: satu panggilan = satu baris, sehingga
-    // radius yang selama ini hanya DIKLAIM benar-benar DITEGAKKAN.
-    const { data: babBaru } = await svc
-      .from("material_chapters")
-      .insert({ material_id: MATERI_UJI, urutan: 9, judul: "PAD-UJI Bab Keliru", isi: "x" })
-      .select("id")
-      .single();
-
-    const { data: sebelum } = await svc.from("material_chapters").select("id");
-
-    const a = await signInAs("admin@padma.test");
-    const { data: terhapus, error } = await a.rpc("hapus_bab_materi", { bab_id: babBaru!.id });
-    expect(error).toBeNull();
-    expect(terhapus).toBe(babBaru!.id);
-
-    const { data: sesudah } = await svc.from("material_chapters").select("id");
-    expect(sesudah!.length).toBe(sebelum!.length - 1);
-    expect(sesudah!.map((b) => b.id)).not.toContain(babBaru!.id);
   });
 
   it("KONTROL: video TETAP bisa dilepas dari materinya, tepat satu baris", async () => {
@@ -446,34 +374,18 @@ describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
       );
   });
 
-  it("klien tidak bisa memanggil RPC penghapus isi materi", async () => {
-    const { data: babBaru } = await svc
-      .from("material_chapters")
-      .insert({ material_id: MATERI_UJI, urutan: 8, judul: "PAD-UJI Bab Klien", isi: "x" })
-      .select("id")
-      .single();
-    try {
-      const k = await signInAs("ananda@padma.test");
-      const { error } = await k.rpc("hapus_bab_materi", { bab_id: babBaru!.id });
-      expect(error?.code).toBe("42501");
+  // "klien tidak bisa memanggil RPC penghapus isi materi" (dulu di sini, lewat
+  // `hapus_bab_materi`) DIHAPUS bersama material_chapters. Padanannya untuk
+  // halaman e-book — "klien tidak bisa memanggil RPC ganti_halaman_materi" —
+  // sudah hidup di tests/materi-halaman.test.ts, memakai pola yang sama
+  // (sesi JWT klien sungguhan, bukan service role).
 
-      const { data: masih } = await svc
-        .from("material_chapters")
-        .select("id")
-        .eq("id", babBaru!.id)
-        .maybeSingle();
-      expect(masih).not.toBeNull();
-    } finally {
-      await svc.from("material_chapters").delete().eq("id", babBaru!.id);
-    }
-  });
-
-  it("anon tidak memegang EXECUTE atas kedua RPC itu", async () => {
+  it("anon tidak memegang EXECUTE atas RPC penghapus/pengganti isi materi", async () => {
     const baris = await querySql<{ n: string }>(`
       select count(*)::text as n
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
-         and p.proname in ('hapus_bab_materi','lepas_video_materi')
+         and p.proname in ('lepas_video_materi','ganti_halaman_materi')
          and (has_function_privilege('anon', p.oid, 'EXECUTE')
               or has_function_privilege('public', p.oid, 'EXECUTE'))`);
     expect(Number(baris[0].n)).toBe(0);
@@ -1108,8 +1020,24 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
    * catatan sejarah: bila radius per-materi pada tabel ini ATAU
    * `material_assignments` di atas pernah butuh dibuka lagi lewat hak tabel
    * langsung (bukan RPC), inilah preseden persis mengapa itu ditolak.
+   *
+   * `material_services` (Task 11, migration `materi_hapus_bab_teks`)
+   * ditambahkan DENGAN SADAR, bentuk risikonya SEPADAN dengan
+   * `material_assignments` di atas — bukan diwariskan default privileges:
+   * DELETE tanpa filter atau berfilter tautologis bisa menyapu SELURUH tautan
+   * materi<->layanan, bukan satu pasang. Yang membedakannya dari
+   * chapters/videos/pages: `gantiLayananMateri`
+   * (src/app/admin/materi/aksi.ts) TIDAK memanggil RPC — ia memanggil
+   * `.delete().eq("material_id", materiId)` LANGSUNG lewat sesi pengguna, dan
+   * itu sengaja: radiusnya sudah terkunci di kode aplikasi pada SATU
+   * parameter wajib (bukan filter yang bisa dibuat tautologis dari luar),
+   * policy "materi-layanan: staf kelola" membatasi PERANNYA, dan baris yang
+   * hilang murni TAUTAN admin<->layanan — bukan konten tulisan tangan
+   * (chapters/pages) maupun bukti finansial (videos ditinjau lewat harga
+   * yang sama). "Pulih" berarti admin mencentang ulang layanan dari memori
+   * atau catatan eksternal, persis seperti `material_assignments`.
    */
-  const BOLEH_DELETE: string[] = ["material_assignments"];
+  const BOLEH_DELETE: string[] = ["material_assignments", "material_services"];
 
   it("tidak ada satu tabel pun yang masih memberi DELETE ke authenticated", async () => {
     const baris = await querySql<{ table_name: string }>(`
@@ -1193,10 +1121,10 @@ describe("peta hak DELETE — struktural, bukan perilaku", () => {
       select c.relname as tabel, obj_description(c.oid, 'pg_class') as komentar
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public'
-         and c.relname in ('material_chapters','material_videos')
+         and c.relname in ('material_pages','material_videos')
        order by 1`);
-    expect(baris.map((b) => b.tabel)).toEqual(["material_chapters", "material_videos"]);
-    expect(baris[0].komentar).toContain("hapus_bab_materi");
+    expect(baris.map((b) => b.tabel)).toEqual(["material_pages", "material_videos"]);
+    expect(baris[0].komentar).toContain("ganti_halaman_materi");
     expect(baris[1].komentar).toContain("lepas_video_materi");
   });
 

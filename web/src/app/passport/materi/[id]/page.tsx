@@ -40,10 +40,9 @@ export default async function ReaderMateri({
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
 
-  // `ambilMateriDetail` menyaring `aktif = true` sendiri: policy
-  // material_pages/material_chapters/material_videos TIDAK mengevaluasi
-  // materials.aktif, jadi materi yang ditarik admin tetap punya baris yang
-  // terbaca RLS bila disaring hanya lewat isinya.
+  // `ambilMateriDetail` menyaring `aktif = true` sendiri, lapis kedua di atas
+  // RLS: query reader tidak boleh bergantung 100% pada policy basis data
+  // untuk menutup materi yang ditarik admin.
   const m = await ambilMateriDetail(id);
   if (!m) notFound();
 

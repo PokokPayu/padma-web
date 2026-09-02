@@ -207,7 +207,18 @@ async function bersihkan() {
     .select("id")
     .like("nama", `${PENANDA_ISI}%`);
   for (const l of layanan ?? []) {
-    await admin.from("materials").delete().eq("service_id", l.id);
+    // `materials.service_id` sudah dihapus Task 11 — materi ditautkan lewat
+    // `material_services`, jadi dicari lewat tautan itu dulu, baru dihapus
+    // per id (cascade menyapu material_pages/material_videos/material_services
+    // miliknya).
+    const { data: tautan } = await admin
+      .from("material_services")
+      .select("material_id")
+      .eq("service_id", l.id);
+    const idMateri = (tautan ?? []).map((t) => t.material_id as string);
+    if (idMateri.length > 0) {
+      await admin.from("materials").delete().in("id", idMateri);
+    }
     await admin.from("service_rates").delete().eq("service_id", l.id);
     await admin.from("packages").delete().eq("service_id", l.id);
     await admin.from("services").delete().eq("id", l.id);
@@ -334,7 +345,6 @@ async function main() {
     const { data: materiUji, error: eMateri } = await admin
       .from("materials")
       .insert({
-        service_id: layananUji.id,
         judul: JUDUL_MATERI,
         tipe: "ebook",
         deskripsi: "fixture E2E",
@@ -343,10 +353,20 @@ async function main() {
       .select("id")
       .single();
     if (eMateri) throw eMateri;
-    await admin.from("material_chapters").insert([
-      { material_id: materiUji.id, urutan: 1, judul: `${PENANDA_ISI} Bab 1`, isi: "isi bab satu" },
-      { material_id: materiUji.id, urutan: 2, judul: `${PENANDA_ISI} Bab 2`, isi: "isi bab dua" },
-    ]);
+    await admin
+      .from("material_services")
+      .insert({ material_id: materiUji.id, service_id: layananUji.id });
+    // Isi e-book kini gambar halaman (Task 11), diisi lewat RPC — satu-satunya
+    // jalur tulis `material_pages` — bukan INSERT langsung. Dua baris di sini
+    // menggantikan dua bab lama; "2" tetap dipertahankan karena bagian 6 di
+    // bawah membaca angka itu literal ("2 bab terbaca").
+    await admin.rpc("ganti_halaman_materi", {
+      p_material_id: materiUji.id,
+      p_halaman: [
+        { halaman: 1, objek: `${materiUji.id}/0001.webp`, lebar: 10, tinggi: 10 },
+        { halaman: 2, objek: `${materiUji.id}/0002.webp`, lebar: 10, tinggi: 10 },
+      ],
+    });
 
     const restKlien = await sesiKlienRest();
     const UID_ADMIN = await uidAkun("admin@padma.test");
@@ -615,14 +635,14 @@ async function main() {
     await ctxTamu.close();
 
     // =============== 6. Nonaktifkan materi menutup ISI-nya ==================
-    const bacaBab = async () =>
-      (await restKlien.from("material_chapters").select("id").eq("material_id", materiUji.id))
+    const bacaHalaman = async () =>
+      (await restKlien.from("material_pages").select("halaman").eq("material_id", materiUji.id))
         .data ?? [];
 
     catat(
-      "6a. klien berhak membaca bab materi itu sebelum dinonaktifkan",
-      (await bacaBab()).length === 2,
-      `${(await bacaBab()).length} bab terbaca lewat REST`,
+      "6a. klien berhak membaca halaman materi itu sebelum dinonaktifkan",
+      (await bacaHalaman()).length === 2,
+      `${(await bacaHalaman()).length} halaman terbaca lewat REST`,
     );
 
     await kerja.goto(`${BASE}/admin/materi`, { waitUntil: "networkidle" });
@@ -632,7 +652,7 @@ async function main() {
     // ikut mencocoki tombol "NonAKTIFKAN" yang masih terpampang. Tanpa `exact`,
     // `waitFor` di bawah selesai SEKETIKA pada tombol lama — dan pemeriksaan
     // berikutnya membaca basis data sebelum server action-nya mendarat, lalu
-    // melapor "2 bab masih terbaca" seolah gating materi jebol. Kegagalan
+    // melapor "2 halaman masih terbaca" seolah gating materi jebol. Kegagalan
     // harness yang menyamar sebagai temuan keamanan.
     await kartuMateri.getByRole("button", { name: "Nonaktifkan", exact: true }).click();
     await kartuMateri
@@ -652,11 +672,11 @@ async function main() {
       `materials.aktif: ${String(metaNonaktif!.aktif)}`,
     );
 
-    const babSesudah = await bacaBab();
+    const halamanSesudah = await bacaHalaman();
     catat(
       "6b. materi nonaktif menutup ISI-nya lewat REST, bukan sekadar UI",
-      babSesudah.length === 0,
-      `${babSesudah.length} bab terbaca klien sesudah dinonaktifkan`,
+      halamanSesudah.length === 0,
+      `${halamanSesudah.length} halaman terbaca klien sesudah dinonaktifkan`,
     );
 
     const { data: metaMateri } = await restKlien
@@ -675,8 +695,8 @@ async function main() {
       .waitFor({ state: "visible", timeout: 20_000 });
     catat(
       "6d. materi yang diaktifkan kembali membuka isinya lagi",
-      (await bacaBab()).length === 2,
-      `${(await bacaBab()).length} bab terbaca lagi`,
+      (await bacaHalaman()).length === 2,
+      `${(await bacaHalaman()).length} halaman terbaca lagi`,
     );
   } finally {
     await browser.close();

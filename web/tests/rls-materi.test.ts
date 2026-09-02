@@ -7,8 +7,8 @@ import { signInAs, anonClient } from "./helpers/as-user";
 //
 // Akar masalah: policy "materials: baca meta" berbunyi
 // `using (auth.uid() is not null)` sehingga berlaku untuk SEMUA KOLOM,
-// termasuk `video_url`. Isi bab e-book sudah tergating benar lewat
-// `material_chapters`, tetapi URL video bocor ke klien mana pun — proteksinya
+// termasuk `video_url`. Isi halaman e-book sudah tergating benar lewat
+// `material_pages`, tetapi URL video bocor ke klien mana pun — proteksinya
 // asimetris.
 //
 // Invarian yang dijaga di sini:
@@ -113,13 +113,16 @@ describe("MATERI — URL video TIDAK bocor sebelum layanan berjalan", () => {
     expect(membocorkan(data, URL_RAHASIA)).toBe(false);
   });
 
-  it("klien TIDAK bisa membaca isi bab e-book layanan yang belum ia jalani", async () => {
+  it("klien TIDAK bisa membaca halaman e-book layanan yang belum ia jalani", async () => {
     const klien = await signInAs("ananda@padma.test");
     const { data } = await klien
-      .from("material_chapters")
-      .select("isi")
+      .from("material_pages")
+      .select("halaman, objek")
       .eq("material_id", MATERI_TERKUNCI_EBOOK);
 
+    // Seed MEMANG menaruh satu baris material_pages untuk materi ini (lihat
+    // supabase/seed.sql) supaya pemeriksaan ini membuktikan RLS benar-benar
+    // menutup, bukan lolos kebetulan karena tidak ada apa pun untuk dibocorkan.
     expect(data ?? []).toHaveLength(0);
   });
 
@@ -174,15 +177,15 @@ describe("MATERI — layanan yang SUDAH selesai tetap terbuka untuk klien", () =
     expect(JSON.stringify(data)).toContain(URL_TERBUKA);
   });
 
-  it("klien BISA membaca isi bab e-book layanan yang sudah ia selesaikan", async () => {
+  it("klien BISA membaca halaman e-book layanan yang sudah ia selesaikan", async () => {
     const klien = await signInAs("ananda@padma.test");
     const { data, error } = await klien
-      .from("material_chapters")
-      .select("urutan, judul, isi")
+      .from("material_pages")
+      .select("halaman, objek, lebar, tinggi")
       .eq("material_id", MATERI_TERBUKA_EBOOK);
 
     expect(error).toBeNull();
-    expect(data!.length).toBeGreaterThanOrEqual(2);
+    expect(data!.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -213,7 +216,6 @@ describe("MATERI — staf tetap bisa mengelola semuanya", () => {
         .from("materials")
         .insert({
           id: materialId,
-          service_id: "11111111-1111-1111-1111-111111111106",
           judul: "Materi Uji Admin",
           tipe: "video",
           deskripsi: "dibuat oleh test",

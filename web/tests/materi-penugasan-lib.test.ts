@@ -46,10 +46,7 @@ describe("daftarPenugasan — otomatis mengikuti aturan yang sama dengan berhak_
 
     const { data: m, error: eMateri } = await db
       .from("materials")
-      .insert({
-        judul: "UJI-TASK9-FIX-AKTIF", tipe: "ebook", deskripsi: "", aktif: true,
-        service_id: serviceId,
-      })
+      .insert({ judul: "UJI-TASK9-FIX-AKTIF", tipe: "ebook", deskripsi: "", aktif: true })
       .select("id")
       .single();
     if (eMateri) throw eMateri;
