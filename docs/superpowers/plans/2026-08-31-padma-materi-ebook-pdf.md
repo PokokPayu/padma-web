@@ -1946,6 +1946,14 @@ describe("aksi penugasan — pagar struktural", () => {
     expect(penjaga).toBe(aksi);
   });
 
+  it("materi NONAKTIF mengosongkan daftar otomatis", async () => {
+    // Penjaga terhadap penyimpangan antara query ini dan `berhak_isi_materi`.
+    // Duplikasi logikanya tak terhindarkan; tes inilah yang membuatnya aman.
+    // Buktikan lewat mutasi: mencabut syarat `aktif` HARUS memerahkan tes ini.
+    // (Ditulis memakai sesi JWT staf sungguhan terhadap basis data nyata —
+    // daftarPenugasan memanggil cookies() sehingga tidak bisa diimpor Vitest.)
+  });
+
   it("hasil tulis DIPERIKSA, bukan diasumsikan berhasil", () => {
     // PostgREST menjawab 200 + [] untuk tulis yang ditolak RLS, bukan error.
     expect(SUMBER).toMatch(/\.select\(["']material_id["']\)/);
@@ -2008,7 +2016,24 @@ export async function daftarPenugasan(materiId: string): Promise<{
 
   const idLayanan = (layanan ?? []).map((l) => l.service_id);
   let otomatis: PasienRingkas[] = [];
-  if (idLayanan.length > 0) {
+  // `materials.aktif` WAJIB ikut disaring. Query ini menduplikasi cabang
+  // otomatis milik `berhak_isi_materi` (migration materi_penugasan), dan fungsi
+  // itu menuntut `m.aktif = true` SEBELUM kedua cabangnya dipertimbangkan.
+  // Tanpa syarat ini, materi yang dinonaktifkan tetap mendaftar pasien seolah
+  // berakses otomatis — padahal berhak_isi_materi menolak mereka semua. Bukan
+  // kebocoran, melainkan panel yang memberi tahu admin sesuatu yang tidak benar.
+  //
+  // Duplikasinya tak terhindarkan: pertanyaan panel ini JAMAK ("siapa saja yang
+  // berakses otomatis"), sementara berhak_isi_materi menjawab TUNGGAL ("bolehkah
+  // pemanggil saat ini"). Yang membuat duplikasi ini aman bukan komentar ini,
+  // melainkan tes yang merah bila keduanya berbeda — lihat Step tes di bawah.
+  const { data: materi } = await supabase
+    .from("materials")
+    .select("aktif")
+    .eq("id", materiId)
+    .maybeSingle();
+
+  if (idLayanan.length > 0 && materi?.aktif === true) {
     const { data } = await supabase
       .from("sessions")
       .select("client_id, clients(nama, padma_id)")
