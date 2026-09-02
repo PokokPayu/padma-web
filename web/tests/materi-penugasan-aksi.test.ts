@@ -8,16 +8,35 @@ const SUMBER = readFileSync(
 );
 
 describe("aksi penugasan — pagar struktural", () => {
-  it("setiap aksi memanggil requireRole sendiri", () => {
-    const aksi = [...SUMBER.matchAll(/export async function (\w+)/g)].length;
-    const penjaga = [...SUMBER.matchAll(/requireRole\(\["admin", ?"owner"\]\)/g)].length;
-    expect(aksi).toBeGreaterThan(0);
-    expect(penjaga).toBe(aksi);
-  });
+  it("setiap aksi memanggil requireRole SENDIRI, dan memeriksa hasil tulisnya SENDIRI", () => {
+    const aksi = [...SUMBER.matchAll(/export async function (\w+)/g)];
+    expect(aksi.length).toBeGreaterThan(0);
 
-  it("hasil tulis DIPERIKSA, bukan diasumsikan berhasil", () => {
-    // PostgREST menjawab 200 + [] untuk tulis yang ditolak RLS, bukan error.
-    expect(SUMBER).toMatch(/\.select\(["']material_id["']\)/);
+    // Jumlah total TIDAK CUKUP: dibuktikan lewat mutasi, kedua requireRole bisa
+    // ditumpuk di satu aksi sementara aksi lain sama sekali tanpa penjaga, dan
+    // totalnya tetap cocok. Server action adalah endpoint POST tersendiri — di
+    // repo ini sudah dibuktikan bisa dipanggil dari rute lain — jadi SETIAP
+    // badan aksi wajib memuat penjaganya sendiri. Begitu juga pemeriksaan hasil
+    // tulis: satu kemunculan di mana pun pada berkas juga terbukti lolos lewat
+    // mutasi yang sama (satu aksi kehilangan .select("material_id") sama
+    // sekali). Kedua penjaga karena itu diikat PER BADAN FUNGSI, bukan pada
+    // seluruh berkas.
+    for (let i = 0; i < aksi.length; i++) {
+      const mulai = aksi[i].index!;
+      const akhir = i + 1 < aksi.length ? aksi[i + 1].index! : SUMBER.length;
+      const tubuh = SUMBER.slice(mulai, akhir);
+
+      // Regex toleran spasi DAN gaya kutip: pada rencana ini satu asersi
+      // pernah dikalahkan hanya dengan mengganti kutip ganda ke tunggal, dan
+      // satu lagi dikalahkan oleh reformat yang menambah/mengurangi spasi.
+      expect(tubuh, `${aksi[i][1]} tidak memanggil requireRole sendiri`).toMatch(
+        /requireRole\(\s*\[\s*["']admin["']\s*,\s*["']owner["']\s*\]\s*\)/,
+      );
+      // PostgREST menjawab 200 + [] untuk tulis yang ditolak RLS, bukan error.
+      expect(tubuh, `${aksi[i][1]} tidak memeriksa hasil tulisnya`).toMatch(
+        /\.select\(\s*["']material_id["']\s*\)/,
+      );
+    }
   });
 
   it("ditugaskan_oleh tidak pernah dikirim dari kode — trigger yang mengisinya", () => {
