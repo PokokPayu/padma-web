@@ -196,24 +196,39 @@ describe("ambilDaftarMateri", () => {
 
     expect(per.get(MATERI_TERBUKA_VIDEO)!.terbuka).toBe(true);
     expect(per.get(MATERI_TERBUKA_EBOOK)!.terbuka).toBe(true);
-    expect(per.get(MATERI_TERBUKA_EBOOK)!.jumlahBab).toBeGreaterThanOrEqual(2);
+    // Seed menaruh 3 baris material_pages untuk materi ini (lihat seed.sql).
+    expect(per.get(MATERI_TERBUKA_EBOOK)!.jumlahHalaman).toBe(3);
 
     // Terkunci: kartunya TETAP tampil (judul & deskripsi terbaca) — hanya
     // isinya yang tidak ada.
     expect(per.get(MATERI_TERKUNCI_VIDEO)!.terbuka).toBe(false);
     expect(per.get(MATERI_TERKUNCI_EBOOK)!.terbuka).toBe(false);
-    expect(per.get(MATERI_TERKUNCI_EBOOK)!.jumlahBab).toBe(0);
+    expect(per.get(MATERI_TERKUNCI_EBOOK)!.jumlahHalaman).toBe(0);
     expect(per.get(MATERI_TERKUNCI_EBOOK)!.judul).toBe("Panduan ASI Perah");
     expect(per.get(MATERI_TERKUNCI_VIDEO)!.namaLayanan).toBe("Lactation Hero");
+
+    // Keempat materi seed sudah dimigrasikan ke `material_services` sejak
+    // migration `materi_banyak_layanan` (satu baris per materi lama) — jadi
+    // seluruhnya `punyaLayanan: true`, terbuka maupun terkunci. Aturan M10
+    // ("materi tanpa layanan disembunyikan bila belum terbuka") diuji murni
+    // di tests/materi-daftar-klien.test.ts; di sini yang dibuktikan adalah
+    // bendera itu terisi BENAR dari query sungguhan, bukan sekadar ada.
+    expect(per.get(MATERI_TERBUKA_EBOOK)!.punyaLayanan).toBe(true);
+    expect(per.get(MATERI_TERKUNCI_EBOOK)!.punyaLayanan).toBe(true);
   });
 
-  it("hasilnya TIDAK memuat isi bab maupun URL video sama sekali", async () => {
+  it("hasilnya TIDAK memuat isi bab, URL video, maupun kunci objek halaman", async () => {
     const { ambilDaftarMateri } = await import("@/lib/passport/data");
     const json = JSON.stringify(await ambilDaftarMateri());
     expect(json).not.toContain("vimeo.com");
     expect(json).not.toContain("Isi bab");
     expect(json.toLowerCase()).not.toContain("\"isi\"");
     expect(json.toLowerCase()).not.toContain("\"url\"");
+    // Daftar hanya boleh membawa metadata & hitungan — tidak pernah kunci
+    // objek gambar halaman (mis. "<uuid>/0001.webp"), yang cukup untuk
+    // mengunduh gambarnya sendiri lewat storage bila bocor.
+    expect(json).not.toContain(".webp");
+    expect(json.toLowerCase()).not.toContain("\"objek\"");
   });
 
   it("materi non-aktif tidak muncul (baris materials sendiri tetap terbaca RLS)", async () => {
@@ -231,14 +246,17 @@ describe("ambilDaftarMateri", () => {
 describe("ambilMateriDetail", () => {
   beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
 
-  it("materi terbuka: bab terurut menurut `urutan` dan isinya terbaca", async () => {
+  it("materi terbuka: halaman terurut menurut `halaman` dan dimensinya terbaca", async () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const d = await ambilMateriDetail(MATERI_TERBUKA_EBOOK);
     expect(d).not.toBeNull();
     expect(d!.tipe).toBe("ebook");
-    expect(d!.bab.length).toBeGreaterThanOrEqual(2);
-    expect(d!.bab.map((b) => b.urutan)).toEqual([...d!.bab.map((b) => b.urutan)].sort((a, b) => a - b));
-    expect(d!.bab.every((b) => b.isi.length > 0)).toBe(true);
+    expect(d!.berhak).toBe(true);
+    expect(d!.halaman).toHaveLength(3); // seed: 3 baris material_pages
+    expect(d!.halaman.map((h) => h.halaman)).toEqual(
+      [...d!.halaman.map((h) => h.halaman)].sort((a, b) => a - b),
+    );
+    expect(d!.halaman.every((h) => h.lebar > 0 && h.tinggi > 0)).toBe(true);
     expect(d!.videoUrl).toBeNull();
   });
 
@@ -246,17 +264,20 @@ describe("ambilMateriDetail", () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const d = await ambilMateriDetail(MATERI_TERBUKA_VIDEO);
     expect(d!.videoUrl).toBe("https://vimeo.com/padma-sankalpa-001");
+    expect(d!.berhak).toBe(true);
   });
 
-  it("materi TERKUNCI: metadata tampil, bab kosong & videoUrl null walau URL-nya diakses langsung", async () => {
+  it("materi TERKUNCI: metadata tampil, halaman kosong, berhak=false & videoUrl null walau URL-nya diakses langsung", async () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const ebook = await ambilMateriDetail(MATERI_TERKUNCI_EBOOK);
     expect(ebook!.judul).toBe("Panduan ASI Perah");
-    expect(ebook!.bab).toEqual([]);
+    expect(ebook!.halaman).toEqual([]);
     expect(ebook!.videoUrl).toBeNull();
+    expect(ebook!.berhak).toBe(false);
 
     const video = await ambilMateriDetail(MATERI_TERKUNCI_VIDEO);
     expect(video!.videoUrl).toBeNull();
+    expect(video!.berhak).toBe(false);
     expect(JSON.stringify(video)).not.toContain("RAHASIA");
   });
 
@@ -328,9 +349,26 @@ describe("pagar struktural lapisan data", () => {
       sumber.indexOf("export type MateriDetail"),
     );
     expect(daftar.length).toBeGreaterThan(0);
-    expect(daftar).toContain("material_chapters(id)");
-    expect(daftar).not.toMatch(/material_chapters\([^)]*isi/);
+    expect(daftar).toContain("material_pages(halaman)");
+    expect(daftar).not.toMatch(/material_pages\([^)]*objek/);
     expect(daftar).not.toMatch(/material_videos\([^)]*url/);
+  });
+
+  it("nama layanan TIDAK dibaca lagi lewat hint FK materials.service_id", () => {
+    // Task 11 menghapus kolom `materials.service_id` beserta constraint FK
+    // `materials_service_id_fkey`. Hint yang menyebut nama constraint itu
+    // akan mematahkan query begitu kolomnya hilang — jadi baik daftar maupun
+    // detail WAJIB membaca nama layanan lewat `material_services`, tidak
+    // pernah lewat hint itu.
+    //
+    // Diperiksa pada STRING LITERAL (argumen `.select(...)` yang sungguhan
+    // dikirim ke PostgREST), bukan pada seluruh berkas — komentar di atas
+    // (dan di dalam sumbernya) SENGAJA menyebut nama hint lama itu memakai
+    // backtick untuk menjelaskan alasannya, dan pemindaian seluruh berkas
+    // akan salah menganggap komentar itu sendiri sebagai pelanggaran.
+    const literal = [...sumber.matchAll(/"([^"\n]*)"/g)].map((m) => m[1]);
+    expect(literal.some((s) => s.includes("services!"))).toBe(false);
+    expect(literal.filter((s) => s.includes("material_services(service_id)")).length).toBe(2);
   });
 
   it("nama mitra digabung di JS, tidak lewat embed PostgREST ke view", () => {

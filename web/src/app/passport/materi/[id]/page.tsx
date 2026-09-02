@@ -2,8 +2,34 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ambilKlien, ambilMateriDetail } from "@/lib/passport/data";
 import { Watermark } from "../../_komponen/watermark";
+import { ReaderPdf } from "./reader-pdf";
 
 export const metadata = { title: "Materi" };
+
+/**
+ * Pesan "belum berhak" — dipertahankan APA ADANYA dari sebelum M10, sebab
+ * kalimatnya memang benar untuk keadaan ini (beda dengan kartu terkunci di
+ * daftar tanpa layanan sama sekali, lihat `saringDaftarMateri`). Diekstrak
+ * jadi komponen karena SATU pesan yang sama kini dipakai baik ebook maupun
+ * video — `m.berhak` (RPC `berhak_isi_materi`) tidak peduli tipe materinya.
+ */
+function BelumTerbuka({ judul }: { judul: string }) {
+  return (
+    <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
+      <h1 className="font-serif text-xl text-night">Materi ini belum terbuka</h1>
+      <p className="mt-2 text-[13.5px] text-ink-soft">
+        <b className="text-ink">{judul}</b> terbuka setelah layanan terkait
+        Anda jalani. Hubungi tim PADMA bila Anda merasa ini keliru.
+      </p>
+      <Link
+        href="/passport/materi"
+        className="mt-5 inline-block text-sm font-bold text-leaf underline underline-offset-4"
+      >
+        ← Kembali ke Materi
+      </Link>
+    </section>
+  );
+}
 
 export default async function ReaderMateri({
   params,
@@ -15,110 +41,105 @@ export default async function ReaderMateri({
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
 
   // `ambilMateriDetail` menyaring `aktif = true` sendiri: policy
-  // material_chapters/material_videos TIDAK mengevaluasi materials.aktif, jadi
-  // materi yang ditarik admin tetap punya bab yang terbaca RLS.
+  // material_pages/material_chapters/material_videos TIDAK mengevaluasi
+  // materials.aktif, jadi materi yang ditarik admin tetap punya baris yang
+  // terbaca RLS bila disaring hanya lewat isinya.
   const m = await ambilMateriDetail(id);
   if (!m) notFound();
 
-  // "Terkunci" berbentuk ARRAY KOSONG (bab) dan OBJEK NULL (video) — bukan
-  // error dan bukan isi tersensor: RLS memang tidak mengembalikan barisnya.
-  // Embed video adalah objek/null, BUKAN array — memeriksa panjangnya selalu
-  // menghasilkan salah dan membuat setiap materi video tampak terkunci.
-  const berhak = m.tipe === "ebook" ? m.bab.length > 0 : m.videoUrl !== null;
-  if (!berhak) {
+  // 1. Tidak berhak — pesan lama, dan ia memang benar di sini. `m.berhak`
+  //    datang dari RPC `berhak_isi_materi`: SATU sumber kebenaran yang sama
+  //    dipakai policy RLS, bukan disimpulkan dari isi yang kebetulan kosong —
+  //    isi kosong JUGA terjadi saat berhak tapi belum diunggah admin
+  //    (keadaan 2 di bawah), dan tanpa RPC ini dua keadaan itu tidak bisa
+  //    dibedakan.
+  if (!m.berhak) {
+    return <BelumTerbuka judul={m.judul} />;
+  }
+
+  // ===== Cabang VIDEO — TIDAK DISENTUH sama sekali oleh M10 =====
+  // Satu-satunya perubahan yang menyentuhnya secara TIDAK LANGSUNG adalah
+  // gerbang di atas, yang sekarang memakai `m.berhak` (RPC) alih-alih
+  // `m.videoUrl !== null` — panel admin tetap mensyaratkan video terpasang
+  // sebelum materi bisa aktif, jadi keduanya sepakat untuk materi yang benar
+  // sudah terbit.
+  if (m.tipe === "video") {
     return (
-      <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
-        <h1 className="font-serif text-xl text-night">Materi ini belum terbuka</h1>
-        <p className="mt-2 text-[13.5px] text-ink-soft">
-          <b className="text-ink">{m.judul}</b> terbuka setelah layanan terkait
-          Anda jalani. Hubungi tim PADMA bila Anda merasa ini keliru.
-        </p>
+      <>
         <Link
           href="/passport/materi"
-          className="mt-5 inline-block text-sm font-bold text-leaf underline underline-offset-4"
+          className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"
         >
           ← Kembali ke Materi
         </Link>
+
+        <div className="mb-4 flex items-center gap-4 rounded-2xl border border-gold/30 bg-gradient-to-br from-pine to-night p-7 text-[#EFE6CE]">
+          <span className="flex h-14 w-14 flex-none items-center justify-center rounded-2xl bg-gold/15 text-2xl text-gold-bright">
+            ▶
+          </span>
+          <span>
+            <h1 className="font-serif text-xl text-[#F5EEDC]">{m.judul}</h1>
+            <span className="text-xs text-[#A9BBAA]">
+              Video · tonton di aplikasi · {m.namaLayanan}
+            </span>
+          </span>
+        </div>
+
+        {m.deskripsi && (
+          <div className="mb-4 rounded-2xl border border-black/10 bg-white p-6 text-[13.5px] text-[#3C4C42]">
+            {m.deskripsi}
+          </div>
+        )}
+
+        <section className="relative select-none overflow-hidden rounded-2xl border border-black/10 bg-white p-6">
+          <Watermark nama={klien.nama} padmaId={klien.padmaId} />
+          <div className="relative z-10">
+            <div className="mb-3.5 flex aspect-video items-center justify-center rounded-xl border border-gold/30 bg-gradient-to-br from-pine to-[#081F16]">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/90 text-2xl text-[#132518]">
+                ▶
+              </span>
+            </div>
+            {/* Kesiapan tidak boleh dikarang: belum ada akun penyedia video,
+                jadi tidak ada pemutar sungguhan dan tidak ada URL yang
+                dikirim ke halaman ini. */}
+            <p className="text-[13px] text-ink-soft">
+              Pemutar video diaktifkan pada fase berikutnya, memakai penyedia
+              dengan tautan terproteksi (terkunci domain). Sampai saat itu,
+              mintalah tautannya pada tim PADMA lewat WhatsApp.
+            </p>
+          </div>
+        </section>
+
+        <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
+          <span className="text-gold">🔒</span>
+          Materi ini hanya dapat dibaca di dalam aplikasi — tidak ada berkas yang
+          bisa diunduh atau diteruskan. Setiap halaman ditandai identitas Anda.
+        </p>
+      </>
+    );
+  }
+
+  // ===== Cabang EBOOK — tiga keadaan (M10) =====
+
+  // 2. Berhak, tetapi isinya belum diunggah admin. Bukan 404 (materinya
+  //    memang ada dan pasien memang berhak), dan bukan reader kosong yang
+  //    membuat pasien mengira aplikasinya rusak.
+  if (m.halaman.length === 0) {
+    return (
+      <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
+        <h1 className="font-serif text-xl text-night">Isi materi sedang disiapkan</h1>
+        <p className="mt-2 text-[13.5px] text-ink-soft">
+          <b className="text-ink">{m.judul}</b> sudah terbuka untuk Anda, tetapi
+          isinya belum diunggah tim PADMA. Silakan cek kembali nanti.
+        </p>
       </section>
     );
   }
 
-  return (
-    <>
-      <Link
-        href="/passport/materi"
-        className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"
-      >
-        ← Kembali ke Materi
-      </Link>
-
-      <div className="mb-4 flex items-center gap-4 rounded-2xl border border-gold/30 bg-gradient-to-br from-pine to-night p-7 text-[#EFE6CE]">
-        <span className="flex h-14 w-14 flex-none items-center justify-center rounded-2xl bg-gold/15 text-2xl text-gold-bright">
-          {m.tipe === "ebook" ? "📖" : "▶"}
-        </span>
-        <span>
-          <h1 className="font-serif text-xl text-[#F5EEDC]">{m.judul}</h1>
-          <span className="text-xs text-[#A9BBAA]">
-            {m.tipe === "ebook"
-              ? "E-Book · baca di aplikasi"
-              : "Video · tonton di aplikasi"}{" "}
-            · {m.namaLayanan}
-          </span>
-        </span>
-      </div>
-
-      {m.deskripsi && (
-        <div className="mb-4 rounded-2xl border border-black/10 bg-white p-6 text-[13.5px] text-[#3C4C42]">
-          {m.deskripsi}
-        </div>
-      )}
-
-      <section className="relative select-none overflow-hidden rounded-2xl border border-black/10 bg-white p-6">
-        <Watermark nama={klien.nama} padmaId={klien.padmaId} />
-        <div className="relative z-10">
-          {m.tipe === "video" ? (
-            <>
-              <div className="mb-3.5 flex aspect-video items-center justify-center rounded-xl border border-gold/30 bg-gradient-to-br from-pine to-[#081F16]">
-                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/90 text-2xl text-[#132518]">
-                  ▶
-                </span>
-              </div>
-              {/* Kesiapan tidak boleh dikarang: belum ada akun penyedia video,
-                  jadi tidak ada pemutar sungguhan dan tidak ada URL yang
-                  dikirim ke halaman ini. */}
-              <p className="text-[13px] text-ink-soft">
-                Pemutar video diaktifkan pada fase berikutnya, memakai penyedia
-                dengan tautan terproteksi (terkunci domain). Sampai saat itu,
-                mintalah tautannya pada tim PADMA lewat WhatsApp.
-              </p>
-            </>
-          ) : (
-            <div className="grid gap-6">
-              {m.bab.map((b, i) => (
-                <article key={b.id}>
-                  <h2 className="mb-2 font-serif text-lg text-night">
-                    <span className="mr-2 font-mono text-xs text-gold">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    {b.judul}
-                  </h2>
-                  {/* `whitespace-pre-line`: isi bab menyimpan pemisah paragraf
-                      sebagai baris baru, bukan markup. */}
-                  <p className="whitespace-pre-line text-sm leading-7 text-[#3C4C42]">
-                    {b.isi}
-                  </p>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
-        <span className="text-gold">🔒</span>
-        Materi ini hanya dapat dibaca di dalam aplikasi — tidak ada berkas yang
-        bisa diunduh atau diteruskan. Setiap halaman ditandai identitas Anda.
-      </p>
-    </>
-  );
+  // 3. Berhak dan ada isinya. Watermark TIDAK dilapiskan di sini — ia sudah
+  //    dibakar ke dalam setiap gambar oleh route
+  //    `/api/materi/[id]/halaman/[n]`; melapisinya lagi hanya menggandakan
+  //    teks yang sama, dan lapisan CSS itu hilang begitu gambarnya disimpan
+  //    sementara yang dibakar server tidak.
+  return <ReaderPdf materiId={m.id} halaman={m.halaman} />;
 }

@@ -214,41 +214,50 @@ describe("daftar materi — pagar kebocoran (halaman ini tidak boleh membawa isi
   });
 });
 
-describe("reader materi — e-book yang sudah terbuka", () => {
-  it("seluruh bab tampil berurutan, judul beserta isinya", async () => {
+/** SELURUH baris material_pages materi terbuka, dibaca menembus RLS (pembanding). */
+async function halamanTerbuka(): Promise<
+  Array<{ halaman: number; objek: string; lebar: number; tinggi: number }>
+> {
+  const { data, error } = await svc
+    .from("material_pages")
+    .select("halaman, objek, lebar, tinggi")
+    .eq("material_id", TERBUKA_EBOOK)
+    .order("halaman");
+  if (error) throw error;
+  return data as Array<{ halaman: number; objek: string; lebar: number; tinggi: number }>;
+}
+
+describe("reader materi — e-book yang sudah terbuka (M10: gambar halaman, bukan teks bab)", () => {
+  it("seluruh halaman tampil berurutan sebagai gambar, dengan dimensi asli", async () => {
     const m = await markupReader(TERBUKA_EBOOK);
-    const { data } = await svc
-      .from("material_chapters")
-      .select("urutan, judul, isi")
-      .eq("material_id", TERBUKA_EBOOK)
-      .order("urutan");
-    const bab = data as Array<{ urutan: number; judul: string; isi: string }>;
-    expect(bab).toHaveLength(3);
+    const halaman = await halamanTerbuka();
+    expect(halaman).toHaveLength(3); // seed: 3 baris material_pages
 
     let posisi = -1;
-    for (const b of bab) {
-      expect(m, `judul bab "${b.judul}" tidak sampai ke layar`).toContain(esc(b.judul));
-      expect(m, `isi bab "${b.judul}" tidak sampai ke layar`).toContain(
-        esc(cuplikan(b.isi)),
+    for (const h of halaman) {
+      const src = `/api/materi/${TERBUKA_EBOOK}/halaman/${h.halaman}`;
+      expect(m, `gambar halaman ${h.halaman} tidak sampai ke layar`).toContain(
+        `src="${src}"`,
       );
-      const kini = m.indexOf(esc(b.judul));
-      expect(kini, `bab "${b.judul}" tampil di luar urutan`).toBeGreaterThan(posisi);
+      // Dimensi ASLI wajib ikut — tanpanya peramban tidak menyediakan ruang
+      // sebelum gambarnya tiba, dan halaman melompat setiap gambar dimuat.
+      expect(m).toContain(`width="${h.lebar}"`);
+      expect(m).toContain(`height="${h.tinggi}"`);
+      expect(m).toContain(`Halaman ${h.halaman} dari 3`);
+
+      const kini = m.indexOf(src);
+      expect(kini, `halaman ${h.halaman} tampil di luar urutan`).toBeGreaterThan(posisi);
       posisi = kini;
     }
-    expect(m).toContain("Panduan Siklus Subur");
   });
 
-  it("teks bab dirender utuh dengan pemisah paragraf, bukan satu blok rapat", async () => {
+  it("watermark CSS TIDAK dilapiskan lagi — sudah dibakar ke dalam gambar server", async () => {
     const m = await markupReader(TERBUKA_EBOOK);
-    expect(m).toContain("whitespace-pre-line");
-  });
-
-  it("watermark identitas klien menyertai isi (deterrent, bukan proteksi mutlak)", async () => {
-    const m = await markupReader(TERBUKA_EBOOK);
-    expect(m).toContain("Ananda Putri · PAD-2607-0012");
-    expect(m).toContain('aria-hidden="true"');
-    // Watermark tidak boleh menghalangi interaksi di atasnya.
-    expect(m).toContain("pointer-events-none");
+    // Komponen `Watermark` (identitas berulang secara diagonal) adalah untuk
+    // reader teks lama. Melapisinya di atas gambar yang SUDAH ber-watermark
+    // hanya akan menggandakan teks yang sama di layar.
+    expect(m).not.toContain("Ananda Putri · PAD-2607-0012");
+    expect(m).not.toContain("pointer-events-none");
   });
 
   it("tidak ada berkas yang bisa diunduh atau diteruskan dari reader", async () => {
@@ -258,19 +267,30 @@ describe("reader materi — e-book yang sudah terbuka", () => {
     expect(m).not.toContain(".pdf");
   });
 
-  it("menyediakan jalan kembali ke daftar materi", async () => {
+  it("gambar disulitkan disalin: select-none pada kontainernya", async () => {
     const m = await markupReader(TERBUKA_EBOOK);
-    expect(m).toMatch(/href="\/passport\/materi"/);
-    expect(m).toContain("Kembali ke Materi");
+    expect(m).toContain("select-none");
   });
 
-  it("isi bab tidak pernah menjadi bagian URL", async () => {
+  it("kunci objek storage mentah TIDAK PERNAH bocor ke markup — hanya URL rute halaman", async () => {
     const m = await markupReader(TERBUKA_EBOOK);
-    const bab = await semuaIsiBab();
-    for (const b of bab) {
-      expect(m).not.toContain(encodeURIComponent(cuplikan(b.isi)));
+    for (const h of await halamanTerbuka()) {
+      // `objek` (mis. "<uuid>/0001.webp") adalah kunci storage privat; yang
+      // boleh sampai ke klien hanyalah URL rute `/api/materi/.../halaman/n`,
+      // yang diperiksa lewat gerbang RLS & watermark setiap permintaan.
+      expect(m, `kunci objek "${h.objek}" bocor ke markup reader`).not.toContain(h.objek);
     }
-    expect(m).not.toMatch(/href="[^"]*\bisi=/i);
+  });
+
+  it("reader e-book murni gambar halaman — tanpa navigasi/deskripsi tambahan (desain M10)", async () => {
+    // M10 sengaja meniadakan bingkai lama (tautan balik, judul, deskripsi)
+    // untuk keadaan "berhak & ada isi": `ReaderPdf` hanya berisi grid gambar.
+    // Navigasi balik tetap tersedia dari kartu daftar materi & tombol
+    // peramban — bukan regresi yang lolos tak sengaja, tapi diuji di sini
+    // supaya perubahannya terlihat eksplisit bila desainnya nanti diubah lagi.
+    const m = await markupReader(TERBUKA_EBOOK);
+    expect(m).not.toContain("Kembali ke Materi");
+    expect(m).not.toContain("Panduan Siklus Subur"); // judul materi
   });
 });
 
@@ -290,6 +310,19 @@ describe("reader materi — video yang sudah terbuka", () => {
     const m = await markupReader(TERBUKA_VIDEO);
     expect(m).not.toContain("<iframe");
     expect(m).not.toContain("<video");
+  });
+
+  it("watermark CSS TETAP dipasang — cabang video tidak disentuh M10", async () => {
+    const m = await markupReader(TERBUKA_VIDEO);
+    expect(m).toContain("Ananda Putri · PAD-2607-0012");
+    expect(m).toContain('aria-hidden="true"');
+    expect(m).toContain("pointer-events-none");
+  });
+
+  it("menyediakan jalan kembali ke daftar materi — TIDAK berubah dari sebelum M10", async () => {
+    const m = await markupReader(TERBUKA_VIDEO);
+    expect(m).toMatch(/href="\/passport\/materi"/);
+    expect(m).toContain("Kembali ke Materi");
   });
 });
 
@@ -375,6 +408,7 @@ describe("komponen watermark", () => {
 describe("materi — pagar sumber", () => {
   const sumberDaftar = baca("src/app/passport/materi/page.tsx");
   const sumberReader = baca("src/app/passport/materi/[id]/page.tsx");
+  const sumberReaderPdf = baca("src/app/passport/materi/[id]/reader-pdf.tsx");
   const sumberWatermark = baca("src/app/passport/_komponen/watermark.tsx");
 
   it("keduanya Server Component yang membaca lewat lapisan data passport", () => {
@@ -397,12 +431,26 @@ describe("materi — pagar sumber", () => {
     expect(sumberDaftar).not.toContain("material_videos");
   });
 
-  it("keterbukaan disimpulkan dari bentuk embed yang benar (array vs objek/null)", () => {
-    // `material_videos` adalah OBJEK atau null — `video.length === 0` selalu
-    // salah dan akan membuat setiap video tampak terkunci.
-    expect(sumberReader).not.toMatch(/videoUrl\s*\.\s*length/);
-    expect(sumberReader).toMatch(/videoUrl\s*!==\s*null/);
-    expect(sumberReader).toMatch(/bab\.length\s*>\s*0/);
+  it("gerbang akses berasal dari RPC berhak_isi_materi, bukan dari bentuk konten", () => {
+    // Sebelum M10, "berhak" DISIMPULKAN dari bentuk data (`bab.length > 0`
+    // untuk ebook, `videoUrl !== null` untuk video). Cara itu tidak bisa
+    // membedakan "tidak berhak" dari "berhak tapi isinya belum diunggah
+    // admin" — dua keadaan yang bentuknya SAMA-SAMA kosong. Reader sekarang
+    // memakai `m.berhak`, SATU sumber kebenaran yang sama dipakai policy RLS
+    // lewat RPC `berhak_isi_materi` (lihat `ambilMateriDetail`).
+    //
+    // Dicocokkan pada sumber TANPA komentar baris: berkas ini sendiri
+    // menjelaskan perubahannya dengan MENYEBUT pola lama itu di dalam
+    // komentar (persis kalimat di atas), dan pemindaian mentah akan salah
+    // menganggap penjelasan itu sebagai pola yang masih dipakai.
+    const kode = sumberReader.replace(/\/\/.*$/gm, "");
+    expect(kode).toMatch(/if\s*\(\s*!m\.berhak\s*\)/);
+    expect(kode).not.toMatch(/videoUrl\s*!==\s*null/);
+    expect(kode).not.toMatch(/\bbab\.length/);
+    // Keadaan "berhak tapi belum diunggah" (khusus ebook) MEMANG memeriksa
+    // bentuk konten — tapi itu keadaan ISI, bukan gerbang akses; gerbangnya
+    // sendiri (baris di atas) sudah lolos sebelum baris ini pernah dicapai.
+    expect(kode).toMatch(/m\.halaman\.length\s*===\s*0/);
   });
 
   it("judul halaman mengandalkan template metadata, tidak mengulang nama aplikasi", () => {
@@ -413,15 +461,33 @@ describe("materi — pagar sumber", () => {
   });
 
   it("isi materi tidak pernah dicatat ke log", () => {
-    for (const sumber of [sumberDaftar, sumberReader, sumberWatermark]) {
+    for (const sumber of [sumberDaftar, sumberReader, sumberReaderPdf, sumberWatermark]) {
       expect(sumber).not.toContain("console.");
     }
   });
 
   it("reader menyulitkan penyalinan tanpa menjanjikan proteksi mutlak", () => {
+    // Cabang video (page.tsx) & reader e-book (reader-pdf.tsx) kini dua
+    // berkas terpisah — masing-masing harus tetap membawa deterrent-nya
+    // sendiri, bukan hanya salah satu.
     expect(sumberReader).toContain("select-none");
+    expect(sumberReaderPdf).toContain("select-none");
     // Kejujuran yang diminta spec: watermark & select-none adalah deterrent.
     expect(sumberWatermark.toLowerCase()).toContain("deterrent");
+  });
+
+  it("watermark gambar e-book dibakar server, TIDAK dilapis ulang lewat komponen CSS", () => {
+    // Konstraint eksplisit brief Task 10: melapiskan `<Watermark/>` di atas
+    // gambar yang sudah ber-watermark hanya menggandakan teks yang sama, dan
+    // lapisan CSS itu sendiri hilang begitu gambarnya disimpan — sementara
+    // yang dibakar server tidak. `ReaderPdf` (dipakai satu-satunya di cabang
+    // ebook) tidak boleh MENGIMPOR ATAU MEMAKAI komponen itu.
+    //
+    // Diperiksa lewat pola impor/JSX, bukan kata "Watermark" mentah: doc
+    // comment berkas ini sendiri menjelaskan ketiadaannya memakai kata yang
+    // sama persis (lihat komentar di atas fungsi `ReaderPdf`).
+    expect(sumberReaderPdf).not.toMatch(/import\s*\{[^}]*\bWatermark\b/);
+    expect(sumberReaderPdf).not.toMatch(/<Watermark\b/);
   });
 });
 

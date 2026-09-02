@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { saringDaftarMateri } from "./materi-tampil";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
 
 export type KlienPassport = {
@@ -144,20 +145,34 @@ export type MateriRingkas = {
   deskripsi: string;
   namaLayanan: string;
   terbuka: boolean;
-  jumlahBab: number;
+  jumlahHalaman: number;
+  /**
+   * M10: materi TANPA satu pun layanan hanya boleh tampil bila memang sudah
+   * terbuka (mis. di-assign eksplisit) — lihat `saringDaftarMateri` di
+   * `./materi-tampil`. Kartu terkunci menjanjikan "jalani layanan ini,
+   * materinya terbuka"; janji itu bohong untuk materi yang tidak punya
+   * layanan sama sekali.
+   */
+  punyaLayanan: boolean;
 };
+
+type BarisLayananNama = { id: string; nama: string };
 
 type BarisMateriDaftar = {
   id: string;
   judul: string;
   tipe: TipeMateri;
   deskripsi: string;
-  services: { nama: string } | null;
-  // `material_chapters` = one-to-many → ARRAY (kosong saat terkunci).
-  material_chapters: Array<{ id: string }>;
+  // `material_pages` = one-to-many → ARRAY (kosong saat terkunci ATAU saat
+  // berhak tapi isinya belum diunggah admin — daftar tidak perlu membedakan
+  // keduanya, hanya reader yang perlu, lewat RPC `berhak_isi_materi`).
+  material_pages: Array<{ halaman: number }>;
   // `material_videos.material_id` adalah PRIMARY KEY → one-to-one → OBJEK/null.
   // `video.length === 0` selalu salah di sini.
   material_videos: { material_id: string } | null;
+  // Many-to-many lewat tabel penghubung, BOLEH KOSONG (materi tanpa layanan
+  // sama sekali, hanya terbuka lewat material_assignments).
+  material_services: Array<{ service_id: string }>;
 };
 
 // Daftar materi: DILARANG menyebut `isi` atau `url` — halaman daftar tidak
@@ -165,41 +180,65 @@ type BarisMateriDaftar = {
 // ADA/TIDAKNYA baris tergating yang dikembalikan RLS, bukan dari kolom apa pun.
 export async function ambilDaftarMateri(): Promise<MateriRingkas[]> {
   const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("materials")
-    .select(
-      // FK: materials.service_id → services — disambiguate dari material_services
-      // Dua jalur POST ke services sekarang ada:
-      // (1) langsung lewat materials.service_id → services
-      // (2) lewat tabel penghubung: materials → material_services → services
-      // PostgREST tidak bisa tahu jalur mana yang dimaksud (PGRST201) tanpa hint FK.
-      "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id), material_videos(material_id)",
-    )
-    // Policy chapters/videos kini ikut mengevaluasi materials.aktif (migration
-    // gating_materi_hormati_aktif), sehingga ISI materi yang ditarik memang
-    // berhenti dijawab basis data. Baris `materials` sendiri TETAP terbaca
-    // setiap pengguna login — menutupnya akan mengulangi bug partner_publik —
-    // jadi menghilangkan KARTU-nya tetap tanggung jawab query ini.
-    .eq("aktif", true)
-    .order("judul")
-    .returns<BarisMateriDaftar[]>();
 
-  return (data ?? []).map((m) => {
-    const bab = m.material_chapters ?? [];
+  // DUA QUERY, digabung di JS — pola yang sama dipakai `ambilSesi` untuk nama
+  // mitra. `materials -> services` kini punya DUA jalur (langsung lewat
+  // `materials.service_id`, dan lewat `material_services`), dan sejak materi
+  // boleh berlayanan-jamak itu membuat PostgREST menolak embed `services`
+  // LANGSUNG dari `materials` dengan PGRST201 kecuali diberi hint FK eksplisit
+  // (`services!materials_service_id_fkey`). Hint itu SENGAJA tidak dipakai
+  // lagi: ia menyebut nama constraint FK `materials.service_id`, dan kolom itu
+  // rencananya dihapus — hint yang menyebut FK yang sudah tak ada akan
+  // mematahkan query ini. Membaca nama layanan lewat `material_services`
+  // (id layanan diambil sebagai array, namanya digabung di JS) menghindari
+  // ambiguitas itu sekaligus tetap tidak bergantung pada embed ke view.
+  const [{ data }, { data: layanan }] = await Promise.all([
+    supabase
+      .from("materials")
+      .select(
+        "id, judul, tipe, deskripsi, material_pages(halaman), material_videos(material_id), material_services(service_id)",
+      )
+      // Policy pages/chapters/videos kini ikut mengevaluasi materials.aktif
+      // (migration gating_materi_hormati_aktif), sehingga ISI materi yang
+      // ditarik memang berhenti dijawab basis data. Baris `materials` sendiri
+      // TETAP terbaca setiap pengguna login — menutupnya akan mengulangi bug
+      // partner_publik — jadi menghilangkan KARTU-nya tetap tanggung jawab
+      // query ini.
+      .eq("aktif", true)
+      .order("judul")
+      .returns<BarisMateriDaftar[]>(),
+    supabase.from("services").select("id, nama").returns<BarisLayananNama[]>(),
+  ]);
+
+  const namaLayananPer = new Map((layanan ?? []).map((s) => [s.id, s.nama]));
+
+  const daftar: MateriRingkas[] = (data ?? []).map((m) => {
+    const halaman = m.material_pages ?? [];
     const video = m.material_videos;
+    const layananId = (m.material_services ?? []).map((ms) => ms.service_id);
+    // Satu materi kini bisa punya beberapa layanan — gabungkan namanya, atau
+    // string kosong bila tidak ada satu pun (materi murni-assignment).
+    const namaLayanan = layananId
+      .map((id) => namaLayananPer.get(id))
+      .filter((nama): nama is string => Boolean(nama))
+      .join(", ");
     return {
       id: m.id,
       judul: m.judul,
       tipe: m.tipe,
       deskripsi: m.deskripsi,
-      namaLayanan: m.services?.nama ?? "",
-      terbuka: m.tipe === "ebook" ? bab.length > 0 : video !== null,
-      jumlahBab: bab.length,
+      namaLayanan,
+      terbuka: m.tipe === "ebook" ? halaman.length > 0 : video !== null,
+      jumlahHalaman: halaman.length,
+      punyaLayanan: layananId.length > 0,
     };
   });
+
+  // M10 — lihat komentar `saringDaftarMateri` di `./materi-tampil`.
+  return saringDaftarMateri(daftar);
 }
 
-export type BabMateri = { id: string; urutan: number; judul: string; isi: string };
+export type HalamanMateri = { halaman: number; lebar: number; tinggi: number };
 
 export type MateriDetail = {
   id: string;
@@ -207,8 +246,17 @@ export type MateriDetail = {
   tipe: TipeMateri;
   deskripsi: string;
   namaLayanan: string;
-  bab: BabMateri[];
+  halaman: HalamanMateri[];
   videoUrl: string | null;
+  /**
+   * Dari RPC `berhak_isi_materi` (security definer) — SATU sumber kebenaran
+   * yang sama dipakai policy RLS `material_pages`/`material_chapters`/
+   * `material_videos`. Tanpa ini, "tidak berhak" dan "berhak tapi isinya
+   * belum diunggah admin" terlihat identik dari sisi query: keduanya nol
+   * baris. Pasien yang sebenarnya berhak akan dibohongi kalimat "terbuka
+   * setelah layanan terkait Anda jalani".
+   */
+  berhak: boolean;
 };
 
 type BarisMateriDetail = {
@@ -216,41 +264,55 @@ type BarisMateriDetail = {
   judul: string;
   tipe: TipeMateri;
   deskripsi: string;
-  services: { nama: string } | null;
-  material_chapters: BabMateri[];
+  material_pages: HalamanMateri[];
   material_videos: { url: string } | null;
+  material_services: Array<{ service_id: string }>;
 };
 
 export async function ambilMateriDetail(materialId: string): Promise<MateriDetail | null> {
   const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("materials")
-    .select(
-      // FK: materials.service_id → services — disambiguate dari material_services
-      // Dua jalur ke services sekarang ada:
-      // (1) langsung lewat materials.service_id → services
-      // (2) lewat tabel penghubung: materials → material_services → services
-      // PostgREST tidak bisa tahu jalur mana yang dimaksud (PGRST201) tanpa hint FK.
-      "id, judul, tipe, deskripsi, services!materials_service_id_fkey(nama), material_chapters(id, urutan, judul, isi), material_videos(url)",
-    )
-    .eq("id", materialId)
-    .eq("aktif", true) // reader pun wajib menyaring sendiri
-    .returns<BarisMateriDetail[]>()
-    .maybeSingle();
+  const [{ data }, { data: layanan }, { data: berhak }] = await Promise.all([
+    supabase
+      .from("materials")
+      .select(
+        // Lihat komentar panjang di `ambilDaftarMateri` — hint FK
+        // `services!materials_service_id_fkey` SENGAJA tidak dipakai lagi di
+        // sini juga, dengan alasan yang sama.
+        "id, judul, tipe, deskripsi, material_pages(halaman, lebar, tinggi), material_videos(url), material_services(service_id)",
+      )
+      .eq("id", materialId)
+      .eq("aktif", true) // reader pun wajib menyaring sendiri
+      .returns<BarisMateriDetail[]>()
+      .maybeSingle(),
+    supabase.from("services").select("id, nama").returns<BarisLayananNama[]>(),
+    // Parameternya hanya id materi — tidak bergantung pada hasil query
+    // manapun di atas, jadi aman dipanggil paralel lewat `Promise.all`.
+    supabase.rpc("berhak_isi_materi", { p_material_id: materialId }),
+  ]);
   if (!data) return null;
 
-  // Bab yang terkunci tidak dikembalikan RLS sama sekali — array kosong, bukan
-  // isi tersensor. Tidak ada yang perlu disaring di sini.
-  const bab = [...(data.material_chapters ?? [])].sort((a, b) => a.urutan - b.urutan);
+  const namaLayananPer = new Map((layanan ?? []).map((s) => [s.id, s.nama]));
+  const namaLayanan = (data.material_services ?? [])
+    .map((ms) => namaLayananPer.get(ms.service_id))
+    .filter((nama): nama is string => Boolean(nama))
+    .join(", ");
+
+  // Halaman yang terkunci tidak dikembalikan RLS sama sekali — array kosong,
+  // bukan isi tersensor. Diurutkan menaik di JS karena embed PostgREST tidak
+  // menjamin urutan tanpa `.order()` eksplisit; komparator MEMBALAS 0 untuk
+  // elemen setara — komparator yang membalas 1 untuk itu sudah pernah jadi
+  // bug nyata di repo ini (menghapus/menggeser baris yang seharusnya diam).
+  const halaman = [...(data.material_pages ?? [])].sort((a, b) => a.halaman - b.halaman);
 
   return {
     id: data.id,
     judul: data.judul,
     tipe: data.tipe,
     deskripsi: data.deskripsi,
-    namaLayanan: data.services?.nama ?? "",
-    bab,
+    namaLayanan,
+    halaman,
     videoUrl: data.material_videos?.url ?? null,
+    berhak: berhak === true,
   };
 }
 

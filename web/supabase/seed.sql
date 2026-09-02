@@ -83,3 +83,19 @@ insert into material_chapters (id, material_id, urutan, judul, isi) values
   ('88888888-8888-8888-8888-888888888803','77777777-7777-7777-7777-777777777704',1,
    'Menyimpan ASI Perah',
    E'Isi bab ini sengaja hanya untuk klien yang sudah menjalani layanan Lactation Hero. Bila Anda dapat membacanya tanpa pernah menjalani layanan tersebut, gating materi sedang bocor.');
+
+-- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi, bukan teks
+-- bab). Hanya materi TERBUKA (…702) yang diberi baris `material_pages`: tanpa
+-- ini reader-nya akan selalu jatuh ke keadaan "berhak tapi isi belum
+-- diunggah" (M10, keadaan 2) walau Ananda sudah menyelesaikan layanannya —
+-- padahal seed ini justru dipakai untuk membuktikan keadaan 3 ("berhak DAN
+-- ada isinya"). Materi TERKUNCI (…704) sengaja dibiarkan tanpa baris: Ananda
+-- tidak berhak sama sekali, jadi RPC `berhak_isi_materi` sudah menutupnya di
+-- keadaan 1 sebelum jumlah halamannya pernah relevan.
+-- `objek` di sini TIDAK menunjuk berkas sungguhan di bucket `materi-halaman`
+-- — cukup untuk menguji lapisan data & markup reader, yang hanya membaca
+-- metadata baris ini (halaman/lebar/tinggi), bukan mengunduh objeknya.
+insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
+  ('77777777-7777-7777-7777-777777777702',1,'77777777-7777-7777-7777-777777777702/0001.webp',1600,2263),
+  ('77777777-7777-7777-7777-777777777702',2,'77777777-7777-7777-7777-777777777702/0002.webp',1600,2263),
+  ('77777777-7777-7777-7777-777777777702',3,'77777777-7777-7777-7777-777777777702/0003.webp',1600,2263);
