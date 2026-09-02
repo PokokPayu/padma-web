@@ -92,9 +92,19 @@ insert into material_chapters (id, material_id, urutan, judul, isi) values
 -- ada isinya"). Materi TERKUNCI (…704) sengaja dibiarkan tanpa baris: Ananda
 -- tidak berhak sama sekali, jadi RPC `berhak_isi_materi` sudah menutupnya di
 -- keadaan 1 sebelum jumlah halamannya pernah relevan.
--- `objek` di sini TIDAK menunjuk berkas sungguhan di bucket `materi-halaman`
--- — cukup untuk menguji lapisan data & markup reader, yang hanya membaca
--- metadata baris ini (halaman/lebar/tinggi), bukan mengunduh objeknya.
+-- `objek` di sini MEMANG menunjuk berkas sungguhan di bucket privat
+-- `materi-halaman` — bukan path yang hanya kebetulan berbentuk benar. SQL
+-- murni tidak bisa menaruh BYTE gambar ke storage (itu jalur Storage API),
+-- jadi ketiga objeknya diunggah terpisah oleh `unggahHalamanMateriDemo()` di
+-- scripts/seed-users.ts, sesudah baris ini ada (satu-satunya urutan yang
+-- mungkin: RLS `berhak_isi_materi` pada `material_pages` butuh baris DB-nya
+-- lebih dulu). Ini bukan kerapian kosmetik: sebelum diperbaiki, ketiga baris
+-- ini menunjuk objek yang tidak pernah diunggah, dan membuka e-book ini di
+-- dev menampilkan tiga `<img>` yang semuanya 404 — reader yang tampak rusak,
+-- persis kelas masalah "layar menjanjikan sesuatu yang tidak benar" yang
+-- dirapikan berulang kali di rencana ini. Jumlah halaman & dimensi di sini
+-- WAJIB SAMA PERSIS dengan `HALAMAN_DEMO`/`LEBAR_DEMO`/`TINGGI_DEMO` di
+-- scripts/seed-users.ts.
 insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
   ('77777777-7777-7777-7777-777777777702',1,'77777777-7777-7777-7777-777777777702/0001.webp',1600,2263),
   ('77777777-7777-7777-7777-777777777702',2,'77777777-7777-7777-7777-777777777702/0002.webp',1600,2263),

@@ -124,6 +124,12 @@ export default async function ReaderMateri({
   // 2. Berhak, tetapi isinya belum diunggah admin. Bukan 404 (materinya
   //    memang ada dan pasien memang berhak), dan bukan reader kosong yang
   //    membuat pasien mengira aplikasinya rusak.
+  //
+  //    Tautan baliknya (fix ronde 1): draft pertama keadaan ini tidak
+  //    punya jalan keluar sama sekali selain tombol back peramban — persis
+  //    kelas masalah yang sama dengan keadaan 3 di bawah sebelum diperbaiki.
+  //    Markup-nya disalin dari `BelumTerbuka`, kartu yang paling mirip
+  //    (sama-sama kartu berdiri sendiri berisi judul & satu kalimat).
   if (m.halaman.length === 0) {
     return (
       <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
@@ -132,6 +138,12 @@ export default async function ReaderMateri({
           <b className="text-ink">{m.judul}</b> sudah terbuka untuk Anda, tetapi
           isinya belum diunggah tim PADMA. Silakan cek kembali nanti.
         </p>
+        <Link
+          href="/passport/materi"
+          className="mt-5 inline-block text-sm font-bold text-leaf underline underline-offset-4"
+        >
+          ← Kembali ke Materi
+        </Link>
       </section>
     );
   }
@@ -141,5 +153,49 @@ export default async function ReaderMateri({
   //    `/api/materi/[id]/halaman/[n]`; melapisinya lagi hanya menggandakan
   //    teks yang sama, dan lapisan CSS itu hilang begitu gambarnya disimpan
   //    sementara yang dibakar server tidak.
-  return <ReaderPdf materiId={m.id} halaman={m.halaman} />;
+  //
+  //    Tautan balik & judulnya (fix ronde 1): draft pertama Task 10 memakai
+  //    `return <ReaderPdf .../>` telanjang persis seperti pseudokode brief,
+  //    dan itu membuat satu-satunya layar yang benar-benar dipakai pasien
+  //    lama justru satu-satunya yang tidak punya jalan keluar — sementara
+  //    keadaan 1 & 2 di atasnya keduanya punya "← Kembali ke Materi". Markup
+  //    di bawah disalin APA ADANYA dari cabang video persis di atasnya
+  //    (header gradien yang sama sudah dipakai reader ebook SEBELUM M10),
+  //    bukan gaya baru.
+  return (
+    <>
+      <Link
+        href="/passport/materi"
+        className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"
+      >
+        ← Kembali ke Materi
+      </Link>
+
+      <div className="mb-4 flex items-center gap-4 rounded-2xl border border-gold/30 bg-gradient-to-br from-pine to-night p-7 text-[#EFE6CE]">
+        <span className="flex h-14 w-14 flex-none items-center justify-center rounded-2xl bg-gold/15 text-2xl text-gold-bright">
+          📖
+        </span>
+        <span>
+          <h1 className="font-serif text-xl text-[#F5EEDC]">{m.judul}</h1>
+          <span className="text-xs text-[#A9BBAA]">
+            E-Book · baca di aplikasi · {m.namaLayanan}
+          </span>
+        </span>
+      </div>
+
+      {m.deskripsi && (
+        <div className="mb-4 rounded-2xl border border-black/10 bg-white p-6 text-[13.5px] text-[#3C4C42]">
+          {m.deskripsi}
+        </div>
+      )}
+
+      <ReaderPdf materiId={m.id} halaman={m.halaman} />
+
+      <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
+        <span className="text-gold">🔒</span>
+        Materi ini hanya dapat dibaca di dalam aplikasi — tidak ada berkas yang
+        bisa diunduh atau diteruskan. Setiap halaman ditandai identitas Anda.
+      </p>
+    </>
+  );
 }

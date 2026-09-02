@@ -282,15 +282,94 @@ describe("reader materi — e-book yang sudah terbuka (M10: gambar halaman, buka
     }
   });
 
-  it("reader e-book murni gambar halaman — tanpa navigasi/deskripsi tambahan (desain M10)", async () => {
-    // M10 sengaja meniadakan bingkai lama (tautan balik, judul, deskripsi)
-    // untuk keadaan "berhak & ada isi": `ReaderPdf` hanya berisi grid gambar.
-    // Navigasi balik tetap tersedia dari kartu daftar materi & tombol
-    // peramban — bukan regresi yang lolos tak sengaja, tapi diuji di sini
-    // supaya perubahannya terlihat eksplisit bila desainnya nanti diubah lagi.
+  it("reader e-book PUNYA tautan balik & judul, di ATAS gambar (fix ronde 1)", async () => {
+    // Draft pertama Task 10 mengikuti pseudokode brief apa adanya
+    // (`return <ReaderPdf .../>` telanjang) — itu membuat SATU-SATUNYA layar
+    // yang benar-benar lama dipandangi pasien justru satu-satunya TANPA
+    // jalan keluar selain tombol back peramban, sementara keadaan 1 & 2
+    // sama-sama punya "← Kembali ke Materi". Diperbaiki dengan menyalin
+    // markup header yang sama persis dipakai cabang video (persis reader
+    // ebook SEBELUM M10) — bukan gaya baru.
     const m = await markupReader(TERBUKA_EBOOK);
-    expect(m).not.toContain("Kembali ke Materi");
-    expect(m).not.toContain("Panduan Siklus Subur"); // judul materi
+    expect(m).toMatch(/href="\/passport\/materi"/);
+    expect(m).toContain("Kembali ke Materi");
+    expect(m).toContain("Panduan Siklus Subur"); // judul materi
+    expect(m).toContain("Sankalpa Fertility Massage"); // nama layanan
+    expect(m).toContain("E-Book · baca di aplikasi");
+    expect(m).toContain("E-book 3 bab tentang membaca siklus."); // deskripsi seed
+
+    // Urutannya mengikat: pasien yang mulai menggulir ke bawah harus sudah
+    // MELIHAT jalan keluarnya sebelum tiba di gambar halaman pertama, bukan
+    // sesudahnya.
+    const posisiBalik = m.indexOf("Kembali ke Materi");
+    const posisiJudul = m.indexOf("Panduan Siklus Subur");
+    const posisiGambarPertama = m.indexOf(
+      `src="/api/materi/${TERBUKA_EBOOK}/halaman/1"`,
+    );
+    expect(posisiBalik).toBeGreaterThan(-1);
+    expect(posisiJudul).toBeGreaterThan(posisiBalik);
+    expect(posisiGambarPertama).toBeGreaterThan(posisiJudul);
+  });
+});
+
+/**
+ * Keadaan 2 (M10): berhak, tapi adminnya belum mengunggah satu halaman pun.
+ * Tidak ada fixture seed untuk ini — TERBUKA_EBOOK selalu punya 3 halaman,
+ * TERKUNCI_EBOOK tidak pernah berhak — jadi materi & penugasannya dibuat
+ * langsung di sini, dipola persis `materiTanpaLayanan`/`material_assignments`
+ * di tests/materi-penugasan.test.ts.
+ */
+describe("reader materi — e-book berhak tapi isi belum diunggah (M10, keadaan 2)", () => {
+  let materiId = "";
+
+  beforeAll(async () => {
+    const db = svc;
+    const { data: layanan } = await db.from("services").select("id").limit(1).single();
+    const { data: staf } = await db.from("profiles").select("id").eq("role", "admin").single();
+    const { data: klien } = await db
+      .from("clients")
+      .select("id")
+      .eq("email", "ananda@padma.test")
+      .single();
+    const { data: m } = await db
+      .from("materials")
+      .insert({
+        judul: "UJI-BELUM-UNGGAH",
+        tipe: "ebook",
+        deskripsi: "",
+        aktif: true,
+        service_id: layanan!.id, // NOT NULL sampai Task 11
+      })
+      .select("id")
+      .single();
+    materiId = m!.id as string;
+    // Sengaja TIDAK ada baris material_pages sama sekali — itulah keadaan 2.
+    // Berhak lewat PENUGASAN, bukan sesi selesai: materi ini tidak dikaitkan
+    // ke layanan mana pun yang pernah Ananda jalani.
+    await db.from("material_services").delete().eq("material_id", materiId);
+    await db
+      .from("material_assignments")
+      .insert({ material_id: materiId, client_id: klien!.id, ditugaskan_oleh: staf!.id });
+  });
+
+  afterAll(async () => {
+    await svc.from("materials").delete().eq("id", materiId);
+  });
+
+  it("bukan 404, bukan reader kosong — kartu jujur + tautan balik (fix ronde 1)", async () => {
+    // Sebelum fix ronde 1, keadaan ini juga tidak punya jalan keluar selain
+    // tombol back peramban — bug yang sama dengan keadaan 3, hanya tidak
+    // disebut eksplisit oleh coordinator karena tidak ada fixture yang
+    // mendemonstrasikannya. Diperbaiki dengan pola yang sama: tautan balik
+    // disalin dari `BelumTerbuka`, kartu paling mirip.
+    const m = await markupReader(materiId);
+    expect(m).toContain("Isi materi sedang disiapkan");
+    expect(m).toContain("UJI-BELUM-UNGGAH");
+    expect(m).toContain("belum diunggah tim PADMA");
+    expect(m).toMatch(/href="\/passport\/materi"/);
+    expect(m).toContain("Kembali ke Materi");
+    // Bukan kerangka reader kosong: tidak ada satu pun <img> halaman.
+    expect(m).not.toMatch(/<img\b/);
   });
 });
 

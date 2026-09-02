@@ -2,7 +2,9 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 import { createClientInvite } from "../src/lib/auth/link-client";
+import { namaObjekHalaman } from "../src/lib/materi/rasterisasi";
 
 // Kredensial dev ada di .env.local (lihat vitest.config.ts yang memakai
 // DOTENV_CONFIG_PATH=".env.local"); .env dipakai sebagai cadangan.
@@ -20,6 +22,75 @@ const PASSWORD = "padma-dev-123";
 
 export const ANANDA_CLIENT_ID = "44444444-4444-4444-4444-444444444401";
 export const RINA_CLIENT_ID = "44444444-4444-4444-4444-444444444402";
+
+const BUCKET_MATERI_HALAMAN = "materi-halaman";
+
+/**
+ * Halaman e-book demo — Task 10, ronde perbaikan 1.
+ *
+ * `supabase/seed.sql` menulis TIGA baris `material_pages` untuk materi
+ * "Panduan Siklus Subur" (…702), tapi SQL murni tidak bisa menaruh BYTE
+ * gambar ke bucket storage — itu jalur Storage API, bukan `insert`. Sebelum
+ * perbaikan ini baris-baris itu menunjuk objek yang tidak pernah ada, jadi
+ * membuka e-book itu di dev menampilkan tiga `<img>` yang semuanya 404 —
+ * reader yang tampak rusak persis kelas masalah yang dirapikan berulang kali
+ * di rencana ini (layar menjanjikan sesuatu yang tidak benar). Objek
+ * sungguhan diunggah DI SINI, lewat service role, sesudah `db reset`
+ * menjalankan `seed.sql` — satu-satunya urutan yang mungkin.
+ *
+ * Materi id, jumlah halaman (3), dan dimensi (1600×2263) WAJIB SAMA PERSIS
+ * dengan baris `material_pages` di `supabase/seed.sql` — keduanya
+ * mendeskripsikan objek yang sama dari dua sisi (baris DB vs. byte storage)
+ * dan harus disepakati manual karena SQL tidak bisa memanggil `sharp`.
+ */
+const MATERI_TERBUKA_EBOOK_ID = "77777777-7777-7777-7777-777777777702";
+const HALAMAN_DEMO = [1, 2, 3];
+const LEBAR_DEMO = 1600;
+const TINGGI_DEMO = 2263;
+
+/**
+ * Idempoten lewat `upsert: true` — mengunggah ulang menimpa objek lama di
+ * path yang sama, bukan menduplikasinya atau gagal. Aman dipanggil setiap
+ * `npm run seed:users` maupun setiap globalSetup vitest.
+ *
+ * Gambarnya sengaja POLOS (warna solid + nomor halaman) — bukan konten
+ * ebook sungguhan. Yang dibuktikan bucket ini ADA dan bisa disajikan lewat
+ * rute `/api/materi/[id]/halaman/[n]`, bukan mutu visualnya.
+ */
+async function unggahHalamanMateriDemo(admin: SupabaseClient) {
+  for (const halaman of HALAMAN_DEMO) {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${LEBAR_DEMO}" height="${TINGGI_DEMO}">` +
+      `<rect width="100%" height="100%" fill="#EFEDE4"/>` +
+      `<text x="50%" y="50%" font-family="serif" font-size="160" fill="#132518" ` +
+      `text-anchor="middle" dominant-baseline="middle">Halaman ${halaman}</text>` +
+      `</svg>`;
+
+    const buffer = await sharp({
+      create: {
+        width: LEBAR_DEMO,
+        height: TINGGI_DEMO,
+        channels: 3,
+        background: "#EFEDE4",
+      },
+    })
+      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+      // 82 mengikuti nilai yang sama dipakai `bakarWatermark`
+      // (src/lib/materi/watermark.ts) — bukan konstanta `KUALITAS_WEBP` di
+      // rasterisasi.ts, yang satuannya 0–1 untuk `canvas.toBlob` peramban,
+      // bukan 0–100 yang diminta `sharp`.
+      .webp({ quality: 82 })
+      .toBuffer();
+
+    const { error } = await admin.storage
+      .from(BUCKET_MATERI_HALAMAN)
+      .upload(namaObjekHalaman(MATERI_TERBUKA_EBOOK_ID, halaman), buffer, {
+        contentType: "image/webp",
+        upsert: true,
+      });
+    if (error) throw error;
+  }
+}
 
 /**
  * Token undangan Rina untuk DEV & TEST.
@@ -260,6 +331,7 @@ export async function seedUsers() {
   );
   if (sErr) throw sErr;
 
+  await unggahHalamanMateriDemo(admin);
 }
 
 // Hanya jalan bila dieksekusi langsung (`npm run seed:users`), bukan saat
