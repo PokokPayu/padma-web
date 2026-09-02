@@ -18,7 +18,7 @@ export async function daftarPenugasan(materiId: string): Promise<{
 }> {
   const supabase = await createServerSupabase();
 
-  const [{ data: assign }, { data: layanan }] = await Promise.all([
+  const [{ data: assign }, { data: layanan }, { data: materi }] = await Promise.all([
     supabase
       .from("material_assignments")
       .select("client_id, clients(nama, padma_id)")
@@ -29,9 +29,23 @@ export async function daftarPenugasan(materiId: string): Promise<{
       .select("service_id")
       .eq("material_id", materiId)
       .returns<{ service_id: string }[]>(),
+    supabase.from("materials").select("aktif").eq("id", materiId).maybeSingle(),
   ]);
 
-  const idLayanan = (layanan ?? []).map((l) => l.service_id);
+  // `otomatis` MENDUPLIKASI dengan sengaja cabang otomatis milik
+  // `berhak_isi_materi()` (migration 20260831110000_materi_penugasan.sql):
+  // fungsi itu mensyaratkan `m.aktif = true` SEBELUM kedua cabangnya
+  // dievaluasi, jadi materi nonaktif tidak pernah membuka isinya untuk siapa
+  // pun — apa pun sesi yang pernah selesai. Tanpa syarat yang sama di sini,
+  // panel ini akan menyatakan seorang klien "berhak otomatis" pada materi
+  // yang sudah dinonaktifkan admin, padahal `berhak_isi_materi` sudah
+  // menjawab false untuknya — bukan lubang keamanan (RLS tetap dijaga fungsi
+  // yang sungguhan), tapi panel yang berbohong ke admin.
+  //
+  // Duplikasi dua cabang aturan yang sama di dua tempat AMAN hanya karena ada
+  // tes yang merah begitu keduanya berbeda pendapat — bukan komentar ini.
+  // Lihat tests/materi-penugasan-lib.test.ts.
+  const idLayanan = materi?.aktif ? (layanan ?? []).map((l) => l.service_id) : [];
   let otomatis: PasienRingkas[] = [];
   if (idLayanan.length > 0) {
     const { data } = await supabase

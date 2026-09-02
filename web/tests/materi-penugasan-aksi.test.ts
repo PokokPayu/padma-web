@@ -23,6 +23,11 @@ describe("aksi penugasan — pagar struktural", () => {
     // seluruh berkas.
     for (let i = 0; i < aksi.length; i++) {
       const mulai = aksi[i].index!;
+      // Asumsi: badan tiap aksi berakhir tepat di deklarasi berikutnya (atau
+      // EOF untuk yang terakhir) — kode SETELAH aksi terakhir, atau DI ANTARA
+      // dua aksi tapi di luar keduanya, ikut terserap tanpa disadari. Benar
+      // untuk susunan berkas ini hari ini; edit berikutnya yang menambah kode
+      // di luar badan fungsi bisa membuat asumsi ini diam-diam salah.
       const akhir = i + 1 < aksi.length ? aksi[i + 1].index! : SUMBER.length;
       const tubuh = SUMBER.slice(mulai, akhir);
 
