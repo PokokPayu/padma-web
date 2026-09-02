@@ -62,13 +62,25 @@ export function PengunggahPdf({
           // `u.objek` berakhiran `.webp` (namaObjekHalaman) TAPI itu KONVENSI
           // PENAMAAN, bukan jaminan isi byte: bila peramban admin tidak
           // mendukung ekspor WebP, canvas.toBlob() di pdf-klien.ts diam-diam
-          // menghasilkan PNG (bukan gagal — lihat komentar di sana), dan PNG
-          // itulah yang terunggah di bawah path `.webp`. Ini AMAN: rute
-          // penyaji (api/materi/[id]/halaman/[n]/route.ts) selalu mendekode
-          // ulang lewat sharp() lalu memaksa .webp({...}) saat membakar
-          // watermark — sharp membaca byte sungguhan, bukan ekstensi nama
-          // berkas — jadi objek berisi PNG tetap sampai ke pasien sebagai
-          // WebP asli.
+          // menghasilkan PNG (bukan gagal — lihat komentar di sana), dan
+          // `h.blob.type` mengikuti isi SUNGGUHAN itu ("image/png"), bukan
+          // ekstensi nama objek. `uploadToSignedUrl()` di bawah tidak diberi
+          // `contentType` — storage-js membaca Content-Type multipart-nya
+          // dari `Blob.type` itu sendiri.
+          //
+          // Ini BUKAN aman: bucket `materi-halaman` dibatasi
+          // `allowed_mime_types = ['image/webp','image/jpeg']` (migration
+          // `materi_halaman_pdf`), dan storage server memvalidasi MIME type
+          // ini SEBELUM byte-nya tersimpan — DIBUKTIKAN LANGSUNG lewat PUT
+          // manual berisi PNG ke path `.webp`: 400 `invalid_mime_type`
+          // ("mime type image/png is not supported"). Unggahan PNG di sini
+          // DITOLAK, bukan lewat lalu direkode belakangan — `error` di bawah
+          // berisi kegagalan itu dan seluruh proses berhenti di halaman yang
+          // gagal, materinya berakhir tidak lengkap. Rute penyaji
+          // (api/materi/[id]/halaman/[n]/route.ts) memang mendekode ulang
+          // lewat sharp() dan memaksa .webp({...}) saat membakar watermark —
+          // tapi itu hanya relevan untuk objek yang SUDAH tersimpan; PNG
+          // tidak pernah sampai ke titik itu.
           const { error } = await supabase.storage
             .from(BUCKET)
             .uploadToSignedUrl(u.objek, u.token, h.blob);
