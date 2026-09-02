@@ -225,13 +225,42 @@ async function main() {
     // reader bab lama. Yang dibuktikan di sini adalah gambar halamannya
     // sungguhan dimuat lewat rute bergerbang RLS
     // `/api/materi/{id}/halaman/{n}`, bukan isi mentah dari storage.
-    const gambarHalaman = await page
-      .locator(`img[src="/api/materi/${MATERI_TERBUKA}/halaman/1"]`)
-      .count();
+    // React menulis atribut `src` pada tag <img> APA PUN nasib permintaannya —
+    // tag itu tetap ada di DOM walau rute di baliknya membalas 403/404 dan
+    // pasien hanya melihat ikon gambar rusak. Menghitung KEHADIRAN tag saja
+    // (`count() === 1`) karena itu lolos vakum: ia membuktikan markup-nya
+    // ditulis, bukan bahwa reader-nya benar-benar bekerja. Yang membedakan
+    // "termuat" dari "gagal senyap" adalah PIKSEL SUNGGUHAN — `naturalWidth`
+    // & `naturalHeight` tetap 0 pada gambar yang gagal dimuat, tidak peduli
+    // apa isi atribut `src`-nya. Ditunggu lewat `waitForFunction` (menunggu
+    // `img.complete`), bukan dibaca sekali segera sesudah goto — supaya tidak
+    // balapan dengan permintaan gambar yang belum tuntas.
+    const selektorHalaman1 = `img[src="/api/materi/${MATERI_TERBUKA}/halaman/1"]`;
+    const gambarHalaman = await page.locator(selektorHalaman1).count();
+    let dimensiGambar = { naturalWidth: 0, naturalHeight: 0 };
+    let gagalMenunggu = "";
+    try {
+      await page.waitForFunction(
+        (sel) => {
+          const el = document.querySelector(sel) as HTMLImageElement | null;
+          return !!el && el.complete;
+        },
+        selektorHalaman1,
+        { timeout: 15_000 },
+      );
+      dimensiGambar = await page.locator(selektorHalaman1).evaluate((el) => ({
+        naturalWidth: (el as HTMLImageElement).naturalWidth,
+        naturalHeight: (el as HTMLImageElement).naturalHeight,
+      }));
+    } catch (e) {
+      gagalMenunggu = e instanceof Error ? e.message : String(e);
+    }
     catat(
-      "3e. reader e-book menampilkan gambar halaman lewat rute bergerbang",
-      gambarHalaman === 1,
-      `${gambarHalaman} elemen <img> halaman 1 ditemukan`,
+      "3e. reader e-book menampilkan gambar halaman BERISI PIKSEL SUNGGUHAN lewat rute bergerbang (bukan cuma tag <img> yang ditulis)",
+      gambarHalaman === 1 && dimensiGambar.naturalWidth > 0 && dimensiGambar.naturalHeight > 0,
+      `${gambarHalaman} elemen <img> halaman 1 ditemukan; naturalWidth=${dimensiGambar.naturalWidth} naturalHeight=${dimensiGambar.naturalHeight}${
+        gagalMenunggu ? `; gagal menunggu load: ${gagalMenunggu}` : ""
+      }`,
     );
     // Aksi unduh dicari sebagai ELEMEN, bukan sebagai kata: halaman ini memang
     // menulis kalimat "tidak ada berkas yang bisa diunduh", dan pencarian kata
