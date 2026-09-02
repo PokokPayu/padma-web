@@ -57,7 +57,7 @@ const BUCKET_MATERI_HALAMAN = "materi-halaman";
  */
 const MATERI_EBOOK_DEMO = [
   { id: "77777777-7777-7777-7777-777777777702", jumlahHalaman: 3 },
-  { id: "77777777-7777-7777-7777-777777777704", jumlahHalaman: 1 },
+  { id: "77777777-7777-7777-7777-777777777704", jumlahHalaman: 3 },
 ];
 const LEBAR_DEMO = 1600;
 const TINGGI_DEMO = 2263;
