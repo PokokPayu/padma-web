@@ -58,6 +58,32 @@ describe("material_pages & RPC pengganti halaman", () => {
     expect(anon).toEqual([]);
   });
 
+  it("authenticated memegang HANYA SELECT — bukan INSERT/UPDATE/DELETE", async () => {
+    // Migration 20260831120000 mencabut hak tabel TOTAL dari `authenticated`
+    // lalu memberi kembali SATU-SATUNYA hak SELECT — jalur tulis semata-mata
+    // RPC `ganti_halaman_materi` (security definer, guard sendiri). Test di
+    // atas ("anon tidak punya hak apa pun") dan describe "penutupan radius"
+    // di bawah membuktikan DELETE lewat REST langsung ditolak, tapi tidak
+    // satu pun keduanya membuktikan hak TABEL-nya sendiri persis SELECT saja
+    // — 42501 pada DELETE tetap sama bunyinya baik hak tabel DELETE memang
+    // tidak ada MAUPUN hak tabel ADA tapi ditolak RLS/policy. Baris DAFTAR
+    // PERSIS ini (bukan sekadar "DELETE ditolak") yang menutup celahnya:
+    // policy staf "halaman: staf kelola" SENGAJA masih `for all` (lihat
+    // komentar migration-nya) — pagar yang menutup separuh diam-diam itu
+    // adalah HAK TABEL, bukan policy, dan hanya assersi PERSIS ini yang
+    // menangkap re-grant INSERT/UPDATE seandainya kelak ditambahkan tanpa
+    // sadar. Re-grant UPDATE khususnya akan membuka
+    // `PATCH material_pages?halaman=gte.0` untuk menimpa `objek` SELURUH
+    // halaman SELURUH materi — sama sekali tidak dijaga policy staf yang
+    // `for all` itu.
+    const hak = await querySql<{ privilege_type: string }>(`
+      select privilege_type from information_schema.role_table_grants
+       where table_schema = 'public' and table_name = 'material_pages'
+         and grantee = 'authenticated'
+       order by privilege_type`);
+    expect(hak.map((h) => h.privilege_type)).toEqual(["SELECT"]);
+  });
+
   it("RPC TIDAK PERNAH menyentuh baris materi lain", async () => {
     const db = svc();
     const buat = async (judul: string) =>
