@@ -371,6 +371,21 @@ describe("pagar struktural lapisan data", () => {
     expect(literal.filter((s) => s.includes("material_services(service_id)")).length).toBe(2);
   });
 
+  it("halaman detail diurutkan EKSPLISIT di JS, tidak mengandalkan urutan DB", () => {
+    // Diikat pada SUMBER, bukan pada hasil query sungguhan: material_pages
+    // punya primary key (material_id, halaman), jadi Postgres KEBETULAN sudah
+    // mengembalikan barisnya menaik lewat scan indeks — menghapus `.sort(...)`
+    // di `ambilMateriDetail` tidak akan mengubah urutan yang teramati test
+    // integrasi mana pun selama planner tetap memilih index scan itu. Baris
+    // ini yang membuktikan sortnya benar ADA, terlepas dari kebetulan itu
+    // (pola sama seperti "urutan mengikat" di
+    // tests/materi-route-halaman.test.ts, yang juga tidak bisa mengandalkan
+    // observasi perilaku semata).
+    expect(sumber).toMatch(
+      /\[\.\.\.\(data\.material_pages\s*\?\?\s*\[\]\)\]\.sort\(\(a,\s*b\)\s*=>\s*a\.halaman\s*-\s*b\.halaman\)/,
+    );
+  });
+
   it("nama mitra digabung di JS, tidak lewat embed PostgREST ke view", () => {
     // Embed ke sebuah VIEW bergantung inferensi relasi yang tidak dijamin, dan
     // kegagalannya senyap (nama bidan jadi null, atau riwayat kosong tanpa error).
