@@ -14,6 +14,20 @@ export const LEBAR_RASTER = 1600;
  *  halaman tetap ~200-400 KB. */
 export const KUALITAS_WEBP = 0.82;
 
+/**
+ * KOPLING KE `max_rows` PostgREST — baca ini sebelum menaikkannya.
+ *
+ * Reader pasien membaca halaman lewat EMBED PostgREST
+ * (`materials -> material_pages`), dan embed itu ikut dipotong `max_rows`
+ * (1000 di config.toml maupun default Supabase cloud). Diuji empiris dengan
+ * materi 1200 halaman: hanya halaman 1..1000 yang kembali, TANPA error.
+ *
+ * Jadi 300 bukan angka bebas. Menaikkannya melewati `max_rows` membuat pasien
+ * diam-diam kehilangan halaman akhir sebuah e-book — tidak ada yang merah,
+ * tidak ada yang menandai, dan reader tetap tampak bekerja. Bila batas ini
+ * perlu naik melewati 1000, embed-nya harus diganti query berpaginasi lebih
+ * dulu.
+ */
 export const MAKS_HALAMAN = 300;
 export const MAKS_BYTE_PDF = 60 * 1024 * 1024;
 

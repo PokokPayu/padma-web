@@ -6,11 +6,14 @@
 //   1. `admin.storage.from(BUCKET).list(materiId)` tanpa opsi hanya
 //      menjawab 100 objek pertama (default storage-js). Objek 101+ selamat
 //      dari `.remove()` sebagai sampah yatim.
-//   2. `createSignedUploadUrl(objek)` tanpa `{ upsert: true }` mengirim
-//      `x-upsert: false`, jadi PUT ke objek yatim itu (halaman >100 pada
-//      PDF pengganti) ditolak, seluruh unggahan throw di tengah, dan
-//      `catatHalamanMateri` tidak pernah sempat jalan — materi berakhir
-//      NOL halaman, tanpa jalan pulih lewat UI admin.
+//   2. `createSignedUploadUrl(objek)` tanpa `{ upsert: true }` DITOLAK saat
+//      URL-nya diterbitkan — bukan nanti saat browser mem-PUT. Bagian
+//      `createSignedUploadUrl({ upsert: true })` di bawah membuktikannya
+//      empiris. Akibatnya `terbitkanUrlUnggahHalaman` berhenti di
+//      `return { ok: false }` (fungsi itu tidak pernah melempar exception),
+//      `catatHalamanMateri` tidak pernah sempat jalan, dan materi berakhir
+//      NOL halaman — tanpa jalan pulih lewat UI admin, sebab setiap ulangan
+//      berperilaku sama.
 //
 // `materi-unggah-aksi.test.ts` sudah menjaga BENTUK kode (urutan panggilan,
 // dsb) lewat pembacaan sumber. Berkas ini menjalankan `terbitkanUrlUnggahHalaman`

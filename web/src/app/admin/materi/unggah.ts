@@ -116,18 +116,24 @@ export async function terbitkanUrlUnggahHalaman(
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
     const objek = namaObjekHalaman(materiId, halaman);
-    // `{ upsert: true }` WAJIB di sini. Tanpanya storage-js mengirim
-    // `x-upsert: false`, dan PUT ke objek yang barisnya baru saja kita hapus
-    // di ATAS (bukan objek storage-nya — lihat urutan di kepala fungsi ini)
-    // akan ditolak bila objek lama itu berada DI LUAR seratus pertama yang
-    // sempat dihapus `.remove()` sebelum perbaikan `.list()` di atas — persis
-    // kombinasi yang membuat unggahan ulang e-book >100 halaman gagal
-    // permanen: halaman 101 bertabrakan dengan objek lama yang masih ada,
-    // seluruh proses throw, dan `catatHalamanMateri` di bawah tidak pernah
-    // sempat jalan sehingga materi berakhir NOL halaman. Path objeknya tetap
-    // ditentukan server (lihat dokblok fungsi ini) — `upsert` hanya mengizinkan
-    // PUT menimpa path yang KITA sendiri namai, bukan membiarkan browser
-    // memilih path.
+    // `{ upsert: true }` WAJIB di sini, dan penolakannya terjadi LEBIH AWAL
+    // daripada yang mungkin diduga: bukan saat browser mem-PUT, melainkan saat
+    // `createSignedUploadUrl` ini dipanggil. Tanpa upsert, memintanya untuk
+    // path yang objeknya masih ada mengembalikan `error` — jadi fungsi ini
+    // berhenti di `return { ok: false }` di bawah dan tidak pernah melempar
+    // exception. (Dibuktikan empiris di tests/materi-unggah-lib.test.ts.)
+    //
+    // Itulah kombinasi yang dulu membuat unggah ulang e-book >100 halaman
+    // gagal permanen: baris sudah dikosongkan di atas, tetapi objek lama di
+    // luar seratus pertama selamat dari `.remove()` (sebelum `.list()`
+    // dipaginasi), sehingga penerbitan URL untuk halaman 101 ditolak,
+    // `catatHalamanMateri` tidak pernah jalan, dan materi berakhir NOL
+    // halaman — dengan setiap ulangan berperilaku sama.
+    //
+    // Path objeknya tetap ditentukan server (lihat dokblok fungsi ini):
+    // `upsert` hanya mengizinkan penimpaan path yang KITA sendiri namai, dan
+    // `catatHalamanMateri` menolak `objek` apa pun yang tidak sama dengan nama
+    // turunan server itu.
     const { data, error } = await admin.storage
       .from(BUCKET)
       .createSignedUploadUrl(objek, { upsert: true });
