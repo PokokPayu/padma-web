@@ -15,7 +15,8 @@
     "test:e2e:admin": "tsx tests/e2e/admin-operasional.e2e.ts",
     "test:e2e:pelengkap": "tsx tests/e2e/admin-pelengkap.e2e.ts",
     "test:e2e:owner": "tsx tests/e2e/owner.e2e.ts",
-    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:funnel && npm run test:e2e:passport && npm run test:e2e:admin && npm run test:e2e:pelengkap && npm run test:e2e:owner",
+    "test:e2e:materi": "tsx tests/e2e/materi-pdf.e2e.ts",
+    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:funnel && npm run test:e2e:passport && npm run test:e2e:admin && npm run test:e2e:pelengkap && npm run test:e2e:owner && npm run test:e2e:materi",
     "db:recover": "npx supabase stop && npx supabase start && npx supabase db reset",
     "seed:users": "tsx scripts/seed-users.ts"
   },
