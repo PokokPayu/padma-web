@@ -96,10 +96,30 @@ describe("daftarPenugasan — 'otomatis' tidak terpotong PostgREST max_rows (Fix
   });
 
   afterAll(async () => {
-    if (serviceId) await admin.from("sessions").delete().eq("service_id", serviceId);
-    if (materiId) await admin.from("materials").delete().eq("id", materiId);
-    if (serviceId) await admin.from("services").delete().eq("id", serviceId);
-    if (klienIds.length > 0) await admin.from("clients").delete().in("id", klienIds);
+    if (serviceId) {
+      const { error } = await admin.from("sessions").delete().eq("service_id", serviceId);
+      if (error) throw error;
+    }
+    if (materiId) {
+      const { error } = await admin.from("materials").delete().eq("id", materiId);
+      if (error) throw error;
+    }
+    if (serviceId) {
+      const { error } = await admin.from("services").delete().eq("id", serviceId);
+      if (error) throw error;
+    }
+    // `.in("id", klienIds)` DALAM SATU PANGGILAN pernah gagal SENYAP di sini
+    // untuk 1001 UUID (~37 KB query string) — errornya tidak pernah diperiksa
+    // sebelumnya, jadi 1001 klien uji bocor ke basis data tanpa satu tes pun
+    // merah. Dihapus BERKELOMPOK (200 per panggilan) dan errornya WAJIB
+    // diperiksa: pembersihan yang gagal senyap di sini akan mencemari setiap
+    // test lain yang menghitung baris `clients` secara persis.
+    const UKURAN_KELOMPOK = 200;
+    for (let i = 0; i < klienIds.length; i += UKURAN_KELOMPOK) {
+      const kelompok = klienIds.slice(i, i + UKURAN_KELOMPOK);
+      const { error } = await admin.from("clients").delete().in("id", kelompok);
+      if (error) throw error;
+    }
   });
 
   it("seluruh 1001 klien dengan sesi selesai muncul di 'otomatis', bukan terpotong di 1000", async () => {
