@@ -187,11 +187,12 @@ export async function ambilDaftarMateri(): Promise<MateriRingkas[]> {
   // boleh berlayanan-jamak itu membuat PostgREST menolak embed `services`
   // LANGSUNG dari `materials` dengan PGRST201 kecuali diberi hint FK eksplisit
   // (`services!materials_service_id_fkey`). Hint itu SENGAJA tidak dipakai
-  // lagi: ia menyebut nama constraint FK `materials.service_id`, dan kolom itu
-  // rencananya dihapus — hint yang menyebut FK yang sudah tak ada akan
-  // mematahkan query ini. Membaca nama layanan lewat `material_services`
-  // (id layanan diambil sebagai array, namanya digabung di JS) menghindari
-  // ambiguitas itu sekaligus tetap tidak bergantung pada embed ke view.
+  // lagi: ia menyebut nama constraint FK `materials.service_id`, dan Task 11
+  // menghapus kolom itu beserta constraint-nya — hint yang menyebut FK yang
+  // sudah tak ada akan mematahkan query ini. Membaca nama layanan lewat
+  // `material_services` (id layanan diambil sebagai array, namanya digabung
+  // di JS) menghindari ambiguitas itu sekaligus tetap tidak bergantung pada
+  // embed ke view.
   const [{ data }, { data: layanan }] = await Promise.all([
     supabase
       .from("materials")
