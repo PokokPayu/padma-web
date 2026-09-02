@@ -1,12 +1,25 @@
 // tests/materi-route-halaman.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { signInAs } from "./helpers/as-user";
 
 const SUMBER = readFileSync(
   path.resolve(__dirname, "../src/app/api/materi/[id]/halaman/[n]/route.ts"),
   "utf8",
 );
+
+// Sesi Ananda sungguhan — RLS yang menjadi penjaga, sama seperti
+// tests/passport-materi.test.ts, bukan diam-diam menembus lewat service role.
+const ref = vi.hoisted(() => ({ klien: null as SupabaseClient | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.klien!,
+}));
+
+beforeAll(async () => {
+  ref.klien = await signInAs("ananda@padma.test");
+});
 
 describe("route halaman — pagar yang dibaca dari sumbernya", () => {
   it("berjalan di runtime Node, bukan Edge (sharp butuh Node)", () => {
@@ -59,5 +72,39 @@ describe("route halaman — pagar yang dibaca dari sumbernya", () => {
     // 401/403 mengonfirmasi bahwa materinya ADA.
     expect(SUMBER).toMatch(/status:\s*404/);
     expect(SUMBER).not.toMatch(/status:\s*40[13]/);
+  });
+});
+
+/**
+ * Route dipanggil SUNGGUHAN (bukan sekadar dibaca sebagai teks) melawan
+ * objek storage yang benar-benar diunggah `scripts/seed-users.ts` (fix
+ * ronde 1, Finding 2). Sebelum fix itu, `material_pages` di seed.sql
+ * menunjuk path yang tidak pernah ada di bucket `materi-halaman` —
+ * lolos dari SETIAP test lain di repo ini karena semuanya berhenti di baris
+ * DB (`material_pages.objek`), tidak pernah benar-benar mengunduh objeknya.
+ * Describe ini yang menutup celah itu: bila seed-nya kembali berbohong
+ * (baris ada, objek tidak), test ini — bukan hanya mata manusia di
+ * `npm run dev` — yang merah.
+ */
+describe("route halaman — objek seed sungguhan ada di storage (fix ronde 1)", () => {
+  const MATERI_TERBUKA_EBOOK = "77777777-7777-7777-7777-777777777702";
+
+  it("GET halaman 1 materi seed terbuka -> 200 image/webp sungguhan, bukan 404", async () => {
+    const { GET } = await import("@/app/api/materi/[id]/halaman/[n]/route");
+    const res = await GET(new Request("http://x/"), {
+      params: Promise.resolve({ id: MATERI_TERBUKA_EBOOK, n: "1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/webp");
+
+    // Bukan stub: byte pertama WebP sungguhan adalah magic number RIFF/WEBP
+    // (52 49 46 46 .. 57 45 42 50), bukan payload kosong atau teks galat.
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.length).toBeGreaterThan(0);
+    const magic = Buffer.from(bytes.slice(0, 4)).toString("ascii");
+    const webpTag = Buffer.from(bytes.slice(8, 12)).toString("ascii");
+    expect(magic).toBe("RIFF");
+    expect(webpTag).toBe("WEBP");
   });
 });
