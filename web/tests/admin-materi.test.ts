@@ -341,6 +341,12 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
         if (l.id === TANPA_LAYANAN_ID) continue;
         expect(l.materi.map((m) => m.id)).not.toContain(yatim!.id);
       }
+      // Arah sebaliknya: materi yang MEMANG bertaut (MATERI_EBOOK -> SVC_TERBUKA
+      // dari fixture) tidak boleh IKUT nyasar ke sentinel ini. Tanpa baris ini,
+      // filter sentinel yang salah (mis. "panjang >= 0" alih-alih "=== 0") tetap
+      // lolos: bucket sentinel akan diam-diam memuat SETIAP materi, bukan hanya
+      // yang yatim, dan tidak satu assertion di atas yang menangkapnya.
+      expect(sentinel.materi.map((m) => m.id)).not.toContain(MATERI_EBOOK);
     } finally {
       await admin.from("materials").delete().eq("id", yatim!.id);
     }
@@ -998,7 +1004,14 @@ describe("halaman materi (/admin/materi)", () => {
 
   it("menandai materi yang isinya belum lengkap, bukan mendiamkannya", () => {
     expect(markup).toContain("PAD-UJI Materi Tanpa Isi");
-    expect(markup).toMatch(/belum ada isi|belum punya isi|Belum ada isi/i);
+    // Diikat pada PIL "Belum ada isi" (`>Belum ada isi<`, huruf besar/kecil
+    // dan tanpa embel-embel), BUKAN pada kata "isi" secara longgar: pesan
+    // penjelas AksiMateri di baris yang sama juga memuat frasa "belum ada
+    // isinya" (huruf kecil), dan regex longgar tanpa jangkar akan lolos
+    // hanya karena kalimat itu ada — terlepas pil-nya sungguh dirender atau
+    // tidak. Menghapus PillBelumAdaIsi dari page.tsx (dan hanya itu) MEMBUAT
+    // baris ini merah; regex lama tidak.
+    expect(markup).toContain(">Belum ada isi<");
   });
 
   it("menyebut jumlah halaman e-book dan keberadaan video", () => {
