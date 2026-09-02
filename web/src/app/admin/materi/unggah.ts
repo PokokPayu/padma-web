@@ -77,13 +77,30 @@ export async function terbitkanUrlUnggahHalaman(
   // tengah meninggalkan sampah, dan halaman lama yang tersisa akan bercampur
   // dengan yang baru bila PDF penggantinya lebih pendek.
   //
+  // `.list()` TANPA opsi hanya menjawab 100 objek pertama (default
+  // storage-js: `{ limit: 100, offset: 0 }`) — pernah ditemukan lewat e-book
+  // 300 halaman yang diunggah ulang: objek `0001..0100` tersapu, `0101..0300`
+  // selamat, dan setiap percobaan ulang mengulang persis itu (urutan menaik
+  // selalu mengembalikan seratus PERTAMA yang sama). Di-loop pakai `offset`
+  // supaya SELURUH objek ditemukan berapa pun jumlah halamannya — jangan
+  // berasumsi jumlah halaman muat dalam satu panggilan.
+  //
   // Hasil `.remove()` WAJIB ditangkap (dulu dibuang total, tanpa
   // destructure). Kegagalannya di titik ini adalah mode gagal LUNAK — tapi
   // lunak tidak berarti boleh senyap. Admin dan pemantauan berhak tahu objek
   // yatim mungkin tersisa, lewat pesan yang berbeda dari kegagalan di atas,
   // bukan sekadar diam seolah tidak terjadi apa-apa.
-  const { data: lama } = await admin.storage.from(BUCKET).list(materiId);
-  if (lama && lama.length > 0) {
+  const LIMIT_LIST = 1000;
+  const lama: Array<{ name: string }> = [];
+  for (let offset = 0; ; offset += LIMIT_LIST) {
+    const { data: potongan } = await admin.storage
+      .from(BUCKET)
+      .list(materiId, { limit: LIMIT_LIST, offset });
+    if (!potongan || potongan.length === 0) break;
+    lama.push(...potongan);
+    if (potongan.length < LIMIT_LIST) break;
+  }
+  if (lama.length > 0) {
     const { error: hapus } = await admin.storage
       .from(BUCKET)
       .remove(lama.map((o) => `${materiId}/${o.name}`));
@@ -99,9 +116,21 @@ export async function terbitkanUrlUnggahHalaman(
   const unggahan: Unggahan[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
     const objek = namaObjekHalaman(materiId, halaman);
+    // `{ upsert: true }` WAJIB di sini. Tanpanya storage-js mengirim
+    // `x-upsert: false`, dan PUT ke objek yang barisnya baru saja kita hapus
+    // di ATAS (bukan objek storage-nya — lihat urutan di kepala fungsi ini)
+    // akan ditolak bila objek lama itu berada DI LUAR seratus pertama yang
+    // sempat dihapus `.remove()` sebelum perbaikan `.list()` di atas — persis
+    // kombinasi yang membuat unggahan ulang e-book >100 halaman gagal
+    // permanen: halaman 101 bertabrakan dengan objek lama yang masih ada,
+    // seluruh proses throw, dan `catatHalamanMateri` di bawah tidak pernah
+    // sempat jalan sehingga materi berakhir NOL halaman. Path objeknya tetap
+    // ditentukan server (lihat dokblok fungsi ini) — `upsert` hanya mengizinkan
+    // PUT menimpa path yang KITA sendiri namai, bukan membiarkan browser
+    // memilih path.
     const { data, error } = await admin.storage
       .from(BUCKET)
-      .createSignedUploadUrl(objek);
+      .createSignedUploadUrl(objek, { upsert: true });
     if (error || !data) {
       return { ok: false, pesan: "Gagal menyiapkan unggahan. Coba lagi." };
     }
