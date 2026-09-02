@@ -108,3 +108,66 @@ describe("route halaman — objek seed sungguhan ada di storage (fix ronde 1)", 
     expect(webpTag).toBe("WEBP");
   });
 });
+
+/**
+ * Objek seed sungguhan untuk materi TERKUNCI juga (fix ronde 2, Finding 1).
+ *
+ * Draf pertama fix ronde 1 memberi `…704` ("Panduan ASI Perah") satu baris
+ * `material_pages` dengan `objek` FIKTIF, beralasan "materi ini tidak pernah
+ * bisa dibuka siapa pun di data demo". Itu SALAH: `tests/admin-sesi-catatan
+ * .test.ts` ("materi layanan itu ikut TERBUKA untuk klien") membuktikan
+ * menandai satu sesi Lactation Hero SIAPA PUN "selesai" — aksi admin
+ * sehari-hari dan SEARAH, karena `DELETE sessions` sudah dicabut — membuka
+ * `…704` seketika lewat cabang otomatis `berhak_isi_materi`. Baris dengan
+ * objek fiktif berarti pembukaan itu berakhir gambar 404 permanen.
+ *
+ * Describe ini menutup celah itu dengan pola PERSIS sama dengan describe di
+ * atas untuk `…702`: memanggil rute sungguhan, bukan berhenti di baris DB.
+ * Berhak dibuka lewat PENUGASAN (bukan menyelesaikan sesi Lactation Hero
+ * sungguhan) — keduanya sama-sama dievaluasi `berhak_isi_materi`, dan
+ * penugasan tidak mengganggu statistik sesi/progres Ananda yang dihitung
+ * persis oleh banyak test lain (mis. tests/passport-seed-demo.test.ts).
+ */
+describe("route halaman — objek seed sungguhan ada di storage untuk materi TERKUNCI juga (fix ronde 2)", () => {
+  const MATERI_TERKUNCI_EBOOK = "77777777-7777-7777-7777-777777777704";
+  const ANANDA_CLIENT_ID = "44444444-4444-4444-4444-444444444401";
+
+  it("sesudah ditugaskan, GET halaman 1 -> 200 image/webp sungguhan, bukan 404", async () => {
+    const { createAdminSupabase } = await import("@/lib/supabase/admin");
+    const admin = createAdminSupabase();
+    const { data: staf } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin")
+      .single();
+    const { error: eTugas } = await admin.from("material_assignments").insert({
+      material_id: MATERI_TERKUNCI_EBOOK,
+      client_id: ANANDA_CLIENT_ID,
+      ditugaskan_oleh: staf!.id,
+    });
+    if (eTugas) throw eTugas;
+
+    try {
+      const { GET } = await import("@/app/api/materi/[id]/halaman/[n]/route");
+      const res = await GET(new Request("http://x/"), {
+        params: Promise.resolve({ id: MATERI_TERKUNCI_EBOOK, n: "1" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe("image/webp");
+
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      expect(bytes.length).toBeGreaterThan(0);
+      const magic = Buffer.from(bytes.slice(0, 4)).toString("ascii");
+      const webpTag = Buffer.from(bytes.slice(8, 12)).toString("ascii");
+      expect(magic).toBe("RIFF");
+      expect(webpTag).toBe("WEBP");
+    } finally {
+      await admin
+        .from("material_assignments")
+        .delete()
+        .eq("material_id", MATERI_TERKUNCI_EBOOK)
+        .eq("client_id", ANANDA_CLIENT_ID);
+    }
+  });
+});

@@ -95,17 +95,37 @@ async function layananAda(layananId: string): Promise<boolean> {
  * dibuat tautologis. Repo ini pernah kehilangan SELURUH bab materi lewat satu
  * filter longgar (`?urutan=gte.0`); `.eq("material_id", materiId)` di bawah
  * adalah pelajaran itu diterapkan di sini.
+ *
+ * DELETE-nya diperiksa lewat jumlah baris SEBELUM vs SESUDAH, bukan sekadar
+ * `error`. Tidak seperti INSERT (di bawah), tidak ada angka "seharusnya N
+ * baris" yang diketahui lebih dulu untuk DELETE ini — materi boleh memang
+ * tidak punya tautan sama sekali. PostgREST menjawab 200 + [] baik untuk
+ * "tidak ada baris yang cocok" MAUPUN "ada baris tapi RLS menolaknya" — dua
+ * keadaan yang tidak bisa dibedakan hanya dari respons DELETE itu sendiri.
+ * Menghitung dulu (`sebelum`) lalu membandingkan dengan baris yang benar-
+ * benar terhapus (`.select()`) membedakan keduanya: bila keduanya sama,
+ * seluruh baris lama benar-benar hilang; bila lebih kecil, sebagian tertahan
+ * diam-diam.
  */
 async function gantiLayananMateri(
   materiId: string,
   idLayanan: string[],
 ): Promise<Berhasil | Gagal> {
   const supabase = await createServerSupabase();
-  const { error: hapus } = await supabase
+
+  const { count: sebelum } = await supabase
+    .from("material_services")
+    .select("material_id", { count: "exact", head: true })
+    .eq("material_id", materiId);
+
+  const { data: terhapus, error: hapus } = await supabase
     .from("material_services")
     .delete()
-    .eq("material_id", materiId); // radius terikat SATU materi
-  if (hapus) return { ok: false, pesan: "Gagal memperbarui layanan materi." };
+    .eq("material_id", materiId) // radius terikat SATU materi
+    .select("material_id");
+  if (hapus || (terhapus ?? []).length !== (sebelum ?? 0)) {
+    return { ok: false, pesan: "Gagal memperbarui layanan materi." };
+  }
 
   if (idLayanan.length === 0) return { ok: true };
 

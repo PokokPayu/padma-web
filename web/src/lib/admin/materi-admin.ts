@@ -202,11 +202,16 @@ export async function pilihanLayananMateri(): Promise<LayananPilihanMateri[]> {
 export type KlienPilihan = { id: string; nama: string; padmaId: string };
 
 /**
- * Pilihan klien untuk panel penugasan — seluruh klien tertaut akun
- * (`user_id` terisi), diurutkan nama. Klien yang belum diaktivasi TIDAK
- * disaring: penugasan sah dibuat sebelum klien pernah login, ia hanya baru
- * bermakna begitu `berhak_isi_materi()` dievaluasi lewat `auth.uid()` klien
- * itu sendiri.
+ * Pilihan klien untuk panel penugasan — SELURUH baris `clients`, diurutkan
+ * nama, TANPA menyaring `user_id`. `clients.user_id` boleh NULL (klien yang
+ * didaftarkan tapi belum menukar tautan aktivasi), dan itu bukan alasan
+ * untuk menyembunyikannya dari daftar pilih: penugasan sah dibuat sebelum
+ * klien pernah login sama sekali — `material_assignments` hanya menyimpan
+ * `client_id`, dan baru bermakna begitu `berhak_isi_materi()` dievaluasi
+ * lewat `auth.uid()` klien itu SENDIRI saat ia benar-benar masuk. Menyaring
+ * klien belum-aktivasi di sini hanya akan memaksa admin menugaskan materi
+ * dalam urutan tertentu (aktivasi dulu, baru boleh assign) tanpa alasan
+ * teknis apa pun.
  */
 export async function pilihanKlien(): Promise<KlienPilihan[]> {
   const supabase = await createServerSupabase();

@@ -73,40 +73,38 @@ insert into material_videos (material_id, url) values
   ('77777777-7777-7777-7777-777777777703','https://vimeo.com/RAHASIA-123');
 
 -- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi; bab teks
--- sudah dibongkar total di Task 11, material_chapters tidak ada lagi). Hanya
--- materi TERBUKA (…702) yang diberi baris `material_pages`: tanpa
--- ini reader-nya akan selalu jatuh ke keadaan "berhak tapi isi belum
--- diunggah" (M10, keadaan 2) walau Ananda sudah menyelesaikan layanannya —
--- padahal seed ini justru dipakai untuk membuktikan keadaan 3 ("berhak DAN
--- ada isinya"). Materi TERKUNCI (…704) sengaja dibiarkan tanpa baris: Ananda
--- tidak berhak sama sekali, jadi RPC `berhak_isi_materi` sudah menutupnya di
--- keadaan 1 sebelum jumlah halamannya pernah relevan.
+-- sudah dibongkar total di Task 11, material_chapters tidak ada lagi).
+-- KEDUA materi ebook demo dapat baris `material_pages` — TERBUKA (…702)
+-- MAUPUN TERKUNCI (…704).
+--
+-- Draf pertama fix ronde 2 membiarkan …704 tanpa baris (atau dengan baris
+-- ber-objek fiktif) dengan alasan "Ananda tidak pernah berhak, jadi tidak
+-- relevan". Itu SALAH, dan `tests/admin-sesi-catatan.test.ts` (test "materi
+-- layanan itu ikut TERBUKA untuk klien") membuktikannya: menandai SATU sesi
+-- Lactation Hero SIAPA PUN "selesai" — aksi admin sehari-hari, dan SEARAH
+-- karena `DELETE sessions` sudah dicabut — langsung membuka …704 lewat
+-- cabang otomatis `berhak_isi_materi`, tanpa satu pun langkah tambahan.
+-- Materi yang aktif tanpa objek sungguhan di baliknya berarti pembukaan itu
+-- berakhir gambar 404 permanen bagi klien yang bersangkutan — persis kelas
+-- bug yang rencana ini bongkar berulang kali: kartu yang menjanjikan isi
+-- padahal kosong.
+--
 -- `objek` di sini MEMANG menunjuk berkas sungguhan di bucket privat
--- `materi-halaman` — bukan path yang hanya kebetulan berbentuk benar. SQL
--- murni tidak bisa menaruh BYTE gambar ke storage (itu jalur Storage API),
--- jadi ketiga objeknya diunggah terpisah oleh `unggahHalamanMateriDemo()` di
+-- `materi-halaman` untuk KEDUA materi — bukan path yang hanya kebetulan
+-- berbentuk benar, dan TIDAK ADA lagi baris yang objeknya fiktif. SQL murni
+-- tidak bisa menaruh BYTE gambar ke storage (itu jalur Storage API), jadi
+-- keempat objeknya diunggah terpisah oleh `unggahHalamanMateriDemo()` di
 -- scripts/seed-users.ts, sesudah baris ini ada (satu-satunya urutan yang
 -- mungkin: RLS `berhak_isi_materi` pada `material_pages` butuh baris DB-nya
--- lebih dulu). Ini bukan kerapian kosmetik: sebelum diperbaiki, ketiga baris
--- ini menunjuk objek yang tidak pernah diunggah, dan membuka e-book ini di
--- dev menampilkan tiga `<img>` yang semuanya 404 — reader yang tampak rusak,
+-- lebih dulu). Ini bukan kerapian kosmetik: sebelum diperbaiki, baris-baris
+-- ini menunjuk objek yang tidak pernah diunggah, dan membuka salah satu
+-- e-book ini di dev menampilkan `<img>` 404 — reader yang tampak rusak,
 -- persis kelas masalah "layar menjanjikan sesuatu yang tidak benar" yang
 -- dirapikan berulang kali di rencana ini. Jumlah halaman & dimensi di sini
--- WAJIB SAMA PERSIS dengan `HALAMAN_DEMO`/`LEBAR_DEMO`/`TINGGI_DEMO` di
+-- WAJIB SAMA PERSIS dengan `MATERI_EBOOK_DEMO`/`LEBAR_DEMO`/`TINGGI_DEMO` di
 -- scripts/seed-users.ts.
 insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
   ('77777777-7777-7777-7777-777777777702',1,'77777777-7777-7777-7777-777777777702/0001.webp',1600,2263),
   ('77777777-7777-7777-7777-777777777702',2,'77777777-7777-7777-7777-777777777702/0002.webp',1600,2263),
-  ('77777777-7777-7777-7777-777777777702',3,'77777777-7777-7777-7777-777777777702/0003.webp',1600,2263);
-
--- Materi TERKUNCI (…704) MEMANG dapat baris juga — beda dari draf pertama
--- migration Task 10, dan sengaja. "Aktif" tanpa satu pun halaman adalah
--- persis kelas bug yang rencana ini bongkar berulang kali: kartu yang
--- menjanjikan isi padahal kosong. Objeknya BOLEH fiktif (tidak diunggah
--- `unggahHalamanMateriDemo()`) karena — TIDAK SEPERTI …702 — materi ini
--- terbukti tidak pernah bisa dibuka siapa pun di data demo: Ananda tidak
--- pernah menjalani Lactation Hero, jadi `berhak_isi_materi` menutupnya di
--- keadaan 1 SEBELUM baris ini pernah dijawab ke klien mana pun. Tidak ada
--- `<img>` yang bisa 404 kalau rute halamannya tidak pernah tercapai.
-insert into material_pages (material_id, halaman, objek, lebar, tinggi) values
+  ('77777777-7777-7777-7777-777777777702',3,'77777777-7777-7777-7777-777777777702/0003.webp',1600,2263),
   ('77777777-7777-7777-7777-777777777704',1,'77777777-7777-7777-7777-777777777704/0001.webp',1600,2263);

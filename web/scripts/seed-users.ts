@@ -26,25 +26,39 @@ export const RINA_CLIENT_ID = "44444444-4444-4444-4444-444444444402";
 const BUCKET_MATERI_HALAMAN = "materi-halaman";
 
 /**
- * Halaman e-book demo — Task 10, ronde perbaikan 1.
+ * Halaman e-book demo — Task 10, ronde perbaikan 1; diperluas ke KEDUA
+ * materi ebook demo di Task 11 fix ronde 2.
  *
- * `supabase/seed.sql` menulis TIGA baris `material_pages` untuk materi
- * "Panduan Siklus Subur" (…702), tapi SQL murni tidak bisa menaruh BYTE
- * gambar ke bucket storage — itu jalur Storage API, bukan `insert`. Sebelum
- * perbaikan ini baris-baris itu menunjuk objek yang tidak pernah ada, jadi
- * membuka e-book itu di dev menampilkan tiga `<img>` yang semuanya 404 —
+ * `supabase/seed.sql` menulis baris `material_pages` untuk kedua materi
+ * ebook demo — "Panduan Siklus Subur" (…702, terbuka) DAN "Panduan ASI
+ * Perah" (…704, terkunci) — tapi SQL murni tidak bisa menaruh BYTE gambar ke
+ * bucket storage — itu jalur Storage API, bukan `insert`. Tanpa objek
+ * sungguhan di sini, membuka salah satu e-book itu menampilkan `<img>` 404 —
  * reader yang tampak rusak persis kelas masalah yang dirapikan berulang kali
  * di rencana ini (layar menjanjikan sesuatu yang tidak benar). Objek
  * sungguhan diunggah DI SINI, lewat service role, sesudah `db reset`
  * menjalankan `seed.sql` — satu-satunya urutan yang mungkin.
  *
- * Materi id, jumlah halaman (3), dan dimensi (1600×2263) WAJIB SAMA PERSIS
- * dengan baris `material_pages` di `supabase/seed.sql` — keduanya
- * mendeskripsikan objek yang sama dari dua sisi (baris DB vs. byte storage)
- * dan harus disepakati manual karena SQL tidak bisa memanggil `sharp`.
+ * `…704` BUKAN pengecualian yang "aman dibiarkan fiktif" — draf pertama
+ * fix ronde 2 beralasan begitu ("Ananda tidak pernah berhak, jadi tidak
+ * relevan") dan reviewer membantahnya dengan test yang SUDAH ADA di repo
+ * ini: `tests/admin-sesi-catatan.test.ts` ("materi layanan itu ikut TERBUKA
+ * untuk klien") membuktikan menandai SATU sesi Lactation Hero SIAPA PUN
+ * selesai — aksi admin sehari-hari, dan searah karena `DELETE sessions`
+ * sudah dicabut — langsung membuka `…704` lewat cabang otomatis
+ * `berhak_isi_materi`. Baris tanpa objek sungguhan berarti pembukaan itu
+ * berakhir gambar 404 permanen, bukan cuma teoretis.
+ *
+ * Materi id, jumlah halaman, dan dimensi (1600×2263) WAJIB SAMA PERSIS
+ * dengan baris `material_pages` di `supabase/seed.sql` untuk id yang sama —
+ * keduanya mendeskripsikan objek yang sama dari dua sisi (baris DB vs. byte
+ * storage) dan harus disepakati manual karena SQL tidak bisa memanggil
+ * `sharp`.
  */
-const MATERI_TERBUKA_EBOOK_ID = "77777777-7777-7777-7777-777777777702";
-const HALAMAN_DEMO = [1, 2, 3];
+const MATERI_EBOOK_DEMO = [
+  { id: "77777777-7777-7777-7777-777777777702", jumlahHalaman: 3 },
+  { id: "77777777-7777-7777-7777-777777777704", jumlahHalaman: 1 },
+];
 const LEBAR_DEMO = 1600;
 const TINGGI_DEMO = 2263;
 
@@ -58,37 +72,39 @@ const TINGGI_DEMO = 2263;
  * rute `/api/materi/[id]/halaman/[n]`, bukan mutu visualnya.
  */
 async function unggahHalamanMateriDemo(admin: SupabaseClient) {
-  for (const halaman of HALAMAN_DEMO) {
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${LEBAR_DEMO}" height="${TINGGI_DEMO}">` +
-      `<rect width="100%" height="100%" fill="#EFEDE4"/>` +
-      `<text x="50%" y="50%" font-family="serif" font-size="160" fill="#132518" ` +
-      `text-anchor="middle" dominant-baseline="middle">Halaman ${halaman}</text>` +
-      `</svg>`;
+  for (const { id: materiId, jumlahHalaman } of MATERI_EBOOK_DEMO) {
+    for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${LEBAR_DEMO}" height="${TINGGI_DEMO}">` +
+        `<rect width="100%" height="100%" fill="#EFEDE4"/>` +
+        `<text x="50%" y="50%" font-family="serif" font-size="160" fill="#132518" ` +
+        `text-anchor="middle" dominant-baseline="middle">Halaman ${halaman}</text>` +
+        `</svg>`;
 
-    const buffer = await sharp({
-      create: {
-        width: LEBAR_DEMO,
-        height: TINGGI_DEMO,
-        channels: 3,
-        background: "#EFEDE4",
-      },
-    })
-      .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
-      // 82 mengikuti nilai yang sama dipakai `bakarWatermark`
-      // (src/lib/materi/watermark.ts) — bukan konstanta `KUALITAS_WEBP` di
-      // rasterisasi.ts, yang satuannya 0–1 untuk `canvas.toBlob` peramban,
-      // bukan 0–100 yang diminta `sharp`.
-      .webp({ quality: 82 })
-      .toBuffer();
+      const buffer = await sharp({
+        create: {
+          width: LEBAR_DEMO,
+          height: TINGGI_DEMO,
+          channels: 3,
+          background: "#EFEDE4",
+        },
+      })
+        .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+        // 82 mengikuti nilai yang sama dipakai `bakarWatermark`
+        // (src/lib/materi/watermark.ts) — bukan konstanta `KUALITAS_WEBP` di
+        // rasterisasi.ts, yang satuannya 0–1 untuk `canvas.toBlob` peramban,
+        // bukan 0–100 yang diminta `sharp`.
+        .webp({ quality: 82 })
+        .toBuffer();
 
-    const { error } = await admin.storage
-      .from(BUCKET_MATERI_HALAMAN)
-      .upload(namaObjekHalaman(MATERI_TERBUKA_EBOOK_ID, halaman), buffer, {
-        contentType: "image/webp",
-        upsert: true,
-      });
-    if (error) throw error;
+      const { error } = await admin.storage
+        .from(BUCKET_MATERI_HALAMAN)
+        .upload(namaObjekHalaman(materiId, halaman), buffer, {
+          contentType: "image/webp",
+          upsert: true,
+        });
+      if (error) throw error;
+    }
   }
 }
 
