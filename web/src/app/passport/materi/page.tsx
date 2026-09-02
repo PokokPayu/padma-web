@@ -7,9 +7,14 @@ export const metadata = { title: "Materi Panduan" };
 
 // Halaman DAFTAR sengaja tidak pernah menyentuh pengambil detail materi:
 // keterbukaan tiap materi disimpulkan dari ada/tidaknya baris tergating yang
-// dikembalikan RLS, bukan dari isinya. Satu pemanggilan detail di sini sudah
-// cukup untuk menarik seluruh isi bab dan URL video ke payload halaman yang
-// paling sering dibuka — gembok di kartu akan tinggal gambar.
+// dikembalikan RLS, bukan dari isinya. Pengambil detail itu (dipakai reader,
+// bukan di sini) memilih URL pemutar video sungguhan — secret nyata bila
+// materinya video — bersama nomor & dimensi halaman e-book. Baris halaman
+// itu SENDIRI bukan "isi" yang bisa dibaca (kunci objeknya tidak pernah ikut
+// terpilih; byte gambar hanya terbaca lewat rute bergerbang per halaman,
+// terpisah dari payload RSC ini) — tapi URL video-nya tetap penuh. Satu
+// pemanggilan detail di sini sudah cukup menarik URL itu ke payload halaman
+// yang paling sering dibuka — gembok di kartu akan tinggal gambar.
 export default async function HalamanMateri() {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
@@ -62,8 +67,10 @@ export default async function HalamanMateri() {
           // memang bukan tautan, supaya tidak ada yang bisa diikuti.
           return m.terbuka ? (
             // prefetch dibiarkan pada nilai bawaannya untuk rute dinamis:
-            // memaksanya `true` akan menarik isi bab ke Client Cache sebelum
-            // kartu ini benar-benar diklik.
+            // memaksanya `true` akan menarik pengambil detail — dan lewat itu
+            // URL video sungguhan bila materinya video (lihat komentar
+            // dokblok di atas) — ke Client Cache sebelum kartu ini benar-benar
+            // diklik.
             <Link
               key={m.id}
               {...penanda}

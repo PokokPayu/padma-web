@@ -498,7 +498,11 @@ describe("materi — pagar sumber", () => {
 
   it("halaman daftar tidak pernah menyentuh pengambil detail materi", () => {
     // Satu pemanggilan `ambilMateriDetail` di halaman daftar sudah cukup untuk
-    // menarik seluruh gambar halaman ke payload halaman yang paling sering dibuka.
+    // menarik URL pemutar video sungguhan (materi bertipe video) ke payload
+    // halaman yang paling sering dibuka — bukan "gambar halaman": pengambil
+    // detail itu tidak pernah memilih kunci objek e-book, hanya nomor & dimensi
+    // halamannya; byte gambar tetap terkunci di belakang rute bergerbang
+    // per halaman.
     expect(sumberDaftar).not.toContain("ambilMateriDetail");
     expect(sumberDaftar).not.toContain("material_pages");
     expect(sumberDaftar).not.toContain("material_videos");

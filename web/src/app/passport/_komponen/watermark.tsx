@@ -1,8 +1,22 @@
-// Deterrent, bukan proteksi mutlak: teks bab tetap terbaca di View Source dan
-// DevTools karena ia memang ikut terkirim bersama halaman, dan tidak ada
-// platform mana pun yang bisa mencegah tangkapan layar. Guna watermark adalah
-// melacak SUMBER bila satu tangkapan layar tersebar — bukan mengunci apa pun.
-// Spec sudah jujur soal ini; komponen ini tidak boleh dijual lebih dari itu.
+// Deterrent, bukan proteksi mutlak — itu tidak berubah, hanya APA yang
+// dijaganya. `material_chapters` sudah dibongkar (migration
+// materi_hapus_bab_teks / Task 11): komponen ini TIDAK LAGI dipakai reader
+// bab teks (lenyap bersamanya) maupun reader e-book — halaman PDF membakar
+// watermark-nya sendiri, per piksel, DI SERVER (lihat
+// src/lib/materi/watermark.ts), dan `reader-pdf.tsx` tidak pernah
+// mengimpor komponen ini. Satu-satunya pemanggil yang tersisa sekarang
+// adalah cabang VIDEO di `passport/materi/[id]/page.tsx`.
+//
+// Hari ini cabang itu belum mengirim apa pun sensitif ke payload: belum ada
+// penyedia video terpasang, jadi tidak ada URL pemutar yang ikut terkirim
+// (lihat komentar "Kesiapan tidak boleh dikarang" di pemanggilnya) —
+// watermark ini murni melapisi kartu placeholder untuk sementara. Begitu
+// pemutar sungguhan terpasang, kartu itu akan membawa isi (URL/iframe
+// penyedia) yang ikut terkirim bersama halaman dan terbaca lewat View
+// Source/DevTools — persis seperti teks bab dulu — dan gunanya kembali
+// seperti semula: melacak SUMBER bila satu tangkapan layar tersebar, bukan
+// mengunci apa pun. Tidak ada platform yang bisa mencegah tangkapan layar;
+// komponen ini tidak boleh dijual lebih dari itu.
 export function Watermark({ nama, padmaId }: { nama: string; padmaId: string }) {
   return (
     <div
