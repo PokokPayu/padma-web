@@ -1,5 +1,12 @@
 # Materi E-Book PDF — Implementation Plan
 
+> **STATUS: SELESAI** — seluruh 12 task plus review akhir branch tuntas di branch `materi-ebook-pdf`.
+> Checkbox `- [ ]` di bawah **tidak dipelihara** selama eksekusi (sama seperti lima rencana v1
+> sebelumnya di repo ini); jangan dibaca sebagai "belum dikerjakan". Sumber kebenaran progres,
+> ruling, dan utang yang dibawa sadar: `.superpowers/sdd/2026-08-31-padma-materi-ebook-pdf/progress.md`.
+> Diverifikasi ulang 4 September 2026: `tsc --noEmit` bersih, Vitest 1430/1430 di 79 berkas,
+> E2E 123/123, `next build` sukses.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Mengganti e-book berbasis bab teks dengan e-book berbasis PDF yang dirasterisasi menjadi gambar halaman ber-watermark per-pasien, plus gating baru (banyak layanan + penugasan manual).
