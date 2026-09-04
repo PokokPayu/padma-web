@@ -181,7 +181,7 @@ export function epochDariCapWaktu(capWaktu: string): number | null {
 - [ ] **Step 4: Jalankan test, pastikan HIJAU**
 
 Run: `cd web && npx vitest run tests/backup-nama-objek.test.ts`
-Expected: PASS, 6 test.
+Expected: PASS, 7 test.
 
 - [ ] **Step 5: Seluruh suite tetap hijau & typecheck**
 
@@ -255,6 +255,17 @@ describe("retensi", () => {
     expect(pilihObjekKedaluwarsa(asing, SEKARANG)).toEqual([]);
   });
 
+  it("TIDAK PERNAH menghapus objek bercap waktu mustahil (tanggal tidak pernah ada)", () => {
+    // Kunci bentuknya sah (cocok POLA_KUNCI) tapi tanggalnya mustahil — bulan 13,
+    // hari 32, menit 60, dll. epochDariCapWaktu mengembalikan null, dan guard
+    // `if (ms === null) return false;` adalah satu-satunya yang mencegah null
+    // dikoersi menjadi 0 dalam perbandingan numerik. Tanpa guard itu, 0 < batas
+    // (batas negatif untuk epoch 2020-an) bernilai true, dan objek rusak itu
+    // dipilih untuk dihapus permanen — persis arah bencana yang kita hindari.
+    const mustahil = "db/2026/13/padma-20261332-999999Z.dump.age";
+    expect(pilihObjekKedaluwarsa([mustahil], SEKARANG)).toEqual([]);
+  });
+
   it("TIDAK PERNAH menghapus objek bercap waktu masa depan", () => {
     // Cap waktu di masa depan berarti jam runner atau jam pembuatnya kacau.
     // Menghapus berdasar jam yang kacau adalah cara kehilangan backup tersehat.
@@ -307,10 +318,18 @@ const MS_PER_HARI = 24 * 60 * 60 * 1000;
 /**
  * Memilih objek yang boleh dihapus.
  *
- * SELURUH ketidakpastian berujung MEMPERTAHANKAN. Kunci tak terbaca, cap waktu
- * mustahil, jam kacau, konfigurasi aneh — semuanya menghasilkan "jangan hapus".
- * Kelebihan objek di R2 berbiaya beberapa megabyte; menghapus salinan sehat
- * terakhir tidak bisa dibatalkan.
+ * Ketidakpastian pada KUNCI berujung MEMPERTAHANKAN: kunci tak terbaca, cap
+ * waktu mustahil, `sekarangEpochMs`/`hariSimpan` tidak masuk akal (NaN,
+ * infinity, <= 0) — semuanya menghasilkan "jangan hapus".
+ *
+ * Untuk jam skew, fungsi ini HANYA menjaga arah MUNDUR: objek bercap waktu
+ * di masa depan relatif `sekarangEpochMs` ditahan (guard `ms > sekarangEpochMs`
+ * di bawah). Skew MAJU — jam mesin yang melompat ke depan — TIDAK dijaga di
+ * sini: itu mendorong `batas` melewati seluruh cap waktu tersimpan, dan
+ * fungsi murni ini akan memilih SEMUANYA untuk dihapus, karena `sekarang` dan
+ * `batas` dipercaya apa adanya. Pagar untuk kasus itu ada satu lapis di atas
+ * pemanggil, di `unggah.ts` (`MAKS_HAPUS_PER_JALAN`), yang menolak menghapus
+ * bila jumlah objek yang terpilih tidak masuk akal untuk satu jalan normal.
  */
 export function pilihObjekKedaluwarsa(
   kunci: readonly string[],
@@ -336,7 +355,7 @@ export function pilihObjekKedaluwarsa(
 - [ ] **Step 4: Jalankan test, pastikan HIJAU**
 
 Run: `cd web && npx vitest run tests/backup-retensi.test.ts`
-Expected: PASS, 9 test.
+Expected: PASS, 10 test.
 
 - [ ] **Step 5: Buktikan asersi batasnya lolos-mutasi**
 
@@ -369,7 +388,7 @@ git commit -m "feat(backup): pemilihan objek kedaluwarsa yang gagal-aman ke arah
 
 **Interfaces:**
 - Consumes: `kunciObjekBackup`, `PREFIKS_BACKUP` (Task 1); `pilihObjekKedaluwarsa` (Task 2).
-- Produces: `interface KlienObjek { daftar(prefiks: string): Promise<string[]>; unggah(kunci: string, isi: Uint8Array): Promise<void>; hapus(kunci: string): Promise<void> }`, `type HasilUnggah = { kunciBaru: string; dihapus: string[] }`, `unggahDanTerapkanRetensi(klien: KlienObjek, opsi: { capWaktu: string; isi: Uint8Array; sekarangEpochMs: number; hariSimpan?: number }): Promise<HasilUnggah>`.
+- Produces: `interface KlienObjek { daftar(prefiks: string): Promise<string[]>; unggah(kunci: string, isi: Uint8Array): Promise<void>; hapus(kunci: string): Promise<void> }`, `type HasilUnggah = { kunciBaru: string; dihapus: string[] }`, `MAKS_HAPUS_PER_JALAN: number` (F3 whole-branch review — pagar keras yang menolak menghapus dan melempar bila jumlah objek kedaluwarsa terpilih melebihi angka ini dalam satu jalan), `unggahDanTerapkanRetensi(klien: KlienObjek, opsi: { capWaktu: string; isi: Uint8Array; sekarangEpochMs: number; hariSimpan?: number }): Promise<HasilUnggah>`.
 
 - [ ] **Step 1: Pasang dependensi**
 
@@ -383,7 +402,9 @@ Buat `web/tests/backup-unggah.test.ts`:
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { unggahDanTerapkanRetensi, type KlienObjek } from "@/lib/backup/unggah";
+import {
+  unggahDanTerapkanRetensi, MAKS_HAPUS_PER_JALAN, type KlienObjek,
+} from "@/lib/backup/unggah";
 import { kunciObjekBackup, epochDariCapWaktu } from "@/lib/backup/nama-objek";
 
 const SEKARANG = epochDariCapWaktu("20260904-200000Z")!;
@@ -393,12 +414,20 @@ const CAP_BARU = "20260904-200000Z";
 function klienPalsu(awal: string[] = []) {
   const isi = new Set(awal);
   const jejak: string[] = [];
+  // prefiksTerekam menangkap argumen `daftar()` apa adanya (termasuk undefined
+  // bila dipanggil tanpa argumen) — klien palsu sengaja TIDAK mengabaikannya,
+  // supaya tes bisa menuntut prefiks yang benar-benar dipakai pemanggil.
+  let prefiksTerekam: string | undefined;
   const klien: KlienObjek = {
-    async daftar() { jejak.push("daftar"); return [...isi]; },
+    async daftar(prefiks) {
+      prefiksTerekam = prefiks;
+      jejak.push("daftar");
+      return [...isi];
+    },
     async unggah(k) { jejak.push(`unggah:${k}`); isi.add(k); },
     async hapus(k) { jejak.push(`hapus:${k}`); isi.delete(k); },
   };
-  return { klien, isi, jejak };
+  return { klien, isi, jejak, get prefiksTerekam() { return prefiksTerekam; } };
 }
 
 describe("unggah + retensi", () => {
@@ -450,12 +479,39 @@ describe("unggah + retensi", () => {
     expect(isi.has(hasil.kunciBaru)).toBe(true);
   });
 
+  it("menolak menghapus SATU PUN dan melempar bila jam skew MAJU membuat retensi memilih terlalu banyak objek", async () => {
+    // retensi.ts sengaja hanya menjaga skew MUNDUR (lihat komentarnya): jam
+    // yang melompat jauh ke DEPAN mendorong `batas` melewati SELURUH cap
+    // waktu tersimpan, sehingga pilihObjekKedaluwarsa memilih SEMUANYA untuk
+    // dihapus. Bucket di sini TIDAK kosong — beda dari tes "TIDAK PERNAH
+    // menghapus objek yang baru saja diunggah" di atas, yang mulai dari
+    // bucket kosong dan karena itu tidak pernah menyadari bucket yang berisi
+    // riwayat akan terkuras habis. Pagar MAKS_HAPUS_PER_JALAN adalah satu-
+    // satunya yang mencegah itu di sini.
+    const riwayat = Array.from({ length: MAKS_HAPUS_PER_JALAN + 1 }, (_, i) =>
+      kunciObjekBackup(`202601${String(i + 1).padStart(2, "0")}-200000Z`));
+    const { klien, isi } = klienPalsu(riwayat);
+    const jamKacauMajuJauh = SEKARANG + 400 * 24 * 60 * 60 * 1000;
+    await expect(unggahDanTerapkanRetensi(klien, {
+      capWaktu: CAP_BARU, isi: ISI, sekarangEpochMs: jamKacauMajuJauh,
+    })).rejects.toThrow(/MAKS_HAPUS_PER_JALAN|batas aman/);
+    // TIDAK SATU PUN objek lama boleh hilang, termasuk objek baru yang
+    // sempat terunggah sebelum penghapusan dibatalkan.
+    for (const k of riwayat) expect(isi.has(k)).toBe(true);
+    expect(isi.has(kunciObjekBackup(CAP_BARU))).toBe(true);
+  });
+
   it("mendaftar objek dengan prefiks backup", async () => {
-    const { klien, jejak } = klienPalsu();
-    await unggahDanTerapkanRetensi(klien, {
+    // KOREKSI: brief asli hanya menuntut jejak memuat "daftar" — itu tetap
+    // hijau meski dipanggil dengan prefiks salah atau tanpa argumen sama
+    // sekali. Di sini prefiks yang benar-benar diterima klien.daftar()
+    // direkam dan dituntut persis "db/", supaya tes ini benar-benar
+    // menjaga kontrak pemanggilan, bukan cuma keberadaan panggilan.
+    const palsu = klienPalsu();
+    await unggahDanTerapkanRetensi(palsu.klien, {
       capWaktu: CAP_BARU, isi: ISI, sekarangEpochMs: SEKARANG,
     });
-    expect(jejak).toContain("daftar");
+    expect(palsu.prefiksTerekam).toBe("db/");
   });
 });
 ```
@@ -488,6 +544,23 @@ export interface KlienObjek {
 
 export type HasilUnggah = { kunciBaru: string; dihapus: string[] };
 
+/**
+ * Pagar keras terhadap retensi yang salah arah — mis. jam skew MAJU lebih
+ * dari `HARI_SIMPAN` hari, yang mendorong `batas` di `retensi.ts` melewati
+ * SELURUH cap waktu tersimpan (lihat komentar di sana: fungsi itu sengaja
+ * hanya menjaga skew mundur, bukan maju). Tanpa pagar ini, satu jalan dengan
+ * jam yang kacau menghabiskan seluruh riwayat backup dalam sekali jalan.
+ *
+ * Operasi normal menghapus 0 atau 1 objek per hari (satu backup kedaluwarsa
+ * per unggahan). Angka 5 memberi ruang untuk beberapa jalan yang terlewat
+ * berturut-turut (libur, runner gagal, dll.) sebelum jumlah yang terpilih
+ * dianggap mencurigakan. Melebihi ini berarti BERHENTI dan biarkan operator
+ * menghapus manual — arah gagalnya tetap MEMPERTAHANKAN (spec, retensi.ts):
+ * operator selalu bisa menghapus lebih, tidak pernah bisa mengembalikan yang
+ * sudah terhapus.
+ */
+export const MAKS_HAPUS_PER_JALAN = 5;
+
 export async function unggahDanTerapkanRetensi(
   klien: KlienObjek,
   opsi: {
@@ -508,6 +581,17 @@ export async function unggahDanTerapkanRetensi(
     // tidak boleh menjadi korban pembersihannya sendiri.
     .filter((k) => k !== kunciBaru);
 
+  if (dihapus.length > MAKS_HAPUS_PER_JALAN) {
+    // TIDAK menghapus SATU PUN dari daftar ini — unggahan di atas sudah
+    // sukses dan tetap aman, hanya penghapusannya yang dibatalkan.
+    throw new Error(
+      `Retensi memilih ${dihapus.length} objek untuk dihapus dalam satu jalan, ` +
+      `melebihi batas aman MAKS_HAPUS_PER_JALAN (${MAKS_HAPUS_PER_JALAN}). ` +
+      `Dibatalkan, TIDAK ada yang dihapus — kemungkinan jam mesin kacau ` +
+      `(skew maju) atau konfigurasi retensi salah. Periksa manual sebelum menghapus.`,
+    );
+  }
+
   for (const k of dihapus) await klien.hapus(k);
 
   return { kunciBaru, dihapus };
@@ -517,7 +601,7 @@ export async function unggahDanTerapkanRetensi(
 - [ ] **Step 5: Jalankan test, pastikan HIJAU**
 
 Run: `cd web && npx vitest run tests/backup-unggah.test.ts`
-Expected: PASS, 5 test.
+Expected: PASS, 6 test.
 
 - [ ] **Step 6: Tulis CLI-nya**
 
@@ -549,57 +633,73 @@ function wajib(nama: string): string {
   return nilai;
 }
 
-const [berkas, capWaktu] = process.argv.slice(2);
-if (berkas === undefined || capWaktu === undefined) {
-  console.error("Pakai: unggah-r2.ts <berkas> <capWaktu YYYYMMDD-HHMMSSZ>");
-  process.exit(1);
+// Dibungkus dalam fungsi async, BUKAN top-level await: web/package.json
+// tidak menyetel "type": "module", jadi tsx mentranspilasi berkas ini ke
+// CommonJS, dan esbuild menolak top-level await di format cjs
+// (ERR_REQUIRE_ASYNC_MODULE). Menambahkan "type": "module" akan mengenai
+// seluruh aplikasi Next.js, jadi pagar ini dipasang di sini saja.
+async function utama() {
+  const [berkas, capWaktu] = process.argv.slice(2);
+  if (berkas === undefined || capWaktu === undefined) {
+    console.error("Pakai: unggah-r2.ts <berkas> <capWaktu YYYYMMDD-HHMMSSZ>");
+    process.exit(1);
+  }
+
+  const BUCKET = wajib("R2_BUCKET_BACKUP");
+  const s3 = new S3Client({
+    region: "auto",
+    endpoint: `https://${wajib("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: wajib("R2_ACCESS_KEY_ID"),
+      secretAccessKey: wajib("R2_SECRET_ACCESS_KEY"),
+    },
+  });
+
+  const klien: KlienObjek = {
+    async daftar(prefiks) {
+      const kunci: string[] = [];
+      let token: string | undefined;
+      // Paginasi WAJIB: tanpa ContinuationToken, R2 berhenti di 1000 objek dan
+      // retensi diam-diam melewatkan sisanya.
+      do {
+        const r = await s3.send(new ListObjectsV2Command({
+          Bucket: BUCKET, Prefix: prefiks, ContinuationToken: token,
+        }));
+        for (const o of r.Contents ?? []) if (o.Key !== undefined) kunci.push(o.Key);
+        token = r.IsTruncated === true ? r.NextContinuationToken : undefined;
+      } while (token !== undefined);
+      return kunci;
+    },
+    async unggah(kunci, isi) {
+      await s3.send(new PutObjectCommand({
+        Bucket: BUCKET, Key: kunci, Body: isi,
+        ContentType: "application/octet-stream",
+      }));
+    },
+    async hapus(kunci) {
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: kunci }));
+    },
+  };
+
+  const hasil = await unggahDanTerapkanRetensi(klien, {
+    capWaktu,
+    isi: readFileSync(berkas),
+    sekarangEpochMs: Date.now(),
+  });
+
+  console.log(`Terunggah: ${hasil.kunciBaru}`);
+  console.log(`Dihapus  : ${hasil.dihapus.length} objek kedaluwarsa`);
+  for (const k of hasil.dihapus) console.log(`  - ${k}`);
 }
 
-const BUCKET = wajib("R2_BUCKET_BACKUP");
-const s3 = new S3Client({
-  region: "auto",
-  endpoint: `https://${wajib("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: wajib("R2_ACCESS_KEY_ID"),
-    secretAccessKey: wajib("R2_SECRET_ACCESS_KEY"),
-  },
+// `.catch` eksplisit di sinilah yang benar-benar membuat "menerjemahkan galat
+// menjadi exit code" di komentar atas berkas ini nyata — tanpanya, exit 1
+// hanya kebetulan datang dari perilaku bawaan Node untuk unhandled rejection
+// (dan pesannya berupa stack trace mentah, bukan pesan yang jelas).
+utama().catch((galat: unknown) => {
+  console.error(galat instanceof Error ? galat.message : galat);
+  process.exit(1);
 });
-
-const klien: KlienObjek = {
-  async daftar(prefiks) {
-    const kunci: string[] = [];
-    let token: string | undefined;
-    // Paginasi WAJIB: tanpa ContinuationToken, R2 berhenti di 1000 objek dan
-    // retensi diam-diam melewatkan sisanya.
-    do {
-      const r = await s3.send(new ListObjectsV2Command({
-        Bucket: BUCKET, Prefix: prefiks, ContinuationToken: token,
-      }));
-      for (const o of r.Contents ?? []) if (o.Key !== undefined) kunci.push(o.Key);
-      token = r.IsTruncated === true ? r.NextContinuationToken : undefined;
-    } while (token !== undefined);
-    return kunci;
-  },
-  async unggah(kunci, isi) {
-    await s3.send(new PutObjectCommand({
-      Bucket: BUCKET, Key: kunci, Body: isi,
-      ContentType: "application/octet-stream",
-    }));
-  },
-  async hapus(kunci) {
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: kunci }));
-  },
-};
-
-const hasil = await unggahDanTerapkanRetensi(klien, {
-  capWaktu,
-  isi: readFileSync(berkas),
-  sekarangEpochMs: Date.now(),
-});
-
-console.log(`Terunggah: ${hasil.kunciBaru}`);
-console.log(`Dihapus  : ${hasil.dihapus.length} objek kedaluwarsa`);
-for (const k of hasil.dihapus) console.log(`  - ${k}`);
 ```
 
 - [ ] **Step 7: Typecheck & seluruh suite**
@@ -654,6 +754,12 @@ concurrency:
   group: backup-db
   cancel-in-progress: false
 
+# Job ini tidak pernah menyentuh GITHUB_TOKEN (tidak ada checkout tulis, tidak
+# ada komentar PR, tidak ada rilis) — jadi ia tidak butuh scope apa pun selain
+# baca repo untuk actions/checkout.
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest
@@ -700,6 +806,7 @@ jobs:
           age --version
 
       - name: Siapkan sumber
+        id: sumber
         env:
           SUMBER: ${{ inputs.sumber }}
           URL_PRODUKSI: ${{ secrets.SUPABASE_DB_URL }}
@@ -709,8 +816,14 @@ jobs:
             if [ -z "${URL_PRODUKSI:-}" ]; then
               echo "::error::Secret SUPABASE_DB_URL belum dipasang."; exit 1
             fi
-            # Nilainya TIDAK pernah dicetak; hanya diteruskan lewat berkas env.
-            echo "URL_SUMBER=$URL_PRODUKSI" >> "$GITHUB_ENV"
+            # Nilainya TIDAK pernah dicetak. Ditaruh sebagai OUTPUT step ini,
+            # BUKAN $GITHUB_ENV: env job-wide masuk ke SETIAP langkah sesudahnya
+            # tanpa diminta — termasuk "npm ci" yang menjalankan install script
+            # dari seluruh dependency tree Next.js. Sebagai output, ia hanya
+            # sampai ke langkah yang secara eksplisit memintanya lewat
+            # `steps.sumber.outputs.url_sumber` di blok env-nya sendiri
+            # (spec §7). TABEL_WAJIB bukan rahasia, boleh tetap job-wide.
+            echo "url_sumber=$URL_PRODUKSI" >> "$GITHUB_OUTPUT"
             echo "TABEL_WAJIB=auth.users,public.clients,public.sessions,public.materials,public.profiles" >> "$GITHUB_ENV"
           else
             psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database sumber_contoh;"
@@ -723,11 +836,13 @@ jobs:
           insert into public.clients values
             ('22222222-2222-2222-2222-222222222222', 'Pasien Contoh');
           SQL
-            echo "URL_SUMBER=$URL_CONTOH" >> "$GITHUB_ENV"
+            echo "url_sumber=$URL_CONTOH" >> "$GITHUB_OUTPUT"
             echo "TABEL_WAJIB=auth.users,public.clients" >> "$GITHUB_ENV"
           fi
 
       - name: Periksa versi klien vs server
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           server=$(psql "$URL_SUMBER" -Atc "show server_version_num")
@@ -744,6 +859,8 @@ jobs:
         run: echo "nilai=$(date -u +%Y%m%d-%H%M%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: pg_dump
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           # Hanya public + auth. Skema terkelola Supabase (vault, pgsodium,
@@ -751,13 +868,26 @@ jobs:
           # peran postgres, dan tak satu pun bisa dipulihkan ke Postgres polos —
           # memasukkannya membuat verifikasi merah karena hal yang bukan masalah.
           # Objek Storage memang di luar scope (spec B3).
+          #
+          # --no-owner/--no-privileges SENGAJA TIDAK dipakai di sini. Dump ini
+          # adalah arsipnya — harus membawa GRANT ke anon/authenticated supaya
+          # sendirian ia masih jadi backend PostgREST yang berfungsi (86 GRANT
+          # di skema ini per pemeriksaan lokal; tanpanya restore menghasilkan
+          # tabel ber-RLS tanpa satu pun privilege untuk peran yang dipakai
+          # PostgREST — setiap request API pulang "permission denied"). Kedua
+          # flag itu justru dipasang di langkah pg_restore verifikasi di bawah,
+          # karena DI SANA target-nya Postgres polos tanpa peran anon/
+          # authenticated — bukan karena grant-nya tidak berguna. JANGAN
+          # pindahkan flag ini kembali ke sini.
           pg_dump "$URL_SUMBER" \
-            --format=custom --no-owner --no-privileges \
+            --format=custom \
             --schema=public --schema=auth \
             --file="padma-${{ steps.cap.outputs.nilai }}.dump"
           ls -lh padma-*.dump
 
       - name: Pulihkan sungguhan lalu verifikasi
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database verifikasi;"
@@ -772,22 +902,42 @@ jobs:
           echo "--- 20 baris pertama restore.log ---"
           head -20 restore.log || true
 
-          total=0
+          # Ambang lama ("total -eq 0") buta terhadap dump yang kehilangan sebagian
+          # besar barisnya selama sisanya tidak nol (mis. kehilangan 90% baris tetap
+          # lolos). Sebagai gantinya kita bandingkan jumlah baris hasil restore
+          # terhadap jumlah baris di SUMBER — itu menangkap kehilangan data berapa
+          # pun proporsinya. JANGAN sederhanakan ini kembali jadi ambang "-eq 0":
+          # basis data produksi PADMA bisa sungguh-sungguh nol pasien (klinik baru,
+          # belum ada yang mendaftar), dan pembandingan di bawah menangani itu lewat
+          # kasus sumber=0 & pulih=0 secara eksplisit (peringatan, bukan galat) —
+          # bukan lewat ambang mutlak yang tidak bisa membedakan "sumber memang
+          # kosong" dari "dump kehilangan data". Bila ada baris masuk ke sumber di
+          # antara pg_dump dan penghitungan ini, arah gagalnya tetap aman: merah
+          # palsu (total_sumber tampak lebih besar dari isi dump), bukan hijau palsu.
+          total_sumber=0
+          total_pulih=0
           for t in ${TABEL_WAJIB//,/ }; do
             ada=$(psql "$URL_VERIFIKASI" -Atc "select to_regclass('$t') is not null;")
             if [ "$ada" != "t" ]; then
               echo "::error::Tabel wajib $t TIDAK ada di hasil restore — dump tidak lengkap."
               exit 1
             fi
-            n=$(psql "$URL_VERIFIKASI" -Atc "select count(*) from $t;")
-            echo "  $t: $n baris"
-            total=$(( total + n ))
+            n_sumber=$(psql "$URL_SUMBER" -Atc "select count(*) from $t;")
+            n_pulih=$(psql "$URL_VERIFIKASI" -Atc "select count(*) from $t;")
+            echo "  $t: sumber=$n_sumber pulih=$n_pulih"
+            total_sumber=$(( total_sumber + n_sumber ))
+            total_pulih=$(( total_pulih + n_pulih ))
           done
-          if [ "$total" -eq 0 ]; then
-            echo "::error::Seluruh tabel wajib kosong — dump kemungkinan terpotong."
+
+          if [ "$total_pulih" -lt "$total_sumber" ]; then
+            echo "::error::Hasil restore $total_pulih baris sementara sumber $total_sumber baris — dump kehilangan data."
             exit 1
           fi
-          echo "Verifikasi lolos: $total baris di seluruh tabel wajib."
+          if [ "$total_sumber" -eq 0 ] && [ "$total_pulih" -eq 0 ]; then
+            echo "::warning::Basis data sumber memang masih kosong (0 baris di seluruh tabel wajib) — tidak ada yang bisa dibandingkan, melanjutkan."
+          else
+            echo "Verifikasi lolos: $total_pulih baris hasil restore vs $total_sumber baris sumber di seluruh tabel wajib."
+          fi
 
       - name: Enkripsi
         env:
@@ -845,7 +995,12 @@ pembuktian tahap pertama dijalankan tangan di sini terhadap stack lokal:
 ```bash
 CAP=$(date -u +%Y%m%d-%H%M%SZ)
 SRC="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-pg_dump "$SRC" --format=custom --no-owner --no-privileges \
+# --no-owner/--no-privileges TIDAK dipakai di pg_dump (F1 whole-branch review):
+# dump adalah arsipnya, dan harus membawa GRANT ke anon/authenticated supaya
+# sendirian ia masih jadi backend PostgREST yang berfungsi. Flag itu dipasang
+# di pg_restore (verifikasi ke Postgres polos tanpa peran anon/authenticated),
+# bukan lagi di pg_dump.
+pg_dump "$SRC" --format=custom \
   --schema=public --schema=auth --file="/tmp/padma-$CAP.dump"
 psql "$SRC" -c "drop database if exists verifikasi_lokal;" -c "create database verifikasi_lokal;"
 pg_restore --no-owner --no-privileges \
@@ -897,8 +1052,14 @@ Buat `docs/runbook-pemulihan.md` dengan isi berikut:
 
 - Kunci privat `age` dari password manager. **Tanpa ini tidak ada backup yang
   bisa dibuka** — tidak oleh GitHub, tidak oleh Cloudflare, tidak oleh siapa pun.
-- Kredensial R2 yang bisa membaca bucket `padma-backup`.
-- Klien PostgreSQL 17 (`psql`, `pg_restore`) dan `age`.
+- Kredensial R2 yang bisa membaca bucket `padma-backup`: `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (token yang sama disebut spec §10;
+  minta dari password manager, sama seperti kunci `age`).
+- Klien PostgreSQL 17 (`psql`, `pg_restore`), `age`, dan AWS CLI (`aws`) —
+  atau, bila `aws` tidak tersedia, Node.js dengan checkout repo ini (dipakai
+  lewat `npx tsx`, lihat langkah 2).
+- Akses ke sebuah project Supabase tujuan (baru atau yang sudah ada) tempat
+  memulihkan.
 
 ## 1. Pilih backup
 
@@ -907,6 +1068,45 @@ Objek bernama `db/<tahun>/<bulan>/padma-YYYYMMDD-HHMMSSZ.dump.age`, cap waktunya
 "backup kemarin".
 
 ## 2. Unduh dan dekripsi
+
+Unduh dulu objeknya dari R2 — bucket dan bentuk endpoint-nya sama seperti yang
+dipakai `web/scripts/backup/unggah-r2.ts` untuk mengunggah
+(`https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`, bucket dari
+`R2_BUCKET_BACKUP`, biasanya `padma-backup`):
+
+```bash
+export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+aws s3api get-object \
+  --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+  --bucket "$R2_BUCKET_BACKUP" \
+  --key "db/2026/09/padma-YYYYMMDD-HHMMSSZ.dump.age" \
+  padma-YYYYMMDD-HHMMSSZ.dump.age
+```
+
+Tanpa `aws` CLI, dari root repo ini, `@aws-sdk/client-s3` yang sama dipakai
+`unggah-r2.ts` bekerja sama baiknya lewat potongan Node singkat:
+
+```bash
+cd web && R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... \
+  npx tsx -e '
+    import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+    import { writeFileSync } from "node:fs";
+    const s3 = new S3Client({
+      region: "auto",
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
+    });
+    const kunci = "db/2026/09/padma-YYYYMMDD-HHMMSSZ.dump.age";
+    const r = await s3.send(new GetObjectCommand({ Bucket: "padma-backup", Key: kunci }));
+    writeFileSync(kunci.split("/").pop()!, await r.Body!.transformToByteArray());
+  '
+```
+
+Baru sesudah berkasnya ada di disk, dekripsi:
 
 ```bash
 age -d -i kunci-privat.txt -o padma.dump padma-YYYYMMDD-HHMMSSZ.dump.age
@@ -921,11 +1121,39 @@ Jangan pernah memulihkan ke database yang masih berisi data yang ingin
 diselamatkan. Buat yang baru, pulihkan ke sana, periksa, baru alihkan.
 
 ```bash
-pg_restore --no-owner --no-privileges --dbname "$URL_TUJUAN" padma.dump
+pg_restore --no-owner --dbname "$URL_TUJUAN" padma.dump
 ```
 
-Galat `role ... does not exist` wajar dan boleh diabaikan: dump sengaja dibuat
-`--no-owner --no-privileges`, dan peran Supabase tidak ada di Postgres polos.
+**`--no-privileges` SENGAJA tidak dipakai di sini** — beda dari verifikasi CI.
+Dump ini membawa GRANT ke `anon`/`authenticated` (lihat komentar di langkah
+`pg_dump` pada `.github/workflows/backup-db.yml`), dan skema ini hanya pernah
+GRANT ke `anon`, `authenticated`, dan `public` (bawaan Postgres) — ketiganya
+**selalu ada** di project Supabase mana pun sejak project itu dibuat.
+
+Karena itu, pada pemulihan ke project Supabase **sungguhan**, galat
+`role ... does not exist` **BUKAN hal wajar dan TIDAK boleh diabaikan begitu
+saja**. Bila muncul, kemungkinan besar artinya `$URL_TUJUAN` bukan project
+Supabase yang terprovisi penuh (mis. Postgres polos, seperti yang sengaja
+dipakai verifikasi CI) — cari tahu penyebabnya sebelum lanjut. Errornya juga
+diam-diam menjatuhkan korban yang lebih berbahaya daripada GRANT yang gagal:
+`CREATE POLICY ... TO authenticated` yang menyasar peran tak ada juga gagal
+dibuat, dan itu berarti kebijakan RLS hilang — lihat query hitung di
+langkah 4, yang **wajib** dijalankan meski restore-nya "tampak" mulus.
+
+Sesudah restore, selaraskan skema dengan migrasi terbaru di repo. Dump adalah
+jepretan skema saat backup diambil — bisa sampai 24 jam lebih tua daripada
+`main` (RPO, spec §2) — sementara `web/supabase/migrations` adalah sumber
+kebenaran untuk kebijakan RLS dan GRANT yang berlaku **sekarang**:
+
+```bash
+cd web && npx supabase db push --db-url "$URL_TUJUAN"
+```
+
+Jalankan ini SESUDAH restore, bukan sebelum — migrasinya tidak idempoten
+(`create table` tanpa `if not exists`), jadi menjalankannya ke database yang
+sudah punya skema dari dump akan menyalak "already exists" untuk objek yang
+memang sudah identik; yang benar-benar penting adalah migrasi yang lebih baru
+dari tanggal backup, yang akan berhasil menambah policy/kolom yang belum ada.
 
 ## 4. Periksa sebelum mengalihkan trafik
 
@@ -933,11 +1161,22 @@ Galat `role ... does not exist` wajar dan boleh diabaikan: dump sengaja dibuat
 select count(*) from auth.users;
 select count(*) from public.clients;
 select count(*) from public.sessions;
+select count(*) from public.materials;
+select count(*) from public.profiles;
 select max(created_at) from public.sessions;
+
+-- WAJIB: bukti bahwa RLS tidak diam-diam hilang selama restore (lihat
+-- langkah 3). Bandingkan hasilnya dengan jumlah policy di lingkungan sehat
+-- (`select count(*) from pg_policies where schemaname = 'public';` di
+-- staging/dev) — per commit ini angkanya 36. Kurang dari itu berarti
+-- BERHENTI: jangan alihkan trafik ke database ini sampai penyebabnya jelas
+-- dan policy yang hilang sudah dipulihkan (langkah "selaraskan skema" di
+-- atas biasanya cukup untuk ini).
+select count(*) from pg_policies where schemaname = 'public';
 ```
 
-Baris terakhir memberi tahu sampai kapan data ini mutakhir — bandingkan dengan
-kapan kerusakan terjadi.
+Baris terakhir sebelum query RLS memberi tahu sampai kapan data ini
+mutakhir — bandingkan dengan kapan kerusakan terjadi.
 
 ## 5. Sesudah pulih
 
