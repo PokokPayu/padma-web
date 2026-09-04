@@ -58,4 +58,31 @@ describe("deteksi posisi atom moov", () => {
     for (let i = 0; i < 4; i++) rusak[4 + i] = "free".charCodeAt(i);
     expect(moovDiDepan(rusak)).toBeNull();
   });
+
+  it("true dengan box largesize (size == 1) bertipe selain moov/mdat diikuti moov", () => {
+    // Tes ini memastikan jalur largesize 64-bit benar-benar dijalankan. Box harus
+    // bertipe selain `mdat` karena jika bertipe `mdat`, fungsi kembali dengan false
+    // SEBELUM membaca largesize — itulah mengapa tes "menangani box berukuran 64-bit"
+    // tidak pernah menyentuh kode largesize meski komenknya menyatakan demikian.
+    const free64 = new Uint8Array(16 + 32);
+    const dv = new DataView(free64.buffer);
+    dv.setUint32(0, 1, false); // size == 1 = largesize 64-bit berikut
+    for (let i = 0; i < 4; i++) free64[4 + i] = "free".charCodeAt(i);
+    dv.setUint32(8, 0, false); // 32 bit tinggi largesize
+    dv.setUint32(12, 16 + 32, false); // 32 bit rendah = 48 byte
+    expect(moovDiDepan(gabung(box("ftyp", 8), free64, box("moov", 8)))).toBe(true);
+  });
+
+  it("null bila largesize < 16 — penjaga infinite loop pada box kecil bertipe bukan moov/mdat", () => {
+    // Box ber-size == 1 dengan largesize rendah bernilai < 16 (misalnya 0)
+    // dengan tipe selain moov/mdat akan membuat p += 0 dan loop selamanya.
+    // Penjaga `if (lompat < 16) return null;` menjaga kasus ini.
+    const free64invalid = new Uint8Array(16 + 32);
+    const dv = new DataView(free64invalid.buffer);
+    dv.setUint32(0, 1, false); // size == 1 = largesize 64-bit berikut
+    for (let i = 0; i < 4; i++) free64invalid[4 + i] = "free".charCodeAt(i);
+    dv.setUint32(8, 0, false); // 32 bit tinggi
+    dv.setUint32(12, 0, false); // 32 bit rendah = 0 (invalid, < 16)
+    expect(moovDiDepan(gabung(box("ftyp", 8), free64invalid))).toBeNull();
+  });
 });
