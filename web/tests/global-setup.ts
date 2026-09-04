@@ -14,21 +14,19 @@
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { seedUsers } from "../scripts/seed-users";
-
-// Materi video demo (1101 Sankalpa "…701" TERBUKA, 1106 Lactation Hero "…703"
-// TERKUNCI — id yang sama dipakai tests/rls-materi.test.ts, passport-data,
-// passport-materi) — lihat komentar lengkap di `semaikanVideoDemoUntukTest`.
-//
-// `OBJEK_VIDEO_*` diekspor (bukan ditulis ulang di tiap berkas test) supaya
-// nilai yang DISEMAI di sini dan nilai yang DIHARAPKAN oleh test lain tidak
-// pernah mengembang berbeda — impor murni string konstan, aman lintas
-// globalSetup/worker vitest (tidak ada state runtime yang dibagi).
-export const MATERI_VIDEO_TERBUKA = "77777777-7777-7777-7777-777777777701";
-export const MATERI_VIDEO_TERKUNCI = "77777777-7777-7777-7777-777777777703";
-export const OBJEK_VIDEO_TERBUKA = `${MATERI_VIDEO_TERBUKA}/fixture-demo.mp4`;
-export const OBJEK_VIDEO_TERKUNCI = `${MATERI_VIDEO_TERKUNCI}/fixture-rahasia.mp4`;
+import {
+  MATERI_VIDEO_TERBUKA,
+  MATERI_VIDEO_TERKUNCI,
+  OBJEK_VIDEO_TERBUKA,
+  OBJEK_VIDEO_TERKUNCI,
+} from "./helpers/materi-video-fixture";
 
 /**
+ * Materi video demo (1101 Sankalpa "…701" TERBUKA, 1106 Lactation Hero
+ * "…703" TERKUNCI — id & nilai `objek`-nya ada di
+ * `tests/helpers/materi-video-fixture.ts`, diimpor juga oleh berkas test
+ * yang perlu mencocokkan nilai yang disemai di sini).
+ *
  * `supabase/seed.sql` SENGAJA tidak menaruh baris `material_videos` (spec
  * §13b A-6): menyemai OBJEK SUNGGUHAN ke bucket R2 pada setiap `db reset`
  * berarti setiap mesin dev menulis ke bucket bersama, jadi demo dev dibiarkan

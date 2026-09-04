@@ -46,6 +46,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -235,7 +236,7 @@ async function pasangFixture() {
       { halaman: 3, objek: `${MATERI_EBOOK}/0003.webp`, lebar: 10, tinggi: 10 },
     ],
   });
-  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI, mime: "video/mp4" });
+  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI });
 }
 
 beforeAll(async () => {
@@ -924,7 +925,7 @@ describe("mengelola video materi", () => {
     expect((await aktifkanMateri(MATERI_VIDEO)).ok).toBe(false);
 
     // Dikembalikan untuk blok berikutnya.
-    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI, mime: "video/mp4" });
+    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI });
     await admin.from("materials").update({ aktif: true }).eq("id", MATERI_VIDEO);
   });
 
@@ -952,6 +953,28 @@ describe("invarian: tidak ada satu pun materi AKTIF tanpa isi", () => {
 
     const punyaHalaman = new Set((halaman ?? []).map((h) => h.material_id as string));
     const punyaVideo = new Set((video ?? []).map((v) => v.material_id as string));
+
+    // Materi video demo (…701 terbuka, …703 terkunci) HANYA lengkap di sini
+    // karena tests/global-setup.ts menyemai baris material_videos-nya SEKALI
+    // sebelum berkas test mana pun berjalan — `supabase/seed.sql` sendiri
+    // SENGAJA mengosongkan baris ini sejak migrasi objek-R2 (spec §13b A-6).
+    //
+    // Divergensi NYATA, bukan cuma teoretis: `npx supabase db reset && npm
+    // run dev` TANPA vitest membiarkan KEDUA materi ini AKTIF dengan "Belum
+    // ada isi" di panel admin — persis pelanggaran yang invarian ini ada
+    // untuk mencegah. Asersi di bawah membuat itu terlihat DI SINI (bukan
+    // hanya di dalam global-setup.ts) dan membuktikan pasangan ini yang
+    // bergantung pada fixture test: loop UTAMA di bawahnya tetap memeriksa
+    // SEMUA materi aktif tanpa pengecualian apa pun, termasuk kedua id ini,
+    // jadi materi lain yang diam-diam mulai bergantung pada fixture test
+    // masih tertangkap.
+    const idFixtureVideo = new Set([MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI]);
+    for (const id of idFixtureVideo) {
+      expect(
+        punyaVideo.has(id),
+        `materi demo "${id}" seharusnya lengkap HANYA lewat fixture tests/global-setup.ts`,
+      ).toBe(true);
+    }
 
     for (const m of materi ?? []) {
       const lengkap =

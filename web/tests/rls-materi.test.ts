@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
-import { OBJEK_VIDEO_TERBUKA, OBJEK_VIDEO_TERKUNCI } from "./global-setup";
+import { OBJEK_VIDEO_TERBUKA, OBJEK_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
 
 // Regression test untuk kebocoran materi (spec keputusan #13 + bagian 6 alur
 // materi: "materi tidak bocor sebelum layanan berjalan").

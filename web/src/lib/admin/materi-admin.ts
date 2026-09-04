@@ -157,7 +157,7 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
     // materi tanpa satu pun halaman tetap menjawab `count: 0`, tidak pernah
     // larik kosong tanpa objek sama sekali).
     const jumlahHalaman = m.material_pages[0]?.count ?? 0;
-    const url = videoPer.get(m.id) ?? null;
+    const objek = videoPer.get(m.id) ?? null;
     materiById.set(m.id, {
       id: m.id,
       judul: m.judul,
@@ -166,8 +166,8 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
       aktif: m.aktif,
       layananId: layananPerMateri.get(m.id) ?? [],
       jumlahHalaman,
-      videoUrl: url,
-      lengkap: m.tipe === "ebook" ? jumlahHalaman > 0 : url !== null,
+      videoUrl: objek,
+      lengkap: m.tipe === "ebook" ? jumlahHalaman > 0 : objek !== null,
     });
   }
 

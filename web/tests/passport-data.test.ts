@@ -4,7 +4,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
-import { OBJEK_VIDEO_TERBUKA } from "./global-setup";
+import { OBJEK_VIDEO_TERBUKA } from "./helpers/materi-video-fixture";
 
 // `createServerSupabase()` membaca `cookies()` dari next/headers, yang hanya
 // bermakna di dalam request scope. Agar lapisan data BENAR-BENAR dieksekusi di

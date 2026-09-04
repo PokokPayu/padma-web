@@ -38,14 +38,27 @@ export const PANJANG_DESKRIPSI_MAKS = 500;
  *
  * Bukan preferensi vendor: materi video adalah satu-satunya isi berbayar yang
  * meninggalkan aplikasi, jadi ia hanya boleh dititipkan pada penyedia yang bisa
- * dikunci domain (Vimeo) atau ditandatangani (Cloudflare Stream). Constraint
- * `material_videos_host_terproteksi` menegakkan hal yang sama di basis data —
- * daftar di sini ada untuk KALIMAT-nya, bukan untuk menggantikan constraint itu:
- * yang sampai ke layar admin klinik dari constraint adalah kode 23514.
+ * dikunci domain (Vimeo) atau ditandatangani (Cloudflare Stream).
  *
- * Pola sengaja disalin sepadan dengan constraint tersebut. Bila salah satunya
- * diubah tanpa yang lain, admin akan melihat "23514" untuk URL yang formulir
- * sudah terima — jadi keduanya diuji berdampingan.
+ * PENTING — status pagar basis data sejak migrasi objek-R2 (Task 1,
+ * `20260904120000_materi_video_r2.sql`): constraint DB yang dulu menegakkan
+ * hal yang sama, `material_videos_host_terproteksi`, SUDAH DICABUT di
+ * migrasi itu. Alasannya bukan keputusan keamanan, melainkan kontradiksi
+ * matematis: constraint itu menuntut `objek ~ '^https://...'`, sementara
+ * kolom `objek` (sejak migrasi yang sama) wajib TIDAK PERNAH berbentuk URL
+ * — tidak ada string yang bisa memenuhi keduanya sekaligus.
+ *
+ * Sampai Task 6 selesai, `POLA_URL_VIDEO` di bawah ini adalah SATU-SATUNYA
+ * penjaga — bukan lagi salinan sepadan dari sebuah constraint DB yang juga
+ * menjaga. Siapa pun yang login sebagai admin/owner bisa menulis `objek`
+ * sembarang langsung lewat PostgREST (`PATCH /rest/v1/material_videos`),
+ * tanpa pernah melewati fungsi ini — lihat catatan yang sama di migrasi
+ * `20260904120000` dan di `tests/admin-pengerasan.test.ts`.
+ *
+ * Task 6 mengembalikan pagar DB ini dalam BENTUK BARU: check yang
+ * memvalidasi bentuk KUNCI OBJEK (mis. `{material_id}/{acak}.{ext}`), bukan
+ * host URL — jangan melonggarkan pola di bawah dengan asumsi DB masih
+ * menjaga sampai penggantinya itu terpasang.
  */
 export const PENYEDIA_VIDEO = "Vimeo atau Cloudflare Stream";
 
