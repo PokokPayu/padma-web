@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { unggahDanTerapkanRetensi, type KlienObjek } from "@/lib/backup/unggah";
+import {
+  unggahDanTerapkanRetensi, MAKS_HAPUS_PER_JALAN, type KlienObjek,
+} from "@/lib/backup/unggah";
 import { kunciObjekBackup, epochDariCapWaktu } from "@/lib/backup/nama-objek";
 
 const SEKARANG = epochDariCapWaktu("20260904-200000Z")!;
@@ -72,6 +74,28 @@ describe("unggah + retensi", () => {
     });
     expect(hasil.dihapus).toEqual([]);
     expect(isi.has(hasil.kunciBaru)).toBe(true);
+  });
+
+  it("menolak menghapus SATU PUN dan melempar bila jam skew MAJU membuat retensi memilih terlalu banyak objek", async () => {
+    // retensi.ts sengaja hanya menjaga skew MUNDUR (lihat komentarnya): jam
+    // yang melompat jauh ke DEPAN mendorong `batas` melewati SELURUH cap
+    // waktu tersimpan, sehingga pilihObjekKedaluwarsa memilih SEMUANYA untuk
+    // dihapus. Bucket di sini TIDAK kosong — beda dari tes "TIDAK PERNAH
+    // menghapus objek yang baru saja diunggah" di atas, yang mulai dari
+    // bucket kosong dan karena itu tidak pernah menyadari bucket yang berisi
+    // riwayat akan terkuras habis. Pagar MAKS_HAPUS_PER_JALAN adalah satu-
+    // satunya yang mencegah itu di sini.
+    const riwayat = Array.from({ length: MAKS_HAPUS_PER_JALAN + 1 }, (_, i) =>
+      kunciObjekBackup(`202601${String(i + 1).padStart(2, "0")}-200000Z`));
+    const { klien, isi } = klienPalsu(riwayat);
+    const jamKacauMajuJauh = SEKARANG + 400 * 24 * 60 * 60 * 1000;
+    await expect(unggahDanTerapkanRetensi(klien, {
+      capWaktu: CAP_BARU, isi: ISI, sekarangEpochMs: jamKacauMajuJauh,
+    })).rejects.toThrow(/MAKS_HAPUS_PER_JALAN|batas aman/);
+    // TIDAK SATU PUN objek lama boleh hilang, termasuk objek baru yang
+    // sempat terunggah sebelum penghapusan dibatalkan.
+    for (const k of riwayat) expect(isi.has(k)).toBe(true);
+    expect(isi.has(kunciObjekBackup(CAP_BARU))).toBe(true);
   });
 
   it("mendaftar objek dengan prefiks backup", async () => {

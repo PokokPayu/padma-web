@@ -8,10 +8,18 @@ const MS_PER_HARI = 24 * 60 * 60 * 1000;
 /**
  * Memilih objek yang boleh dihapus.
  *
- * SELURUH ketidakpastian berujung MEMPERTAHANKAN. Kunci tak terbaca, cap waktu
- * mustahil, jam kacau, konfigurasi aneh — semuanya menghasilkan "jangan hapus".
- * Kelebihan objek di R2 berbiaya beberapa megabyte; menghapus salinan sehat
- * terakhir tidak bisa dibatalkan.
+ * Ketidakpastian pada KUNCI berujung MEMPERTAHANKAN: kunci tak terbaca, cap
+ * waktu mustahil, `sekarangEpochMs`/`hariSimpan` tidak masuk akal (NaN,
+ * infinity, <= 0) — semuanya menghasilkan "jangan hapus".
+ *
+ * Untuk jam skew, fungsi ini HANYA menjaga arah MUNDUR: objek bercap waktu
+ * di masa depan relatif `sekarangEpochMs` ditahan (guard `ms > sekarangEpochMs`
+ * di bawah). Skew MAJU — jam mesin yang melompat ke depan — TIDAK dijaga di
+ * sini: itu mendorong `batas` melewati seluruh cap waktu tersimpan, dan
+ * fungsi murni ini akan memilih SEMUANYA untuk dihapus, karena `sekarang` dan
+ * `batas` dipercaya apa adanya. Pagar untuk kasus itu ada satu lapis di atas
+ * pemanggil, di `unggah.ts` (`MAKS_HAPUS_PER_JALAN`), yang menolak menghapus
+ * bila jumlah objek yang terpilih tidak masuk akal untuk satu jalan normal.
  */
 export function pilihObjekKedaluwarsa(
   kunci: readonly string[],
