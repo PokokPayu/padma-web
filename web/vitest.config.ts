@@ -45,5 +45,12 @@ export default defineConfig({
       PADMA_PROXY_TEPERCAYA: "1",
     },
   },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+      // Lihat komentar di tests/stubs/server-only.ts: paket asli melempar
+      // Error tanpa syarat di luar bundler Next.js, dan Vitest bukan itu.
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
+    },
+  },
 });
