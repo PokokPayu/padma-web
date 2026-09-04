@@ -82,4 +82,11 @@ async function utama() {
   for (const k of hasil.dihapus) console.log(`  - ${k}`);
 }
 
-utama();
+// `.catch` eksplisit di sinilah yang benar-benar membuat "menerjemahkan galat
+// menjadi exit code" di komentar atas berkas ini nyata — tanpanya, exit 1
+// hanya kebetulan datang dari perilaku bawaan Node untuk unhandled rejection
+// (dan pesannya berupa stack trace mentah, bukan pesan yang jelas).
+utama().catch((galat: unknown) => {
+  console.error(galat instanceof Error ? galat.message : galat);
+  process.exit(1);
+});
