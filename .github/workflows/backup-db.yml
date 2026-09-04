@@ -21,6 +21,12 @@ concurrency:
   group: backup-db
   cancel-in-progress: false
 
+# Job ini tidak pernah menyentuh GITHUB_TOKEN (tidak ada checkout tulis, tidak
+# ada komentar PR, tidak ada rilis) — jadi ia tidak butuh scope apa pun selain
+# baca repo untuk actions/checkout.
+permissions:
+  contents: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest
@@ -67,6 +73,7 @@ jobs:
           age --version
 
       - name: Siapkan sumber
+        id: sumber
         env:
           SUMBER: ${{ inputs.sumber }}
           URL_PRODUKSI: ${{ secrets.SUPABASE_DB_URL }}
@@ -76,8 +83,14 @@ jobs:
             if [ -z "${URL_PRODUKSI:-}" ]; then
               echo "::error::Secret SUPABASE_DB_URL belum dipasang."; exit 1
             fi
-            # Nilainya TIDAK pernah dicetak; hanya diteruskan lewat berkas env.
-            echo "URL_SUMBER=$URL_PRODUKSI" >> "$GITHUB_ENV"
+            # Nilainya TIDAK pernah dicetak. Ditaruh sebagai OUTPUT step ini,
+            # BUKAN $GITHUB_ENV: env job-wide masuk ke SETIAP langkah sesudahnya
+            # tanpa diminta — termasuk "npm ci" yang menjalankan install script
+            # dari seluruh dependency tree Next.js. Sebagai output, ia hanya
+            # sampai ke langkah yang secara eksplisit memintanya lewat
+            # `steps.sumber.outputs.url_sumber` di blok env-nya sendiri
+            # (spec §7). TABEL_WAJIB bukan rahasia, boleh tetap job-wide.
+            echo "url_sumber=$URL_PRODUKSI" >> "$GITHUB_OUTPUT"
             echo "TABEL_WAJIB=auth.users,public.clients,public.sessions,public.materials,public.profiles" >> "$GITHUB_ENV"
           else
             psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database sumber_contoh;"
@@ -90,11 +103,13 @@ jobs:
           insert into public.clients values
             ('22222222-2222-2222-2222-222222222222', 'Pasien Contoh');
           SQL
-            echo "URL_SUMBER=$URL_CONTOH" >> "$GITHUB_ENV"
+            echo "url_sumber=$URL_CONTOH" >> "$GITHUB_OUTPUT"
             echo "TABEL_WAJIB=auth.users,public.clients" >> "$GITHUB_ENV"
           fi
 
       - name: Periksa versi klien vs server
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           server=$(psql "$URL_SUMBER" -Atc "show server_version_num")
@@ -111,6 +126,8 @@ jobs:
         run: echo "nilai=$(date -u +%Y%m%d-%H%M%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: pg_dump
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           # Hanya public + auth. Skema terkelola Supabase (vault, pgsodium,
@@ -118,13 +135,26 @@ jobs:
           # peran postgres, dan tak satu pun bisa dipulihkan ke Postgres polos —
           # memasukkannya membuat verifikasi merah karena hal yang bukan masalah.
           # Objek Storage memang di luar scope (spec B3).
+          #
+          # --no-owner/--no-privileges SENGAJA TIDAK dipakai di sini. Dump ini
+          # adalah arsipnya — harus membawa GRANT ke anon/authenticated supaya
+          # sendirian ia masih jadi backend PostgREST yang berfungsi (86 GRANT
+          # di skema ini per pemeriksaan lokal; tanpanya restore menghasilkan
+          # tabel ber-RLS tanpa satu pun privilege untuk peran yang dipakai
+          # PostgREST — setiap request API pulang "permission denied"). Kedua
+          # flag itu justru dipasang di langkah pg_restore verifikasi di bawah,
+          # karena DI SANA target-nya Postgres polos tanpa peran anon/
+          # authenticated — bukan karena grant-nya tidak berguna. JANGAN
+          # pindahkan flag ini kembali ke sini.
           pg_dump "$URL_SUMBER" \
-            --format=custom --no-owner --no-privileges \
+            --format=custom \
             --schema=public --schema=auth \
             --file="padma-${{ steps.cap.outputs.nilai }}.dump"
           ls -lh padma-*.dump
 
       - name: Pulihkan sungguhan lalu verifikasi
+        env:
+          URL_SUMBER: ${{ steps.sumber.outputs.url_sumber }}
         run: |
           set -euo pipefail
           psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database verifikasi;"
