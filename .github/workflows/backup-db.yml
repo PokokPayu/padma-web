@@ -139,22 +139,42 @@ jobs:
           echo "--- 20 baris pertama restore.log ---"
           head -20 restore.log || true
 
-          total=0
+          # Ambang lama ("total -eq 0") buta terhadap dump yang kehilangan sebagian
+          # besar barisnya selama sisanya tidak nol (mis. kehilangan 90% baris tetap
+          # lolos). Sebagai gantinya kita bandingkan jumlah baris hasil restore
+          # terhadap jumlah baris di SUMBER — itu menangkap kehilangan data berapa
+          # pun proporsinya. JANGAN sederhanakan ini kembali jadi ambang "-eq 0":
+          # basis data produksi PADMA bisa sungguh-sungguh nol pasien (klinik baru,
+          # belum ada yang mendaftar), dan pembandingan di bawah menangani itu lewat
+          # kasus sumber=0 & pulih=0 secara eksplisit (peringatan, bukan galat) —
+          # bukan lewat ambang mutlak yang tidak bisa membedakan "sumber memang
+          # kosong" dari "dump kehilangan data". Bila ada baris masuk ke sumber di
+          # antara pg_dump dan penghitungan ini, arah gagalnya tetap aman: merah
+          # palsu (total_sumber tampak lebih besar dari isi dump), bukan hijau palsu.
+          total_sumber=0
+          total_pulih=0
           for t in ${TABEL_WAJIB//,/ }; do
             ada=$(psql "$URL_VERIFIKASI" -Atc "select to_regclass('$t') is not null;")
             if [ "$ada" != "t" ]; then
               echo "::error::Tabel wajib $t TIDAK ada di hasil restore — dump tidak lengkap."
               exit 1
             fi
-            n=$(psql "$URL_VERIFIKASI" -Atc "select count(*) from $t;")
-            echo "  $t: $n baris"
-            total=$(( total + n ))
+            n_sumber=$(psql "$URL_SUMBER" -Atc "select count(*) from $t;")
+            n_pulih=$(psql "$URL_VERIFIKASI" -Atc "select count(*) from $t;")
+            echo "  $t: sumber=$n_sumber pulih=$n_pulih"
+            total_sumber=$(( total_sumber + n_sumber ))
+            total_pulih=$(( total_pulih + n_pulih ))
           done
-          if [ "$total" -eq 0 ]; then
-            echo "::error::Seluruh tabel wajib kosong — dump kemungkinan terpotong."
+
+          if [ "$total_pulih" -lt "$total_sumber" ]; then
+            echo "::error::Hasil restore $total_pulih baris sementara sumber $total_sumber baris — dump kehilangan data."
             exit 1
           fi
-          echo "Verifikasi lolos: $total baris di seluruh tabel wajib."
+          if [ "$total_sumber" -eq 0 ] && [ "$total_pulih" -eq 0 ]; then
+            echo "::warning::Basis data sumber memang masih kosong (0 baris di seluruh tabel wajib) — tidak ada yang bisa dibandingkan, melanjutkan."
+          else
+            echo "Verifikasi lolos: $total_pulih baris hasil restore vs $total_sumber baris sumber di seluruh tabel wajib."
+          fi
 
       - name: Enkripsi
         env:
