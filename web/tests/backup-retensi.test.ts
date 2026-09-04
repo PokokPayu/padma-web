@@ -41,6 +41,17 @@ describe("retensi", () => {
     expect(pilihObjekKedaluwarsa(asing, SEKARANG)).toEqual([]);
   });
 
+  it("TIDAK PERNAH menghapus objek bercap waktu mustahil (tanggal tidak pernah ada)", () => {
+    // Kunci bentuknya sah (cocok POLA_KUNCI) tapi tanggalnya mustahil — bulan 13,
+    // hari 32, menit 60, dll. epochDariCapWaktu mengembalikan null, dan guard
+    // `if (ms === null) return false;` adalah satu-satunya yang mencegah null
+    // dikoersi menjadi 0 dalam perbandingan numerik. Tanpa guard itu, 0 < batas
+    // (batas negatif untuk epoch 2020-an) bernilai true, dan objek rusak itu
+    // dipilih untuk dihapus permanen — persis arah bencana yang kita hindari.
+    const mustahil = "db/2026/13/padma-20261332-999999Z.dump.age";
+    expect(pilihObjekKedaluwarsa([mustahil], SEKARANG)).toEqual([]);
+  });
+
   it("TIDAK PERNAH menghapus objek bercap waktu masa depan", () => {
     // Cap waktu di masa depan berarti jam runner atau jam pembuatnya kacau.
     // Menghapus berdasar jam yang kacau adalah cara kehilangan backup tersehat.
