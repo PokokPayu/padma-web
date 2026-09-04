@@ -69,6 +69,12 @@ vi.mock("next/navigation", () => ({
 
 beforeAll(async () => {
   ref.klien = await signInAs("ananda@padma.test");
+  // Baris `material_videos` demo (id 701/703) TIDAK datang dari
+  // `supabase/seed.sql` (spec §13b A-6: demo dev dibiarkan kosong). Berkas
+  // ini menguji apa yang klien lihat/tidak lihat di daftar & reader, jadi
+  // butuh baris sungguhan untuk materi terbuka/terkunci di atas —
+  // `tests/global-setup.ts` menyemainya SEKALI sebelum berkas test mana pun
+  // berjalan, lihat komentar di sana untuk alasan lengkapnya.
 });
 
 async function markupDaftar(): Promise<string> {
@@ -105,9 +111,9 @@ async function semuaObjekHalaman(): Promise<string[]> {
 
 /** SELURUH URL video yang ada di basis data, dibaca menembus RLS (pembanding). */
 async function semuaUrlVideo(): Promise<string[]> {
-  const { data, error } = await svc.from("material_videos").select("url");
+  const { data, error } = await svc.from("material_videos").select("objek");
   if (error) throw error;
-  return (data as Array<{ url: string }>).map((v) => v.url);
+  return (data as Array<{ objek: string }>).map((v) => v.objek);
 }
 
 describe("daftar materi — apa yang klien lihat", () => {

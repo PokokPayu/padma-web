@@ -249,9 +249,13 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
   }
 
   if (tipe.nilai === "video") {
+    // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau
+    // sesudah migrasi objek-R2 — `videoUrl` di sini MASIH URL penyedia
+    // (Vimeo/Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar
+    // seluruh alur ini (unggah ke R2 lewat presigned URL).
     const { error: eVideo } = await supabase
       .from("material_videos")
-      .insert({ material_id: id, url: videoUrl });
+      .insert({ material_id: id, objek: videoUrl });
     if (eVideo) {
       segarkanMateri(id);
       return {
@@ -339,9 +343,14 @@ export async function perbaruiMateri(
       }
       // Isi dipasang LEBIH DULU, tipenya menyusul: bila urutannya dibalik dan
       // permintaan kedua gagal, materi aktif langsung berdiri tanpa isi.
+      //
+      // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau
+      // sesudah migrasi objek-R2 — `u.nilai` di sini MASIH URL penyedia
+      // (Vimeo/Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar
+      // seluruh alur ini (unggah ke R2 lewat presigned URL).
       const { error } = await supabase
         .from("material_videos")
-        .upsert({ material_id: id, url: u.nilai }, { onConflict: "material_id" })
+        .upsert({ material_id: id, objek: u.nilai }, { onConflict: "material_id" })
         .select("material_id");
       if (error) return { ok: false, pesan: "Gagal menyimpan URL video materi." };
     } else if (!(await punyaIsi(id, "ebook"))) {
@@ -460,9 +469,15 @@ export async function gantiVideo(
   }
 
   const supabase = await createServerSupabase();
+  // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau sesudah
+  // migrasi objek-R2 — `url.nilai` di sini MASIH URL penyedia (Vimeo/
+  // Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar seluruh
+  // alur ini (unggah ke R2 lewat presigned URL) — ketiga situs tulis
+  // `material_videos` di berkas ini (pendaftaran, penyuntingan tipe, dan
+  // `gantiVideo` ini) menunggunya.
   const { data, error } = await supabase
     .from("material_videos")
-    .upsert({ material_id: materiId, url: url.nilai }, { onConflict: "material_id" })
+    .upsert({ material_id: materiId, objek: url.nilai }, { onConflict: "material_id" })
     .select("material_id");
 
   if (error || (data ?? []).length === 0) {

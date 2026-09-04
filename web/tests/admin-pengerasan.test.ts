@@ -63,8 +63,9 @@ afterAll(async () => {
   // Mitra selalu dikembalikan aktif: passport-beranda & passport-sesi
   // meng-assert nama bidan muncul pada riwayat seed.
   await admin.from("partners").update({ aktif: true }).eq("id", MITRA_SRI);
-  // Bila CHECK allowlist belum ada (jalur MERAH), baris uji benar-benar
-  // tersimpan — jangan tinggalkan URL sampah pada materi seed.
+  // Jaring pengaman bila test constraint-host di bawah gagal di tengah jalan
+  // sebelum sempat membersihkan sendiri — jangan tinggalkan baris sampah pada
+  // materi seed.
   await admin.from("material_videos").delete().eq("material_id", MATERI_EBOOK);
 });
 
@@ -215,24 +216,29 @@ describe("jejak waktu & validasi", () => {
     );
   });
 
-  it("URL video hanya boleh dari host penyedia terproteksi", async () => {
-    const { error: buruk } = await admin.from("material_videos").insert({
-      material_id: MATERI_EBOOK,
-      url: "javascript:alert(1)",
-    });
-    expect(buruk).not.toBeNull();
-
-    const { error: buruk2 } = await admin.from("material_videos").insert({
-      material_id: MATERI_EBOOK,
-      url: "https://situs-sembarangan.example/video",
-    });
-    expect(buruk2).not.toBeNull();
-  });
-
-  it("URL video dari host terproteksi TETAP diterima (seed & alur sah tidak rusak)", async () => {
+  // Dua test di sini dulu membuktikan constraint DB
+  // `material_videos_host_terproteksi` (allowlist host Vimeo/CloudflareStream
+  // pada kolom `url`). Migration `materi_video_r2` (Task 1, migrasi objek-R2)
+  // MENCABUT constraint itu: ia menuntut `objek ~ '^https://...'`, yang
+  // mustahil dipenuhi bersamaan dengan tuntutan skema baru bahwa `objek`
+  // adalah KUNCI OBJEK R2, bukan URL (lihat komentar penyimpangan di migration
+  // itu untuk penjelasan lengkap kenapa keduanya tidak bisa hidup berdampingan).
+  //
+  // Ancaman yang dulu dicegahnya (admin menulis `javascript:`/host asing ke
+  // medan URL) TETAP tercegah — hanya pindah lapisan, dari DB ke aplikasi.
+  // `periksaUrlVideo()` (src/app/admin/materi/aksi.ts) menegakkan allowlist
+  // yang SAMA pada setiap jalur tulis yang masih dipakai sampai Task 6
+  // membongkarnya, dan itu diuji di tests/admin-materi.test.ts ("gantiVideo
+  // menolak host di luar daftar penyedia terproteksi", dkk). Constraint DB
+  // ini sendiri selalu redundan terhadap penjagaan aplikasi itu.
+  it("KONTROL: tanpa constraint DB, insert langsung (service role) tidak lagi disaring hostnya", async () => {
+    // Bukan celah baru: service role SELALU melewati RLS & lapisan aplikasi
+    // (aksi.ts) — ini bukan jalur yang bisa dicapai admin/klien lewat panel.
+    // Test ini murni menandai PERPINDAHAN tanggung jawab, supaya siapa pun
+    // yang membaca berkas ini tidak mengira allowlist masih hidup di DB.
     const { error } = await admin.from("material_videos").insert({
       material_id: MATERI_EBOOK,
-      url: "https://player.vimeo.com/video/123456789",
+      objek: "javascript:alert(1)",
     });
     expect(error).toBeNull();
     await admin.from("material_videos").delete().eq("material_id", MATERI_EBOOK);

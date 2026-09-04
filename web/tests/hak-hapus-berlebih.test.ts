@@ -117,7 +117,7 @@ beforeAll(async () => {
     { onConflict: "material_id,service_id" },
   );
   await svc.from("material_videos").upsert(
-    { material_id: MATERI_UJI, url: "https://vimeo.com/pad-uji-hak-hapus" },
+    { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
     { onConflict: "material_id" },
   );
 
@@ -258,7 +258,7 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
 
     const { error: eGanti } = await a
       .from("material_videos")
-      .update({ url: "https://player.vimeo.com/video/987654321" })
+      .update({ objek: "https://player.vimeo.com/video/987654321" })
       .eq("material_id", MATERI_UJI)
       .select("material_id");
     expect(eGanti).toBeNull();
@@ -272,7 +272,7 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
     await svc
       .from("material_videos")
       .upsert(
-        { material_id: MATERI_UJI, url: "https://vimeo.com/pad-uji-hak-hapus" },
+        { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
         { onConflict: "material_id" },
       );
   });
@@ -369,7 +369,7 @@ describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
     await svc
       .from("material_videos")
       .upsert(
-        { material_id: MATERI_UJI, url: "https://vimeo.com/pad-uji-hak-hapus" },
+        { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
         { onConflict: "material_id" },
       );
   });

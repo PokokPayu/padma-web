@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { OBJEK_VIDEO_TERBUKA, OBJEK_VIDEO_TERKUNCI } from "./global-setup";
 
 // Regression test untuk kebocoran materi (spec keputusan #13 + bagian 6 alur
 // materi: "materi tidak bocor sebelum layanan berjalan").
@@ -26,12 +27,15 @@ const svc = createAdminSupabase();
 // Materi layanan 1101 Sankalpa Fertility Massage — Ananda punya sesi `selesai`.
 const MATERI_TERBUKA_VIDEO = "77777777-7777-7777-7777-777777777701";
 const MATERI_TERBUKA_EBOOK = "77777777-7777-7777-7777-777777777702";
-const URL_TERBUKA = "https://vimeo.com/padma-sankalpa-001";
+// Nilai `objek` baris video ini disemai oleh tests/global-setup.ts (bukan
+// seed.sql — spec §13b A-6) — diimpor sebagai `OBJEK_VIDEO_TERBUKA` supaya
+// nilai yang disemai & yang diharapkan tidak pernah mengembang berbeda.
+const URL_TERBUKA = OBJEK_VIDEO_TERBUKA;
 
 // Materi layanan 1106 Lactation Hero — Ananda TIDAK pernah menjalaninya.
 const MATERI_TERKUNCI_VIDEO = "77777777-7777-7777-7777-777777777703";
 const MATERI_TERKUNCI_EBOOK = "77777777-7777-7777-7777-777777777704";
-const URL_RAHASIA = "https://vimeo.com/RAHASIA-123";
+const URL_RAHASIA = OBJEK_VIDEO_TERKUNCI;
 
 /** Apakah `URL_RAHASIA` muncul di mana pun dalam payload yang diterima klien? */
 function membocorkan(payload: unknown, rahasia: string): boolean {
@@ -55,6 +59,11 @@ beforeAll(async () => {
       "Seed materi belum lengkap — jalankan `npx supabase db reset && npm run seed:users`",
     );
   }
+  // Baris `material_videos` demo (id 701/703) TIDAK datang dari
+  // `supabase/seed.sql` (spec §13b A-6: demo dev dibiarkan kosong). Suite
+  // vitest butuh baris sungguhan untuk regresi kebocoran di bawah, jadi
+  // `tests/global-setup.ts` menyemainya SEKALI sebelum berkas test mana pun
+  // berjalan — lihat komentar di sana untuk alasan lengkapnya.
 });
 
 describe("MATERI — klien tetap melihat DAFTAR materi (kartu terkunci)", () => {
@@ -86,7 +95,7 @@ describe("MATERI — URL video TIDAK bocor sebelum layanan berjalan", () => {
     const klien = await signInAs("ananda@padma.test");
     const { data, error } = await klien
       .from("material_videos")
-      .select("url")
+      .select("objek")
       .eq("material_id", MATERI_TERKUNCI_VIDEO);
 
     // error null: tabelnya ada & boleh di-query — yang kosong adalah HASILNYA,
@@ -107,7 +116,7 @@ describe("MATERI — URL video TIDAK bocor sebelum layanan berjalan", () => {
     const klien = await signInAs("ananda@padma.test");
     const { data, error } = await klien
       .from("materials")
-      .select("id, judul, material_videos(url)");
+      .select("id, judul, material_videos(objek)");
 
     expect(error).toBeNull();
     expect(membocorkan(data, URL_RAHASIA)).toBe(false);
@@ -140,13 +149,13 @@ describe("MATERI — URL video TIDAK bocor sebelum layanan berjalan", () => {
     const klien = await signInAs("ananda@padma.test");
     const ins = await klien
       .from("material_videos")
-      .insert({ material_id: MATERI_TERKUNCI_VIDEO, url: "https://vimeo.com/curian" })
+      .insert({ material_id: MATERI_TERKUNCI_VIDEO, objek: "https://vimeo.com/curian" })
       .select();
     expect(ins.error).not.toBeNull();
 
     const upd = await klien
       .from("material_videos")
-      .update({ url: "https://vimeo.com/curian" })
+      .update({ objek: "https://vimeo.com/curian" })
       .eq("material_id", MATERI_TERBUKA_VIDEO)
       .select();
     expect(upd.data ?? []).toHaveLength(0);
@@ -158,19 +167,19 @@ describe("MATERI — layanan yang SUDAH selesai tetap terbuka untuk klien", () =
     const klien = await signInAs("ananda@padma.test");
     const { data, error } = await klien
       .from("material_videos")
-      .select("material_id, url")
+      .select("material_id, objek")
       .eq("material_id", MATERI_TERBUKA_VIDEO);
 
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
-    expect(data![0].url).toBe(URL_TERBUKA);
+    expect(data![0].objek).toBe(URL_TERBUKA);
   });
 
   it("klien BISA mendapat URL video lewat embedding materials(material_videos)", async () => {
     const klien = await signInAs("ananda@padma.test");
     const { data, error } = await klien
       .from("materials")
-      .select("id, judul, material_videos(url)")
+      .select("id, judul, material_videos(objek)")
       .eq("id", MATERI_TERBUKA_VIDEO);
 
     expect(error).toBeNull();
@@ -192,7 +201,7 @@ describe("MATERI — layanan yang SUDAH selesai tetap terbuka untuk klien", () =
 describe("MATERI — staf tetap bisa mengelola semuanya", () => {
   it("admin BISA membaca semua URL video (termasuk yang terkunci bagi klien)", async () => {
     const admin = await signInAs("admin@padma.test");
-    const { data, error } = await admin.from("material_videos").select("material_id, url");
+    const { data, error } = await admin.from("material_videos").select("material_id, objek");
 
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThanOrEqual(2);
@@ -201,7 +210,7 @@ describe("MATERI — staf tetap bisa mengelola semuanya", () => {
 
   it("owner BISA membaca semua URL video (tidak kehilangan akses)", async () => {
     const owner = await signInAs("owner@padma.test");
-    const { data, error } = await owner.from("material_videos").select("material_id, url");
+    const { data, error } = await owner.from("material_videos").select("material_id, objek");
 
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThanOrEqual(2);
@@ -226,18 +235,18 @@ describe("MATERI — staf tetap bisa mengelola semuanya", () => {
 
       const v = await admin
         .from("material_videos")
-        .insert({ material_id: materialId, url: "https://vimeo.com/uji-admin" })
+        .insert({ material_id: materialId, objek: "https://vimeo.com/uji-admin" })
         .select();
       expect(v.error).toBeNull();
       expect(v.data).toHaveLength(1);
 
       const upd = await admin
         .from("material_videos")
-        .update({ url: "https://vimeo.com/uji-admin-2" })
+        .update({ objek: "https://vimeo.com/uji-admin-2" })
         .eq("material_id", materialId)
         .select();
       expect(upd.data).toHaveLength(1);
-      expect(upd.data![0].url).toBe("https://vimeo.com/uji-admin-2");
+      expect(upd.data![0].objek).toBe("https://vimeo.com/uji-admin-2");
     } finally {
       await svc.from("material_videos").delete().eq("material_id", materialId);
       await svc.from("materials").delete().eq("id", materialId);

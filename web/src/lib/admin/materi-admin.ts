@@ -77,7 +77,7 @@ type BarisMateri = {
   material_pages: Array<{ count: number }>;
 };
 type BarisTautan = { material_id: string; service_id: string };
-type BarisVideo = { material_id: string; url: string };
+type BarisVideo = { material_id: string; objek: string };
 type BarisLayanan = { id: string; nama: string; aktif: boolean };
 
 /**
@@ -137,7 +137,7 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
         .returns<BarisTautan[]>(),
       supabase
         .from("material_videos")
-        .select("material_id, url")
+        .select("material_id, objek")
         .returns<BarisVideo[]>(),
     ]);
 
@@ -149,7 +149,7 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
   }
 
   const videoPer = new Map<string, string>();
-  for (const v of video ?? []) videoPer.set(v.material_id, v.url);
+  for (const v of video ?? []) videoPer.set(v.material_id, v.objek);
 
   const materiById = new Map<string, MateriKelola>();
   for (const m of materi ?? []) {

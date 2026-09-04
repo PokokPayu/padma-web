@@ -4,6 +4,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { OBJEK_VIDEO_TERBUKA } from "./global-setup";
 
 // `createServerSupabase()` membaca `cookies()` dari next/headers, yang hanya
 // bermakna di dalam request scope. Agar lapisan data BENAR-BENAR dieksekusi di
@@ -98,6 +99,12 @@ const MATERI_TERBUKA_EBOOK = "77777777-7777-7777-7777-777777777702";
 // 1106 Lactation Hero — Ananda tidak pernah menjalaninya (TERKUNCI).
 const MATERI_TERKUNCI_VIDEO = "77777777-7777-7777-7777-777777777703";
 const MATERI_TERKUNCI_EBOOK = "77777777-7777-7777-7777-777777777704";
+// Baris `material_videos` demo (id 701/703) TIDAK datang dari
+// `supabase/seed.sql` (spec §13b A-6: demo dev dibiarkan kosong).
+// `ambilDaftarMateri`/`ambilMateriDetail` di bawah butuh baris sungguhan
+// untuk materi terbuka/terkunci di atas, jadi `tests/global-setup.ts`
+// menyemainya SEKALI sebelum berkas test mana pun berjalan — lihat komentar
+// di sana untuk alasan lengkapnya.
 
 const SVC_YOGA = "11111111-1111-1111-1111-111111111102";
 
@@ -273,7 +280,8 @@ describe("ambilMateriDetail", () => {
   it("materi video terbuka: videoUrl terisi dari embed OBJEK (bukan array)", async () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const d = await ambilMateriDetail(MATERI_TERBUKA_VIDEO);
-    expect(d!.videoUrl).toBe("https://vimeo.com/padma-sankalpa-001");
+    // Nilai disemai tests/global-setup.ts (bukan seed.sql — spec §13b A-6).
+    expect(d!.videoUrl).toBe(OBJEK_VIDEO_TERBUKA);
     expect(d!.berhak).toBe(true);
   });
 

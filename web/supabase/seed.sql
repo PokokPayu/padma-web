@@ -66,11 +66,13 @@ insert into material_services (material_id, service_id) values
   ('77777777-7777-7777-7777-777777777703','11111111-1111-1111-1111-111111111106'),
   ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106');
 
--- URL video hidup di tabel tergating `material_videos`, BUKAN di `materials`
--- (lihat migration gate_material_video).
-insert into material_videos (material_id, url) values
-  ('77777777-7777-7777-7777-777777777701','https://vimeo.com/padma-sankalpa-001'),
-  ('77777777-7777-7777-7777-777777777703','https://vimeo.com/RAHASIA-123');
+-- Materi video demo sengaja TIDAK diberi baris `material_videos`, sehingga ia
+-- tampil "Belum ada isi" di panel admin dan terkunci di passport.
+--
+-- Alternatifnya menyemai objek sungguhan ke R2 pada setiap `db reset`, yang
+-- berarti setiap mesin dev menulis ke bucket bersama — tidak sepadan demi satu
+-- materi demo. Konsekuensinya diterima sadar (spec §13b A-6): reader video
+-- hanya bisa dicoba sesudah admin mengunggah video sungguhan.
 
 -- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi; bab teks
 -- sudah dibongkar total di Task 11, material_chapters tidak ada lagi).

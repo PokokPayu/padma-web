@@ -266,7 +266,7 @@ type BarisMateriDetail = {
   tipe: TipeMateri;
   deskripsi: string;
   material_pages: HalamanMateri[];
-  material_videos: { url: string } | null;
+  material_videos: { objek: string } | null;
   material_services: Array<{ service_id: string }>;
 };
 
@@ -279,7 +279,7 @@ export async function ambilMateriDetail(materialId: string): Promise<MateriDetai
         // Lihat komentar panjang di `ambilDaftarMateri` — hint FK
         // `services!materials_service_id_fkey` SENGAJA tidak dipakai lagi di
         // sini juga, dengan alasan yang sama.
-        "id, judul, tipe, deskripsi, material_pages(halaman, lebar, tinggi), material_videos(url), material_services(service_id)",
+        "id, judul, tipe, deskripsi, material_pages(halaman, lebar, tinggi), material_videos(objek), material_services(service_id)",
       )
       .eq("id", materialId)
       .eq("aktif", true) // reader pun wajib menyaring sendiri
@@ -312,7 +312,7 @@ export async function ambilMateriDetail(materialId: string): Promise<MateriDetai
     deskripsi: data.deskripsi,
     namaLayanan,
     halaman,
-    videoUrl: data.material_videos?.url ?? null,
+    videoUrl: data.material_videos?.objek ?? null,
     berhak: berhak === true,
   };
 }

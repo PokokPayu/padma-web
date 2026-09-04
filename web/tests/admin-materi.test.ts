@@ -159,9 +159,9 @@ async function halamanMateri(materiId: string) {
 async function videoMateri(materiId: string) {
   const { data } = await admin
     .from("material_videos")
-    .select("material_id, url")
+    .select("material_id, objek")
     .eq("material_id", materiId)
-    .maybeSingle<{ material_id: string; url: string }>();
+    .maybeSingle<{ material_id: string; objek: string }>();
   return data;
 }
 
@@ -235,7 +235,7 @@ async function pasangFixture() {
       { halaman: 3, objek: `${MATERI_EBOOK}/0003.webp`, lebar: 10, tinggi: 10 },
     ],
   });
-  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, url: URL_UJI });
+  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI, mime: "video/mp4" });
 }
 
 beforeAll(async () => {
@@ -485,7 +485,7 @@ describe("simpanMateri — materi tidak pernah terbit setengah jadi", () => {
     if (!hasil.ok) return;
 
     expect((await barisMateri(hasil.id))!.aktif).toBe(true);
-    expect((await videoMateri(hasil.id))!.url).toBe(
+    expect((await videoMateri(hasil.id))!.objek).toBe(
       "https://player.vimeo.com/video/998877",
     );
   });
@@ -648,7 +648,7 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
     );
     expect(hasil.ok).toBe(true);
     expect((await barisMateri(MATERI_KOSONG))!.tipe).toBe("video");
-    expect((await videoMateri(MATERI_KOSONG))!.url).toBe(
+    expect((await videoMateri(MATERI_KOSONG))!.objek).toBe(
       "https://customer-abc123.cloudflarestream.com/xyz/manifest",
     );
 
@@ -815,7 +815,7 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
 
     const video = await sesiKlien
       .from("material_videos")
-      .select("url")
+      .select("objek")
       .eq("material_id", MATERI_VIDEO);
     expect(video.data ?? []).toHaveLength(1);
   });
@@ -840,7 +840,7 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
 
     const { data, error } = await sesiKlien
       .from("material_videos")
-      .select("url")
+      .select("objek")
       .eq("material_id", MATERI_VIDEO);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
@@ -849,7 +849,7 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
     // Embed pun ikut tertutup — jalur yang dipakai halaman daftar materi.
     const embed = await sesiKlien
       .from("materials")
-      .select("id, material_videos(url)")
+      .select("id, material_videos(objek)")
       .eq("id", MATERI_VIDEO);
     expect(JSON.stringify(embed.data)).not.toContain(URL_UJI);
   });
@@ -891,7 +891,7 @@ describe("mengelola video materi", () => {
       formulir({ video_url: "https://vimeo.com/pad-uji-baru" }),
     );
     expect(hasil.ok).toBe(true);
-    expect((await videoMateri(MATERI_VIDEO))!.url).toBe("https://vimeo.com/pad-uji-baru");
+    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe("https://vimeo.com/pad-uji-baru");
   });
 
   it("gantiVideo menolak host di luar daftar penyedia terproteksi", async () => {
@@ -902,7 +902,7 @@ describe("mengelola video materi", () => {
     expect(hasil.ok).toBe(false);
     if (hasil.ok) return;
     expect(hasil.pesan).toMatch(/vimeo|cloudflare/i);
-    expect((await videoMateri(MATERI_VIDEO))!.url).toBe("https://vimeo.com/pad-uji-baru");
+    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe("https://vimeo.com/pad-uji-baru");
   });
 
   it("lepasVideo DITOLAK selama materinya masih aktif", async () => {
@@ -924,7 +924,7 @@ describe("mengelola video materi", () => {
     expect((await aktifkanMateri(MATERI_VIDEO)).ok).toBe(false);
 
     // Dikembalikan untuk blok berikutnya.
-    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, url: URL_UJI });
+    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI, mime: "video/mp4" });
     await admin.from("materials").update({ aktif: true }).eq("id", MATERI_VIDEO);
   });
 
@@ -933,7 +933,7 @@ describe("mengelola video materi", () => {
     await expect(
       gantiVideo(MATERI_VIDEO, formulir({ video_url: "https://vimeo.com/curian" })),
     ).rejects.toThrow(/REDIRECT/);
-    expect((await videoMateri(MATERI_VIDEO))!.url).toBe(URL_UJI);
+    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe(URL_UJI);
   });
 });
 
