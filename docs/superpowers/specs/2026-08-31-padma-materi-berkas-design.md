@@ -209,11 +209,11 @@ Bucket ini privat **dan sengaja tidak diberi policy `storage.objects` untuk pera
 Byte video tidak pernah masuk Supabase maupun server PADMA. Ia tinggal di bucket R2 privat:
 
 ```
-padma-materi-video   (R2, privat — TIDAK punya public bucket URL maupun custom domain publik)
-                     location hint: apac                 <-- pasien ada di Indonesia
+padma                (R2, privat — TIDAK punya public bucket URL maupun custom domain publik)
+                     location hint: APAC                 <-- pasien ada di Indonesia; TERVERIFIKASI
                      objek: {material_id}/{acak}.{ext}   (nama acak, bukan nama berkas admin)
                      hanya MIME video/mp4 & video/webm yang diterima
-                     maksimum 500 MB per berkas
+                     maksimum 200 MB per berkas          <-- lihat Amandemen A-2
 ```
 
 Bucket ini **tidak boleh** diberi akses publik dalam bentuk apa pun. Satu-satunya jalan masuk adalah presigned URL yang diterbitkan server kita.
@@ -241,9 +241,9 @@ Kegagalan di tengah karena itu tidak pernah menghasilkan materi setengah terisi:
 
 ### Video
 
-1. Admin memilih berkas video. Browser menolak lebih dulu apa pun yang bukan `video/mp4` atau `video/webm`, atau yang lebih besar dari **500 MB**, dengan pesan yang menyebut angkanya.
+1. Admin memilih berkas video. Browser menolak lebih dulu apa pun yang bukan `video/mp4` atau `video/webm`, atau yang lebih besar dari **200 MB**. Pesannya menyebut ukuran berkasnya, batasnya, DAN jalan keluarnya ("ekspor ulang di 720p") — sebab tanpa transkode, admin memang harus mengompres sendiri berapa pun batasnya, dan pesan yang hanya menyebut angka meninggalkannya buntu.
 2. Browser **memeriksa posisi atom `moov`** pada MP4 dengan membaca struktur box di awal berkas. Bila `moov` berada di akhir (bukan "faststart"), admin **diperingatkan** — bukan diblokir — bahwa video akan lambat mulai diputar karena peramban harus mengunduh seluruh berkas dulu. Karena design ini tidak mentranskode apa pun, ini satu-satunya kesempatan menangkap masalah itu, dan membiarkannya lolos berarti pasien melihat pemutar yang menggantung tanpa sebab yang jelas.
-3. Server action `requireRole(["admin","owner"])` menerbitkan **presigned PUT URL** ke R2 untuk objek yang **path-nya ditentukan server**, lalu browser mengunggah berkas langsung ke URL itu. Berkasnya tidak menumpang server kita.
+3. Server action `requireRole(["admin","owner"])` menerbitkan **presigned PUT URL** ke R2 untuk objek yang **path-nya ditentukan server**, lalu browser mengunggah berkas langsung ke URL itu. Berkasnya tidak menumpang server kita. Tanda tangannya WAJIB mengikat `content-type` **dan** `content-length` — lihat Amandemen A-1 dan A-2; keduanya tidak terikat secara default, dan yang pertama membuat MIME palsu bisa masuk basis data.
 4. Setelah unggahan sukses, satu server action menyimpan nama objek + MIME ke `material_videos`.
 
 Tidak ada tahap pemrosesan asinkron: begitu unggahan selesai, videonya siap ditonton. Ini penyederhanaan nyata dibanding layanan streaming — dan sekaligus alasan tidak ada kualitas adaptif.
@@ -366,7 +366,7 @@ Catatan yang tidak boleh hilang: `materials.aktif` **wajib** ikut dievaluasi di 
 | PDF gagal dibaca PDF.js (rusak/terenkripsi) | Pesan yang menyebut sebabnya; tidak ada yang tersimpan |
 | Unggahan gagal di tengah | Tidak ada baris halaman tercatat; materi berstatus "Belum ada isi" di panel admin. Admin mengulang dari awal |
 | Materi tanpa isi dibuka pasien yang berhak | Halaman ramah "isi materi sedang disiapkan", bukan 404 dan bukan reader kosong |
-| Berkas video bukan MP4/WebM, atau > 500 MB | Ditolak di browser sebelum apa pun terkirim, dengan pesan yang menyebut batasnya |
+| Berkas video bukan MP4/WebM, atau > 200 MB | Ditolak di browser sebelum apa pun terkirim, dengan pesan yang menyebut ukuran berkas, batasnya, dan jalan keluarnya. Server MENOLAK ULANG saat menandatangani, jadi peramban yang dimodifikasi pun tidak lolos |
 | MP4 tanpa faststart (`moov` di akhir) | Admin **diperingatkan**, tidak diblokir: video akan lambat mulai diputar |
 | Pasien tidak berhak membuka route halaman | 404, tanpa membedakan "tidak ada" dari "tidak berhak" |
 | R2 tidak bisa dihubungi saat menerbitkan presigned URL | Reader menampilkan galat yang bisa dicoba ulang; sisa passport tetap jalan. Pesan galatnya **tidak memuat URL maupun kunci objek** |
@@ -401,7 +401,7 @@ Seluruhnya **server-only**; tidak satu pun ber-prefix `NEXT_PUBLIC_`.
 | Variabel | Guna |
 |---|---|
 | `R2_ACCOUNT_ID` | Akun Cloudflare pemilik bucket |
-| `R2_BUCKET_VIDEO` | Nama bucket video (privat) |
+| `R2_BUCKET_VIDEO` | Nama bucket video (privat). Nilainya sekarang **`padma`** |
 | `R2_ACCESS_KEY_ID` | Kunci akses S3-compatible |
 | `R2_SECRET_ACCESS_KEY` | Rahasia akses S3-compatible |
 
@@ -418,12 +418,82 @@ Design ini sengaja menutupi dua rantai yang **saling bebas**, dan keduanya sebai
 
 Urutannya: rantai 1 lebih dulu. Model data dan penugasan yang dibangun di sana dipakai ulang oleh rantai 2, dan `material_videos` yang ada sekarang tetap berfungsi dengan URL penyedia sampai rantai 2 dikerjakan.
 
+## 13b. Amandemen sesudah spike R2 (4 September 2026)
+
+Bagian ini mencatat apa yang **berubah** pada dokumen ini setelah API R2 diuji terhadap bucket
+sungguhan. Hasil lengkapnya: `docs/superpowers/spikes/2026-09-04-spike-r2-api.md`.
+
+### A-1: `Content-Type` TIDAK terikat secara default — dan itu wajib ditutup
+
+`getSignedUrl` bawaan hanya menandatangani `host`. Presigned PUT yang diterbitkan untuk
+`video/mp4` **menerima** unggahan ber-`Content-Type: text/html` dengan HTTP 200. Karena MIME
+inilah yang masuk `material_videos.mime` lalu dipakai elemen `<video>`, lubang ini senyap:
+tidak ada yang merah, dan pasien hanya mendapati pemutar yang tidak mau jalan.
+
+Ditutup dengan `signableHeaders: new Set(["content-type"])` — terbukti menolak MIME palsu
+dengan 403 sementara MIME yang benar tetap 200. Rencana implementasi WAJIB menyebut opsi ini
+eksplisit; tanpa itu ia terlewat tanpa satu pun galat.
+
+### A-2: batas ukuran turun ke 200 MB, dan ditegakkan SERVER
+
+Dua perubahan, dan keduanya punya alasan terpisah.
+
+**Kenapa 200 MB, bukan 500 MB.** Design ini menolak transkode (§14), jadi berkas yang diunggah
+admin adalah berkas yang ditonton pasien. Video dari ponsel modern gampang melewati 1 GB, yang
+berarti admin **tetap harus mengompres** berapa pun batas yang dipilih. Tugas batasnya karena itu
+bukan menampung berkas mentah, melainkan menolak cepat dengan instruksi yang jelas. 200 MB
+menampung ~15 menit pada 720p — di atas kebutuhan materi edukasi klinik — sementara satu
+kegagalan unggah berbiaya menit, bukan sejam.
+
+**Kenapa server bisa menegakkannya.** Spec §6 semula menulis batas ini ditegakkan di browser.
+Empirisnya lebih kuat: bila `ContentLength` ikut ditandatangani, R2 menolak badan yang lebih besar
+**maupun** lebih kecil dari yang ditandatangani (403), dan hanya menerima yang persis sama.
+Polanya: browser mendeklarasikan `file.size`, server memeriksa deklarasi itu ≤ 200 MB **sebelum**
+menandatangani, lalu menandatanganinya. Sesudah itu peramban tidak bisa mengunggah apa pun yang
+ukurannya berbeda dari yang disetujui server.
+
+Yang dipagari adalah ukuran **PERSIS**, bukan "maksimum" — kalimat ini harus dibaca tepat, sebab
+menandatangani `ContentLength` sebagai batas atas tidak akan bekerja.
+
+### A-3: parameter checksum SDK bukan pagar integritas
+
+SDK menyelipkan `x-amz-checksum-crc32` dan `x-amz-sdk-checksum-algorithm` ke query presigned URL.
+Badan yang **berbeda** dari yang ditandatangani tetap diterima HTTP 200. Jangan pernah membaca
+parameter itu sebagai jaminan isi.
+
+### A-4: yang TERBUKTI berjalan seperti design
+
+Tidak perlu diragukan lagi saat implementasi: kunci objek benar-benar terikat tanda tangan (PUT ke
+path lain dijawab 403, jadi klaim "path ditentukan server" ditegakkan R2 sendiri, bukan sekadar
+konvensi kita); bucket privat (GET anonim ditolak); Range request dihormati termasuk sufiks
+`bytes=-64`, sehingga seek video jalan; umur presigned URL 2 jam jauh di bawah batas SigV4 7 hari;
+dan location hint bucket memang APAC.
+
+### A-5: CORS bucket — terpasang, tapi belum lengkap untuk produksi
+
+Preflight dari `http://localhost:3000` dijawab 204 dengan `allow-methods: PUT, GET` dan
+`allow-headers: content-type`, sementara origin asing dijawab 403 tanpa header — jadi aturannya
+benar dan tidak kelewat longgar. **`AllowedOrigins` belum memuat domain produksi.** Bila itu
+terlewat, unggah materi mati di produksi saja sementara lokal tetap hijau — kelas bug yang paling
+mahal ditemukan belakangan. Menambahkannya adalah butir go-live, bukan pekerjaan implementasi.
+
+Catatan operasional: token R2 yang ada berlingkup Object Read & Write, jadi CORS dikelola lewat
+dashboard. Itu disengaja — verifikasi CORS lewat preflight tidak menuntut kredensial sama sekali,
+sehingga token admin tidak memberi manfaat sepadan dengan risikonya.
+
+### A-6: materi video demo di seed lokal tampil "Belum ada isi"
+
+Kolom `url` berubah makna menjadi `objek`, dan nilai lama di seed bukan kunci objek. Alternatifnya
+menyemai objek sungguhan ke R2 pada setiap `db reset`, yang berarti setiap mesin dev menulis ke
+bucket bersama — tidak sepadan demi satu materi demo. Konsekuensinya diterima sadar: reader video
+hanya bisa dicoba sesudah admin mengunggah video sungguhan.
+
 ## 14. Di Luar Scope
 
 - Watermark per-pasien yang dibakar ke dalam **video** — butuh encode ulang per pasien.
 - **Transkode video & kualitas adaptif (HLS/DASH).** Butuh ffmpeg; konsekuensinya pasien di koneksi lambat tersendat, dan videonya tetap satu berkas utuh. Inilah yang ditukar demi biaya nol di M5. Jalan naiknya dijelaskan di §3: pindah ke layanan streaming, bukan menambal R2.
 - **Thumbnail video otomatis.** Layanan streaming menghasilkannya sendiri; penyimpanan objek tidak. Pemutar memakai frame pertama.
-- Unggah video multipart untuk berkas > 500 MB.
+- **Unggah video multipart.** Berkas diunggah sekali jalan. Pemicu konkret untuk meninjau ulang, supaya keputusan ini tidak abadi karena kelupaan: admin menabrak batas 200 MB pada video yang **sudah** dikompres wajar, ATAU unggahan berulang kali putus di tengah. Sampai salah satunya teramati, multipart adalah kompleksitas spekulatif — spike sudah memastikan R2 mendukungnya, jadi jalan naiknya terbuka kapan pun dibutuhkan.
 - Cache gambar ber-watermark per (materi, halaman, pasien). Sengaja tidak dulu; ditambahkan hanya bila pemrosesan gambar terbukti menjadi masalah nyata.
 - Lapisan teks ebook untuk pencarian & pembaca layar — ditolak sadar di §2 karena mengembalikan teks yang bisa disebar utuh.
 - Merender ulang PDF ke resolusi lain tanpa unggah ulang — konsekuensi M3.
