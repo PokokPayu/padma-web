@@ -1,0 +1,196 @@
+name: Backup database
+
+on:
+  workflow_dispatch:
+    inputs:
+      sumber:
+        description: "contoh = Postgres bawaan runner (aman). produksi = Supabase sungguhan."
+        type: choice
+        options: [contoh, produksi]
+        default: contoh
+
+  # ===== JADWAL HARIAN — SENGAJA MASIH MATI =====
+  # Dihidupkan sebagai LANGKAH TERAKHIR go-live (spec §11), sesudah ketiga
+  # secret terpasang dan latihan dekripsi pertama selesai. Jadwal yang aktif
+  # sebelum itu gagal setiap hari, dan alarm yang berbunyi tiap hari adalah
+  # alarm yang berhenti dibaca.
+  # schedule:
+  #   - cron: "0 20 * * *"   # 20:00 UTC = 03:00 WIB
+
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      pg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: pengujian
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      URL_ADMIN: postgresql://postgres:pengujian@127.0.0.1:5432/postgres
+      URL_VERIFIKASI: postgresql://postgres:pengujian@127.0.0.1:5432/verifikasi
+      URL_CONTOH: postgresql://postgres:pengujian@127.0.0.1:5432/sumber_contoh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Pasang klien PostgreSQL 17 dan age
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17 age
+          pg_dump --version
+          age --version
+
+      - name: Siapkan sumber
+        env:
+          SUMBER: ${{ inputs.sumber }}
+          URL_PRODUKSI: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ "${SUMBER:-produksi}" = "produksi" ]; then
+            if [ -z "${URL_PRODUKSI:-}" ]; then
+              echo "::error::Secret SUPABASE_DB_URL belum dipasang."; exit 1
+            fi
+            # Nilainya TIDAK pernah dicetak; hanya diteruskan lewat berkas env.
+            echo "URL_SUMBER=$URL_PRODUKSI" >> "$GITHUB_ENV"
+            echo "TABEL_WAJIB=auth.users,public.clients,public.sessions,public.materials,public.profiles" >> "$GITHUB_ENV"
+          else
+            psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database sumber_contoh;"
+            psql "$URL_CONTOH" -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists auth;
+          create table auth.users (id uuid primary key, email text not null);
+          create table public.clients (id uuid primary key, nama text not null);
+          insert into auth.users values
+            ('11111111-1111-1111-1111-111111111111', 'contoh@padma.test');
+          insert into public.clients values
+            ('22222222-2222-2222-2222-222222222222', 'Pasien Contoh');
+          SQL
+            echo "URL_SUMBER=$URL_CONTOH" >> "$GITHUB_ENV"
+            echo "TABEL_WAJIB=auth.users,public.clients" >> "$GITHUB_ENV"
+          fi
+
+      - name: Periksa versi klien vs server
+        run: |
+          set -euo pipefail
+          server=$(psql "$URL_SUMBER" -Atc "show server_version_num")
+          klien=$(pg_dump --version | grep -oE '[0-9]+' | head -1)
+          server_mayor=$(( server / 10000 ))
+          echo "server=$server_mayor klien=$klien"
+          if [ "$klien" -lt "$server_mayor" ]; then
+            echo "::error::pg_dump $klien lebih tua daripada server $server_mayor — dump akan ditolak."
+            exit 1
+          fi
+
+      - name: Buat cap waktu
+        id: cap
+        run: echo "nilai=$(date -u +%Y%m%d-%H%M%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: pg_dump
+        run: |
+          set -euo pipefail
+          # Hanya public + auth. Skema terkelola Supabase (vault, pgsodium,
+          # storage, realtime) sengaja DILUAR: sebagiannya tidak bisa dibaca
+          # peran postgres, dan tak satu pun bisa dipulihkan ke Postgres polos —
+          # memasukkannya membuat verifikasi merah karena hal yang bukan masalah.
+          # Objek Storage memang di luar scope (spec B3).
+          pg_dump "$URL_SUMBER" \
+            --format=custom --no-owner --no-privileges \
+            --schema=public --schema=auth \
+            --file="padma-${{ steps.cap.outputs.nilai }}.dump"
+          ls -lh padma-*.dump
+
+      - name: Pulihkan sungguhan lalu verifikasi
+        run: |
+          set -euo pipefail
+          psql "$URL_ADMIN" -v ON_ERROR_STOP=1 -c "create database verifikasi;"
+          psql "$URL_VERIFIKASI" -v ON_ERROR_STOP=1 -c 'create extension if not exists pgcrypto;'
+
+          # --exit-on-error TIDAK dipakai: dump lintas-lingkungan selalu memuat
+          # GRANT ke peran yang tidak ada di Postgres polos. Yang menentukan
+          # lulus-tidaknya adalah pemeriksaan di bawah, bukan diamnya pg_restore.
+          pg_restore --no-owner --no-privileges \
+            --dbname "$URL_VERIFIKASI" "padma-${{ steps.cap.outputs.nilai }}.dump" \
+            2> restore.log || true
+          echo "--- 20 baris pertama restore.log ---"
+          head -20 restore.log || true
+
+          total=0
+          for t in ${TABEL_WAJIB//,/ }; do
+            ada=$(psql "$URL_VERIFIKASI" -Atc "select to_regclass('$t') is not null;")
+            if [ "$ada" != "t" ]; then
+              echo "::error::Tabel wajib $t TIDAK ada di hasil restore — dump tidak lengkap."
+              exit 1
+            fi
+            n=$(psql "$URL_VERIFIKASI" -Atc "select count(*) from $t;")
+            echo "  $t: $n baris"
+            total=$(( total + n ))
+          done
+          if [ "$total" -eq 0 ]; then
+            echo "::error::Seluruh tabel wajib kosong — dump kemungkinan terpotong."
+            exit 1
+          fi
+          echo "Verifikasi lolos: $total baris di seluruh tabel wajib."
+
+      - name: Enkripsi
+        env:
+          AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AGE_PUBLIC_KEY:-}" ]; then
+            echo "::error::Secret AGE_PUBLIC_KEY belum dipasang."; exit 1
+          fi
+          age -r "$AGE_PUBLIC_KEY" \
+            -o "padma-${{ steps.cap.outputs.nilai }}.dump.age" \
+            "padma-${{ steps.cap.outputs.nilai }}.dump"
+          # Runner memang sekali pakai, tetapi menghapus berkas polosnya menutup
+          # kemungkinan ia ikut terangkut langkah lain (artifact, cache, log).
+          rm -f "padma-${{ steps.cap.outputs.nilai }}.dump"
+          ls -lh padma-*.dump.age
+
+      - name: Unggah ke R2 + terapkan retensi
+        working-directory: web
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_BACKUP: ${{ secrets.R2_BUCKET_BACKUP }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npx tsx scripts/backup/unggah-r2.ts \
+            "../padma-${{ steps.cap.outputs.nilai }}.dump.age" \
+            "${{ steps.cap.outputs.nilai }}"
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "### Backup ${{ steps.cap.outputs.nilai }}"
+            echo "- sumber: \`${{ inputs.sumber || 'terjadwal (produksi)' }}\`"
+            echo "- status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
