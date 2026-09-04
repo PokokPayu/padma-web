@@ -154,9 +154,16 @@ integrasi tambahan: satu kanal yang pasti terbaca lebih baik daripada dua yang d
 
 - **Vitest** untuk fungsi murni: pemilihan objek kedaluwarsa (termasuk batas persis 30 hari,
   objek berumur negatif akibat jam mesin, dan daftar kosong), serta penamaan objek bolak-balik.
-- **Job itu sendiri** dibuktikan dengan `workflow_dispatch` terhadap database **lokal**
-  terlebih dahulu, bukan langsung produksi.
-- Tidak ada tes yang menyentuh produksi.
+- **Job itu sendiri** dibuktikan dalam dua tahap, dan **tidak** dengan menunjuk workflow ke
+  database lokal — runner GitHub tidak punya jalan menuju Postgres Docker di mesin dev, jadi
+  "jalankan workflow terhadap database lokal" adalah instruksi yang mustahil dijalankan:
+  1. **Di mesin dev:** skrip yang sama dijalankan tangan terhadap Postgres Docker lokal. Ini
+     membuktikan rantai dump → restore → verifikasi → enkripsi tanpa menyentuh apa pun di luar.
+  2. **Di CI:** satu jalan `workflow_dispatch` yang men-dump dari **Postgres service container**
+     berisi migrasi repo, bukan dari produksi. Ini membuktikan langkah-langkah runner — pemasangan
+     klien, pemeriksaan versi, `age`, unggah R2, retensi — tanpa risiko pada data sungguhan.
+- Baru sesudah keduanya hijau, workflow diarahkan ke produksi.
+- Tidak ada tes otomatis yang menyentuh produksi.
 
 ## 10. Env & konfigurasi
 
@@ -174,7 +181,9 @@ Seluruhnya GitHub Secrets; tidak satu pun masuk repo.
 1. Reset sandi database Supabase; simpan connection string session pooler ke `SUPABASE_DB_URL`.
 2. Terbitkan token R2 berlingkup `padma-backup`; simpan ketiga nilainya.
 3. Buat pasangan kunci `age`; **kunci privat ke password manager**, publiknya ke `AGE_PUBLIC_KEY`.
-4. Jalankan workflow manual (`workflow_dispatch`) terhadap database lokal, lalu terhadap produksi.
+4. Jalankan skrip di mesin dev terhadap Postgres lokal, lalu `workflow_dispatch` sekali dengan
+   sumber Postgres service container (lihat §9) — **bukan** dengan menunjuk workflow ke mesin dev,
+   yang tidak terjangkau runner. Sesudah keduanya hijau, arahkan ke produksi.
 5. Lakukan latihan dekripsi pertama.
 6. **Baru** aktifkan blok `schedule:`.
 
