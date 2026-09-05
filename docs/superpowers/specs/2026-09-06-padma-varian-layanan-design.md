@@ -1,4 +1,4 @@
-# PADMA — Varian Layanan & Pricelist Asli — Design Doc
+# PADMA — Varian Layanan & Harga Bertingkat — Design Doc
 
 **Tanggal:** 6 September 2026
 **Status:** menunggu review
@@ -25,7 +25,7 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 
 | Urutan | Spec | Alasan urutan |
 |---|---|---|
-| 1 | **Varian layanan & pricelist asli** (dokumen ini) | Prasyarat semuanya. Tanpa varian, harga paket dan tagihan tidak punya satuan. |
+| 1 | **Varian layanan & harga bertingkat** (dokumen ini) | Prasyarat semuanya. Tanpa varian, harga paket dan tagihan tidak punya satuan. |
 | 2 | Paket bundling multi-layanan | `package_items` menunjuk varian. |
 | 3 | Transport, alamat klien, domisili mitra | Prasyarat penyelesaian pembayaran paket. |
 | 4 | Rangkaian status, payment gateway, kredit & reschedule | Perubahan alur terbesar, paling akhir. |
@@ -58,9 +58,9 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 
 **Yang tidak dijamin:**
 
-- **Honor mitra untuk pricelist asli belum diketahui.** Klien belum pernah menyebut angkanya.
-  Seed memakai angka yang ditandai jelas sebagai dummy; produksi harus diisi owner sebelum sesi
-  pertama berbayar berjalan. Tarif tanpa honor membuat rekap owner menampilkan margin palsu.
+- **Pricelist asli tidak ikut masuk repo** (V10). Katalog produksi tetap diisi klien lewat panel,
+  dan honor mitra untuk harga-harga itu belum pernah disebut klien. Tarif tanpa honor membuat rekap
+  owner menampilkan margin palsu, jadi pengisiannya harus lengkap sebelum sesi berbayar pertama.
 - **Circle di spec ini baru berarti harga, belum berarti sesi rombongan.** Memilih Circle
   menghasilkan sesi satu-klien dengan tarif Circle. Bila di lapangan Circle memang diisi beberapa
   klien sekaligus, honor mitra per sesi dan rekap Sabtu akan salah hitung. Itu perlu spec sendiri.
@@ -77,8 +77,8 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 | V6 | **Seluruh pagar uang `service_rates` dipindah APA ADANYA ke `variant_rates`** — `unique (variant_id, berlaku_sejak)`, `check (harga_klien >= 0 and honor_mitra >= 0 and honor_mitra <= harga_klien)`, `guard_tarif_maju`, `kunci_riwayat_tarif` | Pagar-pagar itu lahir dari temuan red team dengan bukti tertulis; mengganti tabelnya tanpa memindahkan pagarnya berarti membayar ulang temuan yang sama. Karena harga dan honor tetap satu baris, penetapan tarif atomik dengan sendirinya — tidak perlu fungsi Postgres khusus maupun invarian pasangan. |
 | V7 | **Label "Soft Launch" ditulis di komponen, bukan `app_settings`** | Ia muncul bila `harga_coret` terisi dan hilang bila dikosongkan; itu sudah cukup sebagai sakelar. Menambah kunci pengaturan untuk teks yang belum pernah minta diubah hanya menambah tempat untuk salah. |
 | V8 | **`service_rates` dijatuhkan, bukan dibiarkan berdampingan** | Dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang tahu kapan. |
-| V9 | **Katalog asli masuk `seed.sql` saja, bukan migrasi produksi** | Data pengembangan jadi realistis (varian bertingkat benar-benar teruji) tanpa menulis angka honor karangan ke database sungguhan. Produksi tetap diisi klien lewat panel, sesuai keputusan #12 spec v1. |
-| V10 | **Layanan prekonsepsi (Sankalpa) & menopause (Sandhya) dibuang dari seed** | Keduanya tidak ada di pricelist soft launch. Katalog pengembangan mencerminkan apa yang benar-benar dijual; bila kelak dijual, admin menambahkannya lewat panel. Fase-nya sendiri tetap ada di tabel `phases`. |
+| V9 | **Seed tetap memakai 10 layanan dummy yang ada — UUID dan namanya tidak disentuh** — tetapi tiga layanan yang TIDAK pernah disebut berkas uji mana pun (`…107`, `…108`, `…109`) diberi varian bertingkat | Data pengembangan butuh contoh varian bertingkat, kalau tidak bug tampilan varian baru ketahuan di produksi. Tapi 25 berkas uji menyebut UUID layanan seed — yang terbanyak justru `…101` dengan 14 kemunculan — sehingga mengganti katalog seed memerahkan seperempat suite yang isinya tidak berhubungan dengan varian. Memilih tiga layanan yang tidak dirujuk siapa pun memberi contoh bertingkat dengan radius nol. |
+| V10 | **Pricelist asli TIDAK masuk repo pada spec ini** | Keputusan #12 spec v1 tetap berlaku: klien mengisi katalognya sendiri lewat panel saat live. Memasukkan 8 layanan + 22 varian asli menuntut pembongkaran ~25 berkas uji dari UUID keras menjadi pencarian lewat fixture bersama — perbaikan yang sah, tetapi pekerjaan tersendiri yang menyentuh berkas jauh di luar ruang lingkup varian. Honor mitra untuk harga-harga itu juga belum pernah disebut klien. |
 
 ## 4. Skema
 
@@ -279,37 +279,26 @@ menyelipkan migrasi ke tengah riwayat sehingga `db reset` gagal.
    ulang dengan `create or replace` agar menunjuk `variant_rates`; keduanya dipakai bersama trigger
    baru dan trigger lamanya ikut jatuh bersama tabelnya.
 
-### 6.1 Seed katalog asli (V9, V10)
+### 6.1 Seed — contoh varian bertingkat (V9, V10)
 
-8 layanan, 22 varian. `harga_coret` = `harga_klien` + 20.000 untuk seluruh baris.
-`honor_mitra` diisi angka **dummy bertanda**, karena klien belum menyebutkannya.
+Seed tidak diganti. Sepuluh layanan dummy, UUID dan namanya tetap. Yang ditambahkan hanya varian
+untuk tiga layanan yang **tidak dirujuk satu berkas uji pun** — diverifikasi dengan
+`grep -rl '…111107' tests` dan seterusnya, ketiganya nol:
 
-| Layanan | Fase | Varian | Harga |
-|---|---|---|---|
-| Garbha Relief | kehamilan | 60 menit | 139.000 |
-| | | 90 menit | 179.000 |
-| | | 120 menit | 219.000 |
-| Garbha Partner Lab | kehamilan | 90 menit · Private | 179.000 |
-| | | 90 menit · Circle | 109.000 |
-| Garbha Flow Yoga | kehamilan | Basic · 60 menit · Private | 139.000 |
-| | | Basic · 60 menit · Circle | 99.000 |
-| | | Complete · 120 menit · Private | 219.000 |
-| | | Complete · 120 menit · Circle | 119.000 |
-| | | Couple · 120 menit · Private | 219.000 |
-| | | Couple · 120 menit · Circle | 119.000 |
-| Shishu Parents Touch | newborn | 90 menit · Private | 179.000 |
-| | | 90 menit · Circle | 109.000 |
-| Shishu Nurturing Academy | newborn | 60 menit · 2 modul | 139.000 |
-| | | 120 menit · 3 modul | 219.000 |
-| Purnama Rest | nifas | 60 menit | 139.000 |
-| | | 90 menit | 179.000 |
-| | | 120 menit | 219.000 |
-| Lactation Hero + Partner Comfort Touch | nifas | 120 menit · Private | 219.000 |
-| | | 120 menit · Circle | 119.000 |
-| Return to Work | nifas | 120 menit · Private | 219.000 |
-| | | 120 menit · Circle | 119.000 |
+| Layanan seed | Varian yang disemai | Dimensi yang diuji |
+|---|---|---|
+| `…111107` Purnama Recovery Massage | 60 menit · 90 menit · 120 menit | durasi bertingkat, tanpa format |
+| `…111109` Shishu Parent Touch | 90 menit · Private, 90 menit · Circle | format, durasi tunggal |
+| `…111108` Sandhya Balance Care | varian baku (label kosong) | layanan berharga tunggal |
 
-Layanan prekonsepsi dan menopause di seed lama dibuang (V10); `phases` tidak disentuh.
+Tujuh layanan lain memperoleh varian baku dari migrasi (§6 langkah 2), jadi seluruh seed tetap
+memenuhi V3 tanpa satu pun perubahan pada baris `services`.
+
+Tarif untuk varian tambahan disemai dengan `harga_coret` terisi pada sebagian baris saja, supaya
+kedua cabang tampilan (dicoret / polos) ada di data pengembangan.
+
+Pricelist asli PADMA — 8 layanan, 22 varian, harga soft launch beserta harga normalnya — tetap
+menjadi pekerjaan pengisian katalog oleh klien lewat panel, di luar repo (V10).
 
 ## 7. Pengujian
 
@@ -374,3 +363,5 @@ Disebut eksplisit supaya tidak dikira sudah beres:
 - **Rangkaian status baru** (`MATCHING_MITRA`, `AWAITING_PAYMENT`, `IN_PROGRESS`, …), payment
   gateway, kredit layanan 30 hari, jatah reschedule.
 - **Circle sebagai sesi rombongan** — lihat §2 "Yang tidak dijamin".
+- **Pengisian katalog asli ke repo** beserta pelepasan ~25 berkas uji dari UUID seed yang
+  ditulis keras (V10). Pekerjaan tersendiri; sah, tapi bukan bagian dari varian.
