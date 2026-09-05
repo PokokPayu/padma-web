@@ -5,6 +5,7 @@ import {
   type TarifRingkas,
   type SesiRekap,
   type TandaBayar,
+  type RekapPekan,
 } from "@/lib/owner/rekap";
 
 // ============================================================================
@@ -522,5 +523,63 @@ describe("hitungRekap — kemurnian & ketahanan", () => {
     expect(() =>
       hitungRekap({ tarif: [tarif({})], sesi: [sesi({ tanggal: "30-08-2026" })], tanda: [] }),
     ).toThrow();
+  });
+});
+
+describe("deretPekanTerakhir — sumbu waktu tanpa lubang", async () => {
+  const { deretPekanTerakhir } = await import("@/lib/owner/rekap");
+  const { awalPekan, geserHari } = await import("@/lib/owner/pekan");
+
+  const HARI = "2026-09-06";
+  const SENIN = awalPekan(HARI); // 2026-08-31
+
+  /** Satu RekapPekan minimal — hanya medan yang dipakai grafik yang diisi. */
+  function pekan(senin: string, harga: number, honor: number): RekapPekan {
+    return {
+      senin,
+      rentang: senin,
+      jumlahSesi: 1,
+      perMitra: [],
+      totalHonor: honor,
+      totalHarga: harga,
+      margin: harga - honor,
+      sesiTakBertarif: [],
+    };
+  }
+
+  it("memulangkan tepat `pekan` titik, terlama di kiri", () => {
+    const hasil = deretPekanTerakhir([pekan(SENIN, 100, 40)], HARI, 4);
+    expect(hasil).toHaveLength(4);
+    expect(hasil[hasil.length - 1].senin).toBe(SENIN);
+    for (let i = 1; i < hasil.length; i++) {
+      expect(hasil[i].senin).toBe(geserHari(hasil[i - 1].senin, 7));
+    }
+  });
+
+  it("pekan tanpa data menjadi NOL, bukan lompatan", () => {
+    // Melompatinya membuat tiga pekan tampil sebagai dua titik dan sumbu
+    // waktunya berbohong tanpa satu angka pun yang salah.
+    const hasil = deretPekanTerakhir([pekan(SENIN, 100, 40)], HARI, 3);
+    expect(hasil.slice(0, 2).every((p) => p.totalHarga === 0)).toBe(true);
+    expect(hasil.slice(0, 2).every((p) => p.margin === 0)).toBe(true);
+    expect(hasil.slice(0, 2).every((p) => p.jumlahSesi === 0)).toBe(true);
+  });
+
+  it("pekan yang ada dipakai apa adanya, tidak dihitung ulang", () => {
+    const asli = pekan(SENIN, 900, 350);
+    const hasil = deretPekanTerakhir([asli], HARI, 2);
+    expect(hasil[1]).toBe(asli);
+  });
+
+  it("pekan di luar jendela diabaikan", () => {
+    const jauh = pekan(geserHari(SENIN, -70), 5000, 1000);
+    const hasil = deretPekanTerakhir([jauh, pekan(SENIN, 100, 40)], HARI, 3);
+    expect(hasil.some((p) => p.totalHarga === 5000)).toBe(false);
+  });
+
+  it("rekap kosong tetap memulangkan deret penuh berisi nol", () => {
+    const hasil = deretPekanTerakhir([], HARI, 8);
+    expect(hasil).toHaveLength(8);
+    expect(hasil.every((p) => p.totalHarga === 0)).toBe(true);
   });
 });

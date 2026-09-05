@@ -1,4 +1,4 @@
-import { awalPekan, rentangPekan } from "./pekan";
+import { awalPekan, geserHari, rentangPekan } from "./pekan";
 
 // ============================================================================
 // REKAP HONOR — agregasi uang, dihitung di TYPESCRIPT
@@ -235,4 +235,43 @@ export function hitungRekap(input: {
   // kronologis; komparator mengembalikan 0 untuk nilai setara agar tidak
   // melanggar kontrak Array#sort.
   return hasil.sort((a, b) => (a.senin > b.senin ? -1 : a.senin < b.senin ? 1 : 0));
+}
+
+/**
+ * `pekan` pekan berurutan sampai pekan berjalan, TERLAMA DI KIRI.
+ *
+ * `hitungRekap()` mengelompokkan sesi, jadi pekan yang tidak punya satu sesi
+ * pun tidak menghasilkan ember sama sekali. Grafik yang memakai hasilnya apa
+ * adanya akan MELOMPATI pekan sepi: delapan pekan tampil sebagai enam titik,
+ * jarak antar titik menjadi tidak sama, dan garisnya berbohong tanpa satu
+ * angka pun yang salah.
+ *
+ * Pekan kosong diisi nol, bukan dihilangkan — dan nol memang benar: tidak ada
+ * sesi berarti tidak ada honor, tidak ada harga, tidak ada margin.
+ *
+ * Fungsi MURNI: tidak membaca jam sistem dan tidak menyentuh basis data.
+ */
+export function deretPekanTerakhir(
+  rekap: readonly RekapPekan[],
+  hariIni: string,
+  pekan = 8,
+): RekapPekan[] {
+  const seninKini = awalPekan(hariIni);
+  const adaNya = new Map(rekap.map((p) => [p.senin, p]));
+
+  return Array.from({ length: pekan }, (_, i) => {
+    const senin = geserHari(seninKini, -7 * (pekan - 1 - i));
+    const punya = adaNya.get(senin);
+    if (punya) return punya;
+    return {
+      senin,
+      rentang: rentangPekan(senin),
+      jumlahSesi: 0,
+      perMitra: [],
+      totalHonor: 0,
+      totalHarga: 0,
+      margin: 0,
+      sesiTakBertarif: [],
+    };
+  });
 }
