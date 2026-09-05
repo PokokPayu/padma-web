@@ -22,24 +22,7 @@ export default async function OwnerLayout({
 }) {
   const { nama } = await requireRole(["owner"]);
 
-  return (
-    <div className="min-h-screen bg-paper">
-      <div className="mx-auto max-w-6xl px-4 pb-36 pt-6 sm:pb-10">
-        {/* Identitas & jalan keluar kini di dalam kartu nav (MenuAkun), bukan
-            strip terpisah di atasnya. Di mobile jalan keluarnya ada di Beranda. */}
-        <NavOwner nama={nama} />
-        {children}
-
-        {/* Kebalikan persis dari catatan di panel admin ("tidak ada angka uang
-            di panel ini"). Keduanya menjelaskan sisi yang sama dari satu
-            firewall, dan owner perlu tahu bahwa yang ia lihat di sini memang
-            tidak pernah sampai ke layar siapa pun yang lain. */}
-        <p className="mt-10 border-t border-black/10 pt-4 text-[11.5px] leading-relaxed text-ink-soft">
-          <b className="text-ink">Money firewall</b> — panel inilah satu-satunya
-          tempat nominal uang hidup. Admin dan klien tidak pernah melihat angka
-          di halaman ini, dan penolakannya ditegakkan di level basis data.
-        </p>
-      </div>
-    </div>
-  );
+  // Kerangka panel (sidebar, topbar, bar bawah) hidup di dalam NavOwner, yang
+  // kini MEMBUNGKUS isi halaman. Catatan money firewall ikut pindah ke sana.
+  return <NavOwner nama={nama}>{children}</NavOwner>;
 }

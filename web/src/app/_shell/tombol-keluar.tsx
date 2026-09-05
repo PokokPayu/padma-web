@@ -1,15 +1,19 @@
 /**
- * Jalan keluar versi mobile.
+ * Jalan keluar versi mobile — kini KHUSUS panel klien (/passport/profil).
  *
- * Di layar kecil, nav berupa bottom bar gelap yang sudah penuh (panel admin
- * memuat sembilan tujuan), jadi menu akun di kartu nav desktop tidak punya
- * tempat di sana. Karena itu Keluar tinggal di dalam halaman yang memang
- * bersifat "akun & setelan": Profil untuk klien, Setelan untuk admin, Beranda
- * untuk owner.
+ * Alasan lahirnya masih sama: di layar kecil, `MenuAkun` tidak selalu punya
+ * tempat, jadi Keluar tinggal di halaman yang memang bersifat "akun & setelan".
+ * Untuk klien itu Profil.
  *
- * `sm:hidden` disengaja: di desktop jalan keluarnya sudah ada di menu akun pada
- * kartu nav, dan dua tombol keluar di satu layar hanya membuat pemakai menebak
- * mana yang benar. Salah satu dari keduanya SELALU tampil, di lebar berapa pun.
+ * Panel admin dan owner TIDAK LAGI memakainya: `Topbar` (lewat `KerangkaPanel`)
+ * kini merender `MenuAkun` di SETIAP lebar layar, bukan hanya di desktop —
+ * jadi menu akun panel staf sudah selalu punya tempat, dan menambahkan tombol
+ * ini di `/admin/pengaturan` atau `/owner` hanya menghasilkan dua jalan keluar
+ * berdampingan di HP, persis yang ingin dicegah paragraf `sm:hidden` di bawah.
+ *
+ * `sm:hidden` masih disengaja untuk panel klien: di desktop jalan keluarnya
+ * sudah ada di menu akun pada kartu nav, dan dua tombol keluar di satu layar
+ * hanya membuat pemakai menebak mana yang benar.
  */
 export function TombolKeluar({ label = "Keluar dari akun" }: { label?: string }) {
   return (

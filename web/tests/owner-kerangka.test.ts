@@ -134,7 +134,13 @@ type Ringkasan = Awaited<ReturnType<typeof ringkasanPekanIni>>;
 function markupNav(pathname: string): string {
   rute.kini = pathname;
   return renderToStaticMarkup(
-    createElement(NavOwner, { nama: "Pemilik PADMA" }),
+    // NavOwner mewajibkan `children` di tipenya (bukan opsional), jadi
+    // createElement TIDAK BISA menyimpulkan properti itu terpenuhi lewat
+    // argumen posisi ketiga — TypeScript tetap menuntutnya di objek props.
+    // Berkas ini berekstensi .ts (bukan .tsx) sehingga sintaks JSX
+    // `<NavOwner>{null}</NavOwner>` tidak tersedia sebagai jalan keluar.
+    // eslint-disable-next-line react/no-children-prop
+    createElement(NavOwner, { nama: "Pemilik PADMA", children: null }),
   );
 }
 
@@ -293,7 +299,7 @@ describe("ringkasan pekan berjalan — dihitung dari data, lewat RLS sesi owner"
 describe("navigasi owner", () => {
   const sumberNav = baca("src/app/owner/_shell/nav-owner.tsx");
 
-  it("client component (butuh usePathname)", () => {
+  it("client component (butuh usePathname lewat KerangkaPanel)", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
@@ -309,22 +315,20 @@ describe("navigasi owner", () => {
     }
   });
 
-  it("menyediakan tab desktop DAN bottom bar mobile", () => {
+  it("menyediakan sidebar DAN bar bawah, masing-masing berlabel", () => {
     const m = markupNav("/owner");
     expect([...m.matchAll(/<nav\b/g)]).toHaveLength(2);
-    expect(m).toContain("sm:hidden"); // bottom bar mobile
-    expect(m).toContain("sm:flex"); // tab desktop
+    expect([...m.matchAll(/aria-label="[^"]+"/g)].length).toBeGreaterThanOrEqual(2);
+    expect(m).toContain("lg:hidden");
+    expect(m).toContain("lg:translate-x-0");
+    // Panel owner hanya punya tiga tujuan, jadi bar bawah memuat KETIGANYA —
+    // tidak ada yang perlu diringkas.
     expect([...m.matchAll(/href="\/owner\/rekap"/g)]).toHaveLength(2);
   });
 
-  it("kedua nav punya label aksesibilitas", () => {
-    const m = markupNav("/owner");
-    expect([...m.matchAll(/aria-label="[^"]+"/g)].length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("JALAN PULANG: owner punya tautan klik ke /admin di kedua nav", () => {
-    // Sebelum Task 3 ada NOL tautan dari /owner ke /admin walau owner adalah
-    // superset admin — satu-satunya jalan adalah mengetik URL sendiri.
+  it("JALAN PULANG: owner punya tautan klik ke /admin di sidebar dan bar bawah", () => {
+    // Sebelum Task 3 rencana owner ada NOL tautan dari /owner ke /admin walau
+    // owner adalah superset admin — satu-satunya jalan adalah mengetik URL.
     const m = markupNav("/owner");
     expect([...m.matchAll(/href="\/admin"/g)]).toHaveLength(2);
     expect(m).toContain("Buka Panel Admin");
@@ -336,12 +340,12 @@ describe("navigasi owner", () => {
     expect([...m.matchAll(/<a\b/g)]).toHaveLength(3 * 2 + 2);
   });
 
-  it("hanya SATU tujuan yang aktif di beranda", () => {
+  it("hanya SATU tujuan yang aktif per nav di beranda", () => {
     const m = markupNav("/owner");
     expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
   });
 
-  it("sub-rute menyalakan tabnya sendiri, bukan Beranda", () => {
+  it("sub-rute menyalakan tujuannya sendiri, bukan Beranda", () => {
     const m = markupNav("/owner/rekap");
     expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
     for (const tag of m.match(/<a[^>]*>/g) ?? []) {
@@ -351,7 +355,7 @@ describe("navigasi owner", () => {
     }
   });
 
-  it("tautan /admin tidak pernah ditandai sebagai tab aktif", () => {
+  it("tautan /admin tidak pernah ditandai sebagai tujuan aktif", () => {
     for (const p of ["/owner", "/owner/rekap", "/owner/tarif"]) {
       for (const tag of markupNav(p).match(/<a[^>]*>/g) ?? []) {
         if (tag.includes('href="/admin"')) {

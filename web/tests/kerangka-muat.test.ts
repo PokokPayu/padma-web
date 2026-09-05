@@ -88,12 +88,65 @@ describe("kerangka muat — perilaku", () => {
     );
   });
 
-  it("bentuknya meniru kartu asli panel, bukan kotak sembarang", () => {
+  it("HalamanSkeleton meneruskan varian ke SETIAP kartunya", () => {
+    // Penerusan `varian` adalah satu-satunya baris yang menghubungkan
+    // loading.tsx dengan bentuk kartu. Tanpa test ini, menghapusnya membuat
+    // kedua panel staf diam-diam kembali ke bentuk kartu klien — dan tidak
+    // ada satu pun test yang merah.
+    const m = renderToStaticMarkup(
+      createElement(HalamanSkeleton, {
+        label: "Memuat panel…",
+        kartu: 3,
+        varian: "panel" as const,
+      }),
+    );
+    // Setiap KartuSkeleton yang di-render menempatkan KARTU[varian] pada
+    // divnya sekali, jadi kartu=3 berarti 3x rounded-lg.
+    expect([...m.matchAll(/rounded-lg/g)]).toHaveLength(3);
+    expect(m).toContain("border-panel-border");
+    expect(m).toContain("bg-panel-surface");
+    expect(m).not.toContain("rounded-2xl");
+  });
+
+  it("HalamanSkeleton tanpa varian tetap pakai bentuk klien", () => {
+    const m = renderToStaticMarkup(
+      createElement(HalamanSkeleton, {
+        label: "Memuat halaman…",
+        kartu: 2,
+      }),
+    );
+    // Default klien: kartu=2 berarti 2x rounded-2xl.
+    expect([...m.matchAll(/rounded-2xl/g)]).toHaveLength(2);
+    expect(m).toContain("border-black/10");
+    expect(m).toContain("bg-white");
+    expect(m).not.toContain("rounded-lg");
+  });
+
+  it("bentuk varian klien tetap meniru kartu lama (/passport tidak ikut berubah)", () => {
     const m = renderToStaticMarkup(createElement(KartuSkeleton, {}));
-    // Kelas yang sama dipakai kartu sungguhan di ketiga panel; kerangka yang
+    // Kelas yang sama dipakai kartu sungguhan di /passport; kerangka yang
     // tidak sebentuk membuat tata letak melompat saat isi datang.
     expect(m).toContain("rounded-2xl");
     expect(m).toContain("border-black/10");
     expect(m).toContain("bg-white");
+  });
+
+  it("bentuk varian panel meniru kartu ruang kerja staf yang baru", () => {
+    const m = renderToStaticMarkup(
+      createElement(KartuSkeleton, { varian: "panel" as const }),
+    );
+    // Radius turun ke 8px dan garisnya token panel — persis kartu di
+    // /admin & /owner sesudah perombakan.
+    expect(m).toContain("rounded-lg");
+    expect(m).toContain("border-panel-border");
+    expect(m).toContain("bg-panel-surface");
+    expect(m).not.toContain("rounded-2xl");
+  });
+
+  it("loading.tsx panel staf memakai varian panel, /passport tidak", () => {
+    for (const panel of ["admin", "owner"]) {
+      expect(baca(`src/app/${panel}/loading.tsx`)).toContain('varian="panel"');
+    }
+    expect(baca("src/app/passport/loading.tsx")).not.toContain("varian");
   });
 });
