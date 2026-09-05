@@ -24,14 +24,14 @@ Bagian ini didahulukan karena seluruh design di bawah bergantung padanya, dan ka
 
 **Yang benar-benar dijamin design ini:**
 
-1. Tidak ada satu berkas pun — PDF maupun MP4 — yang bisa diperoleh pasien lewat jalur normal maupun lewat DevTools. Tidak ada URL yang bisa ditempel ke orang lain.
+1. Tidak ada satu berkas ebook (PDF) pun yang bisa diperoleh pasien lewat jalur normal maupun lewat DevTools — halaman disajikan satu per satu sebagai gambar ber-watermark, bukan berkas utuh, dan URL halamannya tidak berfungsi tanpa sesi si pemintanya sendiri (poin 3). **Video TIDAK memenuhi jaminan ini**: satu berkas MP4 utuh disajikan lewat presigned URL yang bisa diperoleh lewat panel Elements DevTools maupun tab Network, dan URL itu BISA ditempel ke orang lain serta dipakai tanpa sesi PADMA apa pun selama umurnya (2 jam) — lihat batas yang diterima di bawah dan §7.
 2. Merebut isi ebook menuntut menyimpan halaman satu per satu secara manual, bukan satu klik.
 3. Setiap halaman ebook yang tersebar **membawa nama dan PADMA ID akun yang membukanya**, dibakar ke dalam gambarnya — bukan lapisan CSS yang hilang saat disimpan. Kebocoran ebook karena itu bisa dilacak ke akun sumbernya.
 4. PDF asli tidak pernah ada di server PADMA, sehingga tidak ada yang bisa bocor dari sana.
 
 **Batas yang diterima secara sadar:**
 
-- **Video hanya dilindungi terhadap pasien yang penasaran, bukan terhadap pasien yang punya alatnya.** Ini batas terbesar di seluruh design ini dan tidak boleh dihaluskan. Video disimpan sebagai satu berkas utuh di Cloudflare R2 dan disajikan lewat presigned URL berumur pendek. Klik kanan, tekan lama, tombol unduh pemutar, view-source, dan panel Elements semuanya ditutup (§7) — tetapi **satu ekstensi pengunduh video mengalahkan semuanya tanpa keahlian apa pun.** Menghalangi ekstensi menuntut video tersegmentasi atau DRM, yang justru dilepas saat memilih penyimpanan objek. **Jaminan "tidak ada berkas utuh yang bisa disalin" berlaku untuk ebook, TIDAK untuk video.**
+- **Video hanya dilindungi terhadap pasien yang penasaran, bukan terhadap pasien yang punya alatnya.** Ini batas terbesar di seluruh design ini dan tidak boleh dihaluskan. Video disimpan sebagai satu berkas utuh di Cloudflare R2 dan disajikan lewat presigned URL berumur pendek. Klik kanan, tekan lama, tombol unduh pemutar, dan view-source semuanya ditutup (§7) — **panel Elements TIDAK**: `src` merefleksi ke atribut DOM begitu properti disetel, jadi URL-nya tetap terlihat di sana bagi siapa pun yang membuka DevTools, dan **satu ekstensi pengunduh video mengalahkan semuanya tanpa keahlian apa pun** juga. Menghalangi keduanya menuntut video tersegmentasi atau DRM, yang justru dilepas saat memilih penyimpanan objek. **Jaminan "tidak ada berkas utuh yang bisa disalin" berlaku untuk ebook, TIDAK untuk video.**
 - **Kebocoran video tidak bisa dilacak.** Membakar watermark per-pasien ke video berarti meng-encode ulang seluruh video untuk setiap pasien — tidak proporsional untuk satu klinik. Video memakai lapisan watermark di layar, yang hilang begitu videonya diunduh atau layarnya direkam.
 - **Video tidak ditranskode, sehingga tidak ada kualitas adaptif.** Pasien di koneksi lambat menerima berkas dengan kualitas yang sama seperti pasien di koneksi cepat, dan akan tersendat. Ini konsekuensi langsung dari memilih penyimpanan objek alih-alih layanan streaming.
 - **Halaman ebook adalah gambar, bukan teks.** Teksnya tidak bisa disalin, tidak bisa dicari, dan **tidak terbaca pembaca layar**. Ini kerugian aksesibilitas yang nyata, dan ia adalah konsekuensi langsung dari syarat "tidak boleh ada teks yang bisa disebar utuh" — dua hal itu tidak bisa dimiliki sekaligus. Judul dan deskripsi materi tetap berupa teks sungguhan.
@@ -282,9 +282,11 @@ Video disajikan **langsung dari R2 ke pasien**, tidak diproksi. Itu memang yang 
 
 **Umur presigned URL: 2 jam.** Kompromi dua arahnya perlu disebut terbuka. Terlalu pendek, URL kedaluwarsa di tengah tontonan dan pemutar berhenti tanpa sebab yang jelas bagi pasien, terutama bila ia mem-pause lama. Terlalu panjang, URL yang tersebar bisa dipakai siapa pun selama sisa umurnya. Dua jam menampung satu sesi menonton berikut jeda, sambil menutup jendelanya dalam hitungan jam, bukan hari. URL diterbitkan ulang setiap kali halaman reader dibuka, jadi pasien yang memuat ulang selalu mendapat yang baru.
 
-**URL tidak boleh ikut ter-render ke HTML.** Elemen `<video>` dirender **tanpa** atribut `src`. URL-nya diambil komponen klien sesudah halaman hidup, lalu dipasang lewat **properti** `video.src`, bukan atribut. Dua akibatnya penting: URL tidak pernah muncul di **view-source** (Ctrl+U), dan karena properti tidak menulis balik ke DOM, ia juga **tidak muncul di panel Elements DevTools**. Ia hanya hidup di memori JS dan di tab Network.
+**URL tidak boleh ikut ter-render ke HTML.** Elemen `<video>` dirender **tanpa** atribut `src`. URL-nya diambil komponen klien sesudah halaman hidup, lalu dipasang lewat **properti** `video.src`, bukan atribut. Ini menjaga URL keluar dari **view-source** (Ctrl+U) dan dari RSC payload — keduanya hanya memuat apa yang server kirim, bukan mutasi sesudah hidrasi, dan URL ini tidak pernah dilewatkan sebagai prop.
 
-Ini menutup jalur termudah yang tersisa. Merender `<video src="...">` dari server membuat URL bisa ditemukan dengan Ctrl+U lalu Ctrl+F — tiga langkah, tanpa perlu tahu apa itu DevTools.
+Klaim ini SENGAJA dibatasi: `src` pada elemen media adalah atribut IDL yang **merefleksi** — menugaskan `video.src = url` menulis balik ke atribut DOM-nya, sehingga URL **tetap terlihat di panel Elements DevTools** begitu elemen `<video>` diinspeksi. Properti tidak menutup jalur itu; ia hanya menutup view-source dan RSC payload.
+
+Ini tetap menutup jalur termudah yang tersisa. Merender `<video src="...">` dari server membuat URL bisa ditemukan dengan Ctrl+U lalu Ctrl+F — tiga langkah, tanpa perlu tahu apa itu DevTools. Menemukannya lewat panel Elements menuntut membuka DevTools terlebih dahulu, langkah yang menyaring hampir seluruh pasien awam.
 
 **Pengerasan pemutar**, yang jujur disebut deterrent dan bukan proteksi:
 
@@ -301,14 +303,15 @@ Bagian ini ada supaya jaminannya tidak pernah dibaca lebih besar daripada kenyat
 |---|---|---|
 | Klik kanan / tekan lama | Tidak | — |
 | Tombol unduh di pemutar | Tidak | — |
-| View-source (Ctrl+U) atau panel Elements | Tidak | — ditutup oleh pemasangan `src` lewat properti |
+| View-source (Ctrl+U) | Tidak | — server tidak pernah merender atribut `src` |
+| **Panel Elements DevTools** | **Ya** | **Nol** — `src` merefleksi ke atribut DOM begitu properti disetel; URL terlihat begitu elemen `<video>` diinspeksi |
 | **Ekstensi pengunduh video** | **Ya** | **Nol** |
 | DevTools → tab Network | Ya | Sedang |
 | Rekam layar | Ya | Nol, kualitas turun |
 
-**Baris keempat adalah batas sesungguhnya, dan ia tidak bisa ditutup.** Ekstensi pengunduh membaca elemen media di halaman lalu menawarkan tombol unduh; pasien yang tidak paham teknis sama sekali, tetapi kebetulan sudah memasang ekstensi semacam itu, mendapat videonya dengan satu klik. Memproksi lewat server kita tidak menolong — permintaan ekstensi berasal dari peramban yang sama dan membawa cookie sesi pasien itu.
+**Baris Panel Elements dan Ekstensi pengunduh video adalah batas sesungguhnya, dan keduanya tidak bisa ditutup tanpa membongkar mekanismenya sendiri.** Ekstensi pengunduh membaca elemen media di halaman lalu menawarkan tombol unduh; pasien yang tidak paham teknis sama sekali, tetapi kebetulan sudah memasang ekstensi semacam itu, mendapat videonya dengan satu klik. Memproksi lewat server kita tidak menolong — permintaan ekstensi berasal dari peramban yang sama dan membawa cookie sesi pasien itu. Panel Elements lebih sederhana lagi: cukup membuka DevTools (F12) dan melihat atribut elemen `<video>` yang sudah hidup — tidak perlu ekstensi apa pun, hanya perlu tahu bahwa DevTools ada.
 
-Satu-satunya hal yang benar-benar menghalangi ekstensi adalah video tersegmentasi (HLS) atau DRM, dan keduanya dilepas saat M5 memilih penyimpanan objek. Jadi kalimat yang benar tentang video adalah: **aman terhadap pasien yang penasaran, tidak aman terhadap pasien yang sudah punya alatnya.**
+Satu-satunya hal yang benar-benar menghalangi ekstensi ATAU pembacaan panel Elements adalah video tersegmentasi (HLS) atau DRM, dan keduanya dilepas saat M5 memilih penyimpanan objek. Jadi kalimat yang benar tentang video adalah: **aman terhadap pasien yang penasaran dan tidak tahu apa itu DevTools, tidak aman terhadap pasien yang sudah punya alatnya atau yang mau membuka DevTools.**
 
 ## 8. Keamanan
 

@@ -6,9 +6,18 @@ import { useEffect, useRef, useState } from "react";
  * Pemutar video pasien.
  *
  * Elemen <video> dirender TANPA atribut `src`. URL-nya diambil sesudah halaman
- * hidup lalu dipasang lewat PROPERTI `video.src` — dan karena properti tidak
- * menulis balik ke DOM, ia tidak muncul di view-source maupun di panel Elements
- * DevTools. Ia hanya hidup di memori JS dan di tab Network.
+ * hidup lalu dipasang lewat PROPERTI `video.src` — ini menjaga URL keluar dari
+ * view-source (Ctrl+U) dan dari RSC payload, sebab keduanya hanya memuat apa
+ * yang server kirim/render, bukan mutasi sesudah hidrasi, dan URL ini tidak
+ * pernah dilewatkan sebagai prop.
+ *
+ * Klaim ini SENGAJA dibatasi: `src` pada elemen media adalah atribut IDL yang
+ * MEREFLEKSI — menugaskan `video.src = url` menulis balik ke atribut DOM-nya,
+ * jadi URL-nya TETAP terlihat di panel Elements DevTools (inspect element).
+ * Tidak ada perbaikan teknis yang murah untuk menutup jalur itu tanpa
+ * mengorbankan streaming (blob URL menuntut mengunduh seluruh video lebih
+ * dulu) — lapisan ini menghalangi pasien awam, bukan pasien yang membuka
+ * DevTools.
  *
  * Pengerasan di bawah jujur disebut deterrent, bukan proteksi: pasien yang bisa
  * menonton juga bisa merekam layar. Yang dihalangi adalah pasien awam.
