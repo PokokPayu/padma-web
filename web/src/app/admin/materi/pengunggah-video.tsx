@@ -14,15 +14,26 @@ type Keadaan =
   | { fase: "sukses" }
   | { fase: "gagal"; pesan: string };
 
-export function PengunggahVideo({ materiId }: { materiId: string }) {
+export function PengunggahVideo({
+  materiId,
+  onSelesai,
+}: {
+  materiId: string;
+  onSelesai?: () => void;
+}) {
   const [keadaan, setKeadaan] = useState<Keadaan>({ fase: "diam" });
   const [peringatan, setPeringatan] = useState<string | null>(null);
   // Berkas DIPERTAHANKAN sesudah gagal supaya mengulang cukup satu klik, bukan
-  // memilih ulang berkas 200 MB dari awal.
+  // memilih ulang berkas 200 MB dari awal. Disimpan di REF (bukan state) sebab
+  // ia hanya dibaca dari event handler (`onClick` "Coba lagi"), tidak pernah
+  // dari render — `adaBerkas` di bawah adalah salinan STATE-nya, sengaja
+  // dipisah supaya render tidak pernah membaca `.current` (react-hooks/refs).
   const berkasRef = useRef<File | null>(null);
+  const [adaBerkas, setAdaBerkas] = useState(false);
 
   async function jalankan(berkas: File) {
     berkasRef.current = berkas;
+    setAdaBerkas(true);
     setPeringatan(null);
 
     const periksa = periksaBerkasVideo(berkas.type, berkas.size);
@@ -98,6 +109,7 @@ export function PengunggahVideo({ materiId }: { materiId: string }) {
           "penyimpanan. Beri tahu tim teknis agar tidak menumpuk.",
       );
     }
+    onSelesai?.();
   }
 
   return (
@@ -127,7 +139,7 @@ export function PengunggahVideo({ materiId }: { materiId: string }) {
       {keadaan.fase === "gagal" && (
         <p className="mt-2 text-[12px] text-red-700">
           {keadaan.pesan}{" "}
-          {berkasRef.current !== null && (
+          {adaBerkas && (
             <button
               type="button"
               className="underline"

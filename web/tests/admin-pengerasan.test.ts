@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
 
 /**
  * PENGERASAN SEBELUM PANEL ADMIN.
@@ -211,30 +212,99 @@ describe("jejak waktu & validasi", () => {
     );
   });
 
-  // Dua test di sini dulu membuktikan constraint DB
+  // Dua test yang dulu ada di sini membuktikan constraint DB
   // `material_videos_host_terproteksi` (allowlist host Vimeo/CloudflareStream
-  // pada kolom `url`). Migration `materi_video_r2` (Task 1, migrasi objek-R2)
-  // MENCABUT constraint itu SEMENTARA: ia menuntut `objek ~ '^https://...'`,
-  // yang mustahil dipenuhi bersamaan dengan tuntutan skema baru bahwa `objek`
-  // adalah KUNCI OBJEK R2, bukan URL (lihat komentar penyimpangan di migration
-  // itu untuk penjelasan lengkap kenapa keduanya tidak bisa hidup berdampingan).
-  // Task 6 mengembalikannya sebagai check BENTUK KUNCI OBJEK, bukan host URL.
-  //
-  // Ancaman yang dulu dicegahnya LEBIH LUAS daripada "lewat formulir admin":
-  // `periksaUrlVideo()` (src/app/admin/materi/aksi.ts) hanya menjaga jalur
-  // server action. Grant `material_videos` bersifat TINGKAT TABEL dan policy
-  // "video: staf" memberi admin/owner INSERT/UPDATE — jadi admin yang sudah
-  // login bisa PATCH `objek` BEBAS langsung lewat PostgREST, tanpa pernah
-  // menyentuh `aksi.ts`. Jalur ini bukan teoretis: `tests/hak-hapus-
-  // berlebih.test.ts` dan `tests/rls-materi.test.ts` sendiri memakainya
-  // (update `objek` lewat sesi admin biasa).
-  //
-  // SENGAJA tidak ada test di sini yang menuntut `insert`/`update` dengan
-  // `objek` sembarang berhasil: satu-satunya perubahan kode yang bisa
-  // memerahkan asersi semacam itu adalah MENGEMBALIKAN constraint-nya —
-  // yaitu tepat perbaikan yang ditunggu, bukan regresi. Test begitu hanya
-  // akan menggoda orang mencabut constraint pengganti Task 6 supaya suite
-  // hijau lagi.
-  //
-  // TODO(Task 6): kembalikan sebagai check bentuk kunci objek.
+  // pada kolom lama `url`). Migration `materi_video_r2` (Task 1, migrasi
+  // objek-R2) MENCABUT constraint itu SEMENTARA — lihat komentar penyimpangan
+  // di migration itu untuk kenapa. Penggantinya, `material_videos_bentuk_objek`
+  // (Task 6, migration `20260905120000`), diuji di describe terpisah di bawah.
+});
+
+/**
+ * `material_videos_bentuk_objek` (migration `20260905120000`) — pagar DB atas
+ * BENTUK kunci objek, kebalikan dari describe di atas: dulu SENGAJA tidak ada
+ * test yang menuntut `insert`/`update` sembarang GAGAL, karena satu-satunya
+ * perbaikan kode yang bisa membuatnya hijau adalah mengembalikan
+ * constraint-nya — dan constraint itu sekarang sudah kembali. Jadi yang
+ * dijaga di sini adalah kebalikannya: bentuk yang SALAH benar-benar DITOLAK
+ * di lapisan basis data (kode 23514), lewat service role (RLS dilewati)
+ * supaya yang terbukti murni CHECK constraint, bukan hak akses.
+ */
+describe("material_videos_bentuk_objek — CHECK menjaga bentuk & kepemilikan objek", () => {
+  const MATERI_CEK = "77777777-7777-7777-7777-7777777779c1";
+  const MATERI_LAIN = "77777777-7777-7777-7777-7777777779c2";
+
+  beforeAll(async () => {
+    await admin.from("materials").insert([
+      {
+        id: MATERI_CEK,
+        judul: "PAD-UJI Constraint Objek",
+        tipe: "video",
+        deskripsi: "",
+        aktif: false,
+      },
+      {
+        id: MATERI_LAIN,
+        judul: "PAD-UJI Constraint Objek Lain",
+        tipe: "video",
+        deskripsi: "",
+        aktif: false,
+      },
+    ]);
+  });
+
+  afterAll(async () => {
+    await admin.from("material_videos").delete().in("material_id", [MATERI_CEK, MATERI_LAIN]);
+    await admin.from("materials").delete().in("id", [MATERI_CEK, MATERI_LAIN]);
+  });
+
+  it("KONTROL: kunci objek berbentuk benar tetap diterima", async () => {
+    const { error } = await admin
+      .from("material_videos")
+      .insert({ material_id: MATERI_CEK, objek: `${MATERI_CEK}/pad-uji.mp4`, mime: "video/mp4" });
+    expect(error).toBeNull();
+    await admin.from("material_videos").delete().eq("material_id", MATERI_CEK);
+  });
+
+  it("menolak skema asing (javascript:) — bukan lagi lubang terbuka", async () => {
+    const { error } = await admin
+      .from("material_videos")
+      .insert({ material_id: MATERI_CEK, objek: "javascript:alert(1)", mime: "video/mp4" });
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe("23514");
+  });
+
+  it("menolak kunci milik materi LAIN, walau bentuknya sendiri sah", async () => {
+    // Inilah pagar yang tidak bisa diberikan `objekVideoSah()` (aplikasi)
+    // sendirian: constraint ini dievaluasi PER BARIS terhadap `material_id`
+    // baris itu, menutup jalur PATCH langsung PostgREST yang tetap terbuka
+    // bagi admin (lihat `tests/hak-hapus-berlebih.test.ts` &
+    // `tests/rls-materi.test.ts`).
+    const { error } = await admin
+      .from("material_videos")
+      .insert({ material_id: MATERI_CEK, objek: `${MATERI_LAIN}/pad-uji.mp4`, mime: "video/mp4" });
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe("23514");
+  });
+
+  it("menolak ekstensi yang tidak cocok dengan mime", async () => {
+    const { error } = await admin
+      .from("material_videos")
+      .insert({ material_id: MATERI_CEK, objek: `${MATERI_CEK}/pad-uji.webm`, mime: "video/mp4" });
+    expect(error).not.toBeNull();
+    expect(error!.code).toBe("23514");
+  });
+
+  it("kedua baris fixture demo (tests/global-setup.ts) tetap lolos constraint ini", async () => {
+    // Bagian acaknya BUKAN UUID ("fixture-demo"/"fixture-rahasia") — constraint
+    // ini sengaja tidak menuntut UUID (lihat komentar di migration) justru
+    // supaya baris ini lolos tanpa perlu dilonggarkan.
+    const { data } = await admin
+      .from("material_videos")
+      .select("material_id")
+      .in("material_id", [MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI]);
+    expect((data ?? []).map((r) => r.material_id).sort()).toEqual(
+      [MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI].sort(),
+    );
+  });
 });

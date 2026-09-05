@@ -542,10 +542,12 @@ function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman
  * Panel isi video: status ringkas, pengunggah penggantinya
  * (`<PengunggahVideo/>`, menulis lewat `./unggah-video.ts` — bukan `aksi.ts`,
  * persis pola `IsiEbook`/`PengunggahPdf`), dan tombol lepas untuk materi yang
- * sudah ditarik. `videoUrl` di sini tidak disegarkan otomatis sesudah
- * unggahan sukses — `PengunggahVideo` menampilkan status suksesnya sendiri —
- * tapi DISEGARKAN lewat `router.refresh()` sesudah "Lepas video", supaya
- * tombolnya sendiri ikut menghilang begitu isinya benar-benar kosong.
+ * sudah ditarik. `videoUrl` di sini adalah props SERVER yang basi begitu
+ * unggahan sukses secara lokal — karena itu `onSelesai={() => router.refresh()}`
+ * dipasang sama seperti `IsiEbook`/`PengunggahPdf`: tanpanya paragraf status di
+ * atas ("Belum ada video…") tetap basi berdampingan dengan "Video tersimpan."
+ * milik `PengunggahVideo` sendiri, sampai admin berpindah halaman. "Lepas
+ * video" memakai `router.refresh()` yang sama, untuk alasan simetris.
  */
 function IsiVideo({
   materiId,
@@ -565,7 +567,7 @@ function IsiVideo({
       <p className="text-[13px] text-ink">
         {videoUrl !== null ? "Video tersimpan." : "Belum ada video — unggah di bawah."}
       </p>
-      <PengunggahVideo materiId={materiId} />
+      <PengunggahVideo materiId={materiId} onSelesai={() => router.refresh()} />
       {/* "Lepas video" hanya ditawarkan pada materi yang sudah ditarik: materi
           video terbit tanpa isi adalah kartu terkunci yang tidak akan pernah
           terbuka. Server memeriksanya ulang. */}

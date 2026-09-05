@@ -23,10 +23,19 @@ export const LABEL_TIPE: Record<TipeMateri, string> = {
   video: "Video",
 };
 
-/** Kalimat yang menjelaskan ISI apa yang wajib menyertai tiap tipe. */
+/**
+ * Kalimat yang menjelaskan ISI apa yang wajib menyertai tiap tipe.
+ *
+ * `video` berbunyi "satu berkas video", BUKAN "satu URL video" — sejak
+ * Task 6 isinya diunggah lewat `<PengunggahVideo/>` ke R2, bukan URL
+ * penyedia. Kalimat ini disisipkan LANGSUNG ke pesan galat yang juga
+ * menyuruh admin "unggah videonya" (lihat `aksi.ts`); membiarkannya berbunyi
+ * "URL" membuat pesan itu menuntut URL sekaligus menyuruh unggah berkas
+ * dalam satu napas.
+ */
 export const LABEL_ISI: Record<TipeMateri, string> = {
   ebook: "satu berkas PDF",
-  video: "satu URL video",
+  video: "satu berkas video",
 };
 
 export const PANJANG_JUDUL_MINIMAL = 2;

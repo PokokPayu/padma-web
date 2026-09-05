@@ -217,9 +217,12 @@ describe("MATERI — staf tetap bisa mengelola semuanya", () => {
     expect(JSON.stringify(data)).toContain(URL_RAHASIA);
   });
 
-  it("admin BISA menambah & menghapus materi video beserta URL-nya", async () => {
+  it("admin BISA menambah & menghapus materi video beserta objeknya", async () => {
     const admin = await signInAs("admin@padma.test");
     const materialId = "77777777-7777-7777-7777-7777777777f1";
+    // Kunci objek WAJIB berbentuk sah milik `materialId` sendiri sejak
+    // constraint `material_videos_bentuk_objek` (Task 6) — test ini menguji
+    // RLS/hak akses, bukan bentuk, jadi nilainya sengaja dibuat sah.
     try {
       const m = await admin
         .from("materials")
@@ -235,18 +238,18 @@ describe("MATERI — staf tetap bisa mengelola semuanya", () => {
 
       const v = await admin
         .from("material_videos")
-        .insert({ material_id: materialId, objek: "https://vimeo.com/uji-admin" })
+        .insert({ material_id: materialId, objek: `${materialId}/uji-admin.mp4` })
         .select();
       expect(v.error).toBeNull();
       expect(v.data).toHaveLength(1);
 
       const upd = await admin
         .from("material_videos")
-        .update({ objek: "https://vimeo.com/uji-admin-2" })
+        .update({ objek: `${materialId}/uji-admin-2.mp4` })
         .eq("material_id", materialId)
         .select();
       expect(upd.data).toHaveLength(1);
-      expect(upd.data![0].objek).toBe("https://vimeo.com/uji-admin-2");
+      expect(upd.data![0].objek).toBe(`${materialId}/uji-admin-2.mp4`);
     } finally {
       await svc.from("material_videos").delete().eq("material_id", materialId);
       await svc.from("materials").delete().eq("id", materialId);

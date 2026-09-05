@@ -52,13 +52,12 @@ comment on column public.material_videos.objek is
 -- lewat presigned upload) TIDAK menutup jalur PATCH langsung ini — itu
 -- alasan pagar DB perlu kembali, bukan alasan ia boleh dilupakan.
 --
--- Task 6 mengembalikan pagar ini dalam BENTUK BARU: check yang memvalidasi
--- BENTUK KUNCI OBJEK (mis. `{material_id}/{acak}.{ext}`), bukan host URL —
--- brief Task 6 sudah ditugaskan mengerjakan ini. Sampai saat itu,
--- `POLA_URL_VIDEO` (src/app/admin/materi/status.ts) adalah SATU-SATUNYA
--- penjaga, dan HANYA berlaku untuk jalur lewat `aksi.ts`.
+-- Pagar ini SUDAH DIKEMBALIKAN dalam BENTUK BARU: check yang memvalidasi
+-- BENTUK KUNCI OBJEK (`{material_id}/{acak}.{ext}`, bukan host URL) di
+-- migration `20260905120000_material_videos_bentuk_objek.sql` (Task 6, fix
+-- round 1) — lihat komentar panjang di sana untuk kenapa bentuknya begitu.
 --
 -- Test constraint ini (`tests/admin-pengerasan.test.ts`) disunting mengikuti
--- perubahan ini — lihat komentar di sana.
+-- perubahan itu — lihat komentar di sana.
 alter table public.material_videos
   drop constraint material_videos_host_terproteksi;

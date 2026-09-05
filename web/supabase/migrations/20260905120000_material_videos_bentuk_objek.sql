@@ -1,0 +1,67 @@
+-- Mengembalikan pagar DB atas `material_videos.objek` — DALAM BENTUK BARU.
+--
+-- Migration `materi_video_r2` (Task 1, 20260904120000) mencabut constraint
+-- lama `material_videos_host_terproteksi` (yang menuntut `objek ~
+-- '^https://.../vimeo.com/...'` dkk.) karena kontradiksi matematis dengan
+-- kolom `objek` pasca-migrasi itu: `objek` sejak saat itu WAJIB berupa kunci
+-- objek R2, bukan URL, dan tidak ada string yang bisa sekaligus cocok
+-- `'^https://...'` DAN gagal `like 'http%'`. Pencabutan itu didokumentasikan
+-- sebagai SEMENTARA — constraint dijanjikan kembali begitu Task 6 selesai
+-- membongkar jalur tulis URL di panel admin. Task 6 (video-r2, fix round 1)
+-- SEKARANG mengembalikannya, di migration ini.
+--
+-- KENAPA BENTUKNYA BEGINI, bukan sekadar "tolak yang mengandung http":
+--
+--  1. `objek ~ ('^' || material_id::text || '/...')` membandingkan `objek`
+--     dengan `material_id` BARIS ITU SENDIRI — bukan daftar putih global.
+--     Artinya baris video materi A tidak akan pernah lolos menyimpan kunci
+--     objek milik materi B, bahkan bila kunci itu SAH bentuknya (UUID +
+--     ekstensi benar). Ini menutup kelas serangan yang lebih luas daripada
+--     "admin mengetik javascript:/host asing": seorang admin yang PATCH
+--     `material_videos` langsung lewat PostgREST (jalur yang tetap terbuka
+--     — lihat catatan panjang di migration 20260904120000 tentang
+--     `tests/hak-hapus-berlebih.test.ts` & `tests/rls-materi.test.ts`
+--     memakainya lewat sesi admin biasa) tidak bisa lagi menaut objek materi
+--     lain ke baris ini, karena constraint ini dievaluasi PER BARIS terhadap
+--     `material_id` baris itu — pagar yang `objekVideoSah()` (aplikasi,
+--     `src/lib/materi/video.ts`) tidak bisa berikan sendirian: fungsi itu
+--     hanya menjaga jalur lewat server action, sama sekali tidak menjaga
+--     PATCH langsung.
+--
+--  2. Bagian sesudah `/` dibatasi `[A-Za-z0-9._-]{1,120}` — TIDAK termasuk
+--     `/`. Karena itu path traversal (`../lain/objek.mp4`) maupun penautan ke
+--     folder materi lain lewat segmen tambahan mati di regex ini sendiri,
+--     bukan hanya karena awalannya salah.
+--
+--  3. Anchor `^...$` plus keharusan diawali `material_id/` menolak seluruh
+--     skema selain kunci objek relatif kita sendiri — termasuk `http://`,
+--     `https://`, `javascript:`, `data:`, dll. Constraint LAMA menuntut
+--     `objek` berupa URL; constraint BARU ini menuntut sebaliknya.
+--
+--  4. Ekstensi WAJIB cocok dengan `mime`: baris `mime='video/mp4'` hanya
+--     boleh berakhiran `.mp4`, `mime='video/webm'` hanya `.webm`. Menyunting
+--     salah satu kolom saja (mis. mengganti `mime` tanpa mengganti `objek`,
+--     atau sebaliknya) akan ditolak — mencegah baris yang isinya konsisten
+--     secara sintaks tapi berbohong soal tipe berkasnya ke `<video>`.
+--
+--  5. Bagian acak SENGAJA TIDAK dituntut berbentuk UUID (beda dari
+--     `objekVideoSah()` di lapisan aplikasi, yang menuntut UUID persis
+--     karena ITU yang server buat lewat `randomUUID()`). Alasannya adalah
+--     fixture: `tests/global-setup.ts` menyemai dua baris demo dengan bagian
+--     acak `fixture-demo`/`fixture-rahasia` (bukan UUID), dan constraint
+--     ber-UUID akan menolak KEDUANYA — merusak seluruh suite regresi
+--     kebocoran (`rls-materi.test.ts`, `passport-materi.test.ts`, dst.) yang
+--     bergantung pada baris itu tetap ada. Pagar keaslian bagian acak
+--     (UUID-atau-bukan) karena itu tetap murni tanggung jawab
+--     `objekVideoSah()` di jalur aplikasi — constraint DB ini hanya menjaga
+--     bentuk & kepemilikan (material_id), bukan asal-usul nilai acaknya.
+--
+-- Test constraint ini hidup di `tests/admin-pengerasan.test.ts` (asersi
+-- POSITIF: bentuk salah ditolak DB — kebalikan dari test lama yang sengaja
+-- mengunci lubang ini terbuka sampai constraint pengganti terpasang).
+alter table public.material_videos
+  add constraint material_videos_bentuk_objek check (
+    (mime = 'video/mp4'  and objek ~ ('^' || material_id::text || '/[A-Za-z0-9._-]{1,120}\.mp4$'))
+    or
+    (mime = 'video/webm' and objek ~ ('^' || material_id::text || '/[A-Za-z0-9._-]{1,120}\.webm$'))
+  );

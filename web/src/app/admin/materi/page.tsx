@@ -110,7 +110,7 @@ export default async function MateriPage() {
 
       <p className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] text-ink">
         ✦ Materi tidak pernah dihapus, hanya <b>dinonaktifkan</b> — dan
-        menonaktifkannya benar-benar menutup isinya: halaman e-book dan URL
+        menonaktifkannya benar-benar menutup isinya: halaman e-book dan isi
         videonya berhenti dijawab basis data untuk klien, bukan sekadar hilang
         dari layarnya. Materi juga tidak pernah bisa terbit tanpa isi: e-book
         wajib punya {LABEL_ISI.ebook}, video wajib punya {LABEL_ISI.video}.

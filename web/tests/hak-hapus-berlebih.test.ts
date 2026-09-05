@@ -62,6 +62,13 @@ const MATERI_UJI = "77777777-7777-7777-7777-7777777779a1";
 const TARIF_UJI = "99999999-9999-9999-9999-9999999999a1";
 const HONOR_UJI = "99999999-9999-9999-9999-9999999999b1";
 
+// Bentuk kunci objek R2 sah (Task 6, constraint `material_videos_bentuk_objek`
+// — diikat pada MATERI_UJI sendiri, bukan URL sembarang). Nilainya dulu URL
+// Vimeo sebelum medan URL video dibongkar Task 6; test-test di berkas ini
+// hanya butuh SATU nilai konsisten untuk dipasang & dipulihkan, bentuknya
+// tidak relevan bagi apa yang benar-benar diuji (hak akses, bukan isi).
+const OBJEK_VIDEO_UJI = `${MATERI_UJI}/pad-uji-hak-hapus.mp4`;
+
 /** Jauh di depan supaya tidak bertabrakan dengan tanggal test lain. */
 const TGL_PERMINTAAN = "2027-03-11";
 const PEKAN_HONOR = "2027-03-08";
@@ -117,7 +124,7 @@ beforeAll(async () => {
     { onConflict: "material_id,service_id" },
   );
   await svc.from("material_videos").upsert(
-    { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
+    { material_id: MATERI_UJI, objek: OBJEK_VIDEO_UJI },
     { onConflict: "material_id" },
   );
 
@@ -248,7 +255,11 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
     // tetap bisa dikerjakan.
     const a = await signInAs("admin@padma.test");
 
-    // Video: DELETE langsung ditolak, penggantian URL lewat upsert tetap jalan,
+    // Video: DELETE langsung ditolak, penggantian objek lewat upsert tetap
+    // jalan (nilai penggantinya WAJIB berbentuk kunci objek sah milik
+    // MATERI_UJI sendiri sejak constraint `material_videos_bentuk_objek`,
+    // Task 6 — ini test hak akses/RLS, bukan test bentuk, jadi nilainya
+    // sengaja dibuat sah supaya tidak ikut ditolak CHECK constraint),
     // pelepasan lewat RPC tetap jalan.
     const { error: eVideo } = await a
       .from("material_videos")
@@ -258,7 +269,7 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
 
     const { error: eGanti } = await a
       .from("material_videos")
-      .update({ objek: "https://player.vimeo.com/video/987654321" })
+      .update({ objek: `${MATERI_UJI}/pad-uji-ganti.mp4` })
       .eq("material_id", MATERI_UJI)
       .select("material_id");
     expect(eGanti).toBeNull();
@@ -272,7 +283,7 @@ describe("materi tidak bisa dihapus staf (cascade menyapu bab & video)", () => {
     await svc
       .from("material_videos")
       .upsert(
-        { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
+        { material_id: MATERI_UJI, objek: OBJEK_VIDEO_UJI },
         { onConflict: "material_id" },
       );
   });
@@ -369,7 +380,7 @@ describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
     await svc
       .from("material_videos")
       .upsert(
-        { material_id: MATERI_UJI, objek: "https://vimeo.com/pad-uji-hak-hapus" },
+        { material_id: MATERI_UJI, objek: OBJEK_VIDEO_UJI },
         { onConflict: "material_id" },
       );
   });

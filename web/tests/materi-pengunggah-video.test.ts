@@ -43,8 +43,46 @@ describe("pengunggah video — pagar struktural", () => {
     // menghapus salah satunya membuat baris ini merah.
     const pemanggilJalankan = [...s.matchAll(/void jalankan\(/g)].length;
     expect(pemanggilJalankan).toBe(2);
-    expect(s).toMatch(/berkasRef\.current !== null/);
+
+    // Kelayakan tombol dilacak lewat STATE (`adaBerkas`), BUKAN dengan
+    // membaca `berkasRef.current` saat render (itu persis error
+    // `react-hooks/refs`: ref hanya boleh dibaca dari event handler/effect,
+    // bukan selama render). `useState(false)` cocok dengan `berkasRef.current`
+    // yang mulai `null` — keduanya "belum ada berkas" di keadaan awal.
+    expect(s).toContain("const [adaBerkas, setAdaBerkas] = useState(false)");
+    expect(s).toMatch(/setAdaBerkas\(true\)/);
+    expect(s).toMatch(/\{adaBerkas &&/);
+
+    // `.current` HANYA BOLEH muncul di DUA tempat: disimpan
+    // (`berkasRef.current = berkas`, dalam fungsi, bukan render) dan dibaca
+    // ulang di dalam `onClick` tombol "Coba lagi" (event handler, bukan
+    // render). Regex ini menghitung SEMUA kemunculan `.current` — bila
+    // render kembali membacanya langsung (mis. `{berkasRef.current !== null
+    // && ...}`), jumlahnya naik jadi 3 dan baris ini memerah.
+    const pemakaianCurrent = [...s.matchAll(/berkasRef\.current/g)].length;
+    expect(pemakaianCurrent).toBe(2);
     expect(s).toMatch(/const b = berkasRef\.current;\s*\n\s*if \(b\) void jalankan\(b\);/);
+  });
+
+  it("onSelesai dipanggil sesudah catatVideoMateri sukses — bukan sebelum", () => {
+    // Tanpa ini, panel induk (`IsiVideo` di form-materi.tsx) tidak tahu kapan
+    // harus router.refresh(): statusnya sendiri ("Belum ada video…") tetap
+    // stale sementara komponen ini sudah menampilkan "Video tersimpan.",
+    // sampai admin berpindah halaman. Pola sama dengan `PengunggahPdf`
+    // (`onSelesai?: () => void`, dipanggil sesudah unggahan sukses).
+    expect(s).toMatch(/onSelesai\?:\s*\(\)\s*=>\s*void/);
+    const posCatat = s.search(/const catat = await catatVideoMateri\(/);
+    const posOnSelesai = s.indexOf("onSelesai?.();", posCatat);
+    expect(posCatat).toBeGreaterThan(-1);
+    expect(posOnSelesai).toBeGreaterThan(posCatat);
+
+    // Dan TIDAK dipanggil pada cabang gagal: antara `catatVideoMateri` dan
+    // `onSelesai?.()`, satu-satunya `return` yang boleh ada adalah yang
+    // berpasangan dengan `!catat.ok` (jalur gagal keluar duluan, tidak
+    // pernah sampai ke `onSelesai?.()`).
+    const antaraCatatDanSelesai = s.slice(posCatat, posOnSelesai);
+    const jumlahReturn = [...antaraCatatDanSelesai.matchAll(/\breturn;/g)].length;
+    expect(jumlahReturn).toBe(1);
   });
 
   it("moovDiDepan(...) === false MEMPERINGATKAN, TIDAK memblokir unggahan", () => {

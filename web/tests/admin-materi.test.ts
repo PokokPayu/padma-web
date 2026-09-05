@@ -68,7 +68,10 @@ const MATERI_VIDEO = "77777777-7777-7777-7777-7777777779a2";
 const MATERI_KOSONG = "77777777-7777-7777-7777-7777777779a3";
 const TAK_ADA_MATERI = "77777777-7777-7777-7777-7777777779ff";
 
-const URL_UJI = "https://vimeo.com/pad-uji-materi-9a02";
+// Bentuk kunci objek R2 sah (Task 6, constraint `material_videos_bentuk_objek`):
+// diikat pada MATERI_VIDEO sendiri, bukan URL — nama konstanta ini dulu
+// "URL_UJI" sebelum medan URL dibongkar Task 6.
+const OBJEK_UJI = `${MATERI_VIDEO}/pad-uji-materi-9a02.mp4`;
 
 // Lapisan data & action memakai sesi pengguna (`createServerSupabase`). Di
 // vitest tidak ada cookie, jadi klien ber-SESI SUNGGUHAN disuntikkan: RLS dan
@@ -254,7 +257,7 @@ async function pasangFixture() {
       { halaman: 3, objek: `${MATERI_EBOOK}/0003.webp`, lebar: 10, tinggi: 10 },
     ],
   });
-  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI });
+  await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: OBJEK_UJI });
 }
 
 beforeAll(async () => {
@@ -304,7 +307,7 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     const video = semua.find((m) => m.id === MATERI_VIDEO)!;
     // `material_videos` berelasi 1:1 — `video.length === 0` selalu salah dan
     // akan membuat setiap materi video tampak belum punya isi.
-    expect(video.videoUrl).toBe(URL_UJI);
+    expect(video.videoUrl).toBe(OBJEK_UJI);
     expect(Array.isArray(video.videoUrl)).toBe(false);
     expect(video.jumlahHalaman).toBe(0);
   });
@@ -819,14 +822,14 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
       .eq("material_id", MATERI_VIDEO);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
-    expect(JSON.stringify(data)).not.toContain(URL_UJI);
+    expect(JSON.stringify(data)).not.toContain(OBJEK_UJI);
 
     // Embed pun ikut tertutup — jalur yang dipakai halaman daftar materi.
     const embed = await sesiKlien
       .from("materials")
       .select("id, material_videos(objek)")
       .eq("id", MATERI_VIDEO);
-    expect(JSON.stringify(embed.data)).not.toContain(URL_UJI);
+    expect(JSON.stringify(embed.data)).not.toContain(OBJEK_UJI);
   });
 
   it("metadata materi TETAP terbaca klien — yang ditutup isinya, bukan barisnya", async () => {
@@ -885,14 +888,14 @@ describe("mengelola video materi", () => {
     expect((await aktifkanMateri(MATERI_VIDEO)).ok).toBe(false);
 
     // Dikembalikan untuk blok berikutnya.
-    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: URL_UJI });
+    await admin.from("material_videos").insert({ material_id: MATERI_VIDEO, objek: OBJEK_UJI });
     await admin.from("materials").update({ aktif: true }).eq("id", MATERI_VIDEO);
   });
 
   it("PENJAGA PERAN: klien yang login tidak bisa melepas video materi", async () => {
     ref.sesi = sesiKlien;
     await expect(lepasVideo(MATERI_VIDEO)).rejects.toThrow(/REDIRECT/);
-    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe(URL_UJI);
+    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe(OBJEK_UJI);
   });
 });
 
