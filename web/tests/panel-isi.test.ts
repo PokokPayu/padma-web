@@ -184,9 +184,11 @@ const DATA_BATANG = [
 ];
 
 describe("batasAtas — sumbu Y", () => {
-  it("selalu mulai dari nol dan naik ke kelipatan bulat", () => {
+  it("selalu mulai dari nol dan naik ke angka bagus (1/2/2,5/5 × 10^n)", () => {
     expect(batasAtas([3])).toBe(4);
-    expect(batasAtas([9])).toBe(12);
+    // Bukan lagi kelipatan empat (dulu 12): 9 naik ke angka bagus terdekat
+    // yang masih ≥ 9, yaitu 10 — satu kelipatan dari 1×10¹.
+    expect(batasAtas([9])).toBe(10);
     expect(batasAtas([100])).toBe(100);
   });
 
@@ -199,6 +201,18 @@ describe("batasAtas — sumbu Y", () => {
     // Grafik batang panel ini menghitung kejadian; negatif tidak sah, tapi
     // membiarkannya memampatkan skala akan menyembunyikan seluruh data.
     expect(batasAtas([-5, 2])).toBe(4);
+  });
+
+  it("magnitudo rupiah realistis naik ke angka bagus, bukan gilingan kelipatan empat", () => {
+    // Kelipatan-empat lama akan menghasilkan "Rp 462.500" sebagai gridline —
+    // bulat bagi kalkulator, bukan bagi mata. Aturan baru naik ke 1/2/2,5/5×10ⁿ:
+    // 462.500 naik ke 500.000 (5 × 10⁵).
+    expect(batasAtas([462_500])).toBe(500_000);
+    // Beberapa titik uji tambahan pada tiap slot pengali agar aturannya
+    // benar-benar diuji, bukan hanya kebetulan cocok pada satu kasus.
+    expect(batasAtas([180])).toBe(200); // 2 × 10²
+    expect(batasAtas([220])).toBe(250); // 2,5 × 10²
+    expect(batasAtas([260])).toBe(500); // 5 × 10²
   });
 });
 
@@ -380,5 +394,47 @@ describe("GrafikGaris", () => {
     const sumber = baca("src/app/_shell/panel/grafik-garis.tsx");
     expect(sumber).not.toContain("formatRupiah");
     expect(sumber).not.toMatch(/Rp\s?\d/);
+  });
+
+  describe("keadaan kosong — seluruh seri bernilai nol", () => {
+    // Ini persis keadaan data klinik yang sesungguhnya sekarang: pekan tanpa
+    // satu pun sesi selesai. Menggambar grafik biasa di sini bukan cuma
+    // kosong secara visual — label ujung KETIGA seri jatuh di titik yang
+    // sama persis dan bertumpuk jadi coretan tak terbaca, dan sumbu Y
+    // menampilkan "Rp 4 / Rp 3 / Rp 2 / Rp 1 / Rp 0" karena lantai
+    // `batasAtas([])` berbentuk hitungan, bukan rupiah.
+    const SERI_NOL = [
+      { nama: "Harga klien", nilai: [0, 0, 0, 0] },
+      { nama: "Honor mitra", nilai: [0, 0, 0, 0] },
+      { nama: "Margin PADMA", nilai: [0, 0, 0, 0] },
+    ];
+
+    function garisNol() {
+      return renderToStaticMarkup(
+        createElement(GrafikGaris, {
+          judul: "Pendapatan, honor, dan margin",
+          label: LABEL_PEKAN,
+          seri: SERI_NOL,
+          format: (n: number) => `Rp ${n.toLocaleString("id-ID")}`,
+        } as never),
+      );
+    }
+
+    it("merender kalimat keadaan kosong, bukan sumbu atau label yang mengada-ada", () => {
+      const m = garisNol();
+      expect(m).toContain("Belum ada data delapan pekan terakhir.");
+      expect(m).not.toContain("<polyline");
+      // Tidak ada legenda: tidak ada garis untuk diidentifikasi warnanya.
+      expect(m).not.toContain("<ul");
+    });
+
+    it("padanan tabel tetap ada, apa adanya, di keadaan kosong", () => {
+      const m = garisNol();
+      expect(m).toContain("Lihat sebagai tabel");
+      const tabel = m.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
+      expect(tabel).not.toBe("");
+      for (const t of LABEL_PEKAN) expect(tabel).toContain(t);
+      for (const s of SERI_NOL) expect(tabel).toContain(s.nama);
+    });
   });
 });

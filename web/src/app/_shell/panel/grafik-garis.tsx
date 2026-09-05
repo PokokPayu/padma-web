@@ -26,14 +26,18 @@ export function GrafikGaris({
   label,
   seri,
   format,
+  labelKolomLabel = "Pekan",
 }: {
   judul: string;
   label: readonly string[];
   seri: readonly SeriGaris[];
   format: (n: number) => string;
+  /** Judul kolom pertama tabel padanan. Bawaan "Pekan" berbohong bagi
+   *  pemakaian non-pekanan mana pun; pemanggil semacam itu WAJIB mengisinya
+   *  sendiri. */
+  labelKolomLabel?: string;
 }) {
   const [sorot, setSorot] = useState<number | null>(null);
-  const maks = batasAtas(seri.flatMap((s) => [...s.nilai]));
   const n = label.length;
   // Lebar slot dari PLOT, bukan GEOM: GEOM.lebar ikut memuat padding
   // kiri-kanan, yang bukan bagian dari slot mana pun. Pita sorot selebar
@@ -42,6 +46,66 @@ export function GrafikGaris({
   const slot = PLOT.lebar / n;
 
   const warna = (i: number) => PALET_GRAFIK[i % PALET_GRAFIK.length];
+
+  // Padanan tabel dipakai baik oleh keadaan kosong maupun keadaan normal —
+  // diekstrak sekali di sini supaya keduanya benar-benar merender markup
+  // yang sama persis, bukan dua salinan yang bisa berpisah diam-diam.
+  const tabelPadanan = (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-[12px] font-bold text-panel-muted">
+        Lihat sebagai tabel
+      </summary>
+      <div className="mt-2">
+        <Tabel label={judul}>
+          <thead>
+            <tr>
+              <Th>{labelKolomLabel}</Th>
+              {seri.map((s) => (
+                <Th key={s.nama} className="text-right">
+                  {s.nama}
+                </Th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {label.map((t, i) => (
+              <tr key={`${t}-${i}`}>
+                <Td>{t}</Td>
+                {seri.map((s) => (
+                  <Td key={s.nama} className="text-right tabular-nums">
+                    {format(s.nilai[i] ?? 0)}
+                  </Td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </Tabel>
+      </div>
+    </details>
+  );
+
+  // Keadaan kosong: SELURUH nilai di SELURUH seri adalah nol — persis keadaan
+  // data klinik ini sekarang. Menggambar grafik normal di sini menghasilkan
+  // dua kerusakan sekaligus dari satu akar yang sama: (a) label ujung garis
+  // ketiga seri jatuh di titik yang sama persis dan bertumpuk jadi coretan
+  // tak terbaca, dan (b) sumbu Y menampilkan gridline dari lantai
+  // kecil-positif fungsi batas-atas, yang berbentuk hitungan, bukan rupiah.
+  // Tidak ada sumbu berarti tidak ada skala yang
+  // mengada-ada; tidak ada label berarti tidak ada tumpukan. Legenda ikut
+  // disembunyikan — tidak ada garis untuk diidentifikasi warnanya.
+  const semuaNol = seri.every((s) => s.nilai.every((v) => v === 0));
+  if (semuaNol) {
+    return (
+      <div className="relative">
+        <p className="text-[12.5px] text-panel-muted">
+          Belum ada data delapan pekan terakhir.
+        </p>
+        {tabelPadanan}
+      </div>
+    );
+  }
+
+  const maks = batasAtas(seri.flatMap((s) => [...s.nilai]));
 
   return (
     <div className="relative">
@@ -61,10 +125,12 @@ export function GrafikGaris({
         ))}
       </ul>
 
+      {/* TANPA `height` tetap — lihat catatan di GrafikBatang: viewBox +
+          tinggi piksel tetap = letterbox, dan tooltip persentase di bawah
+          berhenti cocok dengan marka di layar begitu itu terjadi. */}
       <svg
         viewBox={`0 0 ${GEOM.lebar} ${GEOM.tinggi}`}
-        width="100%"
-        height={GEOM.tinggi}
+        className="block h-auto w-full"
         role="img"
         aria-label={`${judul}. ${seri
           .map((s) => `${s.nama} berakhir di ${format(s.nilai[s.nilai.length - 1] ?? 0)}`)
@@ -166,37 +232,7 @@ export function GrafikGaris({
         </div>
       )}
 
-      <details className="mt-3">
-        <summary className="cursor-pointer text-[12px] font-bold text-panel-muted">
-          Lihat sebagai tabel
-        </summary>
-        <div className="mt-2">
-          <Tabel label={judul}>
-            <thead>
-              <tr>
-                <Th>Pekan</Th>
-                {seri.map((s) => (
-                  <Th key={s.nama} className="text-right">
-                    {s.nama}
-                  </Th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {label.map((t, i) => (
-                <tr key={`${t}-${i}`}>
-                  <Td>{t}</Td>
-                  {seri.map((s) => (
-                    <Td key={s.nama} className="text-right tabular-nums">
-                      {format(s.nilai[i] ?? 0)}
-                    </Td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </Tabel>
-        </div>
-      </details>
+      {tabelPadanan}
     </div>
   );
 }

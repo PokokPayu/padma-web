@@ -25,13 +25,26 @@ export const PLOT = {
  * Sumbu yang dipotong di bawah membesar-besarkan selisih kecil; pada grafik
  * yang dipakai memutuskan honor, itu bukan gaya melainkan berbohong.
  *
- * Dibulatkan ke kelipatan empat supaya kisinya jatuh di angka bulat, dan
- * minimal empat supaya data yang seluruhnya nol tetap punya kisi alih-alih
- * memicu pembagian nol.
+ * Dibulatkan ke angka "bagus" — 1, 2, 2.5, atau 5 dikali pangkat sepuluh —
+ * bukan ke kelipatan empat. Kelipatan empat jatuh pas untuk hitungan sesi
+ * (batasnya kecil, kelipatannya tetap terbaca), tetapi pada nominal
+ * bermagnitudo ratusan ribu ia menghasilkan kisi yang bulat bagi kalkulator,
+ * bukan bagi mata (mis. empat ratus enam puluh dua ribu lima ratus). Minimal
+ * tetap sebuah lantai kecil-positif, supaya data yang seluruhnya nol tetap
+ * punya skala andai suatu saat digambar tanpa lewat jalur status-kosong.
  */
 export function batasAtas(nilai: readonly number[]): number {
   const maks = Math.max(0, ...nilai);
-  return Math.max(4, Math.ceil(maks / 4) * 4);
+  if (maks <= 4) return 4;
+
+  const magnitudo = Math.pow(10, Math.floor(Math.log10(maks)));
+  for (const pengali of [1, 2, 2.5, 5, 10]) {
+    const kandidat = pengali * magnitudo;
+    if (kandidat >= maks) return kandidat;
+  }
+  // Tidak pernah tercapai (pengali 10 selalu ≥ maks/magnitudo < 10), tetapi
+  // TypeScript tidak tahu itu tanpa penjaga eksplisit.
+  return 10 * magnitudo;
 }
 
 /** Koordinat Y sebuah nilai. Nol = garis dasar, `maks` = tepi atas plot. */

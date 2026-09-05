@@ -5,7 +5,18 @@ import { PALET_GRAFIK } from "./palet";
 import { GEOM, PLOT, Kisi, LabelX, batasAtas, pusatX, skalaY } from "./grafik-dasar";
 import { Tabel, Th, Td } from "./tabel";
 
-export type TitikBatang = { label: string; nilai: number };
+export type TitikBatang = {
+  label: string;
+  nilai: number;
+  /**
+   * Keterangan lebih lengkap untuk satu titik, mis. rentang tanggal penuh
+   * ("1 – 7 Sep 2026") di belakang label pendek sumbu-X ("1 SEP"). Saat ada,
+   * dipakai di tooltip dan kolom pertama tabel padanan alih-alih `label` —
+   * sumbu-X sendiri tetap memakai `label` karena label penuh biasanya
+   * kepanjangan untuk berdesakan di sana.
+   */
+  keterangan?: string;
+};
 
 /**
  * Ujung batang dibulatkan 4px HANYA di sisi atas, dan tetap menempel di garis
@@ -33,11 +44,19 @@ export function GrafikBatang({
   data,
   format = (n) => String(n),
   warna = PALET_GRAFIK[0],
+  labelKolomLabel = "Pekan",
+  labelKolomNilai = "Jumlah",
 }: {
   judul: string;
   data: readonly TitikBatang[];
   format?: (n: number) => string;
   warna?: string;
+  /** Judul kolom pertama tabel padanan. Bawaan "Pekan" berbohong bagi
+   *  pemakaian non-pekanan mana pun; pemanggil semacam itu WAJIB mengisinya
+   *  sendiri. */
+  labelKolomLabel?: string;
+  /** Judul kolom kedua tabel padanan. Lihat `labelKolomLabel`. */
+  labelKolomNilai?: string;
 }) {
   const [sorot, setSorot] = useState<number | null>(null);
   const nilai = data.map((d) => d.nilai);
@@ -55,10 +74,16 @@ export function GrafikBatang({
 
   return (
     <div className="relative">
+      {/* TANPA `height`: dengan `viewBox` tetap, sebuah tinggi piksel tetap
+          membuat gambarnya di-letterbox (skala dibatasi 1, sisanya jadi
+          gutter kosong) alih-alih ikut membesar mengisi kartu — dan tooltip
+          di bawah, yang posisinya persentase dari GEOM.lebar/GEOM.tinggi,
+          hanya cocok dengan tanda-tanda di layar SAAT gambarnya benar-benar
+          mengisi kotaknya. `h-auto` membiarkan tinggi elemen mengikuti rasio
+          viewBox, dan `w-full` yang melebarkannya. */}
       <svg
         viewBox={`0 0 ${GEOM.lebar} ${GEOM.tinggi}`}
-        width="100%"
-        height={GEOM.tinggi}
+        className="block h-auto w-full"
         role="img"
         aria-label={`${judul}. ${data
           .map((d) => `${d.label}: ${format(d.nilai)}`)
@@ -117,7 +142,7 @@ export function GrafikBatang({
             top: `${(skalaY(data[sorot].nilai, maks) / GEOM.tinggi) * 100}%`,
           }}
         >
-          {data[sorot].label}: {format(data[sorot].nilai)}
+          {data[sorot].keterangan ?? data[sorot].label}: {format(data[sorot].nilai)}
         </div>
       )}
 
@@ -131,14 +156,14 @@ export function GrafikBatang({
           <Tabel label={judul}>
             <thead>
               <tr>
-                <Th>Pekan</Th>
-                <Th className="text-right">Jumlah</Th>
+                <Th>{labelKolomLabel}</Th>
+                <Th className="text-right">{labelKolomNilai}</Th>
               </tr>
             </thead>
             <tbody>
               {data.map((d, i) => (
                 <tr key={`${d.label}-${i}`}>
-                  <Td>{d.label}</Td>
+                  <Td>{d.keterangan ?? d.label}</Td>
                   <Td className="text-right tabular-nums">{format(d.nilai)}</Td>
                 </tr>
               ))}
