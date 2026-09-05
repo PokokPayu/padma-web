@@ -426,7 +426,16 @@ describe("KerangkaPanel", () => {
     // Tanpa ini, mengetuk satu tujuan meninggalkan panel gelap menutupi
     // halaman yang baru saja dibuka. Dikunci lewat sumber: repo ini berjalan
     // tanpa jsdom, jadi klik sungguhan tidak bisa disimulasikan.
-    expect(sumber).toMatch(/useEffect\(\s*\(\)\s*=>\s*\{\s*setBuka\(false\);?\s*\}\s*,\s*\[pathname\]\s*\)/);
+    //
+    // Bentuknya bukan lagi useEffect(() => setBuka(false), [pathname]):
+    // react-hooks/set-state-in-effect menandai setState sinkron di dalam efek
+    // sebagai pemicu render berantai, jadi ia diganti pola "menyesuaikan state
+    // ketika prop berubah" React sendiri — dibandingkan dan disetel langsung
+    // di badan render. Maksudnya sama persis: setBuka(false) tetap berjalan
+    // begitu pathname berbeda dari render sebelumnya.
+    expect(sumber).toMatch(
+      /if\s*\(\s*pathname\s*!==\s*pathnameSebelumnya\s*\)\s*\{\s*setPathnameSebelumnya\(pathname\);\s*setBuka\(false\);\s*\}/,
+    );
   });
 
   it("BUTA PERAN: primitif panel tidak tahu bedanya admin dan owner", () => {

@@ -134,6 +134,12 @@ type Ringkasan = Awaited<ReturnType<typeof ringkasanPekanIni>>;
 function markupNav(pathname: string): string {
   rute.kini = pathname;
   return renderToStaticMarkup(
+    // NavOwner mewajibkan `children` di tipenya (bukan opsional), jadi
+    // createElement TIDAK BISA menyimpulkan properti itu terpenuhi lewat
+    // argumen posisi ketiga — TypeScript tetap menuntutnya di objek props.
+    // Berkas ini berekstensi .ts (bukan .tsx) sehingga sintaks JSX
+    // `<NavOwner>{null}</NavOwner>` tidak tersedia sebagai jalan keluar.
+    // eslint-disable-next-line react/no-children-prop
     createElement(NavOwner, { nama: "Pemilik PADMA", children: null }),
   );
 }

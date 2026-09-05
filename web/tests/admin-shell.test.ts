@@ -115,6 +115,12 @@ const NOL: Antrean = {
 function markupNav(pathname: string, antrean: Antrean = NOL): string {
   rute.kini = pathname;
   return renderToStaticMarkup(
+    // NavAdmin mewajibkan `children` di tipenya (bukan opsional), jadi
+    // createElement TIDAK BISA menyimpulkan properti itu terpenuhi lewat
+    // argumen posisi ketiga — TypeScript tetap menuntutnya di objek props.
+    // Berkas ini berekstensi .ts (bukan .tsx) sehingga sintaks JSX
+    // `<NavAdmin>{null}</NavAdmin>` tidak tersedia sebagai jalan keluar.
+    // eslint-disable-next-line react/no-children-prop
     createElement(NavAdmin, {
       antrean,
       nama: "Admin PADMA",

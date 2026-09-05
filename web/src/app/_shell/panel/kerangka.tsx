@@ -51,9 +51,16 @@ export function KerangkaPanel({
 
   // Drawer tertutup setiap kali rute berganti. Tanpa ini, mengetuk satu tujuan
   // meninggalkan panel gelap menutupi halaman yang baru saja dibuka.
-  useEffect(() => {
+  //
+  // Disesuaikan langsung di badan render (bukan di dalam useEffect): pola ini
+  // adalah "menyesuaikan state ketika prop berubah" yang didokumentasikan React
+  // sendiri — memanggil setState secara sinkron di dalam efek memicu render
+  // berantai yang tak perlu, sedangkan pola ini menyatu ke render yang sama.
+  const [pathnameSebelumnya, setPathnameSebelumnya] = useState(pathname);
+  if (pathname !== pathnameSebelumnya) {
+    setPathnameSebelumnya(pathname);
     setBuka(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     if (!buka) return;
