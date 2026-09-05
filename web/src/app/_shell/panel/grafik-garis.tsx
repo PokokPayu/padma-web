@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PALET_GRAFIK, WARNA_PERMUKAAN, WARNA_TINTA_SUMBU } from "./palet";
-import { GEOM, Kisi, LabelX, batasAtas, pusatX, skalaY } from "./grafik-dasar";
+import { GEOM, PLOT, Kisi, LabelX, batasAtas, pusatX, skalaY } from "./grafik-dasar";
 import { Tabel, Th, Td } from "./tabel";
 
 export type SeriGaris = { nama: string; nilai: readonly number[] };
@@ -35,6 +35,11 @@ export function GrafikGaris({
   const [sorot, setSorot] = useState<number | null>(null);
   const maks = batasAtas(seri.flatMap((s) => [...s.nilai]));
   const n = label.length;
+  // Lebar slot dari PLOT, bukan GEOM: GEOM.lebar ikut memuat padding
+  // kiri-kanan, yang bukan bagian dari slot mana pun. Pita sorot selebar
+  // GEOM/n meluber ke slot tetangga, sehingga pointer dekat batas memicu
+  // tooltip pekan berikutnya lebih awal.
+  const slot = PLOT.lebar / n;
 
   const warna = (i: number) => PALET_GRAFIK[i % PALET_GRAFIK.length];
 
@@ -74,9 +79,9 @@ export function GrafikGaris({
         {label.map((t, i) => (
           <rect
             key={`sasaran-${t}-${i}`}
-            x={pusatX(i, n) - GEOM.lebar / (n * 2)}
+            x={pusatX(i, n) - slot / 2}
             y={GEOM.pad.atas}
-            width={GEOM.lebar / n}
+            width={slot}
             height={GEOM.tinggi - GEOM.pad.atas - GEOM.pad.bawah}
             fill="transparent"
             onMouseEnter={() => setSorot(i)}

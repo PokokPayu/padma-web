@@ -294,6 +294,23 @@ describe("GrafikGaris", () => {
     expect([...garis().matchAll(/data-seri="/g)]).toHaveLength(SERI_UJI.length);
   });
 
+  it("pita sorot menyusun ubin plot area tanpa tumpang-tindih maupun meluber ke padding", () => {
+    // Diperiksa dari markup yang benar-benar dirender (bukan dihitung ulang
+    // secara terpisah): pita yang lebih lebar daripada slotnya mencuri hover
+    // milik pekan tetangga persis di dekat batas, dan itu baru kentara kalau
+    // ubin yang dirender diperiksa langsung, bukan diasumsikan benar.
+    const m = garis();
+    const pita = [...m.matchAll(/<rect x="([\d.]+)"[^>]*width="([\d.]+)"[^>]*fill="transparent"/g)].map(
+      ([, x, w]) => ({ kiri: Number(x), kanan: Number(x) + Number(w) }),
+    );
+    expect(pita).toHaveLength(LABEL_PEKAN.length);
+    expect(pita[0].kiri).toBeGreaterThanOrEqual(GEOM.pad.kiri);
+    expect(pita[pita.length - 1].kanan).toBeLessThanOrEqual(GEOM.lebar - GEOM.pad.kanan);
+    for (let i = 0; i < pita.length - 1; i++) {
+      expect(pita[i].kanan).toBeCloseTo(pita[i + 1].kiri, 5);
+    }
+  });
+
   it("legenda WAJIB ada untuk dua seri atau lebih", () => {
     const m = garis();
     // Dicocokkan pada isi <ul> itu sendiri — nama seri juga muncul sebagai
@@ -308,9 +325,16 @@ describe("GrafikGaris", () => {
     expect([...garis().matchAll(/data-label-seri="/g)]).toHaveLength(SERI_UJI.length);
   });
 
-  it("memakai ketiga slot palet tervalidasi, sesuai urutannya", () => {
+  it("memakai ketiga slot palet tervalidasi, SESUAI urutannya", () => {
     const m = garis();
-    for (const heks of PALET_GRAFIK) expect(m).toContain(heks);
+    const tag = (nama: string) =>
+      (m.match(/<polyline[^>]*>/g) ?? []).find((t) => t.includes(`data-seri="${nama}"`));
+    // Urutan slot ikut divalidasi — validator memeriksa pasangan yang
+    // BERSEBELAHAN, jadi menukar dua seri mengubah pasangan yang diperiksa
+    // dan bisa menjatuhkan pemisahan CVD-nya tanpa satu pun error.
+    SERI_UJI.forEach((s, i) => {
+      expect(tag(s.nama), s.nama).toContain(`stroke="${PALET_GRAFIK[i]}"`);
+    });
   });
 
   it("penanda bertumpuk diberi cincin permukaan supaya tidak menyatu", () => {
