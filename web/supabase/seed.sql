@@ -18,6 +18,21 @@ insert into services (id, phase_id, nama) values
   ('11111111-1111-1111-1111-111111111109','newborn','Shishu Parent Touch'),
   ('11111111-1111-1111-1111-111111111110','newborn','Baby Massage Class');
 
+-- Blok CERMIN dari langkah backfill migrasi `varian_layanan`
+-- (`insert into service_variants select id, '' from services`). Pada
+-- `db reset` yang bersih, migrasi berjalan SEBELUM berkas seed ini — jadi
+-- backfill migrasi menyalin NOL baris untuk layanan seed di atas, dan setiap
+-- layanan seed lahir yatim tanpa varian. Pernyataan yang sama diulang di sini
+-- SESUDAH layanan seed ada, dengan `where not exists` supaya idempoten
+-- terhadap backfill migrasi pada basis data yang sudah berisi layanan
+-- produksi. Task berikutnya yang menambahkan varian bertingkat pada layanan
+-- tertentu (…107, …109) menonaktifkan baris baku ini alih-alih menghapusnya —
+-- pensiun lewat `aktif = false`, bukan penghapusan baris, sama seperti aturan
+-- lain di proyek ini.
+insert into service_variants (service_id, label)
+  select id, '' from services
+  where not exists (select 1 from service_variants v where v.service_id = services.id);
+
 insert into service_rates (service_id, harga_klien, honor_mitra) values
   ('11111111-1111-1111-1111-111111111101',425000,190000),
   ('11111111-1111-1111-1111-111111111102',250000,100000),

@@ -23,8 +23,9 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
  * Invarian yang dijaga di sini:
  *   1. peran `anon` tidak memegang hak APA PUN (tabel maupun kolom) atas tabel
  *      data pasien/operasional/internal;
- *   2. `anon` tetap boleh SELECT katalog publik (phases/services/packages) —
- *      bahan landing Plan 2 — tetapi TIDAK boleh menulisnya;
+ *   2. `anon` tetap boleh SELECT katalog publik
+ *      (phases/services/packages/service_variants) — bahan landing Plan 2 —
+ *      tetapi TIDAK boleh menulisnya;
  *   3. lewat REST, anon menabrak 42501 (permission denied) lebih dulu, bukan
  *      diam-diam "0 baris";
  *   4. yang TIDAK boleh ikut rusak: registrasi & login Supabase Auth, akses
@@ -58,7 +59,7 @@ const TABEL_TERTUTUP_ANON = [
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
-const TABEL_KATALOG_PUBLIK = ["phases", "services", "packages"] as const;
+const TABEL_KATALOG_PUBLIK = ["phases", "services", "packages", "service_variants"] as const;
 
 const HAK_TABEL = [
   "SELECT",

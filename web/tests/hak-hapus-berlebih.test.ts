@@ -56,6 +56,7 @@ const KLIEN_RINA = "44444444-4444-4444-4444-444444444402";
 
 /** Fixture milik berkas ini sendiri; semuanya berawalan PAD-UJI. */
 const LAYANAN_UJI = "11111111-1111-1111-1111-1111111119a1";
+const VARIAN_UJI = "11111111-1111-1111-1111-1111111119a2";
 const PAKET_UJI = "22222222-2222-2222-2222-2222222229a1";
 const MITRA_UJI = "33333333-3333-3333-3333-3333333339a1";
 const MATERI_UJI = "77777777-7777-7777-7777-7777777779a1";
@@ -99,6 +100,10 @@ beforeAll(async () => {
   );
   await svc.from("packages").upsert(
     { id: PAKET_UJI, service_id: LAYANAN_UJI, nama: "PAD-UJI Paket", jumlah_sesi: 3, aktif: true },
+    { onConflict: "id" },
+  );
+  await svc.from("service_variants").upsert(
+    { id: VARIAN_UJI, service_id: LAYANAN_UJI, label: "PAD-UJI Varian", aktif: true },
     { onConflict: "id" },
   );
   await svc.from("partners").upsert(
@@ -176,6 +181,9 @@ afterAll(async () => {
   await svc.from("materials").delete().eq("id", MATERI_UJI);
   await svc.from("partners").delete().eq("id", MITRA_UJI);
   await svc.from("packages").delete().eq("id", PAKET_UJI);
+  // Varian sebelum layanannya: FK `service_variants.service_id -> services.id`
+  // tidak ber-cascade (varian yang pernah dipakai sesi adalah riwayat).
+  await svc.from("service_variants").delete().eq("id", VARIAN_UJI);
   await svc.from("services").delete().eq("id", LAYANAN_UJI);
 });
 
@@ -516,6 +524,20 @@ describe("master data tidak bisa dihapus staf", () => {
     expect(layanan).not.toBeNull();
   });
 
+  it("varian layanan: ditolak, dan barisnya masih ada", async () => {
+    // Sama seperti layanan & paket di atas: varian yang pernah dipakai sesi
+    // adalah riwayat harga, bukan draft yang boleh lenyap.
+    const a = await signInAs("admin@padma.test");
+    const { error } = await a.from("service_variants").delete().eq("id", VARIAN_UJI);
+    expect(error?.code).toBe("42501");
+    const { data } = await svc
+      .from("service_variants")
+      .select("id")
+      .eq("id", VARIAN_UJI)
+      .maybeSingle();
+    expect(data).not.toBeNull();
+  });
+
   it("fase: ditolak, dan barisnya masih ada", async () => {
     // Baris fase dibuat & dibereskan DI DALAM test ini: `phases` diperiksa
     // berjumlah tepat 5 oleh tests/landing-katalog.test.ts, jadi ia tidak
@@ -600,13 +622,14 @@ describe("master data tidak bisa dihapus staf", () => {
     }
   });
 
-  it("KONTROL: pensiun lewat `aktif = false` TETAP bekerja untuk mitra, layanan, & paket", async () => {
+  it("KONTROL: pensiun lewat `aktif = false` TETAP bekerja untuk mitra, layanan, paket, & varian", async () => {
     const a = await signInAs("admin@padma.test");
 
     for (const [tabel, id] of [
       ["partners", MITRA_UJI],
       ["services", LAYANAN_UJI],
       ["packages", PAKET_UJI],
+      ["service_variants", VARIAN_UJI],
     ] as const) {
       const { data, error } = await a
         .from(tabel)
