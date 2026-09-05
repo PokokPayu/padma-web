@@ -367,21 +367,41 @@ describe("reader materi — e-book berhak tapi isi belum diunggah (M10, keadaan 
 });
 
 describe("reader materi — video yang sudah terbuka", () => {
-  it("menampilkan pemutar dengan keterangan jujur, tanpa membocorkan URL-nya", async () => {
+  it("menampilkan elemen <video> sungguhan, tanpa membocorkan objek/URL-nya ke markup server", async () => {
     const m = await markupReader(TERBUKA_VIDEO);
     expect(m).toContain("Pijat Mandiri Prekonsepsi");
     for (const url of await semuaUrlVideo()) {
-      expect(m, `URL video ${url} bocor ke reader`).not.toContain(url);
+      expect(m, `kunci objek video ${url} bocor ke reader`).not.toContain(url);
     }
     expect(m.toLowerCase()).not.toContain("vimeo.com");
-    // Kesiapan tidak boleh dikarang: pemutar sungguhan belum ada.
-    expect(m).toContain("fase berikutnya");
+
+    // Pemutar sungguhan harus benar-benar ada — regresi yang menghapusnya
+    // (mis. rollback diam-diam ke placeholder lama) memerahkan baris ini.
+    const tagVideo = m.match(/<video\b[^>]*>/);
+    expect(tagVideo, "elemen <video> tidak ditemukan di markup reader").toBeTruthy();
+
+    // Properti paling gampang hilang diam-diam: atribut `src` TIDAK BOLEH ada
+    // di markup yang dirender SERVER. Ini bukan "belum sempat diisi" — ini
+    // kontrak keamanan Task 7 (lihat komentar di pemutar-video.tsx & route.ts
+    // video): presigned URL baru boleh lahir SESUDAH query ber-RLS memutuskan
+    // hak pasien, jadi ia tidak boleh pernah ikut ke HTML yang dikirim server
+    // (baru dipasang lewat properti DOM sesudah hidrasi). Simplifikasi yang
+    // "membantu" dengan merender `src` di server — misalnya demi menghindari
+    // flash pemutar kosong — akan diam-diam membocorkan tautan video ke
+    // SETIAP pasien yang membuka view-source; baris ini yang menangkapnya.
+    expect(
+      tagVideo?.[0],
+      `atribut src TIDAK BOLEH ada di markup server: ${tagVideo?.[0]}`,
+    ).not.toMatch(/\bsrc\s*=/);
+
+    // Host bucket R2 juga tidak boleh muncul di mana pun di markup, bukan
+    // cuma di dalam tag <video> — presigned URL selalu memuat host ini.
+    expect(m).not.toContain("r2.cloudflarestorage.com");
   });
 
-  it("tidak menyisipkan pemutar pihak ketiga apa pun", async () => {
+  it("tidak menyisipkan pemutar pihak ketiga (iframe Vimeo/dsb.) — <video> di reader adalah milik kita sendiri", async () => {
     const m = await markupReader(TERBUKA_VIDEO);
     expect(m).not.toContain("<iframe");
-    expect(m).not.toContain("<video");
   });
 
   it("watermark CSS TETAP dipasang — cabang video tidak disentuh M10", async () => {
