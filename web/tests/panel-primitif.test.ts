@@ -13,7 +13,7 @@
  *  3. Badge antrean hilang saat nol — alarm yang dinormalkan berhenti berarti.
  */
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -28,6 +28,20 @@ vi.mock("next/navigation", () => ({
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
+
+/** Semua berkas .ts/.tsx di bawah src/app/_shell/panel, rekursif — house idiom
+ *  yang sama dengan `berkasAdmin()` di tests/admin-shell.test.ts. Primitif
+ *  yang lahir belakangan otomatis ikut terjaga, tanpa perlu menambahkannya
+ *  dengan tangan ke daftar test di sini. */
+function berkasPanel(rel = "src/app/_shell/panel"): string[] {
+  const hasil: string[] = [];
+  for (const entri of readdirSync(path.join(AKAR, rel), { withFileTypes: true })) {
+    const anak = `${rel}/${entri.name}`;
+    if (entri.isDirectory()) hasil.push(...berkasPanel(anak));
+    else if (/\.tsx?$/.test(entri.name)) hasil.push(anak);
+  }
+  return hasil;
+}
 
 describe("token visual panel", () => {
   const css = baca("src/app/globals.css");
@@ -62,7 +76,12 @@ describe("token visual panel", () => {
       "--color-ink-soft",
       "--color-clay",
     ]) {
-      expect(css, `${token} ikut terhapus`).toContain(token);
+      // Bukan sekadar toContain(token): nama-nama ini juga muncul di komentar
+      // (beberapa ditambahkan branch ini sendiri) dan di aturan `body`, jadi
+      // menghapus deklarasi `--color-paper: #fbf8f0;` dari @theme akan tetap
+      // lolos toContain — persis regresi yang ingin dicegah test ini. Yang
+      // diwajibkan adalah DEKLARASI sungguhan: nama token diikuti `:` lalu `#`.
+      expect(css, `${token} ikut terhapus`).toMatch(new RegExp(`${token}:\\s*#`));
     }
   });
 
@@ -442,18 +461,12 @@ describe("KerangkaPanel", () => {
     // Begitu satu berkas di sini tahu peran, pemisahan fisik money firewall
     // berubah menjadi satu kondisional yang bisa salah tulis dalam satu
     // karakter — dan yang bocor adalah seluruh nominal PADMA.
-    for (const berkas of [
-      "src/app/_shell/panel/ikon.tsx",
-      "src/app/_shell/panel/aktif.ts",
-      "src/app/_shell/panel/badge.tsx",
-      "src/app/_shell/panel/sidebar.tsx",
-      "src/app/_shell/panel/topbar.tsx",
-      "src/app/_shell/panel/bottom-bar.tsx",
-      "src/app/_shell/panel/tutup-drawer.ts",
-      "src/app/_shell/panel/kerangka.tsx",
-    ]) {
+    for (const berkas of berkasPanel()) {
       const isi = baca(berkas);
-      expect(isi, `${berkas} menyebut peran`).not.toMatch(/"(admin|owner)"/);
+      // Flag `i`: kedua shell meneruskan "Admin"/"Owner" (huruf besar di
+      // depan) sebagai prop `peran`, bukan "admin"/"owner". Tanpa `i`, sebuah
+      // primitif yang menuliskan `const peran = "Owner"` lolos tanpa terdeteksi.
+      expect(isi, `${berkas} menyebut peran`).not.toMatch(/"(admin|owner)"/i);
       expect(isi, `${berkas} mengimpor penjaga peran`).not.toContain("requireRole");
       expect(isi, `${berkas} memakai service role`).not.toContain("createAdminSupabase");
       expect(isi, `${berkas} menyebut nominal`).not.toMatch(/Rp\s?\d|formatRupiah/);
