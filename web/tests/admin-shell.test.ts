@@ -442,35 +442,34 @@ describe("layout admin", () => {
   });
 });
 
-describe("dashboard antrean admin", () => {
+describe("dashboard admin", () => {
   const sumberDashboard = baca("src/app/admin/page.tsx");
+
+  async function markupDashboard(): Promise<string> {
+    const { default: AdminPage } = await import("@/app/admin/page");
+    rute.kini = "/admin";
+    return renderToStaticMarkup(await AdminPage());
+  }
 
   it("tetap menautkan inbox skrining (pagar lama, jangan dilepas)", () => {
     expect(sumberDashboard).toContain('href="/admin/skrining"');
   });
 
   it("menampilkan keempat angka antrean apa adanya", async () => {
-    const { default: AdminPage } = await import("@/app/admin/page");
-    rute.kini = "/admin";
-    const m = renderToStaticMarkup(await AdminPage());
-
+    const m = await markupDashboard();
     for (const [label, angka] of [
       ["Skrining baru", sesudah.skriningBaru],
       ["Permintaan jadwal", sesudah.permintaanMenunggu],
       ["Klaim pembayaran", sesudah.klaimMenunggu],
       ["Klien belum aktif", sesudah.klienBelumAktif],
     ] as const) {
-      expect(m, `kartu "${label}" tidak ada`).toContain(label);
+      expect(m, `stat tile "${label}" tidak ada`).toContain(label);
       expect(m).toContain(`>${angka}<`);
     }
   });
 
-  it("kartu antrean menautkan ke modul yang menanganinya", async () => {
-    const { default: AdminPage } = await import("@/app/admin/page");
-    rute.kini = "/admin";
-    const m = renderToStaticMarkup(await AdminPage());
-    // Keempat angka — termasuk "Klaim pembayaran", yang sejak modul
-    // /admin/bayar lahir tidak boleh lagi menjadi angka tanpa tujuan.
+  it("setiap angka antrean menautkan modul yang menanganinya", async () => {
+    const m = await markupDashboard();
     for (const href of [
       "/admin/skrining",
       "/admin/klien",
@@ -481,11 +480,42 @@ describe("dashboard antrean admin", () => {
     }
   });
 
-  it("tidak ada nominal uang di dashboard (money firewall)", async () => {
-    const { default: AdminPage } = await import("@/app/admin/page");
-    rute.kini = "/admin";
-    const m = renderToStaticMarkup(await AdminPage());
+  it("membawa grafik tren delapan pekan, lengkap dengan padanan tabelnya", async () => {
+    const m = await markupDashboard();
+    expect([...m.matchAll(/data-batang="/g)]).toHaveLength(8);
+    expect(m).toContain("Lihat sebagai tabel");
+  });
+
+  it("membawa agenda hari ini dan aktivitas terbaru", async () => {
+    const m = await markupDashboard();
+    expect(m).toContain("Agenda hari ini");
+    expect(m).toContain("Aktivitas terbaru");
+  });
+
+  it("aksi cepat menuju formulir yang sebenarnya, bukan tautan mati", async () => {
+    const m = await markupDashboard();
+    // Keduanya rute nyata yang sudah ada sejak panel operasional lahir.
+    expect(m).toContain('href="/admin/klien"');
+    expect(m).toContain('href="/admin/sesi"');
+  });
+
+  it("TIDAK ada nominal uang di dashboard (money firewall)", async () => {
+    const m = await markupDashboard();
     expect(m).not.toMatch(/Rp\s?\d/);
     expect(sumberDashboard).not.toMatch(/Rp\s?\d/);
+    expect(sumberDashboard).not.toContain("formatRupiah");
+    expect(sumberDashboard).not.toContain("@/lib/owner/rupiah");
+  });
+
+  it("penjaga peran tepat satu kali dengan daftar peran persis", () => {
+    expect([...sumberDashboard.matchAll(/requireRole\(/g)]).toHaveLength(1);
+    expect(sumberDashboard).toMatch(
+      /await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/,
+    );
+  });
+
+  it("hari ini menurut kalender Jakarta, bukan jam server", () => {
+    expect(sumberDashboard).toContain("hariIniJakarta");
+    expect(sumberDashboard).not.toContain("new Date()");
   });
 });
