@@ -32,6 +32,35 @@ function BelumTerbuka({ judul }: { judul: string }) {
   );
 }
 
+/**
+ * Keadaan "berhak, tetapi isinya belum diunggah admin" — spec §10 menuntut
+ * ini dibedakan dari "R2 tidak bisa dihubungi" (galat yang bisa dicoba ulang,
+ * ditangani `<PemutarVideo>` sendiri lewat `gagal`). Dipakai KEDUA tipe materi
+ * sejak F4 (video-r2 fix wave): sebelumnya cabang video tidak punya keadaan
+ * ini sama sekali dan langsung merender `<PemutarVideo>` walau `objekVideo`
+ * masih `null` — pemutar itu lalu memanggil route yang menjawab 403 (RLS
+ * meloloskan barisnya sendiri lewat `berhak_isi_materi`, tapi tidak ada baris
+ * `material_videos` untuk dibaca), dan pasien melihat pesan galat generik
+ * alih-alih "sedang disiapkan" yang jujur menyebut sebabnya.
+ */
+function IsiSedangDisiapkan({ judul }: { judul: string }) {
+  return (
+    <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
+      <h1 className="font-serif text-xl text-night">Isi materi sedang disiapkan</h1>
+      <p className="mt-2 text-[13.5px] text-ink-soft">
+        <b className="text-ink">{judul}</b> sudah terbuka untuk Anda, tetapi
+        isinya belum diunggah tim PADMA. Silakan cek kembali nanti.
+      </p>
+      <Link
+        href="/passport/materi"
+        className="mt-5 inline-block text-sm font-bold text-leaf underline underline-offset-4"
+      >
+        ← Kembali ke Materi
+      </Link>
+    </section>
+  );
+}
+
 export default async function ReaderMateri({
   params,
 }: {
@@ -58,14 +87,22 @@ export default async function ReaderMateri({
   }
 
   // ===== Cabang VIDEO =====
-  // TIDAK DISENTUH oleh M10 — perubahan yang menyentuhnya secara TIDAK
-  // LANGSUNG saat itu hanyalah gerbang di atas, yang memakai `m.berhak` (RPC)
-  // alih-alih `m.videoUrl !== null`. Task 7 (video-r2) kini menggantikan
-  // placeholder ▶ palsu di bawah dengan `<PemutarVideo>` sungguhan, yang
-  // mengambil presigned URL dari `/api/materi/[id]/video` sesudah halaman
-  // hidup — lihat komentar di route dan komponen itu untuk urutan yang
-  // mengikat (query ber-RLS dulu, baru presigned URL).
+  // Task 7 (video-r2) menggantikan placeholder ▶ palsu di bawah dengan
+  // `<PemutarVideo>` sungguhan, yang mengambil presigned URL dari
+  // `/api/materi/[id]/video` sesudah halaman hidup — lihat komentar di route
+  // dan komponen itu untuk urutan yang mengikat (query ber-RLS dulu, baru
+  // presigned URL).
+  //
+  // Keadaan "berhak tapi belum diunggah" (F4, fix wave): `m.objekVideo`
+  // sudah tersedia di komponen server ini (`ambilMateriDetail`), jadi
+  // dicabangkan DI SINI, sebelum `<PemutarVideo>` pernah dirender — bukan
+  // dibiarkan menyatu dengan galat "R2 tidak bisa dihubungi" yang ditangani
+  // `<PemutarVideo>` sendiri. Spec §10 menuntut dua keadaan itu beda pesan:
+  // yang ini ramah & bukan galat, yang satunya bisa dicoba ulang.
   if (m.tipe === "video") {
+    if (m.objekVideo === null) {
+      return <IsiSedangDisiapkan judul={m.judul} />;
+    }
     return (
       <>
         <Link
@@ -102,8 +139,9 @@ export default async function ReaderMateri({
 
         <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
           <span className="text-gold">🔒</span>
-          Materi ini hanya dapat dibaca di dalam aplikasi — tidak ada berkas yang
-          bisa diunduh atau diteruskan. Setiap halaman ditandai identitas Anda.
+          Video ini ditonton langsung di dalam aplikasi, dengan identitas Anda
+          tampil di layar selama diputar — ini penghalang bagi yang sekadar
+          penasaran, bukan jaminan berkasnya tidak bisa disalin atau diteruskan.
         </p>
       </>
     );
@@ -118,24 +156,12 @@ export default async function ReaderMateri({
   //    Tautan baliknya (fix ronde 1): draft pertama keadaan ini tidak
   //    punya jalan keluar sama sekali selain tombol back peramban — persis
   //    kelas masalah yang sama dengan keadaan 3 di bawah sebelum diperbaiki.
-  //    Markup-nya disalin dari `BelumTerbuka`, kartu yang paling mirip
-  //    (sama-sama kartu berdiri sendiri berisi judul & satu kalimat).
+  //    Diekstrak jadi `<IsiSedangDisiapkan>` (F4, fix wave) sesudah cabang
+  //    video butuh KARTU YANG SAMA PERSIS untuk keadaan yang sama persis —
+  //    dua salinan markup identik menjaga string yang sama dua kali adalah
+  //    kelas bug yang lebih mahal ditemukan daripada satu komponen bersama.
   if (m.halaman.length === 0) {
-    return (
-      <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
-        <h1 className="font-serif text-xl text-night">Isi materi sedang disiapkan</h1>
-        <p className="mt-2 text-[13.5px] text-ink-soft">
-          <b className="text-ink">{m.judul}</b> sudah terbuka untuk Anda, tetapi
-          isinya belum diunggah tim PADMA. Silakan cek kembali nanti.
-        </p>
-        <Link
-          href="/passport/materi"
-          className="mt-5 inline-block text-sm font-bold text-leaf underline underline-offset-4"
-        >
-          ← Kembali ke Materi
-        </Link>
-      </section>
-    );
+    return <IsiSedangDisiapkan judul={m.judul} />;
   }
 
   // 3. Berhak dan ada isinya. Watermark TIDAK dilapiskan di sini — ia sudah

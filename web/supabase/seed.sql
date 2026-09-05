@@ -43,15 +43,28 @@ insert into app_settings (key, value) values ('nomor_wa','6287778400200');
 -- Dua layanan sengaja dipakai untuk menguji gating materi:
 --   * 1101 Sankalpa Fertility Massage — Ananda punya sesi `selesai` (TERBUKA)
 --   * 1106 Lactation Hero            — Ananda tidak punya sesi apa pun (TERKUNCI)
-insert into materials (id, judul, tipe, deskripsi) values
+--
+-- Kedua materi VIDEO (…701, …703) diseed `aktif = false` (fix F4, video-r2
+-- fix wave): keduanya TIDAK punya baris `material_videos` (lihat catatan di
+-- bawah, spec §13b A-6), dan sebelumnya `aktif` dibiarkan di nilai bawaan
+-- (`true`) tanpa isi — `aktifkanMateri` (`src/app/admin/materi/aksi.ts`)
+-- sendiri MENOLAK menerbitkan materi tanpa isi lewat panel admin, tapi INSERT
+-- langsung di seed ini melangkahi penjaga itu. Akibatnya nyata, bukan
+-- teoretis: `npx supabase db reset && npm run dev` TANPA vitest membiarkan
+-- KEDUA materi ini aktif dengan pemutar yang tidak pernah jalan, dan Ananda
+-- (berhak atas …701 lewat sesi `selesai`-nya) adalah pasien yang mendapatinya
+-- rusak sejak pertama membuka materi ini. `tests/global-setup.ts` membalik
+-- `aktif` ke `true` untuk keduanya, tapi HANYA untuk lingkungan test dan
+-- HANYA sesudah menyemai baris `material_videos`-nya — lihat komentar di sana.
+insert into materials (id, judul, tipe, deskripsi, aktif) values
   ('77777777-7777-7777-7777-777777777701',
-   'Pijat Mandiri Prekonsepsi','video','Panduan video pijat perut mandiri 12 menit.'),
+   'Pijat Mandiri Prekonsepsi','video','Panduan video pijat perut mandiri 12 menit.', false),
   ('77777777-7777-7777-7777-777777777702',
-   'Panduan Siklus Subur','ebook','E-book bergambar tentang membaca siklus.'),
+   'Panduan Siklus Subur','ebook','E-book bergambar tentang membaca siklus.', true),
   ('77777777-7777-7777-7777-777777777703',
-   'Teknik Pelekatan Menyusui','video','Panduan video pelekatan & posisi menyusui.'),
+   'Teknik Pelekatan Menyusui','video','Panduan video pelekatan & posisi menyusui.', false),
   ('77777777-7777-7777-7777-777777777704',
-   'Panduan ASI Perah','ebook','E-book penyimpanan & penanganan ASI perah.');
+   'Panduan ASI Perah','ebook','E-book penyimpanan & penanganan ASI perah.', true);
 
 -- Materi <-> layanan. Sampai Task 11 ini hidup di kolom tunggal
 -- `materials.service_id`; kolom itu sudah dihapus (migration
@@ -67,12 +80,15 @@ insert into material_services (material_id, service_id) values
   ('77777777-7777-7777-7777-777777777704','11111111-1111-1111-1111-111111111106');
 
 -- Materi video demo sengaja TIDAK diberi baris `material_videos`, sehingga ia
--- tampil "Belum ada isi" di panel admin dan terkunci di passport.
+-- tampil "Belum ada isi" di panel admin — dan sejak `aktif = false` di atas,
+-- ia TIDAK muncul sama sekali di passport (bukan "terkunci": kartu terkunci
+-- menuntut `aktif = true` supaya klien yang berhak melihatnya berstatus
+-- terkunci; ini nonaktif, jadi tidak ada kartu apa pun untuk dilihat).
 --
 -- Alternatifnya menyemai objek sungguhan ke R2 pada setiap `db reset`, yang
 -- berarti setiap mesin dev menulis ke bucket bersama — tidak sepadan demi satu
 -- materi demo. Konsekuensinya diterima sadar (spec §13b A-6): reader video
--- hanya bisa dicoba sesudah admin mengunggah video sungguhan.
+-- hanya bisa dicoba sesudah admin mengunggah video sungguhan DAN menerbitkannya.
 
 -- Halaman e-book (Task 10 — reader kini gambar hasil rasterisasi; bab teks
 -- sudah dibongkar total di Task 11, material_chapters tidak ada lagi).
