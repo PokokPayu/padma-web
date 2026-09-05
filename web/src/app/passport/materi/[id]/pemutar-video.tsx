@@ -29,13 +29,24 @@ export function PemutarVideo({ materiId }: { materiId: string }) {
   useEffect(() => {
     let batal = false;
     void (async () => {
-      const r = await fetch(`/api/materi/${materiId}/video`);
-      if (!r.ok) {
+      // Try/catch di sini MENGIKAT (fix F6, video-r2 fix wave): sebelumnya
+      // tidak ada sama sekali, jadi `fetch` yang REJECT (offline, DNS gagal,
+      // koneksi direset — kasus umum di seluler) atau `r.json()` yang THROW
+      // (badan bukan JSON valid) tidak pernah menyetel `gagal`. Bukan galat
+      // yang diam-diam tertelan Promise — ia MELEMPAR, dan pemanggilnya (efek
+      // ini) tidak pernah menangkapnya, sehingga pasien mendapat pemutar
+      // hitam tanpa video maupun pesan galat. Hanya `!r.ok` yang tertangani.
+      try {
+        const r = await fetch(`/api/materi/${materiId}/video`);
+        if (!r.ok) {
+          if (!batal) setGagal(true);
+          return;
+        }
+        const { url } = (await r.json()) as { url: string };
+        if (!batal && ref.current) ref.current.src = url;
+      } catch {
         if (!batal) setGagal(true);
-        return;
       }
-      const { url } = (await r.json()) as { url: string };
-      if (!batal && ref.current) ref.current.src = url;
     })();
     return () => { batal = true; };
   }, [materiId]);
