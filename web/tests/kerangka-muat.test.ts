@@ -88,6 +88,40 @@ describe("kerangka muat — perilaku", () => {
     );
   });
 
+  it("HalamanSkeleton meneruskan varian ke SETIAP kartunya", () => {
+    // Penerusan `varian` adalah satu-satunya baris yang menghubungkan
+    // loading.tsx dengan bentuk kartu. Tanpa test ini, menghapusnya membuat
+    // kedua panel staf diam-diam kembali ke bentuk kartu klien — dan tidak
+    // ada satu pun test yang merah.
+    const m = renderToStaticMarkup(
+      createElement(HalamanSkeleton, {
+        label: "Memuat panel…",
+        kartu: 3,
+        varian: "panel" as const,
+      }),
+    );
+    // Setiap KartuSkeleton yang di-render menempatkan KARTU[varian] pada
+    // divnya sekali, jadi kartu=3 berarti 3x rounded-lg.
+    expect([...m.matchAll(/rounded-lg/g)]).toHaveLength(3);
+    expect(m).toContain("border-panel-border");
+    expect(m).toContain("bg-panel-surface");
+    expect(m).not.toContain("rounded-2xl");
+  });
+
+  it("HalamanSkeleton tanpa varian tetap pakai bentuk klien", () => {
+    const m = renderToStaticMarkup(
+      createElement(HalamanSkeleton, {
+        label: "Memuat halaman…",
+        kartu: 2,
+      }),
+    );
+    // Default klien: kartu=2 berarti 2x rounded-2xl.
+    expect([...m.matchAll(/rounded-2xl/g)]).toHaveLength(2);
+    expect(m).toContain("border-black/10");
+    expect(m).toContain("bg-white");
+    expect(m).not.toContain("rounded-lg");
+  });
+
   it("bentuk varian klien tetap meniru kartu lama (/passport tidak ikut berubah)", () => {
     const m = renderToStaticMarkup(createElement(KartuSkeleton, {}));
     // Kelas yang sama dipakai kartu sungguhan di /passport; kerangka yang
