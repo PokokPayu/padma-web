@@ -36,8 +36,9 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 
 - Katalog memperoleh lapisan baru: layanan → **varian** → harga. Tarif pindah dari per-layanan
   menjadi per-varian.
-- `service_rates` **dibubarkan**, digantikan dua tabel dengan batas keamanan berbeda.
-- Harga klien menjadi **terbaca publik**. Honor mitra tetap owner-only.
+- `service_rates` **dibubarkan**, digantikan `variant_rates` beserta seluruh pagarnya.
+- Harga klien menjadi **terbaca publik lewat view berkolom sempit**. Honor mitra tetap owner-only
+  dan tidak pernah masuk proyeksi view mana pun.
 - `sessions` dan `booking_requests` menyimpan `variant_id`.
 - Owner › Tarif berpindah dari daftar per-layanan ke per-varian, dengan medan baru "harga coret".
 - Admin › Layanan memperoleh pengelolaan varian.
@@ -71,10 +72,9 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 | V1 | **Varian sebagai daftar datar per layanan** — label bebas + durasi + format | Pola di pricelist tidak seragam: Garbha Relief punya 3 durasi tanpa format; Partner Lab durasi tunggal dengan Private/Circle; Flow Yoga punya 3 program × 2 format; Nurturing Academy punya "2 modul". Model "durasi × format" butuh dimensi ketiga dan tetap tidak memuat "modul". Memecah jadi ~25 baris layanan terpisah ditolak karena materi & skrining yang menempel per layanan ikut terduplikasi. |
 | V2 | **`sessions`/`booking_requests` menyimpan `service_id` DAN `variant_id`, dikunci FK gabungan** | `service_variants` diberi `unique (service_id, id)`; sesi memakai `foreign key (service_id, variant_id)`. Database yang menjamin varian milik layanan itu — bukan kode. Alternatif "hanya `variant_id`" memaksa setiap query per-layanan dibongkar jadi join; alternatif "`variant_id` nullable" melahirkan cabang "varian kosong" yang hidup selamanya di tagihan, honor, dan margin. |
 | V3 | **Setiap layanan wajib punya minimal satu varian** | Begitu "layanan tanpa varian" boleh ada, setiap perhitungan harga bercabang dua selamanya — cacat yang sama dengan yang ditolak di V2. Layanan berharga tunggal memakai varian berlabel kosong. |
-| V4 | **Harga dan honor dipisah ke dua tabel** — `variant_rates` (baca publik) dan `variant_honor` (owner-only) | Harga ingin dipajang, honor tidak boleh bocor sama sekali; hari ini keduanya duduk di satu tabel yang owner-only, sementara migration katalog publik menyatakan tegas "tidak ada angka uang". Memisahkan tabel menjadikan batas keamanan sebagai **batas tabel** — tidak ada cara `select *` membocorkan honor. Alternatif hak-kolom ditolak: ia mematahkan `select *` untuk anon, dan sekali ada query publik yang lupa menyebut kolom, halamannya kosong tanpa error. |
+| V4 | **Satu tabel `variant_rates` (harga + harga coret + honor), harga dipajang lewat VIEW berkolom sempit `harga_publik` dengan `security_invoker = off`** | Harga ingin dipajang, honor tidak boleh bocor. Memecahnya jadi dua tabel terdengar lebih aman, tetapi mematikan `check (honor_mitra <= harga_klien)` — CHECK lintas-tabel tidak ada, jadi ia turun pangkat jadi trigger yang menengok tabel sebelah dan benar hanya bila urutan insert benar, plus satu trigger lagi untuk menjaga pasangannya. Tiga pagar terbukti menjadi lima pagar yang lebih lemah. View berkolom sempit adalah pola yang SUDAH berlaku di proyek ini untuk persoalan yang sama persis (`partner_publik`, `pengerasan_admin.sql`): view itulah batas kolomnya. Penolakan view di `lib/owner/rekap.ts` menyasar view AGREGAT yang diam-diam melewati RLS — bukan view sempit yang sengaja menjadi pagar. |
 | V5 | **`harga_coret` diisi manual, bukan dihitung `harga + 20.000`** | "+20rb" adalah keputusan pemasaran bulan ini, bukan hukum sistem. Sebagai rumus, ia jadi kode yang harus diubah saat soft launch berakhir; sebagai angka, ia cuma data. Form boleh menyediakan tombol isi-cepat `+20rb` — itu kenyamanan mengetik. |
-| V6 | **Penetapan tarif lewat satu fungsi Postgres, atomik** | Harga dan honor kini di dua tabel. Bila harga tersimpan tapi honor gagal, margin salah tanpa satu pun error di layar. Dua `insert` berurutan dari server action tidak memberi jaminan itu. |
-| V6a | **Invarian pasangan: setiap baris `variant_rates` punya `variant_honor` dengan `variant_id` dan `berlaku_sejak` yang sama** | Konsekuensi langsung V6, dan syarat agar `tarifPadaTanggal()` tetap punya SATU definisi. Bila kedua riwayat boleh bertanggal berbeda, "tarif yang berlaku" bercabang jadi dua pertanyaan — dan rate card bisa menampilkan margin dari pasangan yang tidak pernah berlaku bersamaan. |
+| V6 | **Seluruh pagar uang `service_rates` dipindah APA ADANYA ke `variant_rates`** — `unique (variant_id, berlaku_sejak)`, `check (harga_klien >= 0 and honor_mitra >= 0 and honor_mitra <= harga_klien)`, `guard_tarif_maju`, `kunci_riwayat_tarif` | Pagar-pagar itu lahir dari temuan red team dengan bukti tertulis; mengganti tabelnya tanpa memindahkan pagarnya berarti membayar ulang temuan yang sama. Karena harga dan honor tetap satu baris, penetapan tarif atomik dengan sendirinya — tidak perlu fungsi Postgres khusus maupun invarian pasangan. |
 | V7 | **Label "Soft Launch" ditulis di komponen, bukan `app_settings`** | Ia muncul bila `harga_coret` terisi dan hilang bila dikosongkan; itu sudah cukup sebagai sakelar. Menambah kunci pengaturan untuk teks yang belum pernah minta diubah hanya menambah tempat untuk salah. |
 | V8 | **`service_rates` dijatuhkan, bukan dibiarkan berdampingan** | Dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang tahu kapan. |
 | V9 | **Katalog asli masuk `seed.sql` saja, bukan migrasi produksi** | Data pengembangan jadi realistis (varian bertingkat benar-benar teruji) tanpa menulis angka honor karangan ke database sungguhan. Produksi tetap diisi klien lewat panel, sesuai keputusan #12 spec v1. |
@@ -111,7 +111,7 @@ create index service_variants_service_idx on service_variants(service_id, urutan
 `"2 modul"`, atau kosong. Tampilan dirangkai dari ketiganya: `Basic · 60 menit · Private`,
 `60 menit · 2 modul`, `90 menit`.
 
-### 4.3 `variant_rates` (baru, baca publik)
+### 4.3 `variant_rates` (baru) — pengganti `service_rates`
 
 ```sql
 create table variant_rates (
@@ -119,24 +119,60 @@ create table variant_rates (
   variant_id    uuid not null references service_variants(id),
   harga_klien   int not null,
   harga_coret   int null,
-  berlaku_sejak date not null default current_date
+  honor_mitra   int not null,
+  berlaku_sejak date not null default current_date,
+  constraint variant_rates_unik_per_tanggal unique (variant_id, berlaku_sejak),
+  constraint variant_rates_nilai_wajar check (
+    harga_klien >= 0 and honor_mitra >= 0 and honor_mitra <= harga_klien
+    and (harga_coret is null or harga_coret >= harga_klien)
+  )
 );
 create index variant_rates_lookup_idx on variant_rates(variant_id, berlaku_sejak desc);
 ```
 
-`harga_coret` NULL = tampil polos. Terisi = tampil dicoret dengan badge Soft Launch.
+`harga_coret` NULL = tampil polos. Terisi = tampil dicoret dengan badge Soft Launch. Syarat
+`harga_coret >= harga_klien` ikut di CHECK yang sama: harga coret yang lebih murah dari harga jual
+bukan promo, ia salah ketik yang tampil ke pengunjung sebagai kenaikan harga.
 
-### 4.4 `variant_honor` (baru, owner-only)
+Pagar yang dipindah dari `service_rates` (V6), dengan `service_id` diganti `variant_id`:
+
+- `unique (variant_id, berlaku_sejak)` — tanpanya `tarifPadaTanggal()` memilih salah satu baris
+  kembar sewenang-wenang, dan honor yang dibayarkan bergantung pada urutan baris hari itu.
+- `guard_tarif_maju` — menolak `berlaku_sejak` yang tidak maju, dari peran API saja. Tarif
+  retroaktif menggeser rekap pekan yang honornya sudah dibayarkan.
+- `kunci_riwayat_tarif` — menolak SETIAP `UPDATE` dari peran API. Tabel ini append-only.
+- Verba `DELETE` dicabut dari `authenticated`.
+
+Ketiganya memakai gerbang `current_user not in ('anon','authenticated','authenticator')` yang sama,
+sehingga seed, migrasi, dan fixture test yang berjalan sebagai `postgres`/`service_role` tetap bisa
+menyemai tanggal lampau.
+
+### 4.4 `harga_publik` (view baru, dibaca `anon`)
 
 ```sql
-create table variant_honor (
-  id            uuid primary key default gen_random_uuid(),
-  variant_id    uuid not null references service_variants(id),
-  honor_mitra   int not null,
-  berlaku_sejak date not null default current_date
-);
-create index variant_honor_lookup_idx on variant_honor(variant_id, berlaku_sejak desc);
+create view public.harga_publik with (security_invoker = off) as
+  select variant_id, harga_klien, harga_coret, berlaku_sejak
+    from public.variant_rates
+   where berlaku_sejak <= (now() at time zone 'Asia/Jakarta')::date;
+
+revoke all on public.harga_publik from public, anon, authenticated;
+grant select on public.harga_publik to anon, authenticated;
 ```
+
+Tiga hal yang disengaja:
+
+- **`security_invoker = off`** — view berjalan sebagai pemiliknya, jadi ia melewati RLS
+  `variant_rates`. Itulah gunanya: pengunjung memang tidak punya, dan tidak boleh punya, hak baca
+  atas tabel dasarnya. Pola yang sama dengan `partner_publik`.
+- **Kolom `honor_mitra` tidak ada di proyeksi.** Batas kerahasiaannya adalah daftar kolom view ini,
+  dan daftar itu dikunci sebagai assertion (§7, P5) supaya penambahan kolom di kemudian hari tidak
+  bisa lolos diam-diam.
+- **`where berlaku_sejak <= hari ini (Jakarta)`** — tarif yang belum berlaku tidak bocor ke
+  pengunjung. Kalendernya Jakarta, bukan `current_date` yang UTC, mengikuti aturan yang sudah
+  dipakai `jaga_tanda_honor`.
+
+`variant_rates` sendiri tetap tertutup bagi `anon` di level HAK TABEL — tidak ada `grant` apa pun.
+Jadi harga terbaca publik **hanya** lewat view ini, tidak pernah lewat tabelnya.
 
 ### 4.5 Perubahan tabel yang ada
 
@@ -156,17 +192,20 @@ alter table sessions          add constraint sessions_varian_milik_layanan
 
 Mengikuti pola yang sudah berlaku di proyek:
 
-- RLS aktif di ketiga tabel baru.
+- RLS aktif di `service_variants` dan `variant_rates`.
 - `service_variants`: baca publik untuk `anon` dengan `aktif = true` (menyusul policy `services`),
-  kelola untuk staf.
-- `variant_rates`: `grant select to anon` + policy baca publik. **Tanpa** hak tulis untuk anon.
-  Tulis hanya owner.
-- `variant_honor`: `to authenticated`, `user_role() = 'owner'` saja. Tidak ada grant apa pun ke
-  `anon`.
-- `revoke delete` dari `authenticated` untuk ketiganya.
+  kelola untuk staf. `grant select to anon`, tanpa hak tulis.
+- `variant_rates`: policy `"rates: hanya owner"` dipindah apa adanya. **Tanpa** grant apa pun ke
+  `anon` — harga publik lewat view §4.4 saja.
+- `harga_publik`: `revoke all from public` lebih dulu, baru `grant select` eksplisit. Aturan [F]
+  migration `fail_closed_sequence_fungsi` berlaku untuk objek baru.
+- `revoke delete on variant_rates from authenticated`; idem `service_variants`.
 - Stempel waktu + pemicu `updated_at` untuk `service_variants`.
-- Jejak audit untuk `variant_rates` dan `variant_honor`, menyusul apa yang sekarang menempel pada
-  `service_rates`.
+- Jejak audit `service_rates` dipindah ke `variant_rates`.
+- `tests/money-firewall-struktural.test.ts`: `TABEL_UANG` menjadi `variant_rates` + `honor_marks`,
+  dan view `harga_publik` didaftarkan sebagai **pengecualian yang dijelaskan** — bukan pelebaran
+  diam-diam. Komentarnya menyebut alasannya: harga klien memang diputuskan tampil publik; honor
+  mitra tetap tidak pernah keluar dari `variant_rates`.
 
 ## 5. Alur & antarmuka
 
@@ -182,15 +221,22 @@ Validasi: layanan tidak boleh kehilangan varian aktif terakhirnya (V3).
 
 Daftar berpindah dari per-layanan menjadi per-varian. `FormTarif` bertambah satu medan:
 
-| Medan | Tabel tujuan |
+| Medan | Kolom |
 |---|---|
 | Harga klien | `variant_rates.harga_klien` |
 | Harga coret (opsional) | `variant_rates.harga_coret` |
-| Honor mitra | `variant_honor.honor_mitra` |
+| Honor mitra | `variant_rates.honor_mitra` |
 
-Ketiganya ditulis oleh **satu fungsi Postgres** dalam satu transaksi dengan `berlaku_sejak` yang
-sama (V6). Tombol isi-cepat `+20rb` mengisi medan harga coret dari harga klien di sisi klien saja —
-ia tidak pernah menjadi aturan server.
+Ketiganya satu baris, satu `insert` — atomik tanpa perlu fungsi Postgres khusus (V6). Aturan yang
+sudah berlaku di `tetapkanTarif()` tidak berubah: INSERT-only, tanggal berlaku tidak boleh mundur,
+honor tidak boleh melebihi harga, dan hasil `insert` diperiksa panjangnya karena INSERT yang
+tertahan RLS dijawab PostgREST sebagai 200 + `[]`.
+
+Satu validator baru di `status.ts`: harga coret, bila diisi, tidak boleh lebih kecil dari harga
+klien — pesannya kalimat, dan CHECK basis data tetap menjadi lapisan terakhir.
+
+Tombol isi-cepat `+20rb` mengisi medan harga coret dari harga klien di sisi klien saja; ia tidak
+pernah menjadi aturan server (V5).
 
 ### 5.3 Landing publik
 
@@ -212,20 +258,26 @@ Klien memilih **varian**, bukan layanan. Ini juga pijakan yang dibutuhkan spec p
 
 ## 6. Migrasi & data
 
-Satu berkas migrasi, langkah berurutan — urutannya tidak bisa dibalik:
+Satu berkas migrasi, langkah berurutan — urutannya tidak bisa dibalik. Cap waktu ditulis MANUAL dan
+lebih besar dari berkas migrasi terakhir; `supabase migration new` memakai jam dinding dan pernah
+menyelipkan migrasi ke tengah riwayat sehingga `db reset` gagal.
 
-1. Buat `varian_format`, `service_variants`, `variant_rates`, `variant_honor`.
+1. Buat `varian_format` dan `service_variants` beserta pengerasannya.
 2. Untuk **tiap** layanan yang ada, terbitkan satu varian baku (label kosong, durasi & format NULL).
-3. Pindahkan tiap baris `service_rates` → `variant_rates` (`harga_klien`, `harga_coret` NULL) +
-   `variant_honor` (`honor_mitra`), dengan `berlaku_sejak` **dipertahankan apa adanya**. Riwayat
-   tarif adalah bukti berapa honor yang seharusnya dibayarkan pekan lalu; ia tidak boleh dibulatkan
-   ke hari migrasi.
-4. Isi `sessions.variant_id` dan `booking_requests.variant_id` dengan varian baku layanannya.
-5. Pasang `NOT NULL` + FK gabungan.
-6. Pindahkan pemicu jejak audit dari `service_rates` ke tabel baru, lalu `drop table service_rates`.
-   Menjatuhkan tabel yang punya pemicu bukan sekadar `drop` — pemicunya harus punya rumah baru
-   lebih dulu.
-7. Pengerasan §4.6.
+3. Buat `variant_rates` beserta seluruh pagar §4.3.
+4. Salin tiap baris `service_rates` → `variant_rates`, dipetakan ke varian baku layanannya, dengan
+   `berlaku_sejak` **dipertahankan apa adanya** dan `harga_coret` NULL. Riwayat tarif adalah bukti
+   berapa honor yang seharusnya dibayarkan pekan lalu; ia tidak boleh dibulatkan ke hari migrasi.
+   Penyalinan ini berjalan sebagai `postgres`, jadi `guard_tarif_maju` melewatkannya — persis
+   gerbang peran yang sudah ada, bukan pengecualian baru.
+5. Isi `sessions.variant_id` dan `booking_requests.variant_id` dengan varian baku layanannya.
+6. Pasang `NOT NULL` + FK gabungan pada kedua tabel.
+7. Buat view `harga_publik` beserta grant-nya (§4.4).
+8. Pindahkan pemicu jejak audit dari `service_rates` ke `variant_rates`, lalu
+   `drop table service_rates`. Menjatuhkan tabel yang punya pemicu bukan sekadar `drop` — pemicunya
+   harus punya rumah baru lebih dulu. Fungsi `guard_tarif_maju` dan `kunci_riwayat_tarif` ditulis
+   ulang dengan `create or replace` agar menunjuk `variant_rates`; keduanya dipakai bersama trigger
+   baru dan trigger lamanya ikut jatuh bersama tabelnya.
 
 ### 6.1 Seed katalog asli (V9, V10)
 
@@ -263,29 +315,34 @@ Layanan prekonsepsi dan menopause di seed lama dibuang (V10); `phases` tidak dis
 
 Test-first, mengikuti pola berkas uji yang sudah ada.
 
-**Pagar — wajib diuji langsung ke database.** Pagar yang hanya diuji lewat kode aplikasi akan lolos
-begitu ada jalur lain yang menyentuh tabel yang sama.
+**Pagar — wajib diuji langsung ke database** lewat `querySql`/`dalamTransaksiRollback`
+(`tests/helpers/db.ts`). Pagar yang hanya diuji lewat kode aplikasi akan lolos begitu ada jalur lain
+yang menyentuh tabel yang sama — dan REST selalu jalur lain itu.
 
 | # | Uji | Menyusul pola |
 |---|---|---|
 | P1 | FK gabungan menolak sesi bervarian milik layanan lain | — (inti V2) |
-| P2 | `variant_rates` terbaca `anon`; `variant_honor` ditolak `anon` **dan** ditolak `admin` | `grant-anon.test.ts` |
-| P3 | `revoke delete` pada ketiga tabel baru | `hak-hapus-berlebih.test.ts` |
-| P4 | Tidak ada hak tulis `anon` pada tabel baru | `grant-anon.test.ts` |
+| P2 | `anon` tidak memegang hak tabel maupun hak KOLOM apa pun atas `variant_rates` | `grant-anon.test.ts` |
+| P3 | `anon` hanya memegang `SELECT` atas `service_variants` dan view `harga_publik` — tanpa hak tulis | `grant-anon.test.ts` |
+| P4 | `revoke delete` pada `service_variants` dan `variant_rates` | `hak-hapus-berlebih.test.ts` |
+| P5 | Daftar kolom view `harga_publik` **persis** `variant_id, harga_klien, harga_coret, berlaku_sejak` — `honor_mitra` tidak ada | `money-firewall-struktural.test.ts` |
+| P6 | `guard_tarif_maju` menolak `berlaku_sejak` mundur lewat REST sebagai owner; `kunci_riwayat_tarif` menolak setiap `UPDATE` lewat REST sebagai owner | `owner-pengerasan.test.ts` |
+| P7 | CHECK menolak `honor_mitra > harga_klien` dan `harga_coret < harga_klien` | `owner-pengerasan.test.ts` |
+| P8 | View menahan tarif bertanggal masa depan: baris ber-`berlaku_sejak` besok tidak muncul bagi `anon` | — |
 
 **Perilaku:**
 
 | # | Uji |
 |---|---|
-| B1 | Penetapan tarif atomik: paksa penulisan honor gagal → harga **tidak** ikut tersimpan (inti V6; tanpa uji ini fungsi Postgres-nya hanya dekorasi) |
+| B1 | `tetapkanTarif()` menolak harga coret yang lebih kecil dari harga klien, dengan kalimat — bukan SQLSTATE |
 | B2 | Pemilihan harga berlaku: baris bertanggal masa depan diabaikan; baris terbaru ≤ hari ini dipakai |
 | B3 | `harga_coret` NULL → tanpa badge; terisi → harga dicoret + badge Soft Launch |
 | B4 | Migrasi: setiap sesi lama punya `variant_id` yang layanannya cocok |
-| B5 | Migrasi: cacah `variant_rates` sama persis dengan cacah `service_rates` sebelum dijatuhkan |
+| B5 | Migrasi: cacah `variant_rates` sama persis dengan cacah `service_rates` sebelum dijatuhkan, dan tiap `berlaku_sejak` terbawa apa adanya |
 | B6 | Landing hanya menampilkan varian `aktif`, urut `urutan` |
 | B7 | Layanan tidak bisa kehilangan varian aktif terakhirnya (V3) |
 | B8 | Panel admin tidak memuat nominal — asersi money firewall yang sudah ada tetap hijau |
-| B9 | Invarian pasangan V6a: setiap `variant_rates` punya `variant_honor` bertanggal sama — diuji setelah migrasi DAN setelah penetapan tarif dari form |
+| B9 | Rekap honor mencocokkan tarif ke sesi lewat `variant_id`, dan `tarifPadaTanggal()` tetap satu definisi yang dipakai bersama rate card |
 
 ## 8. Berkas terdampak
 
@@ -293,19 +350,19 @@ Ditelusuri lewat pembacaan `service_rates` dan `harga_klien`/`honor_mitra` di `w
 
 | Berkas | Perubahan |
 |---|---|
-| `src/lib/owner/data.ts` | `ambilTarif()` membaca dua tabel dan menggabungkannya per (`variant_id`, `berlaku_sejak`) — invarian V6a yang membuat penggabungan ini tidak ambigu. `ambilRateCard()` mendaftar per varian, bukan per layanan. |
+| `src/lib/owner/data.ts` | `ambilTarif()` membaca `variant_rates` dan ikut membawa `harga_coret`. `ambilRateCard()` mendaftar per varian, bukan per layanan. |
 | `src/lib/owner/rekap.ts` | Pencocokan tarif ke sesi berpindah dari `service_id` ke `variant_id`. `tarifPadaTanggal()` tetap satu definisi. |
-| `src/app/owner/tarif/aksi.ts` | `tetapkanTarif()` memanggil fungsi Postgres (V6), bukan `insert` ke satu tabel. |
+| `src/app/owner/tarif/aksi.ts` | Menulis ke `variant_rates`, memvalidasi varian (bukan layanan), dan memeriksa harga coret. INSERT-only tetap. |
 | `src/app/owner/tarif/form-tarif.tsx` | Medan `harga_coret` + tombol isi-cepat `+20rb`. Komentar tentang `service_rates` dimutakhirkan ke tabel penggantinya. |
-| `src/app/owner/tarif/status.ts` `page.tsx` | Baris daftar per varian. |
+| `src/app/owner/tarif/status.ts` `page.tsx` | Validator harga coret + kalimatnya; baris daftar per varian. |
 | `src/app/admin/layanan/*` | Pengelolaan varian (§5.1). |
 | `src/app/passport/bayar/page.tsx` | Komentar rujukan tabel; harga sesi dibaca lewat varian. |
 | `src/lib/owner/rupiah.ts` | Komentar rujukan tabel. Aturan rupiah bulat tidak berubah. |
 | `src/lib/admin/tagihan.ts` | Label sesi menyertakan varian. |
 | Landing katalog | Menampilkan varian + harga (§5.3). |
 
-Berkas uji yang asersinya ikut berubah: `landing-katalog`, `admin-layanan`, dan berkas uji owner
-yang menyentuh rate card. **Maksud** di balik tiap asersi dijaga; yang ditulis ulang adalah
+Berkas uji yang asersinya ikut berubah: `landing-katalog`, `admin-layanan`, `grant-anon`,
+`hak-hapus-berlebih`, `money-firewall-struktural`, `owner-pengerasan`, `owner-tarif`, `owner-rekap`. **Maksud** di balik tiap asersi dijaga; yang ditulis ulang adalah
 bentuknya, dan tiap penulisan ulang wajib menjelaskan di komentar apa yang tetap dijaga.
 
 ## 9. Di luar ruang lingkup
