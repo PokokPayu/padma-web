@@ -12,11 +12,19 @@
  *     satu kondisional yang bisa salah tulis.
  *  3. Badge antrean hilang saat nol — alarm yang dinormalkan berhenti berarti.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// usePathname hanya hidup di dalam App Router. `vi.mock` diangkat ke atas
+// berkas oleh Vitest, jadi letaknya di sini tetap berlaku untuk seluruh
+// `await import(...)` di atasnya.
+const rute = vi.hoisted(() => ({ kini: "/uji" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => rute.kini,
+}));
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -307,6 +315,128 @@ describe("BottomBar", () => {
       if (tag.includes('href="/luar"')) {
         expect(tag).not.toContain('aria-current="page"');
       }
+    }
+  });
+});
+
+const { pasangPenutup } = await import("@/app/_shell/panel/tutup-drawer");
+const { KerangkaPanel } = await import("@/app/_shell/panel/kerangka");
+
+/** Dokumen palsu: mencatat listener yang dipasang & dilepas. */
+function dokumenPalsu() {
+  const listener = new Map<string, (e: unknown) => void>();
+  const dilepas: string[] = [];
+  return {
+    listener,
+    dilepas,
+    addEventListener: (jenis: string, fn: (e: unknown) => void) => {
+      listener.set(jenis, fn);
+    },
+    removeEventListener: (jenis: string) => {
+      dilepas.push(jenis);
+    },
+  };
+}
+
+describe("pasangPenutup — perilaku drawer", () => {
+  it("Escape menutup drawer", () => {
+    const dok = dokumenPalsu();
+    let tertutup = 0;
+    pasangPenutup(dok, () => (tertutup += 1));
+    dok.listener.get("keydown")?.({ key: "Escape" });
+    expect(tertutup).toBe(1);
+  });
+
+  it("tombol lain tidak menutup apa pun", () => {
+    const dok = dokumenPalsu();
+    let tertutup = 0;
+    pasangPenutup(dok, () => (tertutup += 1));
+    dok.listener.get("keydown")?.({ key: "a" });
+    dok.listener.get("keydown")?.({ key: "Enter" });
+    expect(tertutup).toBe(0);
+  });
+
+  it("melepas listener-nya saat dibersihkan — drawer bisa dibuka-tutup berkali-kali", () => {
+    const dok = dokumenPalsu();
+    const lepas = pasangPenutup(dok, () => {});
+    lepas();
+    expect(dok.dilepas).toContain("keydown");
+  });
+});
+
+describe("KerangkaPanel", () => {
+  const sumber = baca("src/app/_shell/panel/kerangka.tsx");
+
+  function markupKerangka(pathname: string, tambahan: Record<string, unknown> = {}) {
+    rute.kini = pathname;
+    return renderToStaticMarkup(
+      createElement(KerangkaPanel, {
+        menu: MENU_UJI,
+        menuRingkas: MENU_UJI.slice(1),
+        akar: "/uji",
+        namaPanel: "Panel Uji",
+        labelSidebar: "Menu panel uji",
+        labelBottomBar: "Navigasi panel uji",
+        nama: "Pemakai Uji",
+        peran: "Uji",
+        catatan: "CATATAN-UJI",
+        children: createElement("p", null, "ISI-UJI"),
+        ...tambahan,
+      } as never),
+    );
+  }
+
+  /** Isi <header> saja — sidebar ikut merender setiap label menu dan nama
+   *  panel, jadi memeriksa seluruh markup akan lolos tanpa syarat. */
+  function isiTopbar(m: string): string {
+    const cocok = m.match(/<header[\s\S]*?<\/header>/);
+    if (!cocok) throw new Error("topbar tidak ditemukan");
+    return cocok[0];
+  }
+
+  it("merender isi halaman, sidebar, bottom bar, dan catatan kaki", () => {
+    const m = markupKerangka("/uji");
+    expect(m).toContain("ISI-UJI");
+    expect(m).toContain("CATATAN-UJI");
+    // Tepat dua nav: sidebar (yang sekaligus jadi drawer) + bottom bar.
+    expect([...m.matchAll(/<nav\b/g)]).toHaveLength(2);
+  });
+
+  it("judul topbar mengikuti tujuan yang sedang dibuka", () => {
+    expect(isiTopbar(markupKerangka("/uji/kotak"))).toContain("Kotak");
+    // Di luar seluruh tujuan, jatuh kembali ke nama panel — bukan string
+    // kosong, dan bukan label tujuan mana pun.
+    const luar = isiTopbar(markupKerangka("/uji/entah"));
+    expect(luar).toContain("Panel Uji");
+    expect(luar).not.toContain("Kotak");
+  });
+
+  it("drawer tertutup saat rute berganti", () => {
+    // Tanpa ini, mengetuk satu tujuan meninggalkan panel gelap menutupi
+    // halaman yang baru saja dibuka. Dikunci lewat sumber: repo ini berjalan
+    // tanpa jsdom, jadi klik sungguhan tidak bisa disimulasikan.
+    expect(sumber).toMatch(/useEffect\(\s*\(\)\s*=>\s*\{\s*setBuka\(false\);?\s*\}\s*,\s*\[pathname\]\s*\)/);
+  });
+
+  it("BUTA PERAN: primitif panel tidak tahu bedanya admin dan owner", () => {
+    // Begitu satu berkas di sini tahu peran, pemisahan fisik money firewall
+    // berubah menjadi satu kondisional yang bisa salah tulis dalam satu
+    // karakter — dan yang bocor adalah seluruh nominal PADMA.
+    for (const berkas of [
+      "src/app/_shell/panel/ikon.tsx",
+      "src/app/_shell/panel/aktif.ts",
+      "src/app/_shell/panel/badge.tsx",
+      "src/app/_shell/panel/sidebar.tsx",
+      "src/app/_shell/panel/topbar.tsx",
+      "src/app/_shell/panel/bottom-bar.tsx",
+      "src/app/_shell/panel/tutup-drawer.ts",
+      "src/app/_shell/panel/kerangka.tsx",
+    ]) {
+      const isi = baca(berkas);
+      expect(isi, `${berkas} menyebut peran`).not.toMatch(/"(admin|owner)"/);
+      expect(isi, `${berkas} mengimpor penjaga peran`).not.toContain("requireRole");
+      expect(isi, `${berkas} memakai service role`).not.toContain("createAdminSupabase");
+      expect(isi, `${berkas} menyebut nominal`).not.toMatch(/Rp\s?\d|formatRupiah/);
     }
   });
 });
