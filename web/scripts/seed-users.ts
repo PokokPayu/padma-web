@@ -120,6 +120,38 @@ async function unggahHalamanMateriDemo(admin: SupabaseClient) {
  */
 export const TOKEN_UNDANGAN_RINA = "undangan-dev-rina-KxN7pQ2sVt4bZ9mLwR3hJf";
 
+/**
+ * Peta service_id → id varian BAKU, dibaca dari basis data alih-alih ditulis
+ * literal: id varian dibuat `gen_random_uuid()` oleh migrasi Task 1, jadi
+ * tidak ada nilai tetap yang bisa ditebak sebelum seed jalan.
+ *
+ * "Baku" di sini artinya SAMA seperti dipilih backfill migrasi
+ * `sesi_menunjuk_varian` (order by urutan, created_at, id) — bukan disaring
+ * lewat `label = ''`, supaya kedua jalur (migrasi utk data lama, seed utk
+ * data baru) sepakat pada varian yang sama walau kelak sebuah layanan
+ * memperoleh varian bertingkat.
+ */
+async function petaVarianBaku(
+  admin: SupabaseClient,
+  serviceIds: string[],
+): Promise<Map<string, string>> {
+  const peta = new Map<string, string>();
+  for (const serviceId of new Set(serviceIds)) {
+    const { data, error } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", serviceId)
+      .order("urutan", { ascending: true })
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(1)
+      .single();
+    if (error) throw error;
+    peta.set(serviceId, data.id as string);
+  }
+  return peta;
+}
+
 async function ensureUser(
   admin: SupabaseClient,
   email: string,
@@ -234,115 +266,126 @@ export async function seedUsers() {
   // `catatan`, `rekomendasi`, dan `status_bayar` ditulis eksplisit di SETIAP
   // baris: upsert massal PostgREST memakai gabungan kunci seluruh objek dan
   // mengisi yang tidak disebut dengan NULL (bukan DEFAULT), sedangkan ketiga
-  // kolom itu NOT NULL.
+  // kolom itu NOT NULL. `variant_id` kena aturan yang sama (lihat
+  // `petaVarianBaku` di atas) — makanya ditambahkan lewat `.map()` sesudah
+  // daftar sesi tersusun, bukan diandalkan pada default kolom.
   const sesiDalamPaket = {
     client_id: ANANDA_CLIENT_ID,
     client_package_id: "55555555-5555-5555-5555-555555555501",
     status_bayar: "belum" as const, // sesi berpaket ikut status bayar paketnya
   };
 
+  const risalahSesi = [
+    // ---- 6 sesi SELESAI dalam paket Sankalpa Prima (progres 6/8) ----
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666601",
+      service_id: "11111111-1111-1111-1111-111111111101", // Fertility Massage
+      partner_id: "33333333-3333-3333-3333-333333333301",
+      tanggal: "2026-07-08",
+      status: "selesai",
+      catatan:
+        "Sesi perkenalan. Pijat relaksasi & pemetaan kondisi awal — ketegangan menumpuk di punggung bawah, kualitas tidur kurang.",
+      rekomendasi:
+        "Jaga tidur 7–8 jam, mulai catat siklus haid di lembar yang kami berikan.",
+    },
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666602",
+      service_id: "11111111-1111-1111-1111-111111111101",
+      partner_id: "33333333-3333-3333-3333-333333333301",
+      tanggal: "2026-07-15",
+      status: "selesai",
+      catatan:
+        "Ketegangan punggung bawah jauh berkurang. Klien mulai rutin jalan pagi bersama pasangan.",
+      rekomendasi:
+        "Lanjutkan jalan pagi 30 menit; kompres hangat bila pegal kembali.",
+    },
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666603",
+      service_id: "11111111-1111-1111-1111-111111111102", // Flow Yoga
+      partner_id: "33333333-3333-3333-3333-333333333302",
+      tanggal: "2026-07-22",
+      status: "selesai",
+      catatan:
+        "Latihan pernapasan & gerakan dasar. Klien cepat menangkap teknik napas diafragma.",
+      rekomendasi:
+        "Ulangi rangkaian napas & gerakan dasar di rumah, 15 menit, 3× sepekan.",
+    },
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666604",
+      service_id: "11111111-1111-1111-1111-111111111101",
+      partner_id: "33333333-3333-3333-3333-333333333301",
+      tanggal: "2026-07-29",
+      status: "selesai",
+      catatan:
+        "Tubuh merespons baik; keluhan pegal hampir hilang. Suasana hati membaik dibanding sesi pertama.",
+      rekomendasi:
+        "Pertahankan rutinitas. Sesi berikutnya fokus pada area pinggul.",
+    },
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666605",
+      service_id: "11111111-1111-1111-1111-111111111103", // Konsultasi Nutrisi
+      partner_id: "33333333-3333-3333-3333-333333333302",
+      tanggal: "2026-08-12",
+      status: "selesai",
+      catatan:
+        "Evaluasi pola makan sepekan. Asupan protein & asam folat masih kurang dari kebutuhan promil.",
+      rekomendasi:
+        "Ikuti menu contoh yang kami berikan; tambah satu porsi protein pada tiap waktu makan.",
+    },
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666606",
+      service_id: "11111111-1111-1111-1111-111111111101",
+      partner_id: "33333333-3333-3333-3333-333333333301",
+      tanggal: "2026-08-19",
+      status: "selesai",
+      catatan:
+        "Siklus tercatat lebih teratur dua bulan terakhir. Respons tubuh sangat baik terhadap rangkaian perawatan.",
+      rekomendasi:
+        "Lanjutkan seluruh rutinitas — perjalanan Anda berjalan sesuai rencana.",
+    },
+    // ---- sesi TERJADWAL berikutnya (stempel ke-7 = penanda "berikutnya") ----
+    // Sengaja jauh (Des 2026) supaya tampilan demo tidak berubah menjadi
+    // "tidak ada sesi berikutnya" hanya karena tanggal seed terlewat.
+    {
+      ...sesiDalamPaket,
+      id: "66666666-6666-6666-6666-666666666607",
+      service_id: "11111111-1111-1111-1111-111111111102",
+      partner_id: "33333333-3333-3333-3333-333333333302",
+      tanggal: "2026-12-04",
+      status: "terjadwal",
+      catatan: "",
+      rekomendasi: "",
+    },
+    // ---- sesi LEPAS yang belum dibayar (bahan halaman Bayar) ----
+    {
+      id: "66666666-6666-6666-6666-666666666608",
+      client_id: ANANDA_CLIENT_ID,
+      service_id: "11111111-1111-1111-1111-111111111103",
+      client_package_id: null, // di luar paket → menjadi item tagihan sendiri
+      partner_id: "33333333-3333-3333-3333-333333333302",
+      tanggal: "2026-12-11",
+      status: "terjadwal",
+      catatan: "",
+      rekomendasi: "",
+      status_bayar: "belum",
+    },
+  ];
+
+  const petaVarian = await petaVarianBaku(
+    admin,
+    risalahSesi.map((s) => s.service_id),
+  );
   const { error: sErr } = await admin.from("sessions").upsert(
-    [
-      // ---- 6 sesi SELESAI dalam paket Sankalpa Prima (progres 6/8) ----
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666601",
-        service_id: "11111111-1111-1111-1111-111111111101", // Fertility Massage
-        partner_id: "33333333-3333-3333-3333-333333333301",
-        tanggal: "2026-07-08",
-        status: "selesai",
-        catatan:
-          "Sesi perkenalan. Pijat relaksasi & pemetaan kondisi awal — ketegangan menumpuk di punggung bawah, kualitas tidur kurang.",
-        rekomendasi:
-          "Jaga tidur 7–8 jam, mulai catat siklus haid di lembar yang kami berikan.",
-      },
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666602",
-        service_id: "11111111-1111-1111-1111-111111111101",
-        partner_id: "33333333-3333-3333-3333-333333333301",
-        tanggal: "2026-07-15",
-        status: "selesai",
-        catatan:
-          "Ketegangan punggung bawah jauh berkurang. Klien mulai rutin jalan pagi bersama pasangan.",
-        rekomendasi:
-          "Lanjutkan jalan pagi 30 menit; kompres hangat bila pegal kembali.",
-      },
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666603",
-        service_id: "11111111-1111-1111-1111-111111111102", // Flow Yoga
-        partner_id: "33333333-3333-3333-3333-333333333302",
-        tanggal: "2026-07-22",
-        status: "selesai",
-        catatan:
-          "Latihan pernapasan & gerakan dasar. Klien cepat menangkap teknik napas diafragma.",
-        rekomendasi:
-          "Ulangi rangkaian napas & gerakan dasar di rumah, 15 menit, 3× sepekan.",
-      },
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666604",
-        service_id: "11111111-1111-1111-1111-111111111101",
-        partner_id: "33333333-3333-3333-3333-333333333301",
-        tanggal: "2026-07-29",
-        status: "selesai",
-        catatan:
-          "Tubuh merespons baik; keluhan pegal hampir hilang. Suasana hati membaik dibanding sesi pertama.",
-        rekomendasi:
-          "Pertahankan rutinitas. Sesi berikutnya fokus pada area pinggul.",
-      },
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666605",
-        service_id: "11111111-1111-1111-1111-111111111103", // Konsultasi Nutrisi
-        partner_id: "33333333-3333-3333-3333-333333333302",
-        tanggal: "2026-08-12",
-        status: "selesai",
-        catatan:
-          "Evaluasi pola makan sepekan. Asupan protein & asam folat masih kurang dari kebutuhan promil.",
-        rekomendasi:
-          "Ikuti menu contoh yang kami berikan; tambah satu porsi protein pada tiap waktu makan.",
-      },
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666606",
-        service_id: "11111111-1111-1111-1111-111111111101",
-        partner_id: "33333333-3333-3333-3333-333333333301",
-        tanggal: "2026-08-19",
-        status: "selesai",
-        catatan:
-          "Siklus tercatat lebih teratur dua bulan terakhir. Respons tubuh sangat baik terhadap rangkaian perawatan.",
-        rekomendasi:
-          "Lanjutkan seluruh rutinitas — perjalanan Anda berjalan sesuai rencana.",
-      },
-      // ---- sesi TERJADWAL berikutnya (stempel ke-7 = penanda "berikutnya") ----
-      // Sengaja jauh (Des 2026) supaya tampilan demo tidak berubah menjadi
-      // "tidak ada sesi berikutnya" hanya karena tanggal seed terlewat.
-      {
-        ...sesiDalamPaket,
-        id: "66666666-6666-6666-6666-666666666607",
-        service_id: "11111111-1111-1111-1111-111111111102",
-        partner_id: "33333333-3333-3333-3333-333333333302",
-        tanggal: "2026-12-04",
-        status: "terjadwal",
-        catatan: "",
-        rekomendasi: "",
-      },
-      // ---- sesi LEPAS yang belum dibayar (bahan halaman Bayar) ----
-      {
-        id: "66666666-6666-6666-6666-666666666608",
-        client_id: ANANDA_CLIENT_ID,
-        service_id: "11111111-1111-1111-1111-111111111103",
-        client_package_id: null, // di luar paket → menjadi item tagihan sendiri
-        partner_id: "33333333-3333-3333-3333-333333333302",
-        tanggal: "2026-12-11",
-        status: "terjadwal",
-        catatan: "",
-        rekomendasi: "",
-        status_bayar: "belum",
-      },
-    ],
+    risalahSesi.map((s) => ({
+      ...s,
+      variant_id: petaVarian.get(s.service_id),
+    })),
     { onConflict: "id" },
   );
   if (sErr) throw sErr;
