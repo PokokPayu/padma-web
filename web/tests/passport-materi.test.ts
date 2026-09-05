@@ -536,7 +536,7 @@ describe("materi — pagar sumber", () => {
 
   it("gerbang akses berasal dari RPC berhak_isi_materi, bukan dari bentuk konten", () => {
     // Sebelum M10, "berhak" DISIMPULKAN dari bentuk data (`bab.length > 0`
-    // untuk ebook, `videoUrl !== null` untuk video). Cara itu tidak bisa
+    // untuk ebook, `objekVideo !== null` untuk video). Cara itu tidak bisa
     // membedakan "tidak berhak" dari "berhak tapi isinya belum diunggah
     // admin" — dua keadaan yang bentuknya SAMA-SAMA kosong. Reader sekarang
     // memakai `m.berhak`, SATU sumber kebenaran yang sama dipakai policy RLS
@@ -548,7 +548,7 @@ describe("materi — pagar sumber", () => {
     // menganggap penjelasan itu sebagai pola yang masih dipakai.
     const kode = sumberReader.replace(/\/\/.*$/gm, "");
     expect(kode).toMatch(/if\s*\(\s*!m\.berhak\s*\)/);
-    expect(kode).not.toMatch(/videoUrl\s*!==\s*null/);
+    expect(kode).not.toMatch(/objekVideo\s*!==\s*null/);
     expect(kode).not.toMatch(/\bbab\.length/);
     // Keadaan "berhak tapi belum diunggah" (khusus ebook) MEMANG memeriksa
     // bentuk konten — tapi itu keadaan ISI, bukan gerbang akses; gerbangnya

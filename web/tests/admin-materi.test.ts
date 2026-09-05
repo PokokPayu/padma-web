@@ -302,13 +302,13 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     const semua = daftar.flatMap((l) => l.materi);
     const ebook = semua.find((m) => m.id === MATERI_EBOOK)!;
     expect(ebook.jumlahHalaman).toBe(3);
-    expect(ebook.videoUrl).toBeNull();
+    expect(ebook.objekVideo).toBeNull();
 
     const video = semua.find((m) => m.id === MATERI_VIDEO)!;
     // `material_videos` berelasi 1:1 — `video.length === 0` selalu salah dan
     // akan membuat setiap materi video tampak belum punya isi.
-    expect(video.videoUrl).toBe(OBJEK_UJI);
-    expect(Array.isArray(video.videoUrl)).toBe(false);
+    expect(video.objekVideo).toBe(OBJEK_UJI);
+    expect(Array.isArray(video.objekVideo)).toBe(false);
     expect(video.jumlahHalaman).toBe(0);
   });
 
@@ -383,7 +383,7 @@ describe("daftarMateriAdmin — materi dikelompokkan di bawah layanannya", () =>
     const terkunci = semua.find(
       (m) => m.id === "77777777-7777-7777-7777-777777777703",
     );
-    expect(terkunci?.videoUrl ?? null).toBeNull();
+    expect(terkunci?.objekVideo ?? null).toBeNull();
     expect(JSON.stringify(daftar)).not.toContain("RAHASIA-123");
   });
 });
@@ -920,15 +920,20 @@ describe("invarian: tidak ada satu pun materi AKTIF tanpa isi", () => {
     // sebelum berkas test mana pun berjalan — `supabase/seed.sql` sendiri
     // SENGAJA mengosongkan baris ini sejak migrasi objek-R2 (spec §13b A-6).
     //
-    // Divergensi NYATA, bukan cuma teoretis: `npx supabase db reset && npm
-    // run dev` TANPA vitest membiarkan KEDUA materi ini AKTIF dengan "Belum
-    // ada isi" di panel admin — persis pelanggaran yang invarian ini ada
-    // untuk mencegah. Asersi di bawah membuat itu terlihat DI SINI (bukan
-    // hanya di dalam global-setup.ts) dan membuktikan pasangan ini yang
-    // bergantung pada fixture test: loop UTAMA di bawahnya tetap memeriksa
-    // SEMUA materi aktif tanpa pengecualian apa pun, termasuk kedua id ini,
-    // jadi materi lain yang diam-diam mulai bergantung pada fixture test
-    // masih tertangkap.
+    // `supabase/seed.sql` juga menyemai KEDUANYA `aktif = false` (fix F4,
+    // video-r2 fix wave) — sebelum fix ini, seed membiarkan `aktif` di nilai
+    // bawaan (`true`) tanpa isi, dan `npx supabase db reset && npm run dev`
+    // TANPA vitest membuat Ananda (berhak atas …701 lewat sesi `selesai`-nya)
+    // adalah pasien pertama yang mendapati pemutar rusak — persis pelanggaran
+    // yang invarian ini ada untuk mencegah. `tests/global-setup.ts` membalik
+    // `aktif` ke `true` untuk keduanya, tapi HANYA sesudah baris
+    // `material_videos`-nya ada (lihat komentar di sana) — urutan yang sama
+    // yang `aktifkanMateri` tuntut dari admin sungguhan. Asersi di bawah
+    // membuat kelengkapannya terlihat DI SINI (bukan hanya di dalam
+    // global-setup.ts) dan membuktikan pasangan ini yang bergantung pada
+    // fixture test: loop UTAMA di bawahnya tetap memeriksa SEMUA materi aktif
+    // tanpa pengecualian apa pun, termasuk kedua id ini, jadi materi lain
+    // yang diam-diam mulai bergantung pada fixture test masih tertangkap.
     const idFixtureVideo = new Set([MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI]);
     for (const id of idFixtureVideo) {
       expect(

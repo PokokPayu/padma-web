@@ -145,13 +145,13 @@ export default async function MateriPage() {
                         {m.deskripsi || "Belum ada deskripsi."}
                       </p>
                       {/* Angka ini yang membuat "materi setengah jadi" terlihat,
-                          bukan tertebak: materi video tanpa URL (atau e-book
-                          tanpa halaman) terkunci selamanya bagi klien yang sudah
-                          berhak, tanpa satu pun error. */}
+                          bukan tertebak: materi video tanpa objek video (atau
+                          e-book tanpa halaman) terkunci selamanya bagi klien
+                          yang sudah berhak, tanpa satu pun error. */}
                       <p className="mt-1 font-mono text-[11.5px] text-ink-soft">
                         {m.tipe === "ebook"
                           ? `${m.jumlahHalaman} halaman`
-                          : m.videoUrl !== null
+                          : m.objekVideo !== null
                             ? "video terpasang"
                             : "video belum terpasang"}
                       </p>
@@ -175,7 +175,7 @@ export default async function MateriPage() {
                       layananId={m.layananId}
                       layanan={pilihan}
                       jumlahHalaman={m.jumlahHalaman}
-                      videoUrl={m.videoUrl}
+                      objekVideo={m.objekVideo}
                       ditugaskan={penugasan.ditugaskan}
                       otomatis={penugasan.otomatis}
                       pilihanKlien={klien}

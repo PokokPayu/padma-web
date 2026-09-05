@@ -248,7 +248,10 @@ export type MateriDetail = {
   deskripsi: string;
   namaLayanan: string;
   halaman: HalamanMateri[];
-  videoUrl: string | null;
+  /** Kunci objek R2 (`material_videos.objek`) atau `null` — BUKAN URL; lihat
+   *  presigned GET yang diterbitkan `/api/materi/[id]/video` sesudah RLS
+   *  meloloskan baris ini. */
+  objekVideo: string | null;
   /**
    * Dari RPC `berhak_isi_materi` (security definer) — SATU sumber kebenaran
    * yang sama dipakai policy RLS `material_pages`/`material_videos`. Tanpa
@@ -312,7 +315,7 @@ export async function ambilMateriDetail(materialId: string): Promise<MateriDetai
     deskripsi: data.deskripsi,
     namaLayanan,
     halaman,
-    videoUrl: data.material_videos?.objek ?? null,
+    objekVideo: data.material_videos?.objek ?? null,
     berhak: berhak === true,
   };
 }

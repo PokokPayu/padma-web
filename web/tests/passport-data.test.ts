@@ -274,27 +274,27 @@ describe("ambilMateriDetail", () => {
       [...d!.halaman.map((h) => h.halaman)].sort((a, b) => a - b),
     );
     expect(d!.halaman.every((h) => h.lebar > 0 && h.tinggi > 0)).toBe(true);
-    expect(d!.videoUrl).toBeNull();
+    expect(d!.objekVideo).toBeNull();
   });
 
-  it("materi video terbuka: videoUrl terisi dari embed OBJEK (bukan array)", async () => {
+  it("materi video terbuka: objekVideo terisi dari embed OBJEK (bukan array)", async () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const d = await ambilMateriDetail(MATERI_TERBUKA_VIDEO);
     // Nilai disemai tests/global-setup.ts (bukan seed.sql — spec §13b A-6).
-    expect(d!.videoUrl).toBe(OBJEK_VIDEO_TERBUKA);
+    expect(d!.objekVideo).toBe(OBJEK_VIDEO_TERBUKA);
     expect(d!.berhak).toBe(true);
   });
 
-  it("materi TERKUNCI: metadata tampil, halaman kosong, berhak=false & videoUrl null walau URL-nya diakses langsung", async () => {
+  it("materi TERKUNCI: metadata tampil, halaman kosong, berhak=false & objekVideo null walau URL-nya diakses langsung", async () => {
     const { ambilMateriDetail } = await import("@/lib/passport/data");
     const ebook = await ambilMateriDetail(MATERI_TERKUNCI_EBOOK);
     expect(ebook!.judul).toBe("Panduan ASI Perah");
     expect(ebook!.halaman).toEqual([]);
-    expect(ebook!.videoUrl).toBeNull();
+    expect(ebook!.objekVideo).toBeNull();
     expect(ebook!.berhak).toBe(false);
 
     const video = await ambilMateriDetail(MATERI_TERKUNCI_VIDEO);
-    expect(video!.videoUrl).toBeNull();
+    expect(video!.objekVideo).toBeNull();
     expect(video!.berhak).toBe(false);
     expect(JSON.stringify(video)).not.toContain("RAHASIA");
   });

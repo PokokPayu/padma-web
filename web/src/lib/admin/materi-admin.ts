@@ -46,11 +46,13 @@ export type MateriKelola = {
   jumlahHalaman: number;
   /**
    * `material_videos.material_id` adalah PRIMARY KEY → relasi 1:1. Nilainya
-   * URL atau `null`, TIDAK PERNAH array: `video.length === 0` selalu salah dan
-   * akan membuat setiap materi video tampak belum punya isi.
+   * KUNCI OBJEK R2 atau `null` (bukan URL — lihat spec §4 soal kelas bug ini
+   * persis di kolom `materials.video_url` lama), TIDAK PERNAH array:
+   * `video.length === 0` selalu salah dan akan membuat setiap materi video
+   * tampak belum punya isi.
    */
-  videoUrl: string | null;
-  /** `ebook` punya minimal satu halaman, atau `video` punya URL. */
+  objekVideo: string | null;
+  /** `ebook` punya minimal satu halaman, atau `video` punya kunci objek. */
   lengkap: boolean;
 };
 
@@ -166,7 +168,7 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
       aktif: m.aktif,
       layananId: layananPerMateri.get(m.id) ?? [],
       jumlahHalaman,
-      videoUrl: objek,
+      objekVideo: objek,
       lengkap: m.tipe === "ebook" ? jumlahHalaman > 0 : objek !== null,
     });
   }
