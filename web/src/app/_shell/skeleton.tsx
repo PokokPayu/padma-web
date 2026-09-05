@@ -25,18 +25,32 @@ export function Blok({ className = "" }: { className?: string }) {
   );
 }
 
-/** Kartu putih: satu judul + `baris` baris teks. */
+/**
+ * Bentuk kartu berbeda antara panel staf dan panel klien.
+ *
+ * `/admin` & `/owner` memakai bahasa visual ruang kerja (radius 8px, garis
+ * token panel); `/passport` tetap memakai bahasa visual PADMA yang lama.
+ * Satu bentuk untuk keduanya berarti salah satunya melompat saat isi datang.
+ */
+export type VarianKerangka = "panel" | "klien";
+
+const KARTU: Record<VarianKerangka, string> = {
+  panel: "rounded-lg border border-panel-border bg-panel-surface p-5",
+  klien: "rounded-2xl border border-black/10 bg-white p-6",
+};
+
+/** Kartu: satu judul + `baris` baris teks. */
 export function KartuSkeleton({
   baris = 3,
+  varian = "klien",
   className = "",
 }: {
   baris?: number;
+  varian?: VarianKerangka;
   className?: string;
 }) {
   return (
-    <div
-      className={`rounded-2xl border border-black/10 bg-white p-6 ${className}`}
-    >
+    <div className={`${KARTU[varian]} ${className}`}>
       <Blok className="h-5 w-2/5" />
       <div className="mt-5 grid gap-3">
         {Array.from({ length: baris }, (_, i) => (
@@ -63,10 +77,12 @@ export function HalamanSkeleton({
   label,
   kartu = 2,
   baris = 4,
+  varian = "klien",
 }: {
   label: string;
   kartu?: number;
   baris?: number;
+  varian?: VarianKerangka;
 }) {
   return (
     // `data-kerangka` adalah pegangan test E2E: sejak loading.tsx ada, Next
@@ -79,7 +95,11 @@ export function HalamanSkeleton({
       <span className="sr-only">{label}</span>
       <div className="grid gap-3.5">
         {Array.from({ length: kartu }, (_, i) => (
-          <KartuSkeleton key={i} baris={i === 0 ? baris : Math.max(2, baris - 2)} />
+          <KartuSkeleton
+            key={i}
+            varian={varian}
+            baris={i === 0 ? baris : Math.max(2, baris - 2)}
+          />
         ))}
       </div>
     </div>
