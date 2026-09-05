@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ambilKlien, ambilMateriDetail } from "@/lib/passport/data";
 import { Watermark } from "../../_komponen/watermark";
 import { ReaderPdf } from "./reader-pdf";
+import { PemutarVideo } from "./pemutar-video";
 
 export const metadata = { title: "Materi" };
 
@@ -56,12 +57,14 @@ export default async function ReaderMateri({
     return <BelumTerbuka judul={m.judul} />;
   }
 
-  // ===== Cabang VIDEO — TIDAK DISENTUH sama sekali oleh M10 =====
-  // Satu-satunya perubahan yang menyentuhnya secara TIDAK LANGSUNG adalah
-  // gerbang di atas, yang sekarang memakai `m.berhak` (RPC) alih-alih
-  // `m.videoUrl !== null` — panel admin tetap mensyaratkan video terpasang
-  // sebelum materi bisa aktif, jadi keduanya sepakat untuk materi yang benar
-  // sudah terbit.
+  // ===== Cabang VIDEO =====
+  // TIDAK DISENTUH oleh M10 — perubahan yang menyentuhnya secara TIDAK
+  // LANGSUNG saat itu hanyalah gerbang di atas, yang memakai `m.berhak` (RPC)
+  // alih-alih `m.videoUrl !== null`. Task 7 (video-r2) kini menggantikan
+  // placeholder ▶ palsu di bawah dengan `<PemutarVideo>` sungguhan, yang
+  // mengambil presigned URL dari `/api/materi/[id]/video` sesudah halaman
+  // hidup — lihat komentar di route dan komponen itu untuk urutan yang
+  // mengikat (query ber-RLS dulu, baru presigned URL).
   if (m.tipe === "video") {
     return (
       <>
@@ -93,19 +96,7 @@ export default async function ReaderMateri({
         <section className="relative select-none overflow-hidden rounded-2xl border border-black/10 bg-white p-6">
           <Watermark nama={klien.nama} padmaId={klien.padmaId} />
           <div className="relative z-10">
-            <div className="mb-3.5 flex aspect-video items-center justify-center rounded-xl border border-gold/30 bg-gradient-to-br from-pine to-[#081F16]">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/90 text-2xl text-[#132518]">
-                ▶
-              </span>
-            </div>
-            {/* Kesiapan tidak boleh dikarang: belum ada akun penyedia video,
-                jadi tidak ada pemutar sungguhan dan tidak ada URL yang
-                dikirim ke halaman ini. */}
-            <p className="text-[13px] text-ink-soft">
-              Pemutar video diaktifkan pada fase berikutnya, memakai penyedia
-              dengan tautan terproteksi (terkunci domain). Sampai saat itu,
-              mintalah tautannya pada tim PADMA lewat WhatsApp.
-            </p>
+            <PemutarVideo materiId={m.id} />
           </div>
         </section>
 
