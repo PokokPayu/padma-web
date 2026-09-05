@@ -38,7 +38,12 @@ export function moovDiDepan(kepala: Uint8Array): boolean | null {
       // periksa, jadi jawabannya tidak diketahui.
       return null;
     } else if (ukuran32 < 8) {
-      // Ukuran mustahil. Berhenti alih-alih melangkah mundur atau diam.
+      // Ukuran mustahil — box valid minimal 8 byte (4 byte ukuran + 4 byte
+      // tipe). Nilai yang sampai di sini (2..7) BUKAN mundur atau diam:
+      // membiarkannya lolos ke cabang `else` di bawah akan melangkah MAJU
+      // sejauh 2..7 byte, offset yang tidak sejalan dengan batas box
+      // sungguhan mana pun — deteksi berikutnya membaca tipe box dari tengah
+      // data acak. Berhenti (jawab "tidak tahu") daripada menyesatkan diri.
       return null;
     } else {
       lompat = ukuran32;
