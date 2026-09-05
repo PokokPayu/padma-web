@@ -22,7 +22,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
-const { PALET_GRAFIK } = await import("@/app/_shell/panel/palet");
+const { PALET_GRAFIK, WARNA_PERMUKAAN } = await import("@/app/_shell/panel/palet");
 const { Kartu } = await import("@/app/_shell/panel/kartu");
 const { StatTile } = await import("@/app/_shell/panel/stat-tile");
 
@@ -265,5 +265,84 @@ describe("GrafikBatang", () => {
   it("tidak memuat nominal maupun pemformat rupiah", () => {
     const sumber = baca("src/app/_shell/panel/grafik-batang.tsx");
     expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
+  });
+});
+
+const { GrafikGaris } = await import("@/app/_shell/panel/grafik-garis");
+
+const LABEL_PEKAN = ["1 Jul", "8 Jul", "15 Jul", "22 Jul"];
+const SERI_UJI = [
+  { nama: "Harga klien", nilai: [400000, 800000, 1200000, 900000] },
+  { nama: "Honor mitra", nilai: [150000, 300000, 450000, 300000] },
+  { nama: "Margin PADMA", nilai: [250000, 500000, 750000, 600000] },
+];
+
+describe("GrafikGaris", () => {
+  function garis(tambahan: Record<string, unknown> = {}) {
+    return renderToStaticMarkup(
+      createElement(GrafikGaris, {
+        judul: "Pendapatan, honor, dan margin",
+        label: LABEL_PEKAN,
+        seri: SERI_UJI,
+        format: (n: number) => `Rp ${n.toLocaleString("id-ID")}`,
+        ...tambahan,
+      } as never),
+    );
+  }
+
+  it("satu jalur per seri", () => {
+    expect([...garis().matchAll(/data-seri="/g)]).toHaveLength(SERI_UJI.length);
+  });
+
+  it("legenda WAJIB ada untuk dua seri atau lebih", () => {
+    const m = garis();
+    // Dicocokkan pada isi <ul> itu sendiri — nama seri juga muncul sebagai
+    // label langsung dan di tabel, jadi memeriksa `m` utuh akan tetap hijau
+    // sekalipun <ul>-nya kosong.
+    const legenda = m.match(/<ul[^>]*aria-label="[^"]*"[^>]*>[\s\S]*?<\/ul>/)?.[0] ?? "";
+    expect(legenda).toMatch(/aria-label="[^"]*"/);
+    for (const s of SERI_UJI) expect(legenda).toContain(s.nama);
+  });
+
+  it("identitas seri tidak pernah warna semata: tiap seri juga berlabel langsung", () => {
+    expect([...garis().matchAll(/data-label-seri="/g)]).toHaveLength(SERI_UJI.length);
+  });
+
+  it("memakai ketiga slot palet tervalidasi, sesuai urutannya", () => {
+    const m = garis();
+    for (const heks of PALET_GRAFIK) expect(m).toContain(heks);
+  });
+
+  it("penanda bertumpuk diberi cincin permukaan supaya tidak menyatu", () => {
+    // Dua titik yang bertumpuk tanpa cincin terbaca sebagai satu titik, dan
+    // dua seri yang berpotongan menjadi satu garis putus.
+    expect(garis()).toContain(WARNA_PERMUKAAN);
+  });
+
+  it("satu sumbu saja — tiga seri berbagi skala yang sama", () => {
+    // Dua sumbu Y adalah kesalahan grafik nomor satu: ia bisa membuat dua
+    // seri apa pun terlihat berkorelasi.
+    const sumber = baca("src/app/_shell/panel/grafik-garis.tsx");
+    expect([...sumber.matchAll(/batasAtas\(/g)]).toHaveLength(1);
+  });
+
+  it("punya padanan tabel berisi seluruh seri", () => {
+    const m = garis();
+    expect(m).toContain("<table");
+    // Dicocokkan pada isi <table> itu sendiri — dengan data uji ini nilai
+    // maksimum juga muncul sebagai label kisi sumbu Y, jadi memeriksa `m`
+    // utuh akan tetap hijau sekalipun tabelnya tidak memuat nilai tersebut.
+    const tabel = m.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
+    expect(tabel).toContain("Rp 1.200.000");
+  });
+
+  it("svg menamai dirinya untuk pembaca layar", () => {
+    expect(garis()).toMatch(/<svg[^>]*role="img"/);
+  });
+
+  it("tidak mengimpor pemformat rupiah — formatnya selalu datang dari prop", () => {
+    const sumber = baca("src/app/_shell/panel/grafik-garis.tsx");
+    expect(sumber).not.toContain("formatRupiah");
+    expect(sumber).not.toMatch(/Rp\s?\d/);
   });
 });
