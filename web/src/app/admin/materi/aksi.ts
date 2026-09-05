@@ -8,7 +8,6 @@ import {
   periksaDeskripsi,
   periksaJudul,
   periksaTipe,
-  periksaUrlVideo,
   type TipeMateri,
 } from "./status";
 
@@ -22,23 +21,25 @@ import {
  *     langsung, jadi `requireRole(["admin","owner"])` ditulis DI DALAM setiap
  *     action — bukan sekali di puncak modul.
  *
- *  2. METADATA & ISI VIDEO DISIMPAN DALAM SATU AKSI; ISI E-BOOK TIDAK BISA.
- *     Sejak Task 11, isi e-book adalah gambar halaman yang diunggah lewat
- *     `<PengunggahPdf materiId=... />` — dan unggahan itu BUTUH `materiId`
- *     yang belum ada pada langkah "materi baru". Karena itu materi `ebook`
- *     SELALU lahir tanpa isi; yang tetap dipertahankan dari pola lama adalah
- *     video (URL-nya bisa disertakan langsung, tidak perlu materiId lebih
- *     dulu) dan jaminan GAGAL-TERTUTUP di bawah (3): materi tanpa isi tidak
- *     pernah bisa diterbitkan lewat jalur mana pun di berkas ini.
+ *  2. METADATA & ISI TIDAK PERNAH SATU AKSI, UNTUK KEDUA TIPE. Sejak Task 6,
+ *     video juga berupa BERKAS yang diunggah ke R2 (lewat
+ *     `<PengunggahVideo materiId=... />`, lihat `./unggah-video.ts`) — bukan
+ *     lagi URL yang bisa disertakan langsung di sini. Isinya karena itu SAMA
+ *     PERSIS dengan e-book (`<PengunggahPdf materiId=... />`, Task 11): kedua
+ *     unggahan BUTUH `materiId` yang belum ada pada langkah "materi baru",
+ *     jadi materi `ebook` MAUPUN `video` SELALU lahir tanpa isi. Jaminan
+ *     GAGAL-TERTUTUP di bawah (3) yang menjaga tidak satu pun jalur di berkas
+ *     ini bisa menerbitkan materi kosong.
  *
- *  3. MATERI LAHIR NONAKTIF. Insert `materials` dan insert isinya adalah
- *     permintaan terpisah; tidak ada transaksi yang membungkusnya, dan hak
- *     DELETE atas `materials` sudah dicabut sehingga tidak ada jalan mundur.
- *     Jadi urutannya dibuat GAGAL-TERTUTUP: baris lahir `aktif = false`, dan
- *     hanya materi video yang isinya lengkap SEKETIKA yang diterbitkan
- *     otomatis di aksi yang sama. Materi ebook (dan materi video yang gagal
- *     di tengah) menyisakan baris nonaktif — tidak terlihat klien, dan bisa
- *     diperbaiki dari halaman ini — bukan kartu yang berbohong.
+ *  3. MATERI LAHIR NONAKTIF. Insert `materials` dan unggahan isinya adalah
+ *     dua permintaan yang benar-benar terpisah — bukan sekadar tanpa
+ *     transaksi, isinya bahkan menunggu round-trip peramban admin lain
+ *     (unggahan berkas) — dan hak DELETE atas `materials` sudah dicabut
+ *     sehingga tidak ada jalan mundur. Jadi urutannya dibuat GAGAL-TERTUTUP:
+ *     baris lahir `aktif = false` untuk KEDUA tipe, tanpa pengecualian, dan
+ *     hanya menerbit lewat `aktifkanMateri` (4) sesudah isinya benar-benar
+ *     ada — tidak terlihat klien sampai saat itu, dan bisa diperbaiki dari
+ *     halaman ini, bukan kartu yang berbohong.
  *
  *  4. `aktifkanMateri` MENOLAK materi tanpa isi. Tanpa itu, pagar (2) & (3)
  *     bisa dilewati hanya dengan satu klik lanjutan.
@@ -198,17 +199,12 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
   if (!tipe.ok) return { ok: false, pesan: tipe.pesan };
   if (!deskripsi.ok) return { ok: false, pesan: deskripsi.pesan };
 
-  // Isi diperiksa SEBELUM satu baris pun lahir — TAPI hanya untuk video. Isi
-  // e-book kini gambar halaman yang diunggah lewat PengunggahPdf, dan
-  // unggahan itu butuh materiId yang belum ada di langkah ini: materi ebook
-  // karena itu SELALU lahir nonaktif tanpa isi, isinya menyusul lewat panel
-  // "Kelola isi" begitu id-nya ada.
-  let videoUrl = "";
-  if (tipe.nilai === "video") {
-    const u = periksaUrlVideo(String(formData.get("video_url") ?? ""));
-    if (!u.ok) return { ok: false, pesan: u.pesan };
-    videoUrl = u.nilai;
-  }
+  // Isi TIDAK diperiksa di sini untuk KEDUA tipe. E-book (gambar halaman) dan,
+  // sejak Task 6, video (berkas R2) sama-sama diunggah lewat komponennya
+  // sendiri (`PengunggahPdf`/`PengunggahVideo`), dan unggahan itu butuh
+  // materiId yang belum ada di langkah ini: materi karena itu SELALU lahir
+  // nonaktif tanpa isi, isinya menyusul lewat panel "Kelola isi" begitu id-nya
+  // ada.
 
   // Setiap id layanan diperiksa keberadaannya. FK memang menolak yang tidak
   // ada, tetapi yang sampai ke layar admin dari FK hanyalah kode 23503.
@@ -221,10 +217,8 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
   const supabase = await createServerSupabase();
 
   // `aktif: false` ditulis MATI di sini — kebalikan dari modul Layanan, dan
-  // sengaja. Insert materi dan insert isinya (bila video) adalah dua
-  // permintaan tanpa transaksi yang membungkusnya; bila yang kedua gagal,
-  // satu-satunya keadaan yang boleh tersisa adalah keadaan yang tidak
-  // terlihat klien.
+  // sengaja, untuk KEDUA tipe: isinya (halaman ebook atau berkas video)
+  // menyusul lewat unggahan terpisah sesudah id ini ada.
   const { data, error } = await supabase
     .from("materials")
     .insert({
@@ -248,38 +242,10 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
     };
   }
 
-  if (tipe.nilai === "video") {
-    // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau
-    // sesudah migrasi objek-R2 — `videoUrl` di sini MASIH URL penyedia
-    // (Vimeo/Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar
-    // seluruh alur ini (unggah ke R2 lewat presigned URL).
-    const { error: eVideo } = await supabase
-      .from("material_videos")
-      .insert({ material_id: id, objek: videoUrl });
-    if (eVideo) {
-      segarkanMateri(id);
-      return {
-        ok: false,
-        pesan: "Materi tersimpan NONAKTIF karena URL videonya gagal disimpan. Pasang URL-nya, lalu aktifkan materi ini.",
-      };
-    }
-
-    const { data: terbit } = await supabase
-      .from("materials")
-      .update({ aktif: true })
-      .eq("id", id)
-      .select("id");
-    if ((terbit ?? []).length === 0) {
-      return {
-        ok: false,
-        pesan: "Isi materi tersimpan, tetapi materinya belum bisa diterbitkan. Aktifkan dari daftar.",
-      };
-    }
-  }
-  // ebook: materinya sengaja tetap nonaktif di sini. Isinya diunggah lewat
-  // PengunggahPdf sesudah materiId ini ada (panel "Kelola isi"), lalu
-  // diterbitkan lewat aktifkanMateri — yang menolak menerbitkan ebook tanpa
-  // satu pun halaman.
+  // Materinya sengaja tetap nonaktif di sini, untuk KEDUA tipe. Isinya
+  // diunggah lewat PengunggahPdf atau PengunggahVideo sesudah materiId ini
+  // ada (panel "Kelola isi"), lalu diterbitkan lewat aktifkanMateri — yang
+  // menolak menerbitkan materi tanpa satu pun halaman/video.
 
   segarkanMateri(id);
   return { ok: true, id };
@@ -289,18 +255,19 @@ export async function simpanMateri(formData: FormData): Promise<Dibuat | Gagal> 
  * Mengubah identitas materi — dan, bila `tipe` berpindah, memastikan ISI
  * tipe barunya sudah ada sebelum perpindahan itu diizinkan.
  *
- * `ebook` → `video` tanpa URL, atau `video` → `ebook` tanpa satu pun halaman,
- * adalah bentuk paling halus dari materi setengah jadi: tipe berpindah, isi
- * lama menjadi tidak terpakai, dan seluruh klien yang berhak melihat kartu
- * terkunci selamanya tanpa satu pun error.
+ * `ebook` → `video` tanpa berkas, atau `video` → `ebook` tanpa satu pun
+ * halaman, adalah bentuk paling halus dari materi setengah jadi: tipe
+ * berpindah, isi lama menjadi tidak terpakai, dan seluruh klien yang berhak
+ * melihat kartu terkunci selamanya tanpa satu pun error.
  *
- * Untuk `video`, isinya bisa disertakan LANGSUNG di aksi ini (URL tinggal
- * ditulis). Untuk `ebook`, isinya gambar halaman yang butuh unggahan berkas
- * lewat PengunggahPdf — sesuatu yang tidak bisa terjadi di dalam SATU
- * permintaan server action. Karena itu perpindahan ke `ebook` hanya diterima
- * bila materi ITU SENDIRI sudah punya halaman (sisa unggahan sebelumnya, atau
- * baru saja diunggah admin lewat panel "Kelola isi" SEBELUM formulir ini
- * disimpan — keduanya memakai `materiId` yang sama, jadi urutan itu sah).
+ * Sejak Task 6, `ebook` MAUPUN `video` sama-sama isinya berkas yang diunggah
+ * lewat komponennya sendiri (`PengunggahPdf`/`PengunggahVideo`) — sesuatu
+ * yang tidak bisa terjadi di dalam SATU permintaan server action. Karena itu
+ * perpindahan ke tipe manapun hanya diterima bila materi ITU SENDIRI sudah
+ * punya isi tipe tujuannya (sisa unggahan sebelumnya, atau baru saja
+ * diunggah admin lewat panel "Kelola isi" SEBELUM formulir ini disimpan —
+ * keduanya memakai `materiId` yang sama, jadi urutan itu sah): kedua cabang
+ * di bawah memeriksa lewat `punyaIsi(id, ...)` yang bentuknya sama persis.
  * Isi lama yang tidak lagi cocok tipenya SENGAJA tidak disapu — penghapusannya
  * punya jalurnya sendiri, dan isi yang tertinggal tidak pernah terbaca karena
  * reader memilih bentuk tampilan menurut `tipe`.
@@ -336,23 +303,16 @@ export async function perbaruiMateri(
   const pindahTipe = tipe.nilai !== materi.tipe;
 
   if (pindahTipe) {
+    // Kedua cabang memeriksa BENTUK YANG SAMA (`punyaIsi`): tidak ada lagi
+    // jalur "isi disertakan langsung di aksi ini" untuk video sejak isinya
+    // jadi berkas R2, bukan URL.
     if (tipe.nilai === "video") {
-      const u = periksaUrlVideo(String(formData.get("video_url") ?? ""));
-      if (!u.ok) {
-        return { ok: false, pesan: `Mengubah tipe ke Video wajib disertai ${LABEL_ISI.video}. ${u.pesan}` };
+      if (!(await punyaIsi(id, "video"))) {
+        return {
+          ok: false,
+          pesan: `Mengubah tipe ke Video wajib disertai ${LABEL_ISI.video}. Simpan tipenya di sini, lalu unggah videonya lewat "Kelola isi" sebelum menerbitkan materinya.`,
+        };
       }
-      // Isi dipasang LEBIH DULU, tipenya menyusul: bila urutannya dibalik dan
-      // permintaan kedua gagal, materi aktif langsung berdiri tanpa isi.
-      //
-      // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau
-      // sesudah migrasi objek-R2 — `u.nilai` di sini MASIH URL penyedia
-      // (Vimeo/Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar
-      // seluruh alur ini (unggah ke R2 lewat presigned URL).
-      const { error } = await supabase
-        .from("material_videos")
-        .upsert({ material_id: id, objek: u.nilai }, { onConflict: "material_id" })
-        .select("material_id");
-      if (error) return { ok: false, pesan: "Gagal menyimpan URL video materi." };
     } else if (!(await punyaIsi(id, "ebook"))) {
       return {
         ok: false,
@@ -453,41 +413,6 @@ export async function nonaktifkanMateri(id: string): Promise<Berhasil | Gagal> {
 // Video
 // ---------------------------------------------------------------------------
 
-export async function gantiVideo(
-  materiId: string,
-  formData: FormData,
-): Promise<Berhasil | Gagal> {
-  await requireRole(["admin", "owner"]);
-
-  const url = periksaUrlVideo(String(formData.get("video_url") ?? ""));
-  if (!url.ok) return { ok: false, pesan: url.pesan };
-
-  const materi = await ambilMateri(materiId);
-  if (!materi) return { ok: false, pesan: "Materi tidak ditemukan." };
-  if (materi.tipe !== "video") {
-    return { ok: false, pesan: "URL video hanya berlaku untuk materi bertipe Video." };
-  }
-
-  const supabase = await createServerSupabase();
-  // TODO(Task 6): kolom ditambal ke `objek` supaya suite tetap hijau sesudah
-  // migrasi objek-R2 — `url.nilai` di sini MASIH URL penyedia (Vimeo/
-  // Cloudflare Stream), BUKAN kunci objek R2. Task 6 membongkar seluruh
-  // alur ini (unggah ke R2 lewat presigned URL) — ketiga situs tulis
-  // `material_videos` di berkas ini (pendaftaran, penyuntingan tipe, dan
-  // `gantiVideo` ini) menunggunya.
-  const { data, error } = await supabase
-    .from("material_videos")
-    .upsert({ material_id: materiId, objek: url.nilai }, { onConflict: "material_id" })
-    .select("material_id");
-
-  if (error || (data ?? []).length === 0) {
-    return { ok: false, pesan: "Gagal menyimpan URL video." };
-  }
-
-  segarkanMateri(materiId);
-  return { ok: true };
-}
-
 /**
  * Melepas video dari materi.
  *
@@ -498,6 +423,11 @@ export async function gantiVideo(
  *
  * Ditolak selama materinya masih terbit: materi video tanpa barisnya adalah
  * kartu terkunci yang tidak akan pernah terbuka, tanpa satu pun error.
+ *
+ * Menggantikan video BUKAN lewat aksi ini — `PengunggahVideo` (Task 6) mencatat
+ * objek barunya lewat `catatVideoMateri` (`./unggah-video.ts`), yang sudah
+ * menimpa barisnya sendiri lewat upsert dan membereskan objek R2 lama. `lepasVideo`
+ * ini hanya untuk melepas isi tanpa unggahan pengganti.
  */
 export async function lepasVideo(materiId: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
@@ -507,7 +437,7 @@ export async function lepasVideo(materiId: string): Promise<Berhasil | Gagal> {
   if (materi.aktif) {
     return {
       ok: false,
-      pesan: "Nonaktifkan materinya lebih dulu. Materi video yang terbit tanpa URL tampil sebagai kartu terkunci yang tidak akan pernah terbuka.",
+      pesan: "Nonaktifkan materinya lebih dulu. Materi video yang terbit tanpa video tampil sebagai kartu terkunci yang tidak akan pernah terbuka.",
     };
   }
 

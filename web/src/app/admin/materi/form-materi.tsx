@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   aktifkanMateri,
-  gantiVideo,
   lepasVideo,
   nonaktifkanMateri,
   perbaruiMateri,
@@ -18,11 +17,11 @@ import {
   LABEL_TIPE,
   PANJANG_DESKRIPSI_MAKS,
   PANJANG_JUDUL_MAKS,
-  PENYEDIA_VIDEO,
   TIPE_SAH,
   type TipeMateri,
 } from "./status";
 import { PengunggahPdf } from "./pengunggah-pdf";
+import { PengunggahVideo } from "./pengunggah-video";
 
 const KELAS_MEDAN =
   "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
@@ -73,36 +72,28 @@ function CentangLayanan({
 }
 
 /**
- * Medan ISI materi — URL untuk video, unggahan PDF untuk e-book.
- *
- * Video: URL-nya bisa disertakan LANGSUNG di formulir mana pun, materi baru
- * maupun sunting, karena tidak butuh apa pun selain teks.
- *
- * E-book: isinya gambar halaman lewat `<PengunggahPdf/>`, dan unggahan itu
- * BUTUH `materiId` yang sudah ada di basis data. Pada formulir "materi baru"
- * id itu belum ada — jadi cabang ini hanya menjelaskan bahwa unggahannya
- * menyusul sesudah materi tersimpan. Pada formulir SUNTING (materiId sudah
- * ada, baik untuk materi ebook lama maupun yang baru dipindah tipenya)
- * `<PengunggahPdf/>` tampil sungguhan.
+ * Medan ISI materi — unggahan berkas untuk KEDUA tipe sejak Task 6: video
+ * (`<PengunggahVideo/>`) menggantikan medan URL penyedia lama, dan e-book
+ * (`<PengunggahPdf/>`) sudah begitu sejak Task 11. Keduanya butuh `materiId`
+ * yang sudah ada di basis data, sehingga pada formulir "materi baru" (id
+ * belum ada) cabang di bawah hanya menjelaskan bahwa unggahannya menyusul
+ * sesudah materi tersimpan. Pada formulir SUNTING (materiId sudah ada, baik
+ * untuk materi lama maupun yang baru dipindah tipenya) komponen pengunggah
+ * masing-masing tampil sungguhan.
  */
 function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
   if (tipe === "video") {
-    return (
-      <label className="mt-3 block">
-        <span className={KELAS_LABEL}>URL video ({PENYEDIA_VIDEO})</span>
-        <input
-          name="video_url"
-          type="url"
-          required
-          placeholder="https://vimeo.com/123456789"
-          className={KELAS_MEDAN}
-        />
-        <span className="mt-1 block text-[11.5px] text-ink-soft">
-          Hanya penyedia yang bisa dikunci domain. Tautan Google Drive atau
-          YouTube ditolak — materi bisa diteruskan ke luar klien PADMA.
-        </span>
-      </label>
-    );
+    // Video kini berupa BERKAS yang diunggah ke R2, bukan URL penyedia — jadi
+    // ia mengikuti pola e-book: unggahan butuh `materiId` yang sudah ada di
+    // basis data, sehingga pada formulir "materi baru" ia belum bisa muncul.
+    if (materiId === undefined) {
+      return (
+        <p className="mt-3 text-[12px] text-ink-soft">
+          Simpan materi ini dulu, lalu unggah videonya lewat “Kelola isi”.
+        </p>
+      );
+    }
+    return <PengunggahVideo materiId={materiId} />;
   }
   if (!materiId) {
     return (
@@ -394,7 +385,7 @@ export function AksiMateri({
 
       {isi && tipe === "ebook" && <IsiEbook materiId={id} jumlahHalaman={jumlahHalaman} />}
       {isi && tipe === "video" && (
-        <IsiVideo materiId={id} judulMateri={judul} aktif={aktif} videoUrl={videoUrl} />
+        <IsiVideo materiId={id} aktif={aktif} videoUrl={videoUrl} />
       )}
       {tugas && (
         <PanelPenugasan
@@ -547,66 +538,57 @@ function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman
   );
 }
 
+/**
+ * Panel isi video: status ringkas, pengunggah penggantinya
+ * (`<PengunggahVideo/>`, menulis lewat `./unggah-video.ts` — bukan `aksi.ts`,
+ * persis pola `IsiEbook`/`PengunggahPdf`), dan tombol lepas untuk materi yang
+ * sudah ditarik. `videoUrl` di sini tidak disegarkan otomatis sesudah
+ * unggahan sukses — `PengunggahVideo` menampilkan status suksesnya sendiri —
+ * tapi DISEGARKAN lewat `router.refresh()` sesudah "Lepas video", supaya
+ * tombolnya sendiri ikut menghilang begitu isinya benar-benar kosong.
+ */
 function IsiVideo({
   materiId,
-  judulMateri,
   aktif,
   videoUrl,
 }: {
   materiId: string;
-  judulMateri: string;
   aktif: boolean;
   videoUrl: string | null;
 }) {
+  const router = useRouter();
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
 
   return (
     <div className="rounded-xl border border-black/10 bg-paper p-3">
-      <form
-        action={(fd) =>
-          mulai(async () => {
-            const r = await gantiVideo(materiId, fd);
-            setPesan(r.ok ? null : r.pesan);
-          })
-        }
-        className="grid gap-2"
-      >
-        <label>
-          <span className={KELAS_LABEL}>URL video ({PENYEDIA_VIDEO})</span>
-          <input
-            name="video_url"
-            type="url"
-            required
-            defaultValue={videoUrl ?? ""}
-            aria-label={`URL video materi ${judulMateri}`}
-            className={KELAS_MEDAN}
-          />
-        </label>
-        <span className="flex flex-wrap gap-2">
-          <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>
-            {pending ? "Menyimpan…" : "Simpan URL"}
-          </button>
-          {/* "Lepas video" hanya ditawarkan pada materi yang sudah ditarik:
-              materi video terbit tanpa URL adalah kartu terkunci yang tidak
-              akan pernah terbuka. Server memeriksanya ulang. */}
-          {!aktif && videoUrl !== null && (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                mulai(async () => {
-                  const r = await lepasVideo(materiId);
-                  setPesan(r.ok ? null : r.pesan);
-                })
+      <p className="text-[13px] text-ink">
+        {videoUrl !== null ? "Video tersimpan." : "Belum ada video — unggah di bawah."}
+      </p>
+      <PengunggahVideo materiId={materiId} />
+      {/* "Lepas video" hanya ditawarkan pada materi yang sudah ditarik: materi
+          video terbit tanpa isi adalah kartu terkunci yang tidak akan pernah
+          terbuka. Server memeriksanya ulang. */}
+      {!aktif && videoUrl !== null && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            mulai(async () => {
+              const r = await lepasVideo(materiId);
+              if (r.ok) {
+                setPesan(null);
+                router.refresh();
+              } else {
+                setPesan(r.pesan);
               }
-              className={KELAS_TOMBOL_KECIL}
-            >
-              Lepas video
-            </button>
-          )}
-        </span>
-      </form>
+            })
+          }
+          className={`${KELAS_TOMBOL_KECIL} mt-2`}
+        >
+          Lepas video
+        </button>
+      )}
       {pesan && <p className="mt-2 text-[12px] font-semibold text-clay">{pesan}</p>}
     </div>
   );

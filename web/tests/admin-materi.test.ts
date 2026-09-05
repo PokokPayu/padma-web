@@ -46,6 +46,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { querySql } from "./helpers/db";
 import { MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
 
 const admin = createAdminSupabase();
@@ -99,11 +100,9 @@ const {
   perbaruiMateri,
   aktifkanMateri,
   nonaktifkanMateri,
-  gantiVideo,
   lepasVideo,
 } = await import("@/app/admin/materi/aksi");
 const { daftarMateriAdmin, TANPA_LAYANAN_ID } = await import("@/lib/admin/materi-admin");
-const { periksaUrlVideo } = await import("@/app/admin/materi/status");
 const { default: MateriPage } = await import("@/app/admin/materi/page");
 
 const sumberAksi = baca("src/app/admin/materi/aksi.ts");
@@ -171,6 +170,25 @@ async function jumlahMateri(): Promise<number> {
     .from("materials")
     .select("id", { count: "exact", head: true });
   return count ?? 0;
+}
+
+/**
+ * Materi video baru, lahir lewat `simpanMateri` — TANPA isi, sama seperti
+ * materi e-book baru diuji langsung lewat `simpanMateri` di atas. Video kini
+ * diunggah terpisah lewat `PengunggahVideo` sesudah materiId ini ada, jadi
+ * helper ini tidak (dan tidak bisa) menyertakan isi apa pun.
+ */
+async function buatMateriVideo(): Promise<string> {
+  const hasil = await simpanMateri(
+    formulir({
+      judul: "PAD-UJI Video Baru Tanpa Isi",
+      tipe: "video",
+      deskripsi: "",
+      service_id: [SVC_TERKUNCI],
+    }),
+  );
+  if (!hasil.ok) throw new Error(`buatMateriVideo gagal: ${hasil.pesan}`);
+  return hasil.id;
 }
 
 async function bersihkan() {
@@ -417,7 +435,6 @@ describe("simpanMateri — materi tidak pernah terbit setengah jadi", () => {
         tipe: "video",
         deskripsi: "",
         service_id: [SVC_TERKUNCI, SVC_KEDUA],
-        video_url: "https://player.vimeo.com/video/998811",
       }),
     );
     expect(hasil.ok).toBe(true);
@@ -425,70 +442,18 @@ describe("simpanMateri — materi tidak pernah terbit setengah jadi", () => {
     expect(await layananMateri(hasil.id)).toEqual([SVC_KEDUA, SVC_TERKUNCI].sort());
   });
 
-  it("video TIDAK bisa disimpan tanpa URL", async () => {
-    const sebelum = await jumlahMateri();
-    const hasil = await simpanMateri(
-      formulir({
-        service_id: SVC_TERBUKA,
-        judul: "PAD-UJI Video Tanpa URL",
-        tipe: "video",
-        deskripsi: "seharusnya ditolak",
-        video_url: "",
-      }),
+  it("materi video baru lahir TANPA isi dan karena itu nonaktif", async () => {
+    // Video kini diunggah terpisah ke R2 sesudah materinya ada, jadi tidak ada
+    // lagi jalur "materi video langsung berisi" saat pendaftaran.
+    const id = await buatMateriVideo();          // helper yang sudah ada di berkas ini
+    const isi = await querySql<{ n: number }>(
+      `select count(*)::int as n from public.material_videos where material_id = '${id}'`,
     );
-    expect(hasil.ok).toBe(false);
-    if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/url|video/i);
-    expect(await jumlahMateri()).toBe(sebelum);
-  });
+    expect(isi[0].n).toBe(0);
+    expect((await barisMateri(id))!.aktif).toBe(false);
 
-  it("URL di luar daftar penyedia ditolak dengan KALIMAT, bukan kode Postgres", async () => {
-    // Constraint `material_videos_host_terproteksi` memang menolaknya, tetapi
-    // yang sampai ke layar admin klinik adalah 23514 — bukan kalimat.
-    for (const url of [
-      "https://youtube.com/watch?v=abc",
-      "http://vimeo.com/123",
-      "https://vimeo.com.jahat.id/123",
-      "javascript:alert(1)",
-    ]) {
-      const hasil = await simpanMateri(
-        formulir({
-          service_id: SVC_TERBUKA,
-          judul: "PAD-UJI Video Host Asing",
-          tipe: "video",
-          deskripsi: "",
-          video_url: url,
-        }),
-      );
-      expect(hasil.ok, `URL "${url}" seharusnya ditolak`).toBe(false);
-      if (hasil.ok) continue;
-      expect(hasil.pesan).toMatch(/vimeo|cloudflare/i);
-      expect(hasil.pesan).not.toMatch(/23514|violates|check constraint/i);
-    }
-    const { data } = await admin
-      .from("materials")
-      .select("id")
-      .eq("judul", "PAD-UJI Video Host Asing");
-    expect(data ?? []).toHaveLength(0);
-  });
-
-  it("video tersimpan bersama URL-nya dalam satu aksi, dan langsung aktif", async () => {
-    const hasil = await simpanMateri(
-      formulir({
-        service_id: SVC_TERKUNCI,
-        judul: "PAD-UJI Video Baru",
-        tipe: "video",
-        deskripsi: "",
-        video_url: "https://player.vimeo.com/video/998877",
-      }),
-    );
-    expect(hasil.ok).toBe(true);
-    if (!hasil.ok) return;
-
-    expect((await barisMateri(hasil.id))!.aktif).toBe(true);
-    expect((await videoMateri(hasil.id))!.objek).toBe(
-      "https://player.vimeo.com/video/998877",
-    );
+    const tolak = await aktifkanMateri(id);
+    expect(tolak.ok).toBe(false);
   });
 
   it("menolak layanan yang tidak ada tanpa menyentuh basis data", async () => {
@@ -575,9 +540,11 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
     expect(await layananMateri(MATERI_EBOOK)).toEqual([SVC_TERBUKA]);
   });
 
-  it("ebook → video TANPA URL ditolak, dan tipenya TIDAK berubah", async () => {
+  it("ebook → video TANPA isi ditolak, dan tipenya TIDAK berubah", async () => {
     // Inilah bentuk paling halus dari materi setengah jadi: tipe berpindah,
     // isinya tidak ikut, dan seluruh klien melihat kartu terkunci selamanya.
+    // MATERI_EBOOK tidak punya baris material_videos sama sekali, jadi
+    // `punyaIsi(id, "video")` menjawab false persis seperti arah sebaliknya.
     const hasil = await perbaruiMateri(
       MATERI_EBOOK,
       formulir({
@@ -585,7 +552,6 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
         judul: "PAD-UJI E-Book Materi Baru",
         tipe: "video",
         deskripsi: "deskripsi baru",
-        video_url: "",
       }),
     );
     expect(hasil.ok).toBe(false);
@@ -636,7 +602,18 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
     }
   });
 
-  it("ebook → video DENGAN URL berpindah lengkap dengan isinya", async () => {
+  it("ebook → video DITERIMA ketika materi itu SENDIRI sudah punya video tersisa", async () => {
+    // Video kini isinya berkas R2 yang diunggah lewat PengunggahVideo — tidak
+    // bisa disertakan LANGSUNG di aksi ini (sama seperti ebook, lihat test
+    // "video → ebook DITERIMA" di atas untuk pola yang sama pada arah
+    // sebaliknya). Baris `material_videos` disiapkan LANGSUNG di sini untuk
+    // mensimulasikan "sudah diunggah admin lewat panel Kelola isi SEBELUM
+    // formulir ini disimpan".
+    await admin.from("material_videos").insert({
+      material_id: MATERI_KOSONG,
+      objek: `${MATERI_KOSONG}/pad-uji-sisa.mp4`,
+      mime: "video/mp4",
+    });
     const hasil = await perbaruiMateri(
       MATERI_KOSONG,
       formulir({
@@ -644,14 +621,11 @@ describe("perbaruiMateri — mengubah tipe wajib disertai isinya", () => {
         judul: "PAD-UJI Materi Tanpa Isi",
         tipe: "video",
         deskripsi: "",
-        video_url: "https://customer-abc123.cloudflarestream.com/xyz/manifest",
       }),
     );
     expect(hasil.ok).toBe(true);
     expect((await barisMateri(MATERI_KOSONG))!.tipe).toBe("video");
-    expect((await videoMateri(MATERI_KOSONG))!.objek).toBe(
-      "https://customer-abc123.cloudflarestream.com/xyz/manifest",
-    );
+    expect(await videoMateri(MATERI_KOSONG)).not.toBeNull();
 
     // Dikembalikan supaya blok berikutnya tetap berangkat dari materi kosong.
     await admin.from("material_videos").delete().eq("material_id", MATERI_KOSONG);
@@ -886,25 +860,11 @@ describe("menonaktifkan materi MENUTUP isinya untuk klien, bukan menyembunyikann
 });
 
 describe("mengelola video materi", () => {
-  it("gantiVideo memasang URL baru pada materi video", async () => {
-    const hasil = await gantiVideo(
-      MATERI_VIDEO,
-      formulir({ video_url: "https://vimeo.com/pad-uji-baru" }),
-    );
-    expect(hasil.ok).toBe(true);
-    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe("https://vimeo.com/pad-uji-baru");
-  });
-
-  it("gantiVideo menolak host di luar daftar penyedia terproteksi", async () => {
-    const hasil = await gantiVideo(
-      MATERI_VIDEO,
-      formulir({ video_url: "https://drive.google.com/file/d/rahasia" }),
-    );
-    expect(hasil.ok).toBe(false);
-    if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/vimeo|cloudflare/i);
-    expect((await videoMateri(MATERI_VIDEO))!.objek).toBe("https://vimeo.com/pad-uji-baru");
-  });
+  // gantiVideo (Task 6: mengganti URL video lewat aksi ini) sudah dibongkar —
+  // menggantikan video kini lewat `PengunggahVideo`/`catatVideoMateri`
+  // (`./unggah-video.ts`), diuji terpisah di `tests/materi-video-aksi.test.ts`.
+  // Yang tersisa di sini adalah `lepasVideo`, yang tidak pernah bergantung
+  // pada URL.
 
   it("lepasVideo DITOLAK selama materinya masih aktif", async () => {
     expect((await barisMateri(MATERI_VIDEO))!.aktif).toBe(true);
@@ -929,11 +889,9 @@ describe("mengelola video materi", () => {
     await admin.from("materials").update({ aktif: true }).eq("id", MATERI_VIDEO);
   });
 
-  it("PENJAGA PERAN: klien yang login tidak bisa mengganti URL video", async () => {
+  it("PENJAGA PERAN: klien yang login tidak bisa melepas video materi", async () => {
     ref.sesi = sesiKlien;
-    await expect(
-      gantiVideo(MATERI_VIDEO, formulir({ video_url: "https://vimeo.com/curian" })),
-    ).rejects.toThrow(/REDIRECT/);
+    await expect(lepasVideo(MATERI_VIDEO)).rejects.toThrow(/REDIRECT/);
     expect((await videoMateri(MATERI_VIDEO))!.objek).toBe(URL_UJI);
   });
 });
@@ -1042,12 +1000,14 @@ describe("halaman materi (/admin/materi)", () => {
     expect(markup).toMatch(/video/i);
   });
 
-  it("menyediakan jalan menambah materi, isinya diunggah lewat PengunggahPdf", () => {
+  it("menyediakan jalan menambah materi, isinya diunggah lewat PengunggahPdf/PengunggahVideo", () => {
     expect(markup).toContain("Materi baru");
     expect(sumberForm).toContain('name="judul"');
     expect(sumberForm).toContain('name="tipe"');
-    expect(sumberForm).toContain('name="video_url"');
     expect(sumberForm).toContain("PengunggahPdf");
+    expect(sumberForm).toContain("PengunggahVideo");
+    // Medan URL video (Task 6) sudah dibongkar — video kini berkas, bukan URL.
+    expect(sumberForm).not.toContain('name="video_url"');
     expect(sumberForm).not.toContain('name="bab_isi"');
     expect(sumberForm).not.toContain('name="bab_judul"');
   });
@@ -1105,9 +1065,10 @@ describe("berkas server action materi", () => {
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
     // simpanMateri, perbaruiMateri, aktifkanMateri, nonaktifkanMateri,
-    // gantiVideo, lepasVideo — tambahBab/perbaruiBab/hapusBab sudah dibongkar
-    // bersama material_chapters di Task 11.
-    expect(jumlahAction).toBe(6);
+    // lepasVideo — tambahBab/perbaruiBab/hapusBab sudah dibongkar bersama
+    // material_chapters di Task 11, dan gantiVideo sudah dibongkar bersama
+    // medan URL video di Task 6 (diganti PengunggahVideo/catatVideoMateri).
+    expect(jumlahAction).toBe(5);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -1173,29 +1134,15 @@ describe("berkas server action materi", () => {
   });
 });
 
-describe("periksaUrlVideo — daftar penyedia terproteksi ditegakkan dua lapis", () => {
-  it("menerima Vimeo & Cloudflare Stream", () => {
-    for (const url of [
-      "https://vimeo.com/123456789",
-      "https://player.vimeo.com/video/123456789",
-      "https://customer-abc.cloudflarestream.com/xyz/manifest/video.m3u8",
-      "https://videodelivery.cloudflarestream.com/xyz/manifest",
-    ]) {
-      expect(periksaUrlVideo(url).ok, `${url} seharusnya diterima`).toBe(true);
-    }
-  });
-
-  it("menolak host lain, skema lain, dan host yang hanya menyerupai", () => {
-    for (const url of [
-      "",
-      "   ",
-      "http://vimeo.com/123",
-      "https://vimeo.com.jahat.id/123",
-      "https://youtube.com/watch?v=1",
-      "javascript:alert(1)",
-      "data:text/html,<script>",
-    ]) {
-      expect(periksaUrlVideo(url).ok, `${url} seharusnya ditolak`).toBe(false);
-    }
+describe("medan URL video (Task 6) benar-benar dibongkar, bukan cuma tak terpakai", () => {
+  // `periksaUrlVideo` tidak lagi ada untuk diuji langsung — video kini berkas
+  // R2, bukan URL, jadi validasi bentuknya (`periksaBerkasVideo`, Task 2) diuji
+  // di `tests/materi-video-lib.test.ts`. Yang dijaga di sini adalah bahwa
+  // validator lama BENAR-BENAR hilang dari status.ts, bukan diam-diam
+  // ditinggalkan sebagai kode mati yang bisa diimpor ulang.
+  it("status.ts tidak lagi mengekspor periksaUrlVideo/PENYEDIA_VIDEO/POLA_URL_VIDEO", () => {
+    expect(sumberStatus).not.toContain("periksaUrlVideo");
+    expect(sumberStatus).not.toContain("PENYEDIA_VIDEO");
+    expect(sumberStatus).not.toContain("POLA_URL_VIDEO");
   });
 });
