@@ -498,6 +498,9 @@ describe("beranda owner", () => {
     expect(nilaiStatTile(m, "Sesi selesai pekan ini")).toBe(String(kini.jumlahSesi));
     expect(nilaiStatTile(m, "Honor dibayar Sabtu ini")).toBe(formatRupiah(kini.totalHonor));
     expect(nilaiStatTile(m, "Margin PADMA pekan ini")).toBe(formatRupiah(kini.margin));
+    // Label rentang pekan berjalan wajib tampil juga — bukan cuma angkanya.
+    // Tanpa ini, "pekan yang mana" hanya bisa ditebak dari tanggal hari ini.
+    expect(m).toContain(kini.rentang);
   });
 
   it("nominal HIDUP di sini — panel ini memang satu-satunya tempatnya", async () => {

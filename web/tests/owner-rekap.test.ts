@@ -563,6 +563,9 @@ describe("deretPekanTerakhir — sumbu waktu tanpa lubang", async () => {
     expect(hasil.slice(0, 2).every((p) => p.totalHarga === 0)).toBe(true);
     expect(hasil.slice(0, 2).every((p) => p.margin === 0)).toBe(true);
     expect(hasil.slice(0, 2).every((p) => p.jumlahSesi === 0)).toBe(true);
+    expect(hasil.slice(0, 2).every((p) => p.totalHonor === 0)).toBe(true);
+    expect(hasil.slice(0, 2).every((p) => p.sesiTakBertarif.length === 0)).toBe(true);
+    expect(hasil.slice(0, 2).every((p) => p.perMitra.length === 0)).toBe(true);
   });
 
   it("pekan yang ada dipakai apa adanya, tidak dihitung ulang", () => {

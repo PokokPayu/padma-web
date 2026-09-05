@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export type Antrean = {
@@ -62,8 +63,15 @@ export async function hitungKlaimMenunggu(): Promise<number> {
  *
  * `head: true` + `count: 'exact'`: yang dibutuhkan hanya jumlahnya, jadi tidak
  * ada satu baris data kesehatan pun yang perlu melintas ke server render.
+ *
+ * Dibungkus `cache()` dari React: `layout.tsx` memanggilnya untuk badge
+ * sidebar dan `page.tsx` memanggilnya lagi untuk keempat StatTile, dua
+ * pemanggil di SATU render yang sama pada satu request. Tanpa `cache()`,
+ * itu sepuluh query hitungan (lima per panggilan) untuk satu tampilan
+ * halaman — `cache()` membuat pemanggilan kedua memakai hasil yang sama
+ * dengan yang pertama alih-alih membaca ulang basis data.
  */
-export async function hitungAntrean(): Promise<Antrean> {
+export const hitungAntrean = cache(async function hitungAntrean(): Promise<Antrean> {
   const supabase = await createServerSupabase();
   const kepala = { count: "exact" as const, head: true };
 
@@ -89,4 +97,4 @@ export async function hitungAntrean(): Promise<Antrean> {
     klaimMenunggu,
     klienBelumAktif: belumAktif.count ?? 0,
   };
-}
+});

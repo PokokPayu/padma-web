@@ -10,7 +10,7 @@ export type TitikTren = {
 /**
  * Sesi SELESAI per pekan, `pekan` pekan terakhir, terlama di kiri.
  *
- * Emedernya DISIAPKAN LEBIH DULU untuk seluruh rentang, lalu diisi. Itu bukan
+ * Embernya DISIAPKAN LEBIH DULU untuk seluruh rentang, lalu diisi. Itu bukan
  * gaya: mengelompokkan baris yang ada saja — seperti `hitungRekap()` di panel
  * owner — menghasilkan ember hanya untuk pekan yang punya sesi, sehingga
  * delapan pekan tampil sebagai enam batang. Tidak ada satu angka pun yang

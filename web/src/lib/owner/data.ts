@@ -285,6 +285,14 @@ export type RingkasanPekan = {
  * Pekan tanpa sesi TIDAK muncul di hasil `hitungRekap`, jadi ketiadaannya
  * dijawab dengan ringkasan bernilai nol — bukan `null` yang memaksa setiap
  * pemanggil menulis cabang kosongnya sendiri.
+ *
+ * TIDAK ADA pemanggil produksi lagi — beranda owner kini menurunkan angkanya
+ * dari elemen terakhir `deretPekanTerakhir()`. Fungsi ini tetap hidup sebagai
+ * ORAKEL INDEPENDEN di `tests/owner-kerangka.test.ts`: angka yang tampil di
+ * halaman wajib SAMA dengan yang dihitung fungsi ini, padahal keduanya
+ * menempuh jalur kode yang berbeda sama sekali. Jangan dihapus saat
+ * membereskan kode — menghapusnya berarti ikut menghapus satu-satunya
+ * pemeriksaan silang yang membuktikan kedua jalur itu sepakat.
  */
 export async function ringkasanPekanIni(hariIni: string): Promise<RingkasanPekan> {
   const senin = awalPekan(hariIni);

@@ -494,9 +494,21 @@ describe("dashboard admin", () => {
 
   it("aksi cepat menuju formulir yang sebenarnya, bukan tautan mati", async () => {
     const m = await markupDashboard();
-    // Keduanya rute nyata yang sudah ada sejak panel operasional lahir.
-    expect(m).toContain('href="/admin/klien"');
-    expect(m).toContain('href="/admin/sesi"');
+    // Diperiksa pada TAG yang membawa label itu sendiri, bukan pada seluruh
+    // dokumen: kedua href ini SUDAH muncul lebih dulu lewat StatTile antrean
+    // ("Klien belum aktif" -> /admin/klien, "Permintaan jadwal" -> /admin/sesi),
+    // jadi `toContain('href="/admin/klien"')` polos akan tetap hijau sekalipun
+    // tombol aksi cepatnya sendiri tidak pernah dirender — persis regresi yang
+    // memicu perbaikan ini. Mengikat pemeriksaan ke tag yang memuat label
+    // tombol menutup celah itu.
+    for (const [label, href] of [
+      ["+ Klien baru", "/admin/klien"],
+      ["+ Sesi baru", "/admin/sesi"],
+    ] as const) {
+      const tag = (m.match(/<a[^>]*>[\s\S]*?<\/a>/g) ?? []).find((t) => t.includes(label));
+      expect(tag, `tombol aksi cepat "${label}" tidak ditemukan`).toBeTruthy();
+      expect(tag).toContain(`href="${href}"`);
+    }
   });
 
   it("TIDAK ada nominal uang di dashboard (money firewall)", async () => {

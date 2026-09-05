@@ -32,7 +32,10 @@ export default async function AdminPage() {
 
   const titikTren = tren.map((t) => {
     const { hari, bulan } = formatTanggalPendek(t.senin);
-    return { label: `${hari} ${bulan}`, nilai: t.jumlah };
+    // `keterangan` membawa rentang penuh ("1 – 7 Sep 2026") ke tooltip dan
+    // kolom pertama tabel padanan; label pendek ("1 SEP") tetap yang dipakai
+    // di sumbu-X sendiri, tempat rentang penuh akan kepanjangan.
+    return { label: `${hari} ${bulan}`, nilai: t.jumlah, keterangan: t.rentang };
   });
 
   return (
@@ -43,6 +46,25 @@ export default async function AdminPage() {
           Halo, {nama}. Inilah yang menunggu ditangani hari ini · {formatTanggalID(hariIni)}
         </p>
       </header>
+
+      {/* Aksi cepat: dua jalan pintas ke formulir yang paling sering dibuka
+          dari beranda, bukan sekadar navigasi ke modulnya. Ditaruh persis di
+          bawah header supaya terbaca sebagai TINDAKAN, bukan tautan lain di
+          antara sekian banyak tautan pada halaman ini. */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Link
+          href="/admin/klien"
+          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
+        >
+          + Klien baru
+        </Link>
+        <Link
+          href="/admin/sesi"
+          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
+        >
+          + Sesi baru
+        </Link>
+      </div>
 
       {/* Keempat angka antrean. `menuntut` menyala hanya saat ada pekerjaan —
           bila semua angka merah, tidak ada yang berarti merah. */}
