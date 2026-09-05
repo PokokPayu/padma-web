@@ -1,102 +1,75 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
-import { ringkasanPekanIni } from "@/lib/owner/data";
+import { ambilRekap } from "@/lib/owner/data";
+import { deretPekanTerakhir } from "@/lib/owner/rekap";
 import { formatRupiah } from "@/lib/owner/rupiah";
-import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
+import { formatTanggalID, formatTanggalPendek, hariIniJakarta } from "@/lib/passport/waktu";
+import { StatTile } from "@/app/_shell/panel/stat-tile";
+import { Kartu } from "@/app/_shell/panel/kartu";
+import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
+import { GrafikPekan } from "./_shell/grafik-pekan";
 
-// Judul mengandalkan template `%s · PADMA` di root layout. Sebelum ini berkas
-// inilah satu-satunya halaman yang memaksakan judul penuh sendiri — lengkap
-// dengan nama aplikasi dan tanda pisah yang berbeda dari template — sehingga
-// tab-nya sendirian keluar dari pola 21 halaman lain.
+// Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Panel Owner" };
 
-function Kartu({
-  label,
-  nilai,
-  keterangan,
-  gelap = false,
-}: {
-  label: string;
-  nilai: string;
-  keterangan: string;
-  /** Kartu gelap `stat.gold` prototipe — dipakai HANYA untuk margin PADMA. */
-  gelap?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-2xl border px-5 py-5 ${
-        gelap ? "border-gold/35" : "border-black/10 bg-white"
-      }`}
-      // Gradien `stat.gold` prototipe ditulis sebagai style inline, bukan
-      // utilitas gradien Tailwind: nilainya persis angka yang sudah disetujui
-      // di padma-prototype.html, dan menerjemahkannya ke sintaks utilitas
-      // hanya menambah satu tempat lagi yang bisa bergeser diam-diam.
-      style={gelap ? { backgroundImage: "linear-gradient(150deg,#12392A,#0A2B1F)" } : undefined}
-    >
-      <small
-        className={`mb-2 block text-[11.5px] font-extrabold uppercase tracking-[0.06em] ${
-          gelap ? "text-gold-bright" : "text-ink-soft"
-        }`}
-      >
-        {label}
-      </small>
-      <span
-        className={`block font-serif text-[29px] leading-none ${
-          gelap ? "text-[#F5EEDC]" : "text-night"
-        }`}
-      >
-        {nilai}
-      </span>
-      <span
-        className={`mt-1.5 block text-[12px] ${gelap ? "text-[#A9BBAA]" : "text-ink-soft"}`}
-      >
-        {keterangan}
-      </span>
-    </div>
-  );
-}
+const TAUTAN_KECIL =
+  "text-[12px] font-bold text-leaf underline underline-offset-4 transition hover:text-night";
 
 export default async function OwnerPage() {
   const { nama } = await requireRole(["owner"]);
 
   // "Hari ini" menurut Jakarta, bukan menurut jam server (Vercel berjalan UTC).
-  // Tanggalnya diteruskan sebagai argumen: lapisan data sengaja tidak membaca
-  // jam sistem sendiri supaya pengelompokan pekan bisa diuji pada pekan mana pun.
   const hariIni = hariIniJakarta();
-  const pekan = await ringkasanPekanIni(hariIni);
+
+  // SATU bacaan. `ringkasanPekanIni()` memanggil `ambilRekap()` di dalamnya,
+  // jadi memakai keduanya berarti membaca seluruh sesi, tarif, dan tanda bayar
+  // dua kali setiap beranda dibuka. Grafik pun tidak butuh query baru: rekap
+  // ini sudah memuat SELURUH pekan lengkap dengan marginnya.
+  const rekap = await ambilRekap();
+
+  // Pekan sepi tidak punya ember sendiri di `hitungRekap()`; deretPekanTerakhir
+  // mengisinya dengan nol supaya sumbu waktunya tidak berlubang.
+  const deret = deretPekanTerakhir(rekap, hariIni, 8);
+  // Elemen terakhir deret ADALAH pekan berjalan menurut definisinya, dan sudah
+  // berisi nol bila pekan itu belum punya sesi sama sekali.
+  const pekan = deret[deret.length - 1];
+  const jumlahMitra = pekan.perMitra.length;
+  const jumlahTakBertarif = pekan.sesiTakBertarif.length;
+
+  const labelPekan = deret.map((p) => {
+    const { hari, bulan } = formatTanggalPendek(p.senin);
+    return `${hari} ${bulan}`;
+  });
 
   return (
     <main>
       <header className="mb-5">
-        <h1 className="font-serif text-2xl text-night">Panel Owner</h1>
-        <p className="mt-1 text-[13px] text-ink-soft">
+        <h1 className="text-[20px] font-bold text-panel-ink">Panel Owner</h1>
+        <p className="mt-1 text-[13px] text-panel-muted">
           Halo, {nama}. Ringkasan pekan berjalan · {formatTanggalID(hariIni)}
         </p>
       </header>
 
       <section
         aria-label={`Ringkasan pekan ${pekan.rentang}`}
-        className="grid grid-cols-1 gap-3.5 sm:grid-cols-3"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-3"
       >
-        <Kartu
+        <StatTile
           label="Sesi selesai pekan ini"
           nilai={String(pekan.jumlahSesi)}
           keterangan={
             pekan.jumlahSesi === 0
               ? "Selesaikan sesi di panel Admin — angka ini ikut bergerak."
-              : `${pekan.jumlahMitra} mitra bekerja · ${pekan.rentang}`
+              : `${jumlahMitra} mitra bekerja · ${pekan.rentang}`
           }
         />
-        <Kartu
+        <StatTile
           label="Honor dibayar Sabtu ini"
           nilai={formatRupiah(pekan.totalHonor)}
           keterangan={`Dari sesi berstatus Selesai pekan ${pekan.rentang}`}
+          href="/owner/rekap"
         />
-        {/* Kartu gelap prototipe (`stat.gold`) sengaja dipakai HANYA di sini:
-            margin adalah angka PADMA — per pekan, bukan per mitra
-            (spec keputusan #6). */}
-        <Kartu
-          gelap
+        <StatTile
           label="Margin PADMA pekan ini"
           nilai={formatRupiah(pekan.margin)}
           keterangan="Harga klien − honor mitra"
@@ -106,10 +79,10 @@ export default async function OwnerPage() {
       {/* Sesi yang lebih tua dari tarif paling awal layanannya TIDAK boleh
           dihitung nol diam-diam — itu uang yang hilang tanpa jejak. Ia muncul
           di sini sebagai peringatan yang menautkan langsung ke perbaikannya. */}
-      {pekan.jumlahTakBertarif > 0 && (
-        <p className="mt-4 rounded-2xl border border-clay/35 bg-white px-5 py-4 text-[12.5px] leading-relaxed text-ink">
+      {jumlahTakBertarif > 0 && (
+        <p className="mt-3 rounded-lg border border-clay/35 bg-panel-surface px-4 py-3 text-[12.5px] leading-relaxed text-panel-ink">
           <b className="text-clay">
-            {pekan.jumlahTakBertarif} sesi pekan ini belum bertarif.
+            {jumlahTakBertarif} sesi pekan ini belum bertarif.
           </b>{" "}
           Layanannya belum punya tarif yang berlaku pada tanggal sesi, jadi
           honornya belum ikut dihitung di angka mana pun di atas.{" "}
@@ -124,7 +97,64 @@ export default async function OwnerPage() {
         </p>
       )}
 
-      <p className="mt-4 text-[12px] leading-relaxed text-ink-soft">
+      <div className="mt-4">
+        <Kartu
+          judul="Delapan pekan terakhir"
+          aksi={
+            <Link href="/owner/rekap" className={TAUTAN_KECIL}>
+              Buka Rekap &amp; Honor
+            </Link>
+          }
+        >
+          {/* Pembungkus client milik panel owner. Fungsi `formatRupiah` TIDAK
+              bisa dioper dari server component ke client component, jadi ia
+              diimpor di dalam pembungkus itu — yang letaknya di bawah
+              `src/app/owner/`, persis tempat nominal memang boleh hidup. */}
+          <GrafikPekan
+            label={labelPekan}
+            hargaKlien={deret.map((p) => p.totalHarga)}
+            honorMitra={deret.map((p) => p.totalHonor)}
+            margin={deret.map((p) => p.margin)}
+          />
+        </Kartu>
+      </div>
+
+      <div className="mt-4">
+        <Kartu judul="Mitra teraktif pekan ini">
+          {pekan.perMitra.length === 0 ? (
+            <p className="text-[12.5px] text-panel-muted">
+              Belum ada sesi selesai pekan ini.
+            </p>
+          ) : (
+            <Tabel label={`Mitra pekan ${pekan.rentang}`}>
+              <thead>
+                <tr>
+                  <Th>Mitra</Th>
+                  <Th className="text-right">Sesi</Th>
+                  <Th className="text-right">Honor</Th>
+                  <Th>Status</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...pekan.perMitra]
+                  .sort((a, b) => b.jumlahSesi - a.jumlahSesi)
+                  .map((m) => (
+                    <tr key={m.partnerId}>
+                      <Td className="font-bold">{m.nama}</Td>
+                      <Td className="text-right tabular-nums">{m.jumlahSesi}</Td>
+                      <Td className="text-right tabular-nums">
+                        {formatRupiah(m.totalHonor)}
+                      </Td>
+                      <Td>{m.sudahDibayar ? "Sudah dibayar" : "Belum dibayar"}</Td>
+                    </tr>
+                  ))}
+              </tbody>
+            </Tabel>
+          )}
+        </Kartu>
+      </div>
+
+      <p className="mt-4 text-[12px] leading-relaxed text-panel-muted">
         Honor dihitung dengan tarif yang berlaku <b>pada tanggal sesi</b>, jadi
         menaikkan tarif hari ini tidak menggeser satu angka pun di pekan yang
         sudah lewat.

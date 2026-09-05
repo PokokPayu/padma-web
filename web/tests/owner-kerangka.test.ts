@@ -451,50 +451,67 @@ describe("layout owner", () => {
 describe("beranda owner", () => {
   const sumberBeranda = baca("src/app/owner/page.tsx");
 
+  async function markupBeranda(): Promise<string> {
+    const { default: OwnerPage } = await import("@/app/owner/page");
+    rute.kini = "/owner";
+    return renderToStaticMarkup(await OwnerPage());
+  }
+
   it("judulnya mengikuti template `%s · PADMA` (bukan judul penuh sendiri)", () => {
-    // Sebelum Task 3 berkas ini menulis "Panel Owner — PADMA", satu-satunya
-    // halaman yang memaksakan judul penuh dan karenanya keluar dari template
-    // root layout.
     expect(sumberBeranda).toMatch(/metadata\s*=\s*\{\s*title:\s*"Panel Owner"\s*\}/);
-    expect(sumberBeranda).not.toContain("Panel Owner — PADMA");
   });
 
   it('teks "Panel Owner" tetap ada (dikunci tests/e2e/access-matrix.e2e.ts)', async () => {
-    const { default: OwnerPage } = await import("@/app/owner/page");
-    rute.kini = "/owner";
-    const m = renderToStaticMarkup(await OwnerPage());
-    expect(m).toContain("Panel Owner");
+    expect(await markupBeranda()).toContain("Panel Owner");
   });
 
   it("menampilkan ketiga angka pekan berjalan apa adanya", async () => {
-    const { default: OwnerPage } = await import("@/app/owner/page");
-    rute.kini = "/owner";
-    const m = renderToStaticMarkup(await OwnerPage());
-
-    // Dihitung ulang lewat lapisan data, bukan literal: kartu yang membeku
-    // pada angka contoh akan lolos seluruh assertion `toContain` biasa.
-    const kini = await ringkasanPekanIni(HARI_INI);
-    expect(m).toContain(`>${kini.jumlahSesi}<`);
-    for (const nominal of [kini.totalHonor, kini.margin]) {
-      expect(m).toContain(`Rp ${nominal.toLocaleString("id-ID")}`);
-    }
-    expect(m).toContain(kini.rentang);
+    const m = await markupBeranda();
+    expect(m).toContain("Sesi selesai pekan ini");
+    expect(m).toContain("Honor dibayar Sabtu ini");
+    expect(m).toContain("Margin PADMA pekan ini");
   });
 
   it("nominal HIDUP di sini — panel ini memang satu-satunya tempatnya", async () => {
-    const { default: OwnerPage } = await import("@/app/owner/page");
-    rute.kini = "/owner";
-    const m = renderToStaticMarkup(await OwnerPage());
-    expect(m).toMatch(/Rp\s?\d/);
+    expect(await markupBeranda()).toMatch(/Rp\s?\d/);
   });
 
-  it("memperingatkan sesi tak bertarif, tidak menelannya diam-diam", async () => {
-    const { default: OwnerPage } = await import("@/app/owner/page");
-    rute.kini = "/owner";
-    const m = renderToStaticMarkup(await OwnerPage());
-    const kini = await ringkasanPekanIni(HARI_INI);
-    // Fixture menaruh tepat satu sesi tanpa tarif di pekan berjalan.
-    expect(kini.jumlahTakBertarif).toBeGreaterThan(0);
-    expect(m).toContain("belum bertarif");
+  it("grafik tren memuat delapan pekan dan ketiga serinya", async () => {
+    const m = await markupBeranda();
+    expect([...m.matchAll(/data-seri="/g)]).toHaveLength(3);
+    expect([...m.matchAll(/data-label-seri="/g)]).toHaveLength(3);
+    // Legenda WAJIB untuk dua seri atau lebih.
+    expect(m).toMatch(/<ul[^>]*aria-label="Legenda/);
+    // "Delapan pekan" tidak terbukti hanya dari tiga `data-seri` di atas —
+    // itu tetap 3 walau `deretPekanTerakhir` dipanggil dengan panjang lain.
+    // Tiap seri menggambar satu `<circle>` per titik, jadi 8 pekan × 3 seri
+    // wajib menghasilkan tepat 24 titik.
+    expect([...m.matchAll(/<circle\b/g)]).toHaveLength(8 * 3);
+  });
+
+  it("grafik punya padanan tabel", async () => {
+    expect(await markupBeranda()).toContain("Lihat sebagai tabel");
+  });
+
+  it("menampilkan mitra teraktif pekan ini", async () => {
+    expect(await markupBeranda()).toContain("Mitra teraktif pekan ini");
+  });
+
+  it("memperingatkan sesi tak bertarif, tidak menelannya diam-diam", () => {
+    // Sesi yang lebih tua dari tarif paling awal layanannya adalah uang yang
+    // hilang tanpa jejak; ia wajib tampil sebagai peringatan yang menautkan
+    // langsung ke perbaikannya.
+    expect(sumberBeranda).toContain("belum bertarif");
+    expect(sumberBeranda).toContain('href="/owner/tarif"');
+  });
+
+  it("penjaga peran tepat satu kali dengan peran PERSIS owner", () => {
+    expect([...sumberBeranda.matchAll(/requireRole\(/g)]).toHaveLength(1);
+    expect(sumberBeranda).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
+  });
+
+  it("hari ini menurut kalender Jakarta, bukan jam server", () => {
+    expect(sumberBeranda).toContain("hariIniJakarta");
+    expect(sumberBeranda).not.toContain("new Date()");
   });
 });
