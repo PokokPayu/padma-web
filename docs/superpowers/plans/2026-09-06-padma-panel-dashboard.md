@@ -2079,10 +2079,13 @@ export default async function AdminPage() {
             </Link>
           }
         >
+          {/* `format` SENGAJA tidak dioper: fungsi tidak bisa menyeberang dari
+              server component ke client component di App Router. Nilai bawaan
+              GrafikBatang (`String(n)`) memang yang dibutuhkan di sini —
+              jumlah sesi adalah bilangan polos tanpa satuan. */}
           <GrafikBatang
             judul="Sesi selesai delapan pekan terakhir"
             data={titikTren}
-            format={(n) => `${n}`}
           />
         </Kartu>
 
@@ -2338,6 +2341,7 @@ EOF
 ### Task 9: Dashboard owner
 
 **Files:**
+- Create: `web/src/app/owner/_shell/grafik-pekan.tsx`
 - Modify: `web/src/app/owner/page.tsx` (tulis ulang)
 - Test: `web/tests/owner-kerangka.test.ts` (ganti `describe("beranda owner")`)
 
@@ -2421,7 +2425,60 @@ describe("beranda owner", () => {
 Run: `cd web && npx vitest run tests/owner-kerangka.test.ts`
 Expected: FAIL — belum ada `data-seri`, legenda, maupun "Mitra teraktif pekan ini".
 
-- [ ] **Step 3: Tulis ulang `web/src/app/owner/page.tsx`**
+- [ ] **Step 3a: Buat `web/src/app/owner/_shell/grafik-pekan.tsx`**
+
+Fungsi tidak bisa dioper dari server component ke client component di App Router — `format={formatRupiah}` akan melempar saat render. Pembungkus ini yang memegang formatternya, dan letaknya di bawah `src/app/owner/` justru menegaskan money firewall: `formatRupiah` tetap tidak pernah diimpor oleh primitif bersama.
+
+```tsx
+"use client";
+
+import { GrafikGaris } from "@/app/_shell/panel/grafik-garis";
+import { formatRupiah } from "@/lib/owner/rupiah";
+
+/**
+ * Grafik tren pekan milik panel owner.
+ *
+ * Ada DUA alasan pembungkus ini hidup di sini alih-alih halamannya memanggil
+ * `GrafikGaris` langsung:
+ *
+ *  1. Fungsi tidak bisa menyeberang dari server component ke client
+ *     component. `format={formatRupiah}` akan melempar saat render.
+ *  2. Money firewall. `GrafikGaris` wajib tetap buta terhadap mata uang —
+ *     ia dipakai juga oleh panel admin kelak. Yang tahu bahwa angka ini
+ *     rupiah adalah berkas di bawah `src/app/owner/`, persis tempat nominal
+ *     memang boleh hidup.
+ *
+ * Serinya diterima sebagai tiga array terpisah, bukan satu array objek:
+ * urutan seri menentukan warna mana yang menempel pada seri mana, dan urutan
+ * itu sudah ikut divalidasi bersama paletnya.
+ */
+export function GrafikPekan({
+  label,
+  hargaKlien,
+  honorMitra,
+  margin,
+}: {
+  label: string[];
+  hargaKlien: number[];
+  honorMitra: number[];
+  margin: number[];
+}) {
+  return (
+    <GrafikGaris
+      judul="Harga klien, honor mitra, dan margin per pekan"
+      label={label}
+      seri={[
+        { nama: "Harga klien", nilai: hargaKlien },
+        { nama: "Honor mitra", nilai: honorMitra },
+        { nama: "Margin PADMA", nilai: margin },
+      ]}
+      format={formatRupiah}
+    />
+  );
+}
+```
+
+- [ ] **Step 3b: Tulis ulang `web/src/app/owner/page.tsx`**
 
 ```tsx
 import Link from "next/link";
@@ -2433,7 +2490,7 @@ import { formatTanggalID, formatTanggalPendek, hariIniJakarta } from "@/lib/pass
 import { StatTile } from "@/app/_shell/panel/stat-tile";
 import { Kartu } from "@/app/_shell/panel/kartu";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
-import { GrafikGaris } from "@/app/_shell/panel/grafik-garis";
+import { GrafikPekan } from "./_shell/grafik-pekan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Panel Owner" };
@@ -2532,15 +2589,15 @@ export default async function OwnerPage() {
             </Link>
           }
         >
-          <GrafikGaris
-            judul="Harga klien, honor mitra, dan margin per pekan"
+          {/* Pembungkus client milik panel owner. Fungsi `formatRupiah` TIDAK
+              bisa dioper dari server component ke client component, jadi ia
+              diimpor di dalam pembungkus itu — yang letaknya di bawah
+              `src/app/owner/`, persis tempat nominal memang boleh hidup. */}
+          <GrafikPekan
             label={labelPekan}
-            seri={[
-              { nama: "Harga klien", nilai: deret.map((p) => p.totalHarga) },
-              { nama: "Honor mitra", nilai: deret.map((p) => p.totalHonor) },
-              { nama: "Margin PADMA", nilai: deret.map((p) => p.margin) },
-            ]}
-            format={formatRupiah}
+            hargaKlien={deret.map((p) => p.totalHarga)}
+            honorMitra={deret.map((p) => p.totalHonor)}
+            margin={deret.map((p) => p.margin)}
           />
         </Kartu>
       </div>
