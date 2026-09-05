@@ -131,7 +131,11 @@ describe("Tabel", () => {
     return renderToStaticMarkup(
       createElement(
         Tabel,
-        { label: "Agenda hari ini" },
+        // `children` dioper POSISIONAL di bawah; TypeScript tidak
+        // memperhitungkannya terhadap prop `children` yang wajib, dan berkas ini
+        // ber-ekstensi .ts sehingga sintaks JSX tidak tersedia sebagai jalan
+        // keluar. Pola `as never` yang sama sudah dipakai berkas test lain.
+        { label: "Agenda hari ini" } as never,
         createElement(
           "thead",
           null,
