@@ -57,7 +57,13 @@ describe("palet grafik", () => {
 
 describe("Kartu", () => {
   it("tanpa judul: tidak merender kepala kosong", () => {
+    // Kartu mewajibkan `children` di tipenya (bukan opsional), jadi
+    // createElement TIDAK BISA menyimpulkan properti itu terpenuhi lewat
+    // argumen posisi ketiga — TypeScript tetap menuntutnya di objek props.
+    // Berkas ini berekstensi .ts (bukan .tsx) sehingga sintaks JSX
+    // `<Kartu>{...}</Kartu>` tidak tersedia sebagai jalan keluar.
     const m = renderToStaticMarkup(
+      // eslint-disable-next-line react/no-children-prop
       createElement(Kartu, { children: createElement("p", null, "ISI") }),
     );
     expect(m).toContain("ISI");
@@ -66,6 +72,7 @@ describe("Kartu", () => {
 
   it("dengan judul: kepala berisi judul dan aksinya", () => {
     const m = renderToStaticMarkup(
+      // eslint-disable-next-line react/no-children-prop -- lihat alasan di test sebelumnya
       createElement(Kartu, {
         judul: "Agenda hari ini",
         aksi: createElement("a", { href: "/x" }, "Semua"),
@@ -79,6 +86,7 @@ describe("Kartu", () => {
 
   it("memakai bentuk kartu panel, bukan kartu klien", () => {
     const m = renderToStaticMarkup(
+      // eslint-disable-next-line react/no-children-prop -- lihat alasan di test pertama describe ini
       createElement(Kartu, { children: null }),
     );
     expect(m).toContain("rounded-lg");
