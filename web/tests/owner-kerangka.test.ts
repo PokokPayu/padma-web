@@ -35,6 +35,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { awalPekan, geserHari, rentangPekan } from "@/lib/owner/pekan";
 import { hariIniJakarta } from "@/lib/passport/waktu";
+import { formatRupiah } from "@/lib/owner/rupiah";
 import { signInAs } from "./helpers/as-user";
 
 const AKAR = path.resolve(__dirname, "..");
@@ -457,6 +458,24 @@ describe("beranda owner", () => {
     return renderToStaticMarkup(await OwnerPage());
   }
 
+  /**
+   * Nilai `StatTile` yang berdiri TEPAT sesudah `label`-nya di markup
+   * (`<small>label</small><span>nilai</span>` — struktur `StatTile` yang
+   * sama persis dipakai baik dibungkus `<a>` maupun `<div>`).
+   *
+   * Dipakai alih-alih dua `toContain` terpisah (satu untuk label, satu untuk
+   * nilai): dua `toContain` lolos walau labelnya tertukar dengan nilai kartu
+   * SEBELAHNYA — mis. kartu "Honor" menampilkan angka margin. Mengikat nilai
+   * ke label yang tepat di depannya menutup celah itu.
+   */
+  function nilaiStatTile(m: string, label: string): string {
+    const cocok = m.match(
+      new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</small><span[^>]*>([^<]*)</span>`),
+    );
+    if (!cocok) throw new Error(`StatTile berlabel "${label}" tidak ditemukan di markup`);
+    return cocok[1];
+  }
+
   it("judulnya mengikuti template `%s · PADMA` (bukan judul penuh sendiri)", () => {
     expect(sumberBeranda).toMatch(/metadata\s*=\s*\{\s*title:\s*"Panel Owner"\s*\}/);
   });
@@ -467,9 +486,18 @@ describe("beranda owner", () => {
 
   it("menampilkan ketiga angka pekan berjalan apa adanya", async () => {
     const m = await markupBeranda();
-    expect(m).toContain("Sesi selesai pekan ini");
-    expect(m).toContain("Honor dibayar Sabtu ini");
-    expect(m).toContain("Margin PADMA pekan ini");
+    const kini = await ringkasanPekanIni(HARI_INI);
+    // Nilainya, bukan cuma labelnya — dan diikat ke labelnya masing-masing,
+    // bukan sekadar "muncul di suatu tempat di halaman": dua kartu bertukar
+    // angka (mis. "Honor" menampilkan margin) akan lolos `toContain` biasa
+    // karena kedua nilai tetap sama-sama hadir di markup, hanya di kartu yang
+    // salah. Halaman ini menurunkan angkanya dari elemen TERAKHIR
+    // deretPekanTerakhir, sementara ringkasanPekanIni menghitungnya lewat
+    // jalur lain — kalau keduanya berbeda, salah satu sedang berbohong, dan
+    // yang dipertaruhkan adalah honor yang dibayarkan.
+    expect(nilaiStatTile(m, "Sesi selesai pekan ini")).toBe(String(kini.jumlahSesi));
+    expect(nilaiStatTile(m, "Honor dibayar Sabtu ini")).toBe(formatRupiah(kini.totalHonor));
+    expect(nilaiStatTile(m, "Margin PADMA pekan ini")).toBe(formatRupiah(kini.margin));
   });
 
   it("nominal HIDUP di sini — panel ini memang satu-satunya tempatnya", async () => {
@@ -497,10 +525,22 @@ describe("beranda owner", () => {
     expect(await markupBeranda()).toContain("Mitra teraktif pekan ini");
   });
 
-  it("memperingatkan sesi tak bertarif, tidak menelannya diam-diam", () => {
+  it("memperingatkan sesi tak bertarif, tidak menelannya diam-diam", async () => {
     // Sesi yang lebih tua dari tarif paling awal layanannya adalah uang yang
     // hilang tanpa jejak; ia wajib tampil sebagai peringatan yang menautkan
-    // langsung ke perbaikannya.
+    // langsung ke perbaikannya. Diperiksa pada MARKUP yang benar-benar
+    // dirender — bukan cuma sumbernya — supaya kondisi mati (mis. `false &&`)
+    // tidak lolos hanya karena teksnya masih tertulis di berkas.
+    const kini = await ringkasanPekanIni(HARI_INI);
+    // Fixture menaruh tepat satu sesi tanpa tarif di pekan berjalan.
+    expect(kini.jumlahTakBertarif).toBeGreaterThan(0);
+    const m = await markupBeranda();
+    expect(m).toContain("belum bertarif");
+    expect(m).toContain('href="/owner/tarif"');
+    // Sumbernya tetap ditegaskan juga: bila peringatannya lenyap dari markup
+    // DAN dari sumber sekaligus, dua asersi ini menjawab pertanyaan yang
+    // berbeda — satu soal kondisinya benar-benar terpicu, satu soal tautan
+    // perbaikannya belum diam-diam dihapus.
     expect(sumberBeranda).toContain("belum bertarif");
     expect(sumberBeranda).toContain('href="/owner/tarif"');
   });
