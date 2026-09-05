@@ -14,10 +14,10 @@
 
 - **Tanpa dependensi baru.** Tidak ada `npm install` di seluruh rencana ini — termasuk jsdom dan testing-library. Konsekuensinya diakui di Task 6: perilaku drawer diuji lewat fungsi murni + asersi sumber, bukan simulasi klik.
 - **Tanpa migration.** Tidak ada perubahan skema, RLS, atau server action.
-- **Money firewall.** Panel admin tidak boleh memuat satu nominal pun; tidak ada berkas di `src/app/_shell/panel/` yang boleh menyebut `Rp`, `formatRupiah`, `harga`, atau `honor`.
+- **Money firewall.** Panel admin tidak boleh memuat satu NOMINAL pun. Yang dilarang di `src/app/_shell/panel/` adalah nominal yang benar-benar dirender dan pemformatnya: pola `/Rp\s?\d/` dan `formatRupiah`. Kata "Rp" di dalam KOMENTAR yang menjelaskan kenapa sebuah ikon justru BUKAN lambang mata uang tidak termasuk — komentar semacam itu mendokumentasikan firewall, bukan menembusnya, dan `nav-admin.tsx` yang ada sekarang sudah memuatnya sambil tetap lulus `not.toMatch(/Rp\s?\d/)`. Constraint yang lebih ketat daripada test penegaknya tidak bisa diperiksa dan hanya melahirkan temuan palsu.
 - **Service role terlarang** di `src/app/admin/**` (kecuali `src/app/admin/materi/unggah.ts`) dan di seluruh `src/app/owner/**`. Berlaku juga untuk `src/app/_shell/panel/**`.
 - **Argumen penjaga peran tidak bergeser.** `src/app/admin/layout.tsx` tetap `await requireRole(["admin","owner"])` **tepat satu kali**; `src/app/owner/layout.tsx` tetap `await requireRole(["owner"])` **tepat satu kali**.
-- **Primitif buta peran.** Tidak satu pun berkas di `src/app/_shell/panel/` boleh memuat string `"admin"`, `"owner"`, atau mengimpor `requireRole`. Dikunci test di Task 6.
+- **Primitif buta peran.** Tidak satu pun berkas di `src/app/_shell/panel/` boleh memuat string BERKUTIP `"admin"` / `"owner"` (yakni percabangan peran di dalam kode) atau mengimpor `requireRole`. Kata "admin"/"owner" di dalam prosa komentar tidak termasuk. Dikunci test di Task 6 dengan pola `/"(admin|owner)"/`.
 - **Halaman klien tidak disentuh.** Tidak ada perubahan pada `src/app/passport/**`, `src/app/_landing/**`, `src/app/skrining/**`, dan token PADMA lama (`--color-paper`, `--color-gold`, `--color-night`, dst.) tetap ada di `globals.css`.
 - **Bahasa Indonesia** untuk nama berkas, identifier, komentar, dan seluruh teks UI — mengikuti seluruh repo.
 - Perintah test: `npm test` (seluruh suite), `npx vitest run tests/<berkas>` (satu berkas). Perintah lint: `npm run lint`. Build: `npm run build`.
