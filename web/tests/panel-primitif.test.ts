@@ -212,6 +212,16 @@ function markupTopbar(tambahan: Record<string, unknown> = {}) {
   );
 }
 
+/** Tag pembuka tombol drawer saja — MenuAkun ikut memancarkan
+ *  aria-expanded, jadi memeriksa seluruh markup akan lolos tanpa syarat. */
+function tagTombolDrawer(m: string): string {
+  const tag = (m.match(/<button[^>]*>/g) ?? []).find((t) =>
+    t.includes('aria-controls="sidebar-panel"'),
+  );
+  if (!tag) throw new Error("tombol drawer tidak ditemukan");
+  return tag;
+}
+
 describe("Topbar", () => {
   it("membawa identitas & jalan keluar lewat MenuAkun yang sudah ada", () => {
     const m = markupTopbar();
@@ -226,16 +236,18 @@ describe("Topbar", () => {
 
   it("tombol drawer mengumumkan apa yang ia kendalikan dan keadaannya", () => {
     const tutup = markupTopbar();
-    expect(tutup).toContain('aria-controls="sidebar-panel"');
-    expect(tutup).toContain('aria-expanded="false"');
-    expect(tutup).toContain('aria-label="Buka menu"');
+    const tagTutup = tagTombolDrawer(tutup);
+    expect(tagTutup).toContain('aria-controls="sidebar-panel"');
+    expect(tagTutup).toContain('aria-expanded="false"');
+    expect(tagTutup).toContain('aria-label="Buka menu"');
     const buka = markupTopbar({ drawerBuka: true });
-    expect(buka).toContain('aria-expanded="true"');
-    expect(buka).toContain('aria-label="Tutup menu"');
+    const tagBuka = tagTombolDrawer(buka);
+    expect(tagBuka).toContain('aria-expanded="true"');
+    expect(tagBuka).toContain('aria-label="Tutup menu"');
   });
 
   it("tombol drawer hanya untuk layar kecil", () => {
-    expect(markupTopbar()).toContain("lg:hidden");
+    expect(tagTombolDrawer(markupTopbar())).toContain("lg:hidden");
   });
 
   it("menyebut tujuan yang sedang dibuka — di layar kecil sidebar tidak terlihat", () => {
