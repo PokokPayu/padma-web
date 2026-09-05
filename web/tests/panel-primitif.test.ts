@@ -260,3 +260,53 @@ describe("Topbar", () => {
     expect(markupTopbar()).not.toContain("<h1");
   });
 });
+
+const { BottomBar } = await import("@/app/_shell/panel/bottom-bar");
+
+function markupBottomBar(pathname: string, tambahan: Record<string, unknown> = {}) {
+  return renderToStaticMarkup(
+    createElement(BottomBar, {
+      menu: MENU_UJI,
+      akar: "/uji",
+      pathname,
+      labelNav: "Navigasi panel uji",
+      ...tambahan,
+    } as never),
+  );
+}
+
+describe("BottomBar", () => {
+  it("satu nav berlabel, hanya untuk layar kecil", () => {
+    const m = markupBottomBar("/uji");
+    expect([...m.matchAll(/<nav\b/g)]).toHaveLength(1);
+    expect(m).toContain('aria-label="Navigasi panel uji"');
+    expect(m).toContain("lg:hidden");
+  });
+
+  it("memakai penanda aktif yang sama dengan sidebar", () => {
+    const m = markupBottomBar("/uji/kotak");
+    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(1);
+    for (const tag of m.match(/<a[^>]*>/g) ?? []) {
+      if (tag.includes('href="/uji"') && !tag.includes("/uji/")) {
+        expect(tag).not.toContain('aria-current="page"');
+      }
+    }
+  });
+
+  it("badge ikut tampil di sini — antrean tidak boleh hanya terlihat di desktop", () => {
+    const m = markupBottomBar("/uji");
+    expect(m).toContain('aria-label="3 menunggu"');
+    expect([...m.matchAll(/aria-label="\d+ menunggu"/g)]).toHaveLength(1);
+  });
+
+  it("jalan keluar ikut tersedia dan tetap bukan tujuan aktif", () => {
+    const keluar = { href: "/luar", label: "Buka Panel Lain", ikon: "keluar" as const };
+    const m = markupBottomBar("/uji", { jalanKeluar: keluar });
+    expect(m).toContain('href="/luar"');
+    for (const tag of m.match(/<a[^>]*>/g) ?? []) {
+      if (tag.includes('href="/luar"')) {
+        expect(tag).not.toContain('aria-current="page"');
+      }
+    }
+  });
+});
