@@ -15,6 +15,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -59,5 +61,26 @@ describe("token visual panel", () => {
   it("latar panel BUKAN krem paper — ruang kerja dan halaman klien memang beda", () => {
     expect(css).toMatch(/--color-panel-bg:\s*#f5f6f4/i);
     expect(css).not.toMatch(/--color-panel-bg:\s*var\(--color-paper\)/);
+  });
+});
+
+const { Ikon, NAMA_IKON } = await import("@/app/_shell/panel/ikon");
+
+describe("peta ikon panel", () => {
+  it("setiap nama ikon menghasilkan SVG", () => {
+    for (const nama of NAMA_IKON) {
+      const m = renderToStaticMarkup(createElement(Ikon, { nama }));
+      expect(m, `ikon "${nama}" tidak merender svg`).toContain("<svg");
+      // Ikon adalah bentuk, bukan informasi: labelnya hidup di teks tautan.
+      expect(m, `ikon "${nama}" tidak aria-hidden`).toContain('aria-hidden="true"');
+    }
+  });
+
+  it("teratai dipakai ulang dari komponen bersama, path-nya tidak disalin", () => {
+    const sumber = baca("src/app/_shell/panel/ikon.tsx");
+    expect(sumber).toMatch(/from\s+["']@\/app\/_landing\/lotus["']/);
+    // Potongan path teratai milik komponen bersama; kemunculannya di sini
+    // berarti path-nya disalin, dan dua salinan akan berpisah diam-diam.
+    expect(sumber).not.toContain("M32 6 C37.5 13");
   });
 });
