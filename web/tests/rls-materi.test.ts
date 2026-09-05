@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
@@ -145,19 +146,52 @@ describe("MATERI — URL video TIDAK bocor sebelum layanan berjalan", () => {
     expect(membocorkan(materials.data, URL_RAHASIA)).toBe(false);
   });
 
-  it("klien TIDAK bisa menyisipkan/mengubah URL video", async () => {
+  it("klien TIDAK bisa menyisipkan/mengubah objek video", async () => {
+    // Kunci objeknya SENGAJA berbentuk sah (`{material_id}/{acak}.mp4`,
+    // bukan "https://vimeo.com/curian" peninggalan era URL) — fix F5 (video-r2
+    // fix wave). Bentuk lama itu ditolak SENDIRI oleh CHECK
+    // `material_videos_bentuk_objek` (`^{material_id}/...\.mp4$`), jadi kedua
+    // asersi di bawah dulu lolos WALAU RLS-nya dicabut sama sekali — CHECK
+    // constraint-lah yang sebenarnya menolak, bukan policy yang test ini
+    // seharusnya buktikan. Dengan kunci yang bentuknya sah, satu-satunya yang
+    // bisa menolak baris ini tinggal RLS.
     const klien = await signInAs("ananda@padma.test");
-    const ins = await klien
+
+    // Baris `material_videos` milik MATERI_TERKUNCI_VIDEO SUDAH ADA (fixture
+    // tests/global-setup.ts, `OBJEK_VIDEO_TERKUNCI`) — INSERT ke material_id
+    // yang sama akan ditolak PRIMARY KEY, RLS ataupun tidak. Dihapus SEMENTARA
+    // (lewat service role, menembus RLS) supaya satu-satunya yang bisa
+    // menolak INSERT klien di bawah tinggal RLS, lalu SELALU dikembalikan
+    // (finally) — test-test lain di berkas ini bergantung baris itu ada.
+    const { data: lama } = await svc
       .from("material_videos")
-      .insert({ material_id: MATERI_TERKUNCI_VIDEO, objek: "https://vimeo.com/curian" })
-      .select();
-    expect(ins.error).not.toBeNull();
+      .select("objek, mime")
+      .eq("material_id", MATERI_TERKUNCI_VIDEO)
+      .single();
+    await svc.from("material_videos").delete().eq("material_id", MATERI_TERKUNCI_VIDEO);
+    try {
+      const ins = await klien
+        .from("material_videos")
+        .insert({
+          material_id: MATERI_TERKUNCI_VIDEO,
+          objek: `${MATERI_TERKUNCI_VIDEO}/${randomUUID()}.mp4`,
+        })
+        .select();
+      expect(ins.error).not.toBeNull();
+    } finally {
+      await svc.from("material_videos").upsert({ material_id: MATERI_TERKUNCI_VIDEO, ...lama });
+    }
 
     const upd = await klien
       .from("material_videos")
-      .update({ objek: "https://vimeo.com/curian" })
+      .update({ objek: `${MATERI_TERBUKA_VIDEO}/${randomUUID()}.mp4` })
       .eq("material_id", MATERI_TERBUKA_VIDEO)
       .select();
+    // `error` diperiksa DULU (fix F5): tanpanya, RLS yang tercabut membuat
+    // update ini lolos sampai CHECK constraint, yang MENOLAK — PostgREST
+    // menjawab `data: null` untuk itu, dan `?? []` sebelumnya membuat baris
+    // ini "lolos" dengan `toHaveLength(0)` walau alasannya CHECK, bukan RLS.
+    expect(upd.error).toBeNull();
     expect(upd.data ?? []).toHaveLength(0);
   });
 });
