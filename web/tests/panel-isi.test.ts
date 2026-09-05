@@ -123,3 +123,40 @@ describe("StatTile", () => {
     expect(m).toContain("text-panel-muted");
   });
 });
+
+const { Tabel, Th, Td } = await import("@/app/_shell/panel/tabel");
+
+describe("Tabel", () => {
+  function tabelUji() {
+    return renderToStaticMarkup(
+      createElement(
+        Tabel,
+        { label: "Agenda hari ini" },
+        createElement(
+          "thead",
+          null,
+          createElement("tr", null, createElement(Th, null, "Klien")),
+        ),
+        createElement(
+          "tbody",
+          null,
+          createElement("tr", null, createElement(Td, null, "Ananda")),
+        ),
+      ),
+    );
+  }
+
+  it("punya nama aksesibel — tabel tanpa nama tak bisa dilompati pembaca layar", () => {
+    expect(tabelUji()).toContain('aria-label="Agenda hari ini"');
+  });
+
+  it("menggulung SENDIRI di sumbu X, bukan memaksa halaman ikut menggulung", () => {
+    // Badan halaman tidak boleh pernah menggulung horizontal; tabel lebarlah
+    // yang menggulung di dalam wadahnya.
+    expect(tabelUji()).toContain("overflow-x-auto");
+  });
+
+  it("kepala kolom memakai scope, bukan sekadar tebal", () => {
+    expect(tabelUji()).toContain('scope="col"');
+  });
+});
