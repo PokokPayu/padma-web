@@ -4,3 +4,6 @@ status-workflow.sh
 # Dependensi & cache runner di root repo. web/.gitignore hanya menutup web/node_modules,
 # sehingga cache Vitest di root pernah ikut ter-commit.
 node_modules/
+
+# Worktree terisolasi untuk eksekusi rencana. Isinya salinan kerja, bukan sumber.
+.worktrees/
