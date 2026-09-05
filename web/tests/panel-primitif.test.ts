@@ -84,3 +84,115 @@ describe("peta ikon panel", () => {
     expect(sumber).not.toContain("M32 6 C37.5 13");
   });
 });
+
+const { aktifkan } = await import("@/app/_shell/panel/aktif");
+const { Badge } = await import("@/app/_shell/panel/badge");
+const { Sidebar } = await import("@/app/_shell/panel/sidebar");
+
+const MENU_UJI = [
+  { href: "/uji", label: "Beranda", ikon: "lotus" as const },
+  { href: "/uji/kotak", label: "Kotak", ikon: "inbox" as const, jumlah: 3 },
+  { href: "/uji/orang", label: "Orang", ikon: "user" as const, jumlah: 0 },
+];
+
+function markupSidebar(pathname: string, tambahan: Record<string, unknown> = {}) {
+  return renderToStaticMarkup(
+    createElement(Sidebar, {
+      menu: MENU_UJI,
+      akar: "/uji",
+      pathname,
+      namaPanel: "Panel Uji",
+      labelNav: "Menu panel uji",
+      terbuka: false,
+      ...tambahan,
+    } as never),
+  );
+}
+
+describe("aktifkan — penanda tujuan aktif", () => {
+  it("akar hanya menyala pada kecocokan PERSIS", () => {
+    expect(aktifkan("/uji", "/uji", "/uji")).toBe(true);
+    // Tanpa perlakuan khusus, startsWith membuat akar menyala di SEMUA sub-rute
+    // — "semua tab menyala" adalah bug yang paling gampang lolos.
+    expect(aktifkan("/uji/kotak", "/uji", "/uji")).toBe(false);
+  });
+
+  it("sub-rute menyalakan tujuan induknya", () => {
+    expect(aktifkan("/uji/kotak", "/uji/kotak", "/uji")).toBe(true);
+    expect(aktifkan("/uji/kotak/123", "/uji/kotak", "/uji")).toBe(true);
+  });
+
+  it("kecocokan segmen, bukan awalan string", () => {
+    // "/uji/kotakan" TIDAK boleh menyalakan "/uji/kotak".
+    expect(aktifkan("/uji/kotakan", "/uji/kotak", "/uji")).toBe(false);
+  });
+});
+
+describe("Badge antrean", () => {
+  it("HILANG saat nol — alarm yang dinormalkan berhenti berarti", () => {
+    expect(renderToStaticMarkup(createElement(Badge, { jumlah: 0 }))).toBe("");
+    expect(renderToStaticMarkup(createElement(Badge, { jumlah: -2 }))).toBe("");
+  });
+
+  it("menyebut jumlahnya untuk pembaca layar", () => {
+    const m = renderToStaticMarkup(createElement(Badge, { jumlah: 4 }));
+    expect(m).toContain('aria-label="4 menunggu"');
+    expect(m).toContain(">4<");
+  });
+});
+
+describe("Sidebar", () => {
+  it("client component (butuh Link & kelas interaktif)", () => {
+    const sumber = baca("src/app/_shell/panel/sidebar.tsx");
+    expect(sumber.trimStart().startsWith('"use client"')).toBe(true);
+  });
+
+  it("merender SATU nav berlabel, berisi satu tautan per tujuan", () => {
+    const m = markupSidebar("/uji");
+    expect([...m.matchAll(/<nav\b/g)]).toHaveLength(1);
+    expect(m).toContain('aria-label="Menu panel uji"');
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(MENU_UJI.length);
+    for (const item of MENU_UJI) {
+      expect(m).toContain(`href="${item.href}"`);
+      expect(m).toContain(item.label);
+    }
+  });
+
+  it("hanya SATU tujuan aktif, dan bukan akar saat berada di sub-rute", () => {
+    const m = markupSidebar("/uji/kotak");
+    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(1);
+    for (const tag of m.match(/<a[^>]*>/g) ?? []) {
+      if (tag.includes('href="/uji"') && !tag.includes("/uji/")) {
+        expect(tag).not.toContain('aria-current="page"');
+      }
+    }
+  });
+
+  it("badge muncul hanya untuk tujuan yang punya antrean", () => {
+    const m = markupSidebar("/uji");
+    expect([...m.matchAll(/aria-label="\d+ menunggu"/g)]).toHaveLength(1);
+    expect(m).toContain('aria-label="3 menunggu"');
+  });
+
+  it("tergeser keluar layar saat tertutup, dan masuk saat terbuka", () => {
+    // Sidebar dirender SEKALI lalu digeser — bukan dirender dua kali untuk
+    // desktop dan drawer. Dua salinan berarti tautan ganda dan fokus yang
+    // bisa mendarat di elemen tak terlihat.
+    expect(markupSidebar("/uji")).toContain("-translate-x-full");
+    expect(markupSidebar("/uji", { terbuka: true })).not.toContain("-translate-x-full");
+    expect(markupSidebar("/uji")).toContain("lg:translate-x-0");
+  });
+
+  it("jalan keluar bukan tujuan: tidak pernah ber-aria-current", () => {
+    const keluar = { href: "/luar", label: "Buka Panel Lain", ikon: "keluar" as const };
+    for (const p of ["/uji", "/uji/kotak", "/uji/orang"]) {
+      const m = markupSidebar(p, { jalanKeluar: keluar });
+      expect(m).toContain('href="/luar"');
+      for (const tag of m.match(/<a[^>]*>/g) ?? []) {
+        if (tag.includes('href="/luar"')) {
+          expect(tag).not.toContain('aria-current="page"');
+        }
+      }
+    }
+  });
+});
