@@ -201,7 +201,10 @@ Mengikuti pola yang sudah berlaku di proyek:
   migration `fail_closed_sequence_fungsi` berlaku untuk objek baru.
 - `revoke delete on variant_rates from authenticated`; idem `service_variants`.
 - Stempel waktu + pemicu `updated_at` untuk `service_variants`.
-- Jejak audit `service_rates` dipindah ke `variant_rates`.
+- **Tidak ada jejak audit yang perlu dipindah.** Diverifikasi: `service_rates` hanya memiliki dua
+  pemicu, `trg_guard_tarif_maju` dan `trg_kunci_riwayat_tarif`, keduanya dari
+  `pengerasan_tabel_uang`. `catat_status_bayar` menempel pada `sessions`/`client_packages`, bukan
+  pada tabel tarif.
 - `tests/money-firewall-struktural.test.ts`: `TABEL_UANG` menjadi `variant_rates` + `honor_marks`,
   dan view `harga_publik` didaftarkan sebagai **pengecualian yang dijelaskan** — bukan pelebaran
   diam-diam. Komentarnya menyebut alasannya: harga klien memang diputuskan tampil publik; honor
@@ -273,11 +276,10 @@ menyelipkan migrasi ke tengah riwayat sehingga `db reset` gagal.
 5. Isi `sessions.variant_id` dan `booking_requests.variant_id` dengan varian baku layanannya.
 6. Pasang `NOT NULL` + FK gabungan pada kedua tabel.
 7. Buat view `harga_publik` beserta grant-nya (§4.4).
-8. Pindahkan pemicu jejak audit dari `service_rates` ke `variant_rates`, lalu
-   `drop table service_rates`. Menjatuhkan tabel yang punya pemicu bukan sekadar `drop` — pemicunya
-   harus punya rumah baru lebih dulu. Fungsi `guard_tarif_maju` dan `kunci_riwayat_tarif` ditulis
-   ulang dengan `create or replace` agar menunjuk `variant_rates`; keduanya dipakai bersama trigger
-   baru dan trigger lamanya ikut jatuh bersama tabelnya.
+8. `drop table service_rates`, sesudah kode berhenti membacanya. Kedua pemicunya
+   (`trg_guard_tarif_maju`, `trg_kunci_riwayat_tarif`) ikut jatuh bersama tabelnya, dan kedua
+   fungsinya dibersihkan terpisah karena hanya tabel itu yang memakainya. Tidak ada jejak audit
+   yang perlu dipindahkan — lihat §4.6.
 
 ### 6.1 Seed — contoh varian bertingkat (V9, V10)
 
