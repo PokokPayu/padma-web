@@ -196,3 +196,55 @@ describe("Sidebar", () => {
     }
   });
 });
+
+const { Topbar } = await import("@/app/_shell/panel/topbar");
+
+function markupTopbar(tambahan: Record<string, unknown> = {}) {
+  return renderToStaticMarkup(
+    createElement(Topbar, {
+      judul: "Klien",
+      nama: "Admin PADMA",
+      peran: "Admin",
+      drawerBuka: false,
+      onToggleDrawer: () => {},
+      ...tambahan,
+    } as never),
+  );
+}
+
+describe("Topbar", () => {
+  it("membawa identitas & jalan keluar lewat MenuAkun yang sudah ada", () => {
+    const m = markupTopbar();
+    // Frasa utuhnya hidup sebagai nama aksesibel tombol MenuAkun.
+    expect(m).toContain("Masuk sebagai Admin PADMA · Admin");
+    const sumber = baca("src/app/_shell/panel/topbar.tsx");
+    expect(sumber).toMatch(/from\s+["']@\/app\/_shell\/menu-akun["']/);
+    // Jalan keluar tidak boleh ditulis ulang di sini: logout WAJIB tetap
+    // <form method="post"> supaya Client Cache pemakai sebelumnya terhapus.
+    expect(sumber).not.toContain("/auth/keluar");
+  });
+
+  it("tombol drawer mengumumkan apa yang ia kendalikan dan keadaannya", () => {
+    const tutup = markupTopbar();
+    expect(tutup).toContain('aria-controls="sidebar-panel"');
+    expect(tutup).toContain('aria-expanded="false"');
+    expect(tutup).toContain('aria-label="Buka menu"');
+    const buka = markupTopbar({ drawerBuka: true });
+    expect(buka).toContain('aria-expanded="true"');
+    expect(buka).toContain('aria-label="Tutup menu"');
+  });
+
+  it("tombol drawer hanya untuk layar kecil", () => {
+    expect(markupTopbar()).toContain("lg:hidden");
+  });
+
+  it("menyebut tujuan yang sedang dibuka — di layar kecil sidebar tidak terlihat", () => {
+    expect(markupTopbar({ judul: "Pembayaran" })).toContain("Pembayaran");
+  });
+
+  it("BUKAN <h1>: judul halaman milik halaman, bukan milik kerangka", () => {
+    // Setiap halaman panel sudah merender <main><h1> sendiri. <h1> kedua di
+    // kerangka membuat dua judul tingkat satu di setiap halaman.
+    expect(markupTopbar()).not.toContain("<h1");
+  });
+});
