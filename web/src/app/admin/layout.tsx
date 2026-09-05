@@ -18,25 +18,16 @@ export default async function AdminLayout({
   // component dan tidak boleh menyentuh data sendiri.
   const antrean = await hitungAntrean();
 
+  // Kerangka panel (sidebar, topbar, bar bawah) hidup di dalam NavAdmin, yang
+  // kini MEMBUNGKUS isi halaman alih-alih berdiri di atasnya. Catatan money
+  // firewall ikut pindah ke sana supaya ia selalu berada di kaki area kerja.
   return (
-    <div className="min-h-screen bg-paper">
-      <div className="mx-auto max-w-6xl px-4 pb-36 pt-6 sm:pb-10">
-        {/* Identitas & jalan keluar TIDAK lagi berupa strip terpisah di atas
-            kartu nav — keduanya kini hidup di dalam kartu itu, lewat MenuAkun.
-            Di mobile jalan keluarnya ada di halaman Setelan. */}
-        <NavAdmin
-          antrean={antrean}
-          nama={nama}
-          peran={role === "owner" ? "Owner" : "Admin"}
-        />
-        {children}
-
-        <p className="mt-10 border-t border-black/10 pt-4 text-[11.5px] leading-relaxed text-ink-soft">
-          <b className="text-ink">Money firewall</b> — tidak ada angka uang di
-          panel ini. Nominal hanya hidup di panel Owner, dan penolakannya
-          ditegakkan di level basis data.
-        </p>
-      </div>
-    </div>
+    <NavAdmin
+      antrean={antrean}
+      nama={nama}
+      peran={role === "owner" ? "Owner" : "Admin"}
+    >
+      {children}
+    </NavAdmin>
   );
 }

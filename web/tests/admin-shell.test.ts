@@ -115,7 +115,12 @@ const NOL: Antrean = {
 function markupNav(pathname: string, antrean: Antrean = NOL): string {
   rute.kini = pathname;
   return renderToStaticMarkup(
-    createElement(NavAdmin, { antrean, nama: "Admin PADMA", peran: "Admin" }),
+    createElement(NavAdmin, {
+      antrean,
+      nama: "Admin PADMA",
+      peran: "Admin",
+      children: null,
+    }),
   );
 }
 
@@ -218,11 +223,11 @@ describe("hitungAntrean — angka datang dari data, lewat RLS sesi pengguna", ()
 describe("navigasi admin", () => {
   const sumberNav = baca("src/app/admin/_shell/nav-admin.tsx");
 
-  it("client component (butuh usePathname)", () => {
+  it("client component (butuh usePathname lewat KerangkaPanel)", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat sembilan tujuan berbahasa Indonesia", () => {
+  it("memuat sembilan tujuan berbahasa Indonesia di sidebar", () => {
     const m = markupNav("/admin");
     const tujuan = [
       ["/admin", "Beranda"],
@@ -231,35 +236,40 @@ describe("navigasi admin", () => {
       ["/admin/sesi", "Sesi"],
       ["/admin/bayar", "Bayar"],
       ["/admin/mitra", "Mitra"],
-      // Label "Layanan", judul halamannya "Layanan & Paket".
       ["/admin/layanan", "Layanan"],
-      // Label "Materi", judul halamannya "Materi Panduan".
       ["/admin/materi", "Materi"],
-      // Label "Setelan", judul halamannya "Pengaturan" — alasan yang sama
-      // dengan "Bayar"/"Pembayaran": bottom bar mobile memotong label panjang.
       ["/admin/pengaturan", "Setelan"],
     ];
     for (const [href, label] of tujuan) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
     }
-    // Jumlahnya dikunci PERSIS (dua nav × sembilan tautan): tujuan yang lahir
-    // tanpa memperbarui daftar di atas akan lolos dari seluruh assertion
-    // `toContain` tanpa satu pun test merah.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(tujuan.length * 2);
+    // Sembilan tautan sidebar + empat tautan bar bawah. Dikunci PERSIS:
+    // tujuan yang lahir tanpa memperbarui daftar di atas akan lolos dari
+    // seluruh assertion `toContain` tanpa satu pun test merah.
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(9 + 4);
   });
 
-  it("menyediakan tab desktop DAN bottom bar mobile", () => {
+  it("bar bawah memuat empat tujuan tersibuk, bukan salinan seluruh menu", () => {
     const m = markupNav("/admin");
+    // Empat tujuan tersibuk hadir DUA kali (sidebar + bar bawah);
+    // sisanya sekali, hanya di sidebar yang di layar kecil jadi drawer.
+    for (const href of ["/admin/skrining", "/admin/klien", "/admin/sesi", "/admin/bayar"]) {
+      expect([...m.matchAll(new RegExp(`href="${href}"`, "g"))], href).toHaveLength(2);
+    }
+    for (const href of ["/admin/mitra", "/admin/layanan", "/admin/materi", "/admin/pengaturan"]) {
+      expect([...m.matchAll(new RegExp(`href="${href}"`, "g"))], href).toHaveLength(1);
+    }
+  });
+
+  it("menyediakan sidebar DAN bar bawah, masing-masing berlabel", () => {
+    const m = markupNav("/admin");
+    // Sidebar dirender sekali dan menjadi drawer di layar kecil; bar bawah
+    // adalah nav kedua. Tiga nav berarti sidebar tersalin dua kali.
     expect([...m.matchAll(/<nav\b/g)]).toHaveLength(2);
-    expect(m).toContain("sm:hidden"); // bottom bar mobile
-    expect(m).toContain("sm:flex"); // tab desktop (hidden di mobile)
-    expect([...m.matchAll(/href="\/admin\/sesi"/g)]).toHaveLength(2);
-  });
-
-  it("kedua nav punya label aksesibilitas", () => {
-    const m = markupNav("/admin");
     expect([...m.matchAll(/aria-label="[^"]+"/g)].length).toBeGreaterThanOrEqual(2);
+    expect(m).toContain("lg:hidden"); // bar bawah & tombol drawer
+    expect(m).toContain("lg:translate-x-0"); // sidebar menetap di layar besar
   });
 
   it("badge HILANG saat antrean nol (alarm tidak dinormalkan)", () => {
@@ -275,15 +285,10 @@ describe("navigasi admin", () => {
       klaimMenunggu: 9,
       klienBelumAktif: 7,
     });
-    // Dua nav -> tiap badge muncul dua kali.
+    // Keempat tujuan berbadge ada di sidebar DAN bar bawah -> dua kali.
     expect([...m.matchAll(/aria-label="3 menunggu"/g)]).toHaveLength(2); // Inbox
     expect([...m.matchAll(/aria-label="7 menunggu"/g)]).toHaveLength(2); // Klien
     expect([...m.matchAll(/aria-label="5 menunggu"/g)]).toHaveLength(2); // Sesi
-    // klaimMenunggu SUDAH punya tujuannya sendiri sejak modul /admin/bayar
-    // lahir. Sebelumnya angka ini sengaja tidak dirender sebagai badge —
-    // menandai bahwa modulnya belum ada — dan yang dijaga adalah agar ia tidak
-    // nyasar ke tab lain. Sekarang yang dijaga MENGUAT: ia wajib muncul, tepat
-    // dua kali (tab desktop + bottom bar), dan tetap hanya di tab Bayar.
     expect([...m.matchAll(/aria-label="9 menunggu"/g)]).toHaveLength(2); // Bayar
     for (const tag of m.match(/<a[^>]*>[\s\S]*?<\/a>/g) ?? []) {
       if (tag.includes('aria-label="9 menunggu"')) {
@@ -297,13 +302,22 @@ describe("navigasi admin", () => {
     expect([...m.matchAll(/aria-label="\d+ menunggu"/g)]).toHaveLength(2);
   });
 
-  it("hanya SATU tujuan yang aktif di beranda", () => {
-    const m = markupNav("/admin");
-    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
+  it("angka badge datang dari prop, bukan literal di dalam nav", () => {
+    // Nav adalah client component: ia tidak boleh mengambil datanya sendiri,
+    // dan tidak boleh menuliskan angka antrean sebagai konstanta.
+    expect(sumberNav).not.toContain("hitungAntrean");
+    expect(sumberNav).toContain("antrean[");
   });
 
-  it("sub-rute menyalakan tabnya sendiri, bukan Beranda", () => {
+  it("hanya SATU tujuan yang aktif di beranda", () => {
+    const m = markupNav("/admin");
+    // Beranda hanya ada di sidebar (bukan tujuan bar bawah), jadi satu.
+    expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(1);
+  });
+
+  it("sub-rute menyalakan tujuannya sendiri, bukan Beranda", () => {
     const m = markupNav("/admin/skrining");
+    // Inbox hadir di sidebar dan bar bawah -> dua penanda aktif.
     expect([...m.matchAll(/aria-current="page"/g)]).toHaveLength(2);
     for (const tag of m.match(/<a[^>]*>/g) ?? []) {
       if (tag.includes('href="/admin"') && !tag.includes("/admin/")) {
@@ -312,7 +326,7 @@ describe("navigasi admin", () => {
     }
   });
 
-  it("rute anak (detail klien) tetap menyalakan tab Klien", () => {
+  it("rute anak (detail klien) tetap menyalakan tujuan Klien", () => {
     const m = markupNav(`/admin/klien/${KLIEN_UJI}`);
     for (const tag of m.match(/<a[^>]*>/g) ?? []) {
       if (tag.includes('href="/admin/klien"')) {
@@ -353,10 +367,7 @@ describe("layout admin", () => {
     );
     expect(sumberLayout).toContain("await hitungAntrean()");
     expect(sumberLayout).toMatch(/<NavAdmin\s+antrean=\{antrean\}/);
-    // Nav adalah client component: ia tidak boleh mengambil datanya sendiri.
-    expect(baca("src/app/admin/_shell/nav-admin.tsx")).not.toContain(
-      "hitungAntrean",
-    );
+    expect(baca("src/app/admin/_shell/nav-admin.tsx")).not.toContain("hitungAntrean");
   });
 
   // Logout tidak lagi ditulis di layout: ia pindah ke komponen shell bersama —
