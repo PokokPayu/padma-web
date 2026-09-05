@@ -18,6 +18,23 @@
   --color-ink: #1f2e26;
   --color-ink-soft: #5d6c61;
   --color-clay: #a6472f;
+
+  /* ===== TOKEN PANEL STAF (/admin & /owner) =====
+     Sengaja TERPISAH dari token PADMA di atas, bukan menimpanya. Landing,
+     skrining, dan /passport tetap memakai krem-emas-serif; yang berganti
+     bahasa visual hanya ruang kerja staf. Menimpa `--color-paper` akan
+     mengubah warna halaman yang dilihat klien tanpa satu test pun merah. */
+  --color-panel-bg: #f5f6f4;
+  --color-panel-surface: #ffffff;
+  --color-panel-border: #e4e7e3;
+  --color-panel-ink: #1b1f1d;
+  --color-panel-muted: #6b756e;
+  /* Rail = sidebar gelap. Nilainya sama dengan --color-night, tetapi diberi
+     nama sendiri supaya "warna sidebar" bisa digeser kelak tanpa menyeret
+     seluruh halaman klien yang juga memakai night. */
+  --color-panel-rail: #0a2b1f;
+  --color-panel-rail-ink: #9db09e;
+  --color-panel-rail-aktif: #f0e3c3;
 }
 
 body {
