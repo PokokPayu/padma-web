@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { hapusObjekVideo } from "@/lib/r2";
 import {
   LABEL_ISI,
   periksaDeskripsi,
@@ -428,8 +429,22 @@ export async function nonaktifkanMateri(id: string): Promise<Berhasil | Gagal> {
  * objek barunya lewat `catatVideoMateri` (`./unggah-video.ts`), yang sudah
  * menimpa barisnya sendiri lewat upsert dan membereskan objek R2 lama. `lepasVideo`
  * ini hanya untuk melepas isi tanpa unggahan pengganti.
+ *
+ * Objek R2-nya kini ikut dihapus (fix F2, video-r2 fix wave) — sebelumnya
+ * fungsi ini HANYA menghapus baris `material_videos` lewat RPC, dan baris itu
+ * adalah SATU-SATUNYA catatan kunci objeknya: begitu baris lenyap, objeknya
+ * tertinggal di bucket selamanya, tidak bisa ditemukan siapa pun lagi — persis
+ * kelas kegagalan yang komentar `catatVideoMateri` (`./unggah-video.ts`)
+ * sebut tidak bisa diterima. Urutannya mengikat, dan SIMETRIS dengan urutan
+ * `catatVideoMateri`: kunci objek dibaca SEBELUM baris dihapus, objeknya baru
+ * dihapus SESUDAH baris terbukti lenyap. Kebalikannya (hapus objek dulu) bisa
+ * meninggalkan baris yang menunjuk objek yang sudah tidak ada bila RPC-nya
+ * gagal sesudah itu — pasien mendapat pemutar yang menunjuk ke ketiadaan.
+ * Kegagalan hapus objek dilaporkan lewat `objekTersisa`, tidak ditelan diam.
  */
-export async function lepasVideo(materiId: string): Promise<Berhasil | Gagal> {
+export async function lepasVideo(
+  materiId: string,
+): Promise<{ ok: true; objekTersisa: boolean } | Gagal> {
   await requireRole(["admin", "owner"]);
 
   const materi = await ambilMateri(materiId);
@@ -442,9 +457,26 @@ export async function lepasVideo(materiId: string): Promise<Berhasil | Gagal> {
   }
 
   const supabase = await createServerSupabase();
+
+  // Kunci objek dibaca SEBELUM RPC menghapus barisnya — sesudah baris itu
+  // lenyap, kunci objeknya lenyap bersamanya dan tidak ada lagi cara
+  // menemukan objek mana yang harus dihapus dari R2.
+  const { data: lama } = await supabase
+    .from("material_videos").select("objek").eq("material_id", materiId).maybeSingle();
+
   const { error } = await supabase.rpc("lepas_video_materi", { materi_id: materiId });
   if (error) return { ok: false, pesan: "Gagal melepas video materi." };
 
+  // Objek dihapus SESUDAH baris terbukti lenyap (lihat dokblok fungsi).
+  let objekTersisa = false;
+  if (lama?.objek) {
+    try {
+      await hapusObjekVideo(lama.objek);
+    } catch {
+      objekTersisa = true;
+    }
+  }
+
   segarkanMateri(materiId);
-  return { ok: true };
+  return { ok: true, objekTersisa };
 }

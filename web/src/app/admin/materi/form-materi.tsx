@@ -240,7 +240,7 @@ export function AksiMateri({
   layananId,
   layanan,
   jumlahHalaman,
-  videoUrl,
+  objekVideo,
   ditugaskan,
   otomatis,
   pilihanKlien,
@@ -254,7 +254,7 @@ export function AksiMateri({
   layananId: string[];
   layanan: PilihanLayanan[];
   jumlahHalaman: number;
-  videoUrl: string | null;
+  objekVideo: string | null;
   ditugaskan: PasienRingkas[];
   otomatis: PasienRingkas[];
   pilihanKlien: KlienPilihan[];
@@ -385,7 +385,7 @@ export function AksiMateri({
 
       {isi && tipe === "ebook" && <IsiEbook materiId={id} jumlahHalaman={jumlahHalaman} />}
       {isi && tipe === "video" && (
-        <IsiVideo materiId={id} aktif={aktif} videoUrl={videoUrl} />
+        <IsiVideo materiId={id} aktif={aktif} objekVideo={objekVideo} />
       )}
       {tugas && (
         <PanelPenugasan
@@ -542,7 +542,7 @@ function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman
  * Panel isi video: status ringkas, pengunggah penggantinya
  * (`<PengunggahVideo/>`, menulis lewat `./unggah-video.ts` — bukan `aksi.ts`,
  * persis pola `IsiEbook`/`PengunggahPdf`), dan tombol lepas untuk materi yang
- * sudah ditarik. `videoUrl` di sini adalah props SERVER yang basi begitu
+ * sudah ditarik. `objekVideo` di sini adalah props SERVER yang basi begitu
  * unggahan sukses secara lokal — karena itu `onSelesai={() => router.refresh()}`
  * dipasang sama seperti `IsiEbook`/`PengunggahPdf`: tanpanya paragraf status di
  * atas ("Belum ada video…") tetap basi berdampingan dengan "Video tersimpan."
@@ -552,11 +552,11 @@ function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman
 function IsiVideo({
   materiId,
   aktif,
-  videoUrl,
+  objekVideo,
 }: {
   materiId: string;
   aktif: boolean;
-  videoUrl: string | null;
+  objekVideo: string | null;
 }) {
   const router = useRouter();
   const [pending, mulai] = useTransition();
@@ -565,13 +565,13 @@ function IsiVideo({
   return (
     <div className="rounded-xl border border-black/10 bg-paper p-3">
       <p className="text-[13px] text-ink">
-        {videoUrl !== null ? "Video tersimpan." : "Belum ada video — unggah di bawah."}
+        {objekVideo !== null ? "Video tersimpan." : "Belum ada video — unggah di bawah."}
       </p>
       <PengunggahVideo materiId={materiId} onSelesai={() => router.refresh()} />
       {/* "Lepas video" hanya ditawarkan pada materi yang sudah ditarik: materi
           video terbit tanpa isi adalah kartu terkunci yang tidak akan pernah
           terbuka. Server memeriksanya ulang. */}
-      {!aktif && videoUrl !== null && (
+      {!aktif && objekVideo !== null && (
         <button
           type="button"
           disabled={pending}
@@ -579,7 +579,15 @@ function IsiVideo({
             mulai(async () => {
               const r = await lepasVideo(materiId);
               if (r.ok) {
-                setPesan(null);
+                // Lunak, tetapi tidak boleh senyap: sama seperti peringatan
+                // `objekLamaTersisa` milik `PengunggahVideo` — objek yatim
+                // memakan kuota 10 GB dan hanya bisa dibersihkan seseorang
+                // yang tahu ia ada.
+                setPesan(
+                  r.objekTersisa
+                    ? "Video dilepas, tetapi berkas videonya gagal dihapus dari penyimpanan. Beri tahu tim teknis agar tidak menumpuk."
+                    : null,
+                );
                 router.refresh();
               } else {
                 setPesan(r.pesan);
