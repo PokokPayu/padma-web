@@ -32,7 +32,7 @@ export function BottomBar({
   return (
     <nav
       aria-label={labelNav}
-      className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t border-gold/25 bg-panel-rail/95 px-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex justify-around border-t border-gold/25 bg-panel-rail/95 px-1 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
     >
       {menu.map((m) => {
         const aktif = aktifkan(pathname, m.href, akar);
@@ -59,10 +59,17 @@ export function BottomBar({
       {jalanKeluar && (
         <Link
           href={jalanKeluar.href}
+          // Nama aksesibel tetap frasa `label` PENUH, bukan `labelRingkas` —
+          // meski kolomnya sesempit seperempat lebar layar dan hanya sanggup
+          // menampilkan versi ringkasnya secara visual.
+          // tests/e2e/owner.e2e.ts mengeklik tautan ini lewat nama aksesibel
+          // ini, dan tests/owner-kerangka.test.ts menegaskan frasa penuhnya
+          // tetap muncul di markup (lewat sidebar, yang punya lebar untuk itu).
+          aria-label={jalanKeluar.label}
           className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1.5 py-1 text-[10px] font-bold text-gold-pale"
         >
           <Ikon nama={jalanKeluar.ikon} className="h-[21px] w-[21px]" />
-          <span className="truncate">{jalanKeluar.label}</span>
+          <span className="truncate">{jalanKeluar.labelRingkas ?? jalanKeluar.label}</span>
         </Link>
       )}
     </nav>

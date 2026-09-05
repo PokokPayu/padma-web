@@ -21,7 +21,15 @@ const MENU: ItemMenu[] = [
 // Sengaja BUKAN anggota MENU: ia bukan tujuan panel owner dan tidak pernah
 // boleh ikut menyala sebagai `aria-current`. Ia jalan keluar, dan tampil
 // berbeda supaya terbaca demikian.
-const PULANG: Tautan = { href: "/admin", label: "Buka Panel Admin", ikon: "keluar" };
+// `labelRingkas` hanya dipakai bar bawah layar kecil, yang membagi tautan ini
+// ke kolom seperempat lebar — "Buka Panel Admin" terpotong jadi "Buka Pane…"
+// di sana. Sidebar tetap merender `label` penuh; ia punya lebar untuk itu.
+const PULANG: Tautan = {
+  href: "/admin",
+  label: "Buka Panel Admin",
+  labelRingkas: "Admin",
+  ikon: "keluar",
+};
 
 /**
  * Shell panel owner.

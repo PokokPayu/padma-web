@@ -89,7 +89,10 @@ export function KerangkaPanel({
           tabIndex={-1}
           aria-hidden="true"
           onClick={() => setBuka(false)}
-          className="fixed inset-0 z-30 bg-night/45 lg:hidden"
+          // z-40: di ATAS topbar (z-30) dan bar bawah (z-30) supaya keduanya
+          // ikut meredup dan tidak bisa diketuk saat drawer terbuka, tapi di
+          // BAWAH sidebar (z-50) yang justru harus tetap tajam sebagai drawer.
+          className="fixed inset-0 z-40 bg-night/45 lg:hidden"
         />
       )}
 
@@ -102,9 +105,15 @@ export function KerangkaPanel({
       />
 
       <div className="px-4 pb-28 pt-5 sm:px-6 lg:pb-10">
-        {children}
-        <div className="mt-10 border-t border-panel-border pt-4 text-[11.5px] leading-relaxed text-panel-muted">
-          {catatan}
+        {/* max-w-7xl disengaja LEBIH LEBAR daripada max-w-6xl lama: area kerja
+            ini menampung tabel, dan tabel butuh ruang lebih dari kartu klien
+            yang jadi acuan lebar lama. Tetap dibatasi (bukan dibiarkan
+            unbounded) supaya tabel tidak berlari sampai ~1500px+ di layar lebar. */}
+        <div className="mx-auto max-w-7xl">
+          {children}
+          <div className="mt-10 border-t border-panel-border pt-4 text-[11.5px] leading-relaxed text-panel-muted">
+            {catatan}
+          </div>
         </div>
       </div>
 

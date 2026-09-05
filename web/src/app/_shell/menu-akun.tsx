@@ -20,10 +20,11 @@ import { useEffect, useRef, useState } from "react";
  * hidup sebagai nama aksesibel tombolnya, sehingga pembaca layar justru
  * mendapat konteks yang lebih lengkap daripada sebelumnya.
  *
- * DIPAKAI DI DALAM <nav>, jadi sengaja memakai <button>, bukan <a>: tiga berkas
- * test menghitung jumlah tag <a> di nav secara persis (admin 18, owner 8), dan
- * satu <a> tambahan akan memerahkan mereka. Tidak pula ber-`aria-current` —
- * jumlahnya juga dihitung, dan tombol ini memang bukan tujuan navigasi.
+ * DIPAKAI DI DALAM `<header>` milik `Topbar` (bukan lagi di dalam `<nav>`),
+ * tetapi tetap sengaja memakai <button>, bukan <a>: beberapa berkas test
+ * menghitung jumlah tag <a> di markup nav secara persis (admin 13, owner 8),
+ * dan satu <a> tambahan akan memerahkan mereka. Tidak pula ber-`aria-current`
+ * — jumlahnya juga dihitung, dan tombol ini memang bukan tujuan navigasi.
  */
 export function MenuAkun({ nama, peran }: { nama: string; peran: string }) {
   const [buka, setBuka] = useState(false);

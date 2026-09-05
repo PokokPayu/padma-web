@@ -17,8 +17,16 @@ export type ItemMenu = {
   jumlah?: number;
 };
 
-/** Tautan yang MENINGGALKAN panel ini — bukan tujuan, jadi tidak pernah aktif. */
-export type Tautan = { href: string; label: string; ikon: NamaIkon };
+/**
+ * Tautan yang MENINGGALKAN panel ini — bukan tujuan, jadi tidak pernah aktif.
+ *
+ * `labelRingkas` opsional: sidebar punya lebar untuk `label` penuh, tapi bar
+ * bawah layar kecil membaginya ke kolom seperempat lebar, tempat frasa
+ * panjang seperti "Buka Panel Admin" terpotong jadi "Buka Pane…". Bila diisi,
+ * itulah yang tampil DI BAR BAWAH SAJA — `label` penuh tetap jadi nama
+ * aksesibel di sana lewat `aria-label`, dan sidebar tidak pernah memakainya.
+ */
+export type Tautan = { href: string; label: string; ikon: NamaIkon; labelRingkas?: string };
 
 /**
  * Sidebar gelap panel staf.
@@ -49,8 +57,15 @@ export function Sidebar({
     <nav
       id="sidebar-panel"
       aria-label={labelNav}
-      className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-panel-rail transition-transform duration-200 motion-reduce:transition-none lg:translate-x-0 ${
-        terbuka ? "translate-x-0" : "-translate-x-full"
+      className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-panel-rail transition-transform duration-200 motion-reduce:transition-none lg:translate-x-0 ${
+        // `invisible` di sini WAJIB ada: transform sendirian (-translate-x-full)
+        // hanya memindahkan sidebar secara visual, tidak mengeluarkannya dari
+        // urutan tab maupun dari a11y tree. Tanpa itu, di layar kecil seorang
+        // pemakai keyboard atau pembaca layar menjelajahi sembilan tujuan admin
+        // (lengkap dengan badge-nya) sebelum sempat mencapai tombol hamburger.
+        // `lg:visible` mengembalikannya begitu breakpoint besar membuatnya
+        // menetap secara visual lagi.
+        terbuka ? "translate-x-0" : "-translate-x-full invisible lg:visible"
       }`}
     >
       <div className="flex items-center gap-2.5 px-5 pb-4 pt-5">
