@@ -322,18 +322,24 @@ describe("BottomBar", () => {
 const { pasangPenutup } = await import("@/app/_shell/panel/tutup-drawer");
 const { KerangkaPanel } = await import("@/app/_shell/panel/kerangka");
 
-/** Dokumen palsu: mencatat listener yang dipasang & dilepas. */
+/** Dokumen palsu: mencatat listener yang dipasang & dilepas — termasuk
+ *  REFERENSI fungsinya sendiri, supaya tes pembersihan bisa membuktikan
+ *  bahwa yang dilepas adalah fungsi yang sama persis dengan yang dipasang,
+ *  bukan sekadar "sesuatu" untuk jenis "keydown". */
 function dokumenPalsu() {
-  const listener = new Map<string, (e: unknown) => void>();
+  const listener = new Map<string, (e: Event) => void>();
   const dilepas: string[] = [];
+  const dilepasFn = new Map<string, (e: Event) => void>();
   return {
     listener,
     dilepas,
-    addEventListener: (jenis: string, fn: (e: unknown) => void) => {
+    dilepasFn,
+    addEventListener: (jenis: string, fn: (e: Event) => void) => {
       listener.set(jenis, fn);
     },
-    removeEventListener: (jenis: string) => {
+    removeEventListener: (jenis: string, fn: (e: Event) => void) => {
       dilepas.push(jenis);
+      dilepasFn.set(jenis, fn);
     },
   };
 }
@@ -343,7 +349,7 @@ describe("pasangPenutup — perilaku drawer", () => {
     const dok = dokumenPalsu();
     let tertutup = 0;
     pasangPenutup(dok, () => (tertutup += 1));
-    dok.listener.get("keydown")?.({ key: "Escape" });
+    dok.listener.get("keydown")?.({ key: "Escape" } as unknown as Event);
     expect(tertutup).toBe(1);
   });
 
@@ -351,16 +357,21 @@ describe("pasangPenutup — perilaku drawer", () => {
     const dok = dokumenPalsu();
     let tertutup = 0;
     pasangPenutup(dok, () => (tertutup += 1));
-    dok.listener.get("keydown")?.({ key: "a" });
-    dok.listener.get("keydown")?.({ key: "Enter" });
+    dok.listener.get("keydown")?.({ key: "a" } as unknown as Event);
+    dok.listener.get("keydown")?.({ key: "Enter" } as unknown as Event);
     expect(tertutup).toBe(0);
   });
 
   it("melepas listener-nya saat dibersihkan — drawer bisa dibuka-tutup berkali-kali", () => {
     const dok = dokumenPalsu();
     const lepas = pasangPenutup(dok, () => {});
+    const terpasang = dok.listener.get("keydown");
     lepas();
     expect(dok.dilepas).toContain("keydown");
+    // Bukan sekadar "sesuatu dilepas" — REFERENSI fungsinya harus identik
+    // dengan yang dipasang. Cleanup yang membuat closure baru (kebocoran
+    // nyata di DOM sungguhan) akan lolos tanpa asersi ini.
+    expect(dok.dilepasFn.get("keydown")).toBe(terpasang);
   });
 });
 
