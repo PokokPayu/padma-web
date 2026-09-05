@@ -70,7 +70,16 @@ export function PengunggahVideo({
     // XMLHttpRequest, bukan fetch: hanya XHR yang memberi progres unggah, dan
     // pada berkas 200 MB bilah progres adalah beda antara "sedang jalan" dan
     // "aplikasinya menggantung".
-    const sukses = await new Promise<boolean>((selesai) => {
+    //
+    // `status` disertakan (fix F3, video-r2 fix wave) — sebelumnya dibuang
+    // total (`selesai(false)`), sehingga "Unggahan terputus." tampil sama
+    // baik untuk koneksi yang benar-benar putus MAUPUN untuk CORS bucket
+    // yang belum memuat domain produksi (spec §13b A-5, satu-satunya butir
+    // go-live yang belum beres): keduanya memicu `onerror`, tapi hanya yang
+    // kedua bisa dikenali dari kode status yang menyertainya bila server
+    // sempat menjawab (mis. 403 dari penolakan tanda tangan/Content-Length,
+    // yang jatuh di `onload`, bukan `onerror`).
+    const hasil = await new Promise<{ ok: boolean; status: number }>((selesai) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", terbit.url);
       xhr.setRequestHeader("Content-Type", terbit.mime);
@@ -82,15 +91,17 @@ export function PengunggahVideo({
           });
         }
       };
-      xhr.onload = () => selesai(xhr.status >= 200 && xhr.status < 300);
-      xhr.onerror = () => selesai(false);
+      xhr.onload = () => {
+        selesai({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status });
+      };
+      xhr.onerror = () => selesai({ ok: false, status: xhr.status });
       xhr.send(berkas);
     });
 
-    if (!sukses) {
+    if (!hasil.ok) {
       setKeadaan({
         fase: "gagal",
-        pesan: "Unggahan terputus. Berkasnya masih terpilih — coba lagi.",
+        pesan: `Unggahan terputus (kode ${hasil.status}). Berkasnya masih terpilih — coba lagi.`,
       });
       return;
     }

@@ -1411,7 +1411,11 @@ describe("route penerbit URL tonton", () => {
 describe("pemutar pasien", () => {
   it("elemen <video> dirender TANPA atribut src", () => {
     // URL dipasang lewat PROPERTI sesudah halaman hidup, sehingga ia tidak
-    // pernah muncul di view-source maupun di panel Elements DevTools.
+    // pernah muncul di view-source (Ctrl+U) maupun di RSC payload. Klaim ini
+    // dibatasi sengaja (spec §7): `src` MEREFLEKSI ke atribut DOM begitu
+    // properti disetel, jadi URL-nya TETAP terlihat di panel Elements
+    // DevTools — properti hanya menutup view-source & RSC payload, bukan
+    // panel Elements.
     expect(PEMUTAR).not.toMatch(/<video[^>]*\ssrc=/);
     expect(PEMUTAR).toMatch(/\.src\s*=/);
   });
@@ -1503,9 +1507,15 @@ import { useEffect, useRef, useState } from "react";
  * Pemutar video pasien.
  *
  * Elemen <video> dirender TANPA atribut `src`. URL-nya diambil sesudah halaman
- * hidup lalu dipasang lewat PROPERTI `video.src` — dan karena properti tidak
- * menulis balik ke DOM, ia tidak muncul di view-source maupun di panel Elements
- * DevTools. Ia hanya hidup di memori JS dan di tab Network.
+ * hidup lalu dipasang lewat PROPERTI `video.src` — ini menjaga URL keluar dari
+ * view-source (Ctrl+U) dan dari RSC payload, sebab keduanya hanya memuat apa
+ * yang server kirim/render, bukan mutasi sesudah hidrasi.
+ *
+ * Klaim ini SENGAJA dibatasi: `src` pada elemen media adalah atribut IDL yang
+ * MEREFLEKSI — menugaskan `video.src = url` menulis balik ke atribut DOM-nya,
+ * jadi URL-nya TETAP terlihat di panel Elements DevTools begitu elemen
+ * <video> diinspeksi. Properti tidak menutup jalur itu; ia hanya menutup
+ * view-source dan RSC payload.
  *
  * Pengerasan di bawah jujur disebut deterrent, bukan proteksi: pasien yang bisa
  * menonton juga bisa merekam layar. Yang dihalangi adalah pasien awam.

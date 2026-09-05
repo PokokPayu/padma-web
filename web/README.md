@@ -9,11 +9,17 @@ Prasyarat: Node >= 20, Docker Desktop.
 ```bash
 npm install
 npx supabase start          # catat anon key & service_role key
-cp .env.example .env.local  # isi ketiga nilai dari keluaran di atas
+cp .env.example .env.local  # isi tiga nilai Supabase dari keluaran di atas
 npx supabase db reset       # migration + seed master data
 npm run seed:users          # user demo 3 peran (untuk `npm run dev`; `npm test` seed sendiri)
 npm run dev
 ```
+
+`.env.local` juga punya empat nilai `R2_*` (bucket video privat Cloudflare R2,
+lihat spec §12) yang BUKAN dari `supabase start` — isi dari dashboard
+Cloudflare bila mengerjakan rantai video. Tanpanya, panel admin & reader video
+tetap jalan sampai unggah/tonton video PERTAMA dicoba, lalu gagal dengan
+galat yang tercatat di log server (bukan lagi senyap total).
 
 ### Bila `npx supabase db reset` gagal
 

@@ -44,9 +44,18 @@ export async function terbitkanUrlUnggahVideo(
   try {
     const url = await urlUnggahVideo(objek, periksa.nilai, byte);
     return { ok: true, url, objek, mime: periksa.nilai };
-  } catch {
-    // Pesannya sengaja tidak membawa detail galat: galat SDK bisa memuat
-    // endpoint dan bagian kredensial.
+  } catch (e) {
+    // Log NAMA & PESAN galatnya saja (fix F3, video-r2 fix wave) — tidak
+    // pernah URL (belum ada satu pun di titik ini) dan tidak pernah
+    // kredensial. Tanpanya, kegagalan PRODUKSI PERTAMA — secret R2 salah
+    // atau belum dipasang, lihat `wajib()` di `@/lib/r2` yang melempar di
+    // titik inilah — membuat admin melihat "Coba lagi" selamanya sementara
+    // log server kosong sama sekali, tanpa satu pun jejak untuk didiagnosis.
+    const nama = e instanceof Error ? e.name : "GalatTidakDikenal";
+    const pesan = e instanceof Error ? e.message : String(e);
+    console.error(`menyiapkan unggahan video gagal: ${nama}: ${pesan}`);
+    // Pesan ke KLIEN sengaja tidak membawa detail galat: galat SDK bisa
+    // memuat endpoint dan bagian kredensial.
     return { ok: false, pesan: "Gagal menyiapkan unggahan video. Coba lagi." };
   }
 }

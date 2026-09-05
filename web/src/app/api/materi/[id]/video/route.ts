@@ -45,15 +45,28 @@ export async function GET(
 
   try {
     // Hak sudah terbukti oleh query di atas — presigned URL baru diterbitkan
-    // di sini, sesudahnya. `r2.urlTontonVideo` (bukan impor langsung) juga
-    // menjaga urutan ini tekstual: baris ini adalah SATU-SATUNYA tempat nama
-    // fungsinya muncul di berkas ini, dan itu jatuh sesudah query di atas.
+    // di sini, sesudahnya. Impor NAMESPACE `r2` (bukan mengimpor
+    // `urlTontonVideo` langsung ke scope berkas ini) juga menjaga urutan ini
+    // tekstual: baris di bawah ini adalah SATU-SATUNYA PEMANGGILAN fungsinya
+    // di berkas ini — bukan satu-satunya baris yang MENYEBUT namanya, sebab
+    // komentar ini sendiri menyebutnya dua baris di atas — dan pemanggilan
+    // itu jatuh sesudah query di atas.
     const url = await r2.urlTontonVideo(baris.objek);
     return NextResponse.json(
       { url, mime: baris.mime },
       { headers: { "cache-control": "no-store" } },
     );
-  } catch {
+  } catch (e) {
+    // Log NAMA & PESAN galatnya saja (fix F3, video-r2 fix wave) — tidak
+    // pernah presigned URL (tidak ada satu pun di scope catch ini: `url`
+    // di atas ber-scope blok `try`) dan tidak pernah kredensial. Tanpanya,
+    // kegagalan PRODUKSI PERTAMA — CORS bucket belum memuat domain produksi
+    // (spec §13b A-5) atau secret R2 salah — tidak meninggalkan jejak apa
+    // pun untuk didiagnosis, dan pasien hanya melihat "Gagal menyiapkan
+    // video." selamanya.
+    const nama = e instanceof Error ? e.name : "GalatTidakDikenal";
+    const pesan = e instanceof Error ? e.message : String(e);
+    console.error(`menerbitkan tonton video gagal: ${nama}: ${pesan}`);
     return NextResponse.json({ pesan: "Gagal menyiapkan video." }, { status: 500 });
   }
 }

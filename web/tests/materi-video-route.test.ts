@@ -24,8 +24,16 @@ describe("route penerbit URL tonton", () => {
     expect(iTerbit).toBeGreaterThan(iQuery);
   });
 
-  it("tidak pernah mencetak URL ke log", () => {
-    expect(ROUTE).not.toMatch(/console\.(log|error|warn)/);
+  it("mencetak nama & pesan galat kegagalan presigned GET, TAPI tidak pernah URL-nya", () => {
+    // Sebelum fix F3 (video-r2 fix wave), catch-nya kosong TANPA log sama
+    // sekali — kegagalan produksi pertama (CORS bucket belum memuat domain
+    // produksi, spec §13b A-5, atau secret R2 salah) diam total: pasien
+    // melihat "Gagal menyiapkan video.", log server kosong. Sekarang HARUS
+    // ada log, tapi asersinya tidak boleh melarang console.* SELURUHNYA
+    // (itu justru menolak fix-nya) — yang dilarang hanyalah mencetak URL
+    // presigned itu SENDIRI, sebab itu tautan unduhan videonya.
+    expect(ROUTE).toMatch(/console\.(log|error|warn)/);
+    expect(ROUTE).not.toMatch(/console\.(log|error|warn)\s*\([^)]*\burl\b/i);
   });
 
   it("melarang cache pada jawabannya", () => {
@@ -38,7 +46,13 @@ describe("route penerbit URL tonton", () => {
 describe("pemutar pasien", () => {
   it("elemen <video> dirender TANPA atribut src", () => {
     // URL dipasang lewat PROPERTI sesudah halaman hidup, sehingga ia tidak
-    // pernah muncul di view-source maupun di panel Elements DevTools.
+    // pernah muncul di view-source (Ctrl+U) maupun di RSC payload — klaim ini
+    // SENGAJA dibatasi (spec §7): `src` adalah atribut IDL yang MEREFLEKSI,
+    // jadi menugaskan `video.src = url` menulis balik ke atribut DOM-nya dan
+    // URL-nya TETAP terlihat di panel Elements DevTools begitu elemennya
+    // diinspeksi. Klaim "tidak pernah muncul di panel Elements" itu SALAH
+    // dan sempat tertulis di sini sebelum dikoreksi — properti tidak menutup
+    // jalur itu, ia hanya menutup view-source & RSC payload.
     expect(PEMUTAR).not.toMatch(/<video[^>]*\ssrc=/);
     expect(PEMUTAR).toMatch(/\.src\s*=/);
   });
