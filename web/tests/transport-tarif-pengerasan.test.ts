@@ -135,10 +135,29 @@ describe("transport_rates — pagar uang", () => {
     expect(row.boleh).toBe(false);
   });
 
-  it("di_atas_20 tidak pernah punya baris tarif — tarifnya per kasus", async () => {
-    const baris = await querySql<{ n: string }>(
-      `select count(*)::text as n from public.transport_rates where jenjang = 'di_atas_20'`,
-    );
-    expect(baris[0].n).toBe("0");
+  /**
+   * >>> Ruling 6 (coordinator, 7 Sep 2026) <<<
+   *
+   * Versi sebelumnya cuma menghitung baris `di_atas_20` dan mengasersi "0" —
+   * itu hanya menjaga SEED, bukan invariannya. Reviewer membuktikan
+   * celahnya langsung: sebagai `authenticated` berklaim JWT owner, INSERT
+   * `di_atas_20` BERHASIL tanpa constraint apa pun, dan karena tabel ini
+   * append-only dengan DELETE tercabut, baris itu PERMANEN untuk peran API —
+   * menciptakan sumber kebenaran kedua (menandingi `transport_khusus`) untuk
+   * nominal yang sama, yang cuma bisa dibersihkan lewat service role.
+   *
+   * Uji ini menggantinya dengan uji PENOLAKAN atas nama constraint
+   * `transport_rates_bukan_per_kasus`: doktrin "di_atas_20 bukan tarif" kini
+   * hidup sebagai CHECK, bukan cuma komentar tabel.
+   */
+  it("menolak baris di_atas_20 — tarifnya per kasus, bukan per jenjang", async () => {
+    await dalamTransaksiRollback(async (jalankan) => {
+      await expect(
+        jalankan(
+          `insert into public.transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
+           values ('di_atas_20', 99999, 88888, '2099-01-01')`,
+        ),
+      ).rejects.toThrow(/transport_rates_bukan_per_kasus/);
+    });
   });
 });

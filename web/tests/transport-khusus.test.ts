@@ -41,6 +41,13 @@ describe("transport_khusus", () => {
       .single();
     expect(eSesi).toBeNull();
 
+    // MINOR 1 (coordinator): bersihkan SEBELUM insert juga, bukan hanya di
+    // `finally`. Bila proses terhenti di tengah (crash, timeout), baris sisa
+    // dari jalan sebelumnya akan bentrok primary key di jalan ini dan
+    // membuatnya merah — pola "fixture yang meracuni jalan berikutnya" sudah
+    // dua kali memakan waktu di proyek ini.
+    await svc.from("transport_khusus").delete().eq("session_id", sesi!.id);
+
     const owner = await signInAs("owner@padma.test");
     try {
       const { data: baris, error } = await owner
@@ -87,6 +94,10 @@ describe("transport_khusus", () => {
       .limit(1)
       .single();
     expect(eSesi).toBeNull();
+
+    // MINOR 1 (coordinator): sama seperti uji identitas di atas — bersihkan
+    // SEBELUM insert juga, bukan hanya di `finally`.
+    await svc.from("transport_khusus").delete().eq("session_id", sesi!.id);
 
     const owner = await signInAs("owner@padma.test");
 

@@ -186,6 +186,11 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
 
     expect(diTabelUang).toContain("variant_rates.harga_klien");
     expect(diTabelUang).toContain("variant_rates.honor_mitra");
+    // MINOR 2 (coordinator, Ruling 6 round): tanpa ini, pemindahan diam-diam
+    // kolom nominal transport keluar dari transport_rates tidak akan
+    // tertangkap uji ini — ia hanya menjaga variant_rates sebelumnya.
+    expect(diTabelUang).toContain("transport_rates.tarif_klien");
+    expect(diTabelUang).toContain("transport_rates.honor_mitra");
   });
 
   it("kolom STATUS bayar TIDAK dituduh sebagai nominal (bukan false positive)", () => {

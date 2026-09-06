@@ -16,6 +16,19 @@ create table public.transport_rates (
 
   constraint transport_rates_unik_per_tanggal unique (jenjang, berlaku_sejak),
 
+  -- Ruling 6 (coordinator): tanpa constraint ini, doktrin "di_atas_20 bukan
+  -- tarif" hanya hidup sebagai KOMENTAR tabel — dan reviewer membuktikan
+  -- langsung bahwa itu tidak menghalangi apa pun: sebagai `authenticated`
+  -- berklaim JWT owner, INSERT `di_atas_20` berhasil begitu saja. Materi
+  -- klien menulis ">20 km: konfirmasi admin" — itu BUKAN tarif, itu
+  -- KETIADAAN tarif, dan nominalnya ditetapkan owner PER KASUS di
+  -- `transport_khusus`. Satu baris `di_atas_20` di sini akan menciptakan
+  -- sumber kebenaran KEDUA untuk nominal yang sama, dan karena tabel ini
+  -- append-only dengan DELETE tercabut, baris itu PERMANEN untuk peran API —
+  -- persis kelas yang sudah dibayar di pengerasan_tabel_uang.sql: doktrin
+  -- uang yang hidup sebagai komentar alih-alih sebagai constraint.
+  constraint transport_rates_bukan_per_kasus check (jenjang <> 'di_atas_20'),
+
   -- SENGAJA TIDAK menuntut `honor_mitra <= tarif_klien`, berbeda dari
   -- variant_rates. Justru sebaliknya yang normal di sini: pada 0–5 km klien
   -- membayar Rp0 sementara mitra menerima Rp10.000. Selisih itu SUBSIDI PADMA,
@@ -103,6 +116,7 @@ revoke delete on public.transport_rates from authenticated;
 
 comment on table public.transport_rates is
   'RIWAYAT tarif transport per JENJANG. APPEND-ONLY untuk peran API. '
-  'Jenjang di_atas_20 sengaja TIDAK pernah punya baris di sini: tarifnya '
-  'ditetapkan owner per kasus di transport_khusus, karena "konfirmasi admin" '
-  'di materi klien bukan tarif melainkan ketiadaan tarif.';
+  'Jenjang di_atas_20 TIDAK BOLEH punya baris di sini (CHECK '
+  'transport_rates_bukan_per_kasus, Ruling 6) — tarifnya ditetapkan owner '
+  'per kasus di transport_khusus, karena "konfirmasi admin" di materi klien '
+  'bukan tarif melainkan ketiadaan tarif.';
