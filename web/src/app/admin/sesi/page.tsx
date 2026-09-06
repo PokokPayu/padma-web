@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { pilihanMitra } from "@/lib/admin/mitra";
-import { pilihanLayanan } from "@/lib/admin/katalog-admin";
+import { pilihanLayanan, pilihanVarian } from "@/lib/admin/katalog-admin";
 import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { BlokPermintaan, type PermintaanAntre } from "./antrean-permintaan";
 import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
@@ -44,7 +44,7 @@ export default async function SesiPage() {
   // diperiksa Postgres.
   const supabase = await createServerSupabase();
 
-  const [{ data: permintaan }, { data: sesi }, { data: klien }, layanan, mitra] =
+  const [{ data: permintaan }, { data: sesi }, { data: klien }, layanan, varian, mitra] =
     await Promise.all([
       supabase
         .from("booking_requests")
@@ -73,6 +73,9 @@ export default async function SesiPage() {
       // sama persis dengan mitra di bawah. Daftar NAMA untuk riwayat tidak
       // menyaring apa pun; itu dua kebutuhan berbeda dari satu tabel.
       pilihanLayanan(),
+      // Varian AKTIF seluruh layanan — disaring per layanan terpilih di
+      // klien, sama seperti wizard `/passport/ajukan`.
+      pilihanVarian(),
       // Hanya mitra AKTIF yang boleh ditawarkan untuk sesi baru. Daftar NAMA
       // untuk riwayat (view `partner_publik`) sengaja tidak menyaring apa pun —
       // dua kebutuhan berbeda dari satu tabel yang sama.
@@ -124,6 +127,7 @@ export default async function SesiPage() {
         <FormJadwalSesi
           klien={pilihanKlien}
           layanan={layanan}
+          varian={varian}
           mitra={mitra}
           // Tanggal awal formulir = hari ini menurut kalender Jakarta, bukan
           // jam server: pada 17:00–24:00 UTC keduanya sudah berbeda tanggal.

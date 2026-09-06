@@ -35,6 +35,7 @@ import { BATAS_PERMINTAAN_MENUNGGU as BATAS } from "@/lib/passport/batas";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -148,6 +149,7 @@ async function isiAntrean(jumlah: number) {
   const baris = Array.from({ length: jumlah }, (_, i) => ({
     client_id: ANANDA,
     service_id: SVC_YOGA,
+    variant_id: VARIAN_YOGA,
     tanggal: tanggalKe(i),
     preferensi_waktu: "pagi",
     status: "menunggu",
@@ -156,10 +158,22 @@ async function isiAntrean(jumlah: number) {
   expect(error).toBeNull();
 }
 
+// Sejak Task 9 `booking_requests.variant_id` NOT NULL: id-nya lahir
+// `gen_random_uuid()` saat migrasi/trigger berjalan, jadi tidak ada nilai
+// tetap yang bisa ditulis literal di sini — dibaca dari basis data sekali di
+// `beforeAll`. `VARIAN_LAIN` sengaja milik layanan LAIN (SVC_YOGA) dari
+// `SVC_NUTRISI` yang dipakai skenario "menolak varian milik layanan lain".
+let VARIAN_NUTRISI: string;
+let VARIAN_YOGA: string;
+let VARIAN_NONAKTIF: string;
+
 beforeAll(async () => {
   sesiAnanda = await sesiSiapSerentak(await signInAs("ananda@padma.test"));
   ref.sesi = sesiAnanda;
   await bersihkanAnanda();
+  VARIAN_NUTRISI = await varianBaku(admin, SVC_NUTRISI);
+  VARIAN_YOGA = await varianBaku(admin, SVC_YOGA);
+  VARIAN_NONAKTIF = await varianBaku(admin, SVC_NONAKTIF);
 });
 
 afterAll(async () => {
@@ -179,7 +193,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     const hasil = await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
         ajukanJadwal(
-          formulir({ layanan: SVC_NUTRISI, tanggal: tanggalKe(i), waktu: "pagi" }),
+          formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: tanggalKe(i), waktu: "pagi" }),
         ),
       ),
     );
@@ -195,7 +209,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
   it("permintaan ke-(BATAS+1) lewat action ditolak dengan pesan, bukan lemparan", async () => {
     await isiAntrean(BATAS);
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "sore" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "sore" }),
     );
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.pesan.length).toBeGreaterThan(0);
@@ -209,6 +223,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
       preferensi_waktu: "sore",
       status: "menunggu",
@@ -227,6 +242,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
         sesiAnanda.from("booking_requests").insert({
           client_id: ANANDA,
           service_id: SVC_NUTRISI,
+          variant_id: VARIAN_NUTRISI,
           tanggal: tanggalKe(i),
           preferensi_waktu: "pagi",
           status: "menunggu",
@@ -255,7 +271,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
       .eq("id", semua[0].id);
 
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "sore" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "sore" }),
     );
     expect(r.ok).toBe(true);
     expect(await menungguAnanda()).toHaveLength(BATAS);
@@ -267,6 +283,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     const { error } = await a.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
       preferensi_waktu: "sore",
       status: "menunggu",
@@ -279,11 +296,11 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
 describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
   it("pengiriman identik kedua lewat action ditolak, hanya satu baris tersimpan", async () => {
     const pertama = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
     );
     expect(pertama.ok).toBe(true);
     const kedua = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
     );
     expect(kedua.ok).toBe(false);
     expect(await barisAnanda()).toHaveLength(1);
@@ -293,6 +310,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
     const baris = {
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
       preferensi_waktu: "pagi",
       status: "menunggu",
@@ -310,12 +328,13 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
     await admin.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
       preferensi_waktu: "pagi",
       status: "ditolak",
     });
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
     );
     expect(r.ok).toBe(true);
     expect(await menungguAnanda()).toHaveLength(1);
@@ -342,7 +361,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
 
   it("server action menolak service_id yang aktif=false", async () => {
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NONAKTIF, tanggal: TGL_DEPAN, waktu: "pagi" }),
+      formulir({ layanan: SVC_NONAKTIF, varian: VARIAN_NONAKTIF, tanggal: TGL_DEPAN, waktu: "pagi" }),
     );
     expect(r.ok).toBe(false);
     expect(await barisAnanda()).toHaveLength(0);
@@ -352,6 +371,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NONAKTIF,
+      variant_id: VARIAN_NONAKTIF,
       tanggal: TGL_DEPAN,
       preferensi_waktu: "pagi",
       status: "menunggu",
@@ -363,7 +383,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
   it("layanan yang kembali aktif bisa dipesan lagi", async () => {
     await admin.from("services").update({ aktif: true }).eq("id", SVC_NONAKTIF);
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NONAKTIF, tanggal: TGL_DEPAN, waktu: "pagi" }),
+      formulir({ layanan: SVC_NONAKTIF, varian: VARIAN_NONAKTIF, tanggal: TGL_DEPAN, waktu: "pagi" }),
     );
     expect(r.ok).toBe(true);
     expect(await barisAnanda()).toHaveLength(1);
@@ -373,7 +393,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
 describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
   it("server action menolak 2020-01-01", async () => {
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_LAMPAU, waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_LAMPAU, waktu: "pagi" }),
     );
     expect(r.ok).toBe(false);
     expect(await barisAnanda()).toHaveLength(0);
@@ -383,6 +403,7 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       tanggal: TGL_LAMPAU,
       preferensi_waktu: "pagi",
       status: "menunggu",
@@ -394,7 +415,7 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
   it("HARI INI menurut kalender Jakarta masih diterima (batasnya >=, bukan >)", async () => {
     const hariIni = hariIniJakarta();
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: hariIni, waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: hariIni, waktu: "pagi" }),
     );
     expect(r.ok).toBe(true);
     const baris = await barisAnanda();
@@ -410,6 +431,56 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
       `select (now() at time zone 'Asia/Jakarta')::date::text as jakarta`,
     );
     expect(baris.jakarta).toBe(hariIniJakarta());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 9: jalur tulis wajib memilih varian
+// ---------------------------------------------------------------------------
+describe("varian wajib — pengajuan tanpa varian sah ditolak", () => {
+  it("menolak pengajuan tanpa varian", async () => {
+    const hasil = await ajukanJadwal(
+      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
+    );
+    expect(hasil.ok).toBe(false);
+    expect(await barisAnanda()).toHaveLength(0);
+  });
+
+  it("menolak varian milik layanan lain", async () => {
+    // VARIAN_YOGA milik SVC_YOGA, dipasangkan sengaja dengan SVC_NUTRISI —
+    // FK gabungan `booking_requests_varian_milik_layanan` tetap lapisan
+    // terakhir, tapi query di action ini yang wajib menolaknya lebih dulu
+    // dengan KALIMAT, bukan kode Postgres.
+    const hasil = await ajukanJadwal(
+      formulir({
+        layanan: SVC_NUTRISI,
+        varian: VARIAN_YOGA,
+        tanggal: TGL_DEPAN,
+        waktu: "pagi",
+      }),
+    );
+    expect(hasil.ok).toBe(false);
+    expect(await barisAnanda()).toHaveLength(0);
+  });
+
+  it("menyimpan variant_id yang dipilih", async () => {
+    const hasil = await ajukanJadwal(
+      formulir({
+        layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
+        tanggal: TGL_DEPAN,
+        waktu: "pagi",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    const { data } = await admin
+      .from("booking_requests")
+      .select("variant_id")
+      .eq("client_id", ANANDA)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    expect(data!.variant_id).toBe(VARIAN_NUTRISI);
   });
 });
 

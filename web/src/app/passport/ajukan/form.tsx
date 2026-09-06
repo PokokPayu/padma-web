@@ -9,17 +9,27 @@ import { ajukanJadwal } from "@/lib/passport/aksi";
 // dan dikunci trigger basis data.
 const WAKTU = ["pagi", "siang", "sore"] as const;
 
+export type VarianPilihan = { id: string; serviceId: string; label: string };
+
 export function FormAjukan({
   layanan,
+  varian,
   tanggalPalingAwal,
 }: {
   layanan: Array<{ id: string; nama: string }>;
+  // Varian AKTIF seluruh layanan, disaring per layanan terpilih di klien —
+  // wizard butuh keduanya bersamaan supaya pilihan kedua bisa berubah tanpa
+  // round-trip ke server saat layanan diganti.
+  varian: VarianPilihan[];
   // String 'YYYY-MM-DD' menurut kalender Jakarta, dirakit di server. Jangan
   // menghitungnya di browser: jam perangkat pemakai bisa apa saja.
   tanggalPalingAwal: string;
 }) {
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
+  const [layananId, setLayananId] = useState(layanan[0]?.id ?? "");
+  const varianLayanan = varian.filter((v) => v.serviceId === layananId);
+  const [varianId, setVarianId] = useState(varianLayanan[0]?.id ?? "");
   const [selesai, setSelesai] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -56,6 +66,7 @@ export function FormAjukan({
       <form
         action={(fd) => {
           fd.set("waktu", waktu);
+          fd.set("varian", varianId);
           mulai(async () => {
             const r = await ajukanJadwal(fd);
             if (r.ok) setSelesai(true);
@@ -68,11 +79,39 @@ export function FormAjukan({
           <select
             name="layanan"
             required
+            value={layananId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setLayananId(id);
+              // Varian terpilih ikut direset ke pilihan pertama layanan baru
+              // — varian layanan sebelumnya tidak sah untuk layanan ini (FK
+              // gabungan bakal menolaknya, dan pesannya sebaiknya tidak pernah
+              // sampai lahir dari kombinasi yang tidak pernah dimaksud klien).
+              setVarianId(varian.find((v) => v.serviceId === id)?.id ?? "");
+            }}
             className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
           >
             {layanan.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.nama}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mb-4 block text-sm">
+          <span className="font-semibold text-ink-soft">Varian</span>
+          <select
+            name="varian"
+            required
+            value={varianId}
+            onChange={(e) => setVarianId(e.target.value)}
+            disabled={varianLayanan.length === 0}
+            className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
+          >
+            {varianLayanan.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label === "" ? "Standar" : v.label}
               </option>
             ))}
           </select>

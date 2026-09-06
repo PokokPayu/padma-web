@@ -35,6 +35,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vites
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 
@@ -91,6 +92,7 @@ beforeEach(async () => {
       client_id: KLIEN,
       client_package_id: PAKET_SEED,
       service_id: SVC_MASSAGE,
+      variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA_A,
       tanggal: "2026-12-20",
       status: "terjadwal",
@@ -103,6 +105,7 @@ beforeEach(async () => {
       client_id: KLIEN,
       client_package_id: null,
       service_id: SVC_NUTRISI,
+      variant_id: await varianBaku(admin, SVC_NUTRISI),
       partner_id: MITRA_B,
       tanggal: "2026-12-21",
       status: "terjadwal",
@@ -328,6 +331,7 @@ describe("constraint sesi berpaket tidak memikul status pembayaran", () => {
       client_id: KLIEN,
       client_package_id: PAKET_UJI,
       service_id: SVC_MASSAGE,
+      variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA_A,
       tanggal: "2026-12-22",
       status: "terjadwal",

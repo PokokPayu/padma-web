@@ -105,6 +105,16 @@ describe("backfill varian", () => {
  * `20260906110000_sesi_menunjuk_varian.sql` — disalin apa adanya, sengaja,
  * supaya uji ini menjaga kode produksi itu sendiri, bukan versi lain yang
  * kebetulan terlihat mirip.
+ *
+ * Sejak Task 9 (`20260906160000_varian_wajib.sql`) kolomnya `not null`, jadi
+ * baris ber-`variant_id` NULL tidak lagi bisa disemai lewat INSERT biasa —
+ * bahkan di dalam transaksi yang di-rollback. Setiap test di bawah karena itu
+ * melonggarkan constraint-nya DI DALAM transaksi yang sama sebelum menyemai
+ * (`alter table ... drop not null`), lalu menjalankan pernyataan `update`
+ * backfill yang sama persis dengan migrasi `20260906160000_varian_wajib.sql`
+ * (jaring pengaman migrasi itu, disalin sengaja) sebelum diverifikasi.
+ * Transaksinya di-rollback sesudahnya — constraint aslinya tidak pernah
+ * benar-benar terlepas.
  */
 describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () => {
   it("mengisi variant_id sessions yang NULL dengan varian baku layanannya", async () => {
@@ -118,13 +128,20 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
       const [klien] = (await jalankan(`select id from public.clients limit 1`)) as Array<{ id: string }>;
       const [mitra] = (await jalankan(`select id from public.partners limit 1`)) as Array<{ id: string }>;
 
+      // Sejak Task 9 kolomnya `not null` — dilonggarkan di dalam transaksi
+      // ini saja supaya baris ber-variant_id NULL bisa disemai, meniru data
+      // yang lahir SEBELUM constraint itu ada. Rollback di akhir mengembalikan
+      // constraint aslinya utuh.
+      await jalankan(`alter table public.sessions alter column variant_id drop not null`);
+
       const [sesi] = (await jalankan(
         `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal)
          values ($1, $2, null, $3, current_date) returning id`,
         [klien.id, a.service_id, mitra.id],
       )) as Array<{ id: string }>;
 
-      // Identik dengan migrasi 20260906110000_sesi_menunjuk_varian.sql.
+      // Identik dengan jaring pengaman migrasi 20260906160000_varian_wajib.sql
+      // (disalin dari migrasi backfill 20260906110000_sesi_menunjuk_varian.sql).
       await jalankan(
         `update public.sessions s
             set variant_id = (select v.id from public.service_variants v
@@ -151,6 +168,10 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
       )) as Array<{ service_id: string; variant_id: string }>;
       const [klien] = (await jalankan(`select id from public.clients limit 1`)) as Array<{ id: string }>;
 
+      // Sejak Task 9 kolomnya `not null` — dilonggarkan di dalam transaksi
+      // ini saja, lihat komentar pada test sessions di atas.
+      await jalankan(`alter table public.booking_requests alter column variant_id drop not null`);
+
       const [permintaan] = (await jalankan(
         `insert into public.booking_requests
            (client_id, service_id, variant_id, tanggal, preferensi_waktu)
@@ -158,7 +179,8 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
         [klien.id, a.service_id],
       )) as Array<{ id: string }>;
 
-      // Identik dengan migrasi 20260906110000_sesi_menunjuk_varian.sql.
+      // Identik dengan jaring pengaman migrasi 20260906160000_varian_wajib.sql
+      // (disalin dari migrasi backfill 20260906110000_sesi_menunjuk_varian.sql).
       await jalankan(
         `update public.booking_requests b
             set variant_id = (select v.id from public.service_variants v

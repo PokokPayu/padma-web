@@ -29,6 +29,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -156,10 +157,12 @@ beforeAll(async () => {
     hasil: "hijau",
     status_tindak_lanjut: "baru",
   });
+  const varianSvc = await varianBaku(admin, SVC);
   await admin.from("booking_requests").insert({
     id: PERMINTAAN_UJI,
     client_id: KLIEN_UJI,
     service_id: SVC,
+    variant_id: varianSvc,
     tanggal: "2026-12-24",
     preferensi_waktu: "pagi",
     status: "menunggu",
@@ -168,6 +171,7 @@ beforeAll(async () => {
     id: SESI_UJI,
     client_id: KLIEN_UJI,
     service_id: SVC,
+    variant_id: varianSvc,
     partner_id: MITRA,
     tanggal: "2026-12-24",
     status: "terjadwal",

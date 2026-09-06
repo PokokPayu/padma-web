@@ -55,6 +55,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { varianBaku } from "../helpers/varian";
 
 config({ path: [".env.local", ".env"] });
 
@@ -280,6 +281,10 @@ async function main() {
       .select("id")
       .single();
     if (eLayanan) throw eLayanan;
+    // Sejak Task 9 `sessions.variant_id` NOT NULL: dibaca dari basis data
+    // (trigger `trg_terbitkan_varian_baku` sudah menerbitkannya begitu
+    // layanan di atas lahir) alih-alih ditulis literal.
+    const variantUji = await varianBaku(admin, layananUji!.id as string);
 
     const { data: userBaru, error: eUser } = await admin.auth.admin.createUser({
       email: EMAIL_KLIEN,
@@ -312,6 +317,7 @@ async function main() {
       .insert({
         client_id: klienUji.id,
         service_id: layananUji.id,
+        variant_id: variantUji,
         partner_id: MITRA_SEED,
         tanggal: TANGGAL_SESI,
         status: "selesai",
@@ -357,6 +363,7 @@ async function main() {
       .insert({
         client_id: klienUji.id,
         service_id: layananUji.id,
+        variant_id: variantUji,
         partner_id: MITRA_SEED,
         client_package_id: paketKlien.id,
         tanggal: TANGGAL_SESI_PAKET,

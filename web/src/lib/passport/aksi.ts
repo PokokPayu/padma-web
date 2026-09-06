@@ -80,6 +80,7 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
   if (!clientId) return { ok: false, pesan: "Akun belum terhubung." };
 
   const serviceId = String(formData.get("layanan") ?? "");
+  const variantId = String(formData.get("varian") ?? "");
   const tanggal = String(formData.get("tanggal") ?? "");
   const waktu = String(formData.get("waktu") ?? "");
   const catatan = String(formData.get("catatan") ?? "").slice(0, 300);
@@ -87,8 +88,8 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
   // Kolom `tanggal` bertipe date dan hidup sebagai string YYYY-MM-DD di
   // seluruh aplikasi — bentuknya diperiksa apa adanya, tanpa aritmatika Date
   // (server berjalan UTC, mesin dev WIB).
-  if (!serviceId || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
-    return { ok: false, pesan: "Lengkapi layanan dan tanggal." };
+  if (!serviceId || !variantId || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+    return { ok: false, pesan: "Lengkapi layanan, varian, dan tanggal." };
   }
   if (!WAKTU_SAH.includes(waktu)) {
     return { ok: false, pesan: "Preferensi waktu tidak sah." };
@@ -116,6 +117,21 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     .maybeSingle();
   if (!layanan) {
     return { ok: false, pesan: "Layanan tidak tersedia untuk saat ini." };
+  }
+
+  // Varian harus AKTIF dan milik LAYANAN yang sama — keduanya disaring dalam
+  // satu query, bukan hanya `id`, supaya "varian milik layanan lain" ditolak
+  // dengan kalimat yang bisa dibaca, bukan sekadar kode Postgres dari FK
+  // gabungan (yang tetap menjadi lapisan terakhir, tidak dilepas di sini).
+  const { data: varian } = await supabase
+    .from("service_variants")
+    .select("id")
+    .eq("id", variantId)
+    .eq("service_id", serviceId)
+    .eq("aktif", true)
+    .maybeSingle();
+  if (!varian) {
+    return { ok: false, pesan: "Varian tidak tersedia untuk layanan ini." };
   }
 
   // Pembatas antrean. Penegak sebenarnya ada di basis data (trigger
@@ -151,10 +167,11 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
   // Insert memakai SESI PENGGUNA, bukan service role: RLS + trigger
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
   // Nilai apa pun yang ikut dikirim browser di FormData diabaikan — hanya
-  // empat medan di bawah yang pernah menyentuh basis data.
+  // medan di bawah yang pernah menyentuh basis data.
   const { error } = await supabase.from("booking_requests").insert({
     client_id: clientId,
     service_id: serviceId,
+    variant_id: variantId,
     tanggal,
     preferensi_waktu: waktu,
     catatan,

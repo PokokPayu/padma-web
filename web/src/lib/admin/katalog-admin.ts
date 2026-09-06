@@ -1,5 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { FormatVarian } from "@/lib/varian";
+import { labelVarian, type FormatVarian } from "@/lib/varian";
 
 /**
  * Lapisan data modul Layanan, Paket, & Varian.
@@ -68,6 +68,7 @@ export type FaseKelola = {
 };
 
 export type LayananPilihan = { id: string; nama: string };
+export type VarianPilihan = { id: string; serviceId: string; nama: string };
 
 type BarisFase = { id: string; nama: string; nama_sanskrit: string; urutan: number };
 type BarisLayanan = {
@@ -244,4 +245,36 @@ export async function pilihanLayanan(): Promise<LayananPilihan[]> {
     .order("nama")
     .returns<LayananPilihan[]>();
   return data ?? [];
+}
+
+type BarisVarianPilihan = {
+  id: string;
+  service_id: string;
+  label: string;
+  durasi_menit: number | null;
+  format: FormatVarian | null;
+};
+
+/**
+ * Pilihan varian untuk MENJADWALKAN sesi baru — hanya yang aktif, dari layanan
+ * apa pun (disaring per layanan terpilih di klien, sama seperti wizard klien
+ * `/passport/ajukan`). Alasan yang sama dengan `pilihanLayanan()`: sesi wajib
+ * menunjuk varian yang benar-benar masih ditawarkan.
+ */
+export async function pilihanVarian(): Promise<VarianPilihan[]> {
+  const supabase = await createServerSupabase();
+  const { data } = await supabase
+    .from("service_variants")
+    .select("id, service_id, label, durasi_menit, format")
+    .eq("aktif", true)
+    .order("urutan")
+    .returns<BarisVarianPilihan[]>();
+  return (data ?? []).map((v) => ({
+    id: v.id,
+    serviceId: v.service_id,
+    // Varian baku (label kosong) tampil sebagai "Standar" di sini — pilihan
+    // ini WAJIB selalu punya teks tampilan, beda dari `labelVarian()` yang
+    // sengaja memulangkan string kosong untuk dirangkai layar lain.
+    nama: labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format }) || "Standar",
+  }));
 }

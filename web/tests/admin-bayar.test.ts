@@ -46,6 +46,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -159,8 +160,13 @@ async function siapkan() {
   ]);
 }
 
+// Sejak Task 9 `sessions.variant_id` NOT NULL: id-nya lahir
+// `gen_random_uuid()` saat migrasi/trigger berjalan, jadi dibaca dari basis
+// data sekali di `beforeAll` alih-alih ditulis literal.
+const variantPerSvc = new Map<string, string>();
+
 function baris(id: string, ubah: Record<string, unknown>) {
-  return {
+  const dasar = {
     id,
     client_id: KLIEN,
     client_package_id: null,
@@ -172,6 +178,9 @@ function baris(id: string, ubah: Record<string, unknown>) {
     rekomendasi: "",
     ...ubah,
   };
+  const serviceId = dasar.service_id as string;
+  const variantId = (dasar as Record<string, unknown>).variant_id ?? variantPerSvc.get(serviceId);
+  return { ...dasar, variant_id: variantId };
 }
 
 async function statusSesi(id: string): Promise<string> {
@@ -205,6 +214,8 @@ beforeAll(async () => {
   // miliknya sendiri.
   const { data } = await sesiAdmin.auth.getUser();
   idAdmin = data.user!.id;
+  variantPerSvc.set(SVC_MASSAGE, await varianBaku(admin, SVC_MASSAGE));
+  variantPerSvc.set(SVC_NUTRISI, await varianBaku(admin, SVC_NUTRISI));
 });
 
 beforeEach(async () => {
@@ -381,6 +392,34 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
     const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_MENUNGGU);
     expect(item).toBeDefined();
     expect((item!.label.match(/ · /g) ?? []).length).toBe(1);
+  });
+
+  // Ruling 13 (Task 9): sebelum ini, `susunTagihan()` sisi klien tidak
+  // menyebut varian sama sekali sementara `daftarTagihanAdmin()` sudah
+  // menyebutnya sejak Task 7 — admin dan klien membaca label BERBEDA untuk
+  // sesi yang SAMA, dan jaminan "label klien & admin sama persis" yang
+  // tertulis di `susunTagihan()` jadi bohong. Dua test di bawah membuktikan
+  // klien kini menyebut variannya, dan bahwa keduanya kembali identik.
+  it("label sesi klien (susunTagihan) menyebut varian yang sama seperti admin (Ruling 13)", async () => {
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+
+    const item = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_VARIAN);
+    expect(item).toBeDefined();
+    expect(item!.label).toContain("VIP");
+    expect(item!.label).toMatch(/90 menit/);
+  });
+
+  it("label klien dan label admin IDENTIK huruf demi huruf untuk sesi ber-varian yang sama (Ruling 13)", async () => {
+    const labelAdmin = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN)!.label;
+
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+    const labelKlien = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_VARIAN)!.label;
+
+    expect(labelKlien).toBe(labelAdmin);
   });
 });
 

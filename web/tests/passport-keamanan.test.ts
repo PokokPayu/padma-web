@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 /**
  * PENJAGA PRA-PASSPORT.
@@ -20,6 +21,10 @@ import { signInAs } from "./helpers/as-user";
 
 const admin = createAdminSupabase();
 const SVC = "11111111-1111-1111-1111-111111111101";
+// Sejak Task 9 `booking_requests.variant_id` NOT NULL: dibaca dari basis data
+// sekali di sini (id-nya lahir `gen_random_uuid()` saat migrasi/trigger
+// berjalan) alih-alih ditulis literal.
+const VARIAN_SVC = await varianBaku(admin, SVC);
 // Tanggal uji sengaja JAUH di masa depan: trigger `guard_booking_pembatas`
 // menolak tanggal lampau (kalender Asia/Jakarta), jadi tanggal yang "beberapa
 // minggu lagi" berubah menjadi kegagalan palsu begitu hari itu lewat.
@@ -43,7 +48,7 @@ describe("penjaga booking_requests", () => {
   it("klien TIDAK bisa menyisipkan permintaan berstatus dikonfirmasi", async () => {
     const { k, clientId } = await klienDanId();
     const { data, error } = await k.from("booking_requests").insert({
-      client_id: clientId, service_id: SVC, tanggal: "2030-09-10",
+      client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-10",
       preferensi_waktu: "pagi", status: "dikonfirmasi",
     }).select();
     if (data?.[0]) bersihkan.push(data[0].id);
@@ -53,7 +58,7 @@ describe("penjaga booking_requests", () => {
   it("klien TIDAK bisa mengubah status permintaannya sendiri", async () => {
     const { k, clientId } = await klienDanId();
     const { data: baru } = await admin.from("booking_requests").insert({
-      client_id: clientId, service_id: SVC, tanggal: "2030-09-11",
+      client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-11",
       preferensi_waktu: "sore", status: "menunggu",
     }).select("id").single();
     bersihkan.push(baru!.id);
@@ -71,7 +76,7 @@ describe("penjaga booking_requests", () => {
   it("klien BOLEH menyisipkan permintaan berstatus menunggu (alur sah)", async () => {
     const { k, clientId } = await klienDanId();
     const { data, error } = await k.from("booking_requests").insert({
-      client_id: clientId, service_id: SVC, tanggal: "2030-09-12",
+      client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-12",
       preferensi_waktu: "pagi", status: "menunggu",
     }).select("id");
     expect(error).toBeNull();
@@ -81,7 +86,7 @@ describe("penjaga booking_requests", () => {
   it("staf tetap bisa mengonfirmasi permintaan", async () => {
     const { clientId } = await klienDanId();
     const { data: baru } = await admin.from("booking_requests").insert({
-      client_id: clientId, service_id: SVC, tanggal: "2030-09-13",
+      client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-13",
       preferensi_waktu: "siang", status: "menunggu",
     }).select("id").single();
     bersihkan.push(baru!.id);

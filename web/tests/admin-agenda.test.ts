@@ -17,6 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -69,6 +70,7 @@ beforeAll(async () => {
   const dasarSesi = {
     client_id: KLIEN_UJI,
     service_id: SVC,
+    variant_id: await varianBaku(admin, SVC),
     partner_id: MITRA,
     status_bayar: "belum" as const,
     catatan: "",
@@ -92,6 +94,7 @@ beforeAll(async () => {
     id: PERMINTAAN_UJI,
     client_id: KLIEN_UJI,
     service_id: SVC,
+    variant_id: dasarSesi.variant_id,
     tanggal: "2027-12-24",
     preferensi_waktu: "pagi",
     status: "menunggu",

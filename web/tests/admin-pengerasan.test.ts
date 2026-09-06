@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 import { MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
 
 /**
@@ -42,11 +43,13 @@ const KLIEN_RINA = "44444444-4444-4444-4444-444444444402";
 const SESI_UJI = "66666666-6666-6666-6666-6666666666a1";
 
 beforeAll(async () => {
+  const svcUji = "11111111-1111-1111-1111-111111111101";
   await admin.from("sessions").upsert(
     {
       id: SESI_UJI,
       client_id: KLIEN_RINA,
-      service_id: "11111111-1111-1111-1111-111111111101",
+      service_id: svcUji,
+      variant_id: await varianBaku(admin, svcUji),
       partner_id: MITRA_SRI,
       tanggal: "2026-12-29",
       status: "terjadwal",
@@ -134,6 +137,7 @@ describe("hak berbahaya dicabut", () => {
       .insert({
         client_id: KLIEN_ANANDA,
         service_id: "11111111-1111-1111-1111-111111111101",
+        variant_id: await varianBaku(admin, "11111111-1111-1111-1111-111111111101"),
         partner_id: MITRA_SRI,
         tanggal: "2026-12-30",
         status: "terjadwal",

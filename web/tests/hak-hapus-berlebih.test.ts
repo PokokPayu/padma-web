@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql, dalamTransaksiRollback } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 /**
  * HAK DELETE BERLEBIH — sisa yang tidak ikut tercabut di Plan 3A.
@@ -86,8 +87,10 @@ const PEKAN_HONOR = "2027-03-08";
 const PEKAN_LEWAT = "2026-01-12"; // Senin
 
 let permintaanUji: string;
+let VARIAN_SEED: string;
 
 beforeAll(async () => {
+  VARIAN_SEED = await varianBaku(svc, LAYANAN_SEED);
   await svc.from("services").upsert(
     {
       id: LAYANAN_UJI,
@@ -152,6 +155,7 @@ beforeAll(async () => {
     .insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
+      variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan",
@@ -477,6 +481,7 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
     const { error: eUlang } = await svc.from("booking_requests").insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
+      variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan ulang",
