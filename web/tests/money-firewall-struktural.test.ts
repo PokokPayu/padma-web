@@ -30,6 +30,19 @@ import { querySql } from "./helpers/db";
  * (menagih, memverifikasi) tanpa pernah melihat angka rupiah. Pengecualiannya
  * DIIKAT KE TIPE: `status_bayar int` tetap akan merah, karena itu nominal yang
  * menyamar sebagai status.
+ *
+ * Yang sengaja TIDAK dituduh (kedua): VIEW `harga_publik`. Ini bukan celah
+ * yang sama dengan yang ditolak `lib/owner/rekap.ts` — penolakan di sana
+ * menyasar view AGREGAT yang diam-diam melewati RLS dan pernah membocorkan
+ * rate card LENGKAP (termasuk honor) ke admin lewat SELECT biasa. View ini
+ * sebaliknya: sempit, disengaja, dan pagarnya justru ADA di kolomnya —
+ * `honor_mitra` tidak pernah ikut diproyeksikan, dan daftar empat kolom yang
+ * boleh tampil dikunci sebagai assertion terpisah di
+ * tests/harga-publik.test.ts. Harga klien memang DIPUTUSKAN tampil publik
+ * (spec V4, §4.4); yang tidak berubah adalah honor mitra tidak pernah keluar
+ * dari `variant_rates`. Pengecualian di bawah karena itu mengecualikan VIEW
+ * itu dari pemindaian, bukan melebarkan `TABEL_UANG` atau melonggarkan
+ * `POLA_NOMINAL`.
  */
 
 /**
@@ -39,6 +52,17 @@ import { querySql } from "./helpers/db";
  * per VARIAN. Daftarnya tidak diperlebar — ia dipindahkan.
  */
 const TABEL_UANG = new Set(["variant_rates", "honor_marks"]);
+
+/**
+ * Satu-satunya view yang boleh memuat kolom nominal.
+ *
+ * Harga klien memang DIPUTUSKAN tampil publik (spec V4): pengunjung harus bisa
+ * melihat pricelist sebelum mendaftar. Yang tidak berubah: honor mitra tidak
+ * pernah keluar dari variant_rates, dan daftar kolom view ini dikunci terpisah
+ * di tests/harga-publik.test.ts — pengecualian ini tidak memberi izin untuk
+ * menambah kolom, hanya untuk empat kolom yang sudah diuji di sana.
+ */
+const VIEW_HARGA_PUBLIK = "harga_publik";
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -122,6 +146,7 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
   it("tidak ada kolom bernuansa nominal uang di luar variant_rates & honor_marks", () => {
     const pelanggaran = semuaKolom
       .filter((k) => !TABEL_UANG.has(k.table_name))
+      .filter((k) => k.table_name !== VIEW_HARGA_PUBLIK)
       .filter((k) => bernuansaUang(k.column_name))
       .filter((k) => !statusSah(k))
       .map((k) => `${k.table_name}.${k.column_name} (${k.data_type})`);
