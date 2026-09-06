@@ -221,7 +221,19 @@ async function bersihkan() {
     }
     await admin.from("service_rates").delete().eq("service_id", l.id);
     await admin.from("packages").delete().eq("service_id", l.id);
-    await admin.from("services").delete().eq("id", l.id);
+    // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku
+    // otomatis (id acak, tidak pernah dicatat di sini) begitu `services` di
+    // atas lahir. FK `service_variants.service_id -> services.id` TIDAK
+    // ber-cascade, jadi tanpa baris ini penghapusan `services` di bawah
+    // tertahan diam-diam — errornya WAJIB diperiksa, sebab silent failure
+    // di sinilah persis yang membuat fixture E2E menumpuk tiap run.
+    const { error: eVarian } = await admin
+      .from("service_variants")
+      .delete()
+      .eq("service_id", l.id);
+    if (eVarian) throw eVarian;
+    const { error: eLayananHapus } = await admin.from("services").delete().eq("id", l.id);
+    if (eLayananHapus) throw eLayananHapus;
   }
 
   const { data: daftar } = await admin.auth.admin.listUsers();
