@@ -26,8 +26,8 @@ Pekerjaan dipecah jadi empat spec berurutan. Dokumen ini yang **pertama**:
 | Urutan | Spec | Alasan urutan |
 |---|---|---|
 | 1 | **Varian layanan & harga bertingkat** (dokumen ini) | Prasyarat semuanya. Tanpa varian, harga paket dan tagihan tidak punya satuan. |
-| 2 | Paket bundling multi-layanan | `package_items` menunjuk varian. |
-| 3 | Transport, alamat klien, domisili mitra | Prasyarat penyelesaian pembayaran paket. |
+| 2 | Transport, alamat klien, domisili mitra | **Ditukar dengan paket** (7 Sep 2026): keputusan paket "bayar sesudah SELURUH mitra ditentukan" menuntut transport, jadi paket tanpa ini bisa dibangun tetapi tidak pernah bisa dikonfirmasi. Lihat `2026-09-07-padma-transport-design.md`. |
+| 3 | Paket bundling multi-layanan | `package_items` menunjuk varian. |
 | 4 | Rangkaian status, payment gateway, kredit & reschedule | Perubahan alur terbesar, paling akhir. |
 
 ## 2. Batas Kejujuran — apa yang berubah dan apa yang tidak
