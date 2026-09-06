@@ -141,6 +141,15 @@ async function petaVarianBaku(
       .from("service_variants")
       .select("id")
       .eq("service_id", serviceId)
+      // Tanpa ini, dua layanan seed di bawah (`…111107` Purnama Recovery
+      // Massage dan `…111109` Shishu Parent Touch) memulangkan varian BAKU-
+      // nya yang sengaja dinonaktifkan tepat di atas (kedua layanan itu diberi
+      // varian bertingkat AKTIF sebagai pengganti — "satu layanan dua harga
+      // utama aktif" sengaja dicegah). Sesi/permintaan jadwal yang dibuat
+      // lewat peta ini untuk salah satu dari dua layanan tersebut lalu diam-
+      // diam menunjuk variant_id nonaktif — sah secara FK, tetapi tak pernah
+      // muncul di katalog/rate card mana pun.
+      .eq("aktif", true)
       .order("urutan", { ascending: true })
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })

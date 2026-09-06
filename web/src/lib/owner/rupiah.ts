@@ -8,16 +8,20 @@
 // basis data dibangun untuk mencegah. Letaknya di sini membuat impor dari luar
 // wilayah owner terlihat ganjil pada saat ditulis, bukan setahun kemudian.
 //
+// Implementasinya sendiri hidup di `@/lib/rupiah-publik` dan dipakai BERSAMA
+// dengan landing publik (gelombang perbaikan varian-layanan: dua formatter
+// rupiah identik pernah hidup berdampingan — satu di sini dengan penjagaan
+// `Number.isFinite`, satu lagi tumbuh sendiri di `_landing/lini-layanan.tsx`
+// TANPA penjagaan itu). Batas di atas tetap UTUH sesudah penggabungan ini:
+// yang dipindah cuma ATURAN FORMATNYA (angka -> string "Rp ..."), BUKAN akses
+// ke tabel uang atau ke kode panel owner — modul bersama itu murni fungsi,
+// tanpa I/O, tanpa tahu siapa pemanggilnya, persis seperti sebelumnya. Berkas
+// INI tetap satu-satunya pintu yang wajar dipakai kode owner, dan
+// money-firewall yang sudah ada tetap memindai IDENTIFIER `formatRupiah` di
+// sumber admin/panel — bukan jalur impornya — jadi kebocoran tetap tertangkap
+// dari mana pun nama itu datang.
+//
 // Nilai uang PADMA adalah RUPIAH BULAT (`variant_rates.harga_klien` dan
 // `honor_mitra` bertipe `int`), jadi tidak ada sen yang perlu dibulatkan dan
 // tidak ada pecahan yang boleh muncul.
-
-/**
- * "Rp 425.000". Pemisah ribuan Indonesia lewat `toLocaleString("id-ID")` —
- * bukan regex sisipan titik buatan sendiri, yang selalu salah pada angka
- * negatif (margin bisa negatif bila honor melebihi harga).
- */
-export function formatRupiah(nilai: number): string {
-  if (!Number.isFinite(nilai)) return "Rp –";
-  return `Rp ${Math.round(nilai).toLocaleString("id-ID")}`;
-}
+export { formatRupiah } from "@/lib/rupiah-publik";

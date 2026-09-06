@@ -234,3 +234,91 @@ describe("batas policy baca publik", () => {
     ]);
   });
 });
+
+/**
+ * `supabase/config.toml` menyetel `max_rows = 1000`: PostgREST memotong SETIAP
+ * bacaan tanpa `.limit()` di baris itu, SENYAP — tanpa error, tanpa kolom
+ * "terpotong". `variant_rates` bersifat APPEND-ONLY SELAMANYA (satu perubahan
+ * harga = satu baris baru yang tidak pernah dihapus), jadi ini bukan skenario
+ * eksotis: satu keputusan seperti "akhiri soft launch" menambah puluhan baris
+ * sekaligus, dan proyek ini akan melewati 1000 baris riwayat harga dalam
+ * hitungan tahun, bukan dekade.
+ *
+ * Fixture di bawah menyemai >1000 baris SUNGGUHAN (bukan mengira-ngira dari
+ * kode) untuk membuktikan bacaKatalog() tetap benar pada skala nyata, bukan
+ * hanya lolos pada dua baris seperti fixture VARIAN_60 di atas. Penyisipannya
+ * cepat (satu INSERT bertumpuk, terukur <1 detik pada mesin ini) jadi TIDAK
+ * ada alasan mengecilkan cakupan uji ini ke sampel kecil.
+ */
+describe("katalog publik pada skala >1000 baris variant_rates (max_rows PostgREST)", () => {
+  const LAYANAN_BANJIR = "11111111-1111-1111-1111-1111111119f1";
+  const VARIAN_BANJIR = "11111111-1111-1111-1111-1111111119f2";
+  // Lebih dari max_rows (1000) sendirian — tidak bergantung pada berapa baris
+  // yang kebetulan ada di tabel dari fixture lain saat uji ini berjalan.
+  const JUMLAH_BARIS = 1050;
+
+  async function bersihkan() {
+    await admin.from("variant_rates").delete().eq("variant_id", VARIAN_BANJIR);
+    await admin.from("service_variants").delete().eq("id", VARIAN_BANJIR);
+    await admin.from("services").delete().eq("id", LAYANAN_BANJIR);
+  }
+
+  it("bacaKatalog memulangkan harga TERBARU walau variant_rates varian ini sendiri melebihi max_rows", async () => {
+    await bersihkan();
+    try {
+      await admin.from("services").insert({
+        id: LAYANAN_BANJIR,
+        phase_id: "kehamilan",
+        nama: "PAD-UJI Layanan Banjir Tarif",
+        aktif: true,
+      });
+      const { error: errorVarian } = await admin.from("service_variants").insert({
+        id: VARIAN_BANJIR,
+        service_id: LAYANAN_BANJIR,
+        label: "",
+        urutan: 0,
+        aktif: true,
+      });
+      if (errorVarian) throw errorVarian;
+
+      // `berlaku_sejak` unik per (variant_id, tanggal) — JUMLAH_BARIS tanggal
+      // BERBEDA, terurut MENAIK (lampau -> kemarin), disisipkan dalam SATU
+      // pernyataan INSERT sehingga baris ber-`berlaku_sejak` TERBARU adalah
+      // baris FISIK TERAKHIR yang ditulis. Tanpa `.order()` di sisi baca,
+      // PostgREST/Postgres tidak berjanji apa pun soal urutan pengembalian —
+      // tetapi pada heap yang baru ditulis begini, baris terakhir itulah yang
+      // pertama tersingkir saat dipotong ke 1000 baris pertama. Itu sudah
+      // diverifikasi manual di luar suite ini (lihat laporan gelombang
+      // perbaikan): TANPA `.order()`, harga yang lolos ke `bacaKatalog()`
+      // adalah harga dari ~2 bulan lalu, BUKAN harga kemarin.
+      const kemarin = new Date(Date.now() - 86_400_000);
+      const baris = Array.from({ length: JUMLAH_BARIS }, (_, i) => {
+        const tanggal = new Date(kemarin.getTime() - (JUMLAH_BARIS - 1 - i) * 86_400_000);
+        return {
+          variant_id: VARIAN_BANJIR,
+          harga_klien: 100_000 + i,
+          harga_coret: null,
+          honor_mitra: 50_000,
+          berlaku_sejak: tanggal.toISOString().slice(0, 10),
+        };
+      });
+      const hargaTerbaruSeharusnya = baris[baris.length - 1].harga_klien;
+
+      const { error: errorTarif } = await admin.from("variant_rates").insert(baris);
+      if (errorTarif) throw errorTarif;
+
+      const katalog = await bacaKatalog();
+      const varian = katalog
+        .flatMap((f) => f.layanan)
+        .find((l) => l.id === LAYANAN_BANJIR)?.varian[0];
+
+      // Bila ini gagal dengan "varian === undefined": harga TERBARU varian ini
+      // jatuh di luar 1000 baris pertama yang dikembalikan PostgREST, dan
+      // `bacaKatalog()` menyaringnya sebagai "tak bertarif" — persis TEMUAN 1(a).
+      expect(varian).toBeDefined();
+      expect(varian!.hargaKlien).toBe(hargaTerbaruSeharusnya);
+    } finally {
+      await bersihkan();
+    }
+  });
+});

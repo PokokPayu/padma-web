@@ -18,6 +18,15 @@ export async function varianBaku(admin: SupabaseClient, serviceId: string): Prom
     .from("service_variants")
     .select("id")
     .eq("service_id", serviceId)
+    // Tanpa ini, dua layanan seed (`…111107` Purnama Recovery Massage dan
+    // `…111109` Shishu Parent Touch) memulangkan varian BAKU-nya yang sengaja
+    // dinonaktifkan `seed.sql` (kedua layanan itu diberi varian bertingkat
+    // AKTIF sebagai pengganti, dan "satu layanan dua harga utama aktif"
+    // adalah keadaan yang sengaja dicegah). Fixture yang memanggil helper ini
+    // untuk salah satu dari dua layanan tersebut lalu diam-diam memakai
+    // variant_id nonaktif — sah secara FK, tetapi tak pernah muncul di
+    // katalog/rate card mana pun.
+    .eq("aktif", true)
     .order("urutan", { ascending: true })
     .order("created_at", { ascending: true })
     .order("id", { ascending: true })

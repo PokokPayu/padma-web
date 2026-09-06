@@ -85,9 +85,26 @@ export async function bacaKatalog(): Promise<FaseKatalog[]> {
       // View sudah membuang tarif yang BELUM berlaku (bandingan kalender
       // Asia/Jakarta ada di definisi view) — yang tersisa untuk kita hanyalah
       // memilih baris ber-`berlaku_sejak` TERBESAR per varian di bawah.
+      //
+      // `.order()` DI SINI BUKAN KOSMETIK. `supabase/config.toml` menyetel
+      // `max_rows = 1000`: PostgREST memotong bacaan tanpa `.limit()` di
+      // angka itu, SENYAP — tidak ada error, tidak ada tanda "terpotong".
+      // `variant_rates` bersifat APPEND-ONLY SELAMANYA (satu perubahan harga
+      // = satu baris baru yang tidak pernah dihapus), jadi begitu tabelnya
+      // melewati 1000 baris, Postgres bebas memulangkan subset SEWENANG-
+      // WENANG. Tanpa urutan menurun di sini, subset itu bisa membuang justru
+      // baris `berlaku_sejak` TERBARU sebuah varian — pemilihan "terbesar" di
+      // JS di bawah lalu jatuh ke harga LAMA (atau varian itu hilang total
+      // dari kartu bila SEMUA barisnya tersingkir), tanpa satu pun error yang
+      // terlihat ganjil. Urutan menurun membuat baris terbaru tiap varian
+      // SELALU masuk 1000 pertama walau riwayatnya sudah sangat panjang;
+      // pemilihan max di JS di bawah tetap dipertahankan sebagai jaring
+      // kedua, bukan pengganti. Dibuktikan pada skala nyata (>1000 baris) di
+      // tests/landing-katalog.test.ts, bukan hanya diasumsikan dari kode ini.
       supabase
         .from("harga_publik")
         .select("variant_id, harga_klien, harga_coret, berlaku_sejak")
+        .order("berlaku_sejak", { ascending: false })
         .returns<BarisHarga[]>(),
     ]);
 

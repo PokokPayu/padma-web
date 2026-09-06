@@ -1,4 +1,5 @@
 import type { FaseKatalog } from "@/lib/katalog";
+import { formatRupiah } from "@/lib/rupiah-publik";
 
 // Aksara Sanskerta per fase — dekorasi, dipetakan dari id fase.
 // Nama fase & daftar layanannya TIDAK ditulis di sini: keduanya datang dari
@@ -16,10 +17,10 @@ const AKSARA: Record<string, string> = {
 // supaya nominal tidak diam-diam menyebar ke layar publik. Landing memang
 // kini menampilkan harga (spec V4 §4.4, keputusan sadar Task 8, BUKAN
 // kebocoran yang sama dengan yang dijaga di sana), jadi ia memakai
-// formatternya SENDIRI alih-alih melanggar batas yang digambar berkas itu.
-function formatRupiah(nilai: number): string {
-  return `Rp ${Math.round(nilai).toLocaleString("id-ID")}`;
-}
+// `@/lib/rupiah-publik` — modul NETRAL yang tidak hidup di bawah `lib/owner/`
+// dan karena itu tidak melanggar batas yang digambar berkas itu, sekaligus
+// tidak lagi menumbuhkan salinan `formatRupiah` sendiri tanpa penjagaan
+// `Number.isFinite` yang justru menjadi alasan formatter owner ditulis.
 
 export function LiniLayanan({ katalog }: { katalog: FaseKatalog[] }) {
   return (

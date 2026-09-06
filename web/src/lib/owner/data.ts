@@ -66,18 +66,51 @@ type BarisTarif = {
  */
 export async function ambilTarif(): Promise<TarifLayanan[]> {
   const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("variant_rates")
-    .select(
-      "id, variant_id, harga_klien, harga_coret, honor_mitra, berlaku_sejak, " +
-        "service_variants(id, label, durasi_menit, format, service_id, services(nama))",
-    )
-    // `berlaku_sejak` bertipe date dan sudah berupa string YYYY-MM-DD:
-    // urutannya diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
-    .order("berlaku_sejak", { ascending: false })
-    .returns<BarisTarif[]>();
 
-  return (data ?? []).map((r) => ({
+  // `max_rows = 1000` di `supabase/config.toml` memotong SETIAP bacaan tanpa
+  // `.limit()` pada angka itu, SENYAP — tanpa error, tanpa tanda "terpotong".
+  // Fungsi ini WAJIB membaca SELURUH riwayat (lihat dokumentasi di atas):
+  // rekap pekan lama mencocokkan tarif ke tanggal sesi, dan `variant_rates`
+  // APPEND-ONLY SELAMANYA membuat riwayatnya tumbuh tanpa batas atas.
+  //
+  // Ini beda dari `bacaKatalog()` (lib/katalog.ts), yang cukup diamankan
+  // dengan urutan menurun karena ia hanya perlu baris TERBARU per varian.
+  // Di sini urutan menurun SAJA tidak cukup: memotong di ujung LAMA membuat
+  // sesi lama "tak bertarif" (honor mitra hilang dari total pekan tanpa satu
+  // angka pun terlihat ganjil — ujung sebaliknya, ujung BARU, akan membuat
+  // rate card & rekap pekan INI memakai harga basi). Karena tidak ada satu
+  // arah potong yang aman untuk kedua pemakai fungsi ini, kita PAGINASI:
+  // menarik SELURUH baris lewat `.range()` berulang sampai halamannya kosong,
+  // bukan mempercayakan kebenaran pada urutan baca satu kali.
+  //
+  // Urutan (`berlaku_sejak` lalu `id`) tetap wajib ada di sini juga — bukan
+  // sekadar kosmetik tampilan, melainkan SYARAT paginasi yang benar: tanpa
+  // pemecah seri yang stabil, dua panggilan `.range()` berurutan bisa
+  // melompati atau mengembalikan dua kali baris yang `berlaku_sejak`-nya
+  // kembar (lazim — banyak varian berbeda bisa diberi tarif pada tanggal
+  // efektif yang sama).
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisTarif[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman } = await supabase
+      .from("variant_rates")
+      .select(
+        "id, variant_id, harga_klien, harga_coret, honor_mitra, berlaku_sejak, " +
+          "service_variants(id, label, durasi_menit, format, service_id, services(nama))",
+      )
+      // `berlaku_sejak` bertipe date dan sudah berupa string YYYY-MM-DD:
+      // urutannya diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
+      .order("berlaku_sejak", { ascending: false })
+      .order("id", { ascending: false })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisTarif[]>();
+
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
+
+  return baris.map((r) => ({
     id: r.id,
     variantId: r.variant_id,
     namaLayanan: r.service_variants?.services?.nama ?? "Layanan",

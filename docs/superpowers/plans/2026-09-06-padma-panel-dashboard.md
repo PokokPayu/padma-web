@@ -16,7 +16,7 @@
 
 - **Tanpa dependensi baru.** Tidak ada `npm install` di seluruh rencana ini — tidak ada library grafik, tidak ada jsdom, tidak ada testing-library.
 - **Tanpa migration.** Tidak ada perubahan skema, RLS, atau server action.
-- **Money firewall.** Dilarang di `src/app/_shell/panel/**` dan di `src/lib/admin/**`: pola `/Rp\s?\d/` dan `formatRupiah`. Komponen grafik menerima fungsi format sebagai prop; hanya `src/app/owner/**` yang boleh mengimpor `@/lib/owner/rupiah`. `src/lib/admin/tren.ts` dan `src/lib/admin/agenda.ts` tidak boleh menyentuh tabel `service_rates` maupun `honor_marks`.
+- **Money firewall.** Dilarang di `src/app/_shell/panel/**` dan di `src/lib/admin/**`: pola `/Rp\s?\d/` dan `formatRupiah`. Komponen grafik menerima fungsi format sebagai prop; hanya `src/app/owner/**` yang boleh mengimpor `@/lib/owner/rupiah`. `src/lib/admin/tren.ts` dan `src/lib/admin/agenda.ts` tidak boleh menyentuh tabel `variant_rates` maupun view `harga_publik` (pengganti `service_rates`, dijatuhkan branch varian-layanan — lihat `docs/superpowers/specs/2026-09-06-padma-varian-layanan-design.md`), maupun `honor_marks`.
 - **Primitif buta peran.** Tidak satu pun berkas di `src/app/_shell/panel/` boleh memuat string berkutip `"admin"`/`"owner"` (dalam bentuk apa pun huruf besar-kecilnya) atau mengimpor `requireRole`. Pagar ini sudah ada di `tests/panel-primitif.test.ts` dan membaca direktori itu secara otomatis, jadi setiap berkas baru langsung ikut terjaga.
 - **Service role terlarang** di `src/app/admin/**` (kecuali `src/app/admin/materi/unggah.ts`), di seluruh `src/app/owner/**`, dan di `src/lib/admin/**` maupun `src/lib/owner/**`. Semua bacaan lewat `createServerSupabase()` supaya RLS yang memutuskan.
 - **Argumen penjaga peran tidak bergeser.** `src/app/admin/page.tsx` tetap `await requireRole(["admin","owner"])`; `src/app/owner/page.tsx` tetap `await requireRole(["owner"])`.
@@ -1425,7 +1425,13 @@ describe("trenSesiSelesai", () => {
     expect(sumber).toContain("createServerSupabase");
     expect(sumber).not.toContain("createAdminSupabase");
     expect(sumber).not.toContain("SERVICE_ROLE");
-    expect(sumber).not.toContain("service_rates");
+    // `service_rates` dijatuhkan branch varian-layanan (2026-09-06): tabel &
+    // view uang sekarang bernama `variant_rates`/`harga_publik`. Memagari
+    // string lama yang tidak akan pernah muncul lagi membuat assertion ini
+    // lulus tanpa menguji apa pun — kebocoran nyata lewat kedua nama baru
+    // lolos tak terdeteksi.
+    expect(sumber).not.toContain("variant_rates");
+    expect(sumber).not.toContain("harga_publik");
     expect(sumber).not.toContain("honor_marks");
     expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
   });
@@ -1712,7 +1718,13 @@ describe("pagar lapisan agenda", () => {
     expect(sumber).toContain("createServerSupabase");
     expect(sumber).not.toContain("createAdminSupabase");
     expect(sumber).not.toContain("SERVICE_ROLE");
-    expect(sumber).not.toContain("service_rates");
+    // `service_rates` dijatuhkan branch varian-layanan (2026-09-06): tabel &
+    // view uang sekarang bernama `variant_rates`/`harga_publik`. Memagari
+    // string lama yang tidak akan pernah muncul lagi membuat assertion ini
+    // lulus tanpa menguji apa pun — kebocoran nyata lewat kedua nama baru
+    // lolos tak terdeteksi.
+    expect(sumber).not.toContain("variant_rates");
+    expect(sumber).not.toContain("harga_publik");
     expect(sumber).not.toContain("honor_marks");
     expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
   });
