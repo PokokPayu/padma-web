@@ -20,8 +20,10 @@ import { awalPekan, geserHari, rentangPekan } from "./pekan";
 
 export type TarifRingkas = {
   id: string;
-  serviceId: string;
+  variantId: string;
   hargaKlien: number;
+  /** Harga PEMASARAN sebelum diskon soft launch, dicoret di layar. Diisi MANUAL. */
+  hargaCoret: number | null;
   honorMitra: number;
   berlakuSejak: string; // YYYY-MM-DD
 };
@@ -29,6 +31,8 @@ export type TarifRingkas = {
 export type SesiRekap = {
   id: string;
   serviceId: string;
+  /** Kunci pencocokan tarif — harga menempel di VARIAN, bukan di layanan. */
+  variantId: string;
   namaLayanan: string;
   partnerId: string;
   namaMitra: string;
@@ -84,20 +88,24 @@ export type RekapPekan = {
 
 /**
  * Tarif yang BERLAKU pada `tgl`: `berlaku_sejak` terbesar yang masih ≤ `tgl`.
- * Mengembalikan `null` bila sesi lebih tua dari tarif paling awal layanan itu —
+ * Mengembalikan `null` bila sesi lebih tua dari tarif paling awal varian itu —
  * dan `null` itu WAJIB dilaporkan pemanggilnya, bukan dijadikan 0.
+ *
+ * Dicocokkan lewat `variantId`, BUKAN `serviceId`: harga menempel di VARIAN.
+ * Dua varian satu layanan boleh punya tarif berbeda, dan tarif varian A tidak
+ * pernah boleh bocor menjadi "berlaku" bagi varian B.
  *
  * Perbandingan tanggal = perbandingan string; keduanya YYYY-MM-DD sehingga
  * urutan leksikografis = urutan kronologis.
  */
 export function tarifPadaTanggal(
   tarif: readonly TarifRingkas[],
-  serviceId: string,
+  variantId: string,
   tgl: string,
 ): TarifRingkas | null {
   let terpilih: TarifRingkas | null = null;
   for (const t of tarif) {
-    if (t.serviceId !== serviceId) continue;
+    if (t.variantId !== variantId) continue;
     if (t.berlakuSejak > tgl) continue;
     if (terpilih === null || t.berlakuSejak > terpilih.berlakuSejak) {
       terpilih = t;
@@ -174,8 +182,9 @@ export function hitungRekap(input: {
 
       // (2) Tarif diambil menurut TANGGAL SESI, bukan tarif berjalan. Karena
       //     itu menaikkan tarif hari ini tidak menggeser satu angka pun di
-      //     pekan yang sudah lewat (spec bagian 5).
-      const t = tarifPadaTanggal(input.tarif, s.serviceId, s.tanggal);
+      //     pekan yang sudah lewat (spec bagian 5). Dicocokkan lewat variantId
+      //     — harga menempel di varian, bukan di layanan.
+      const t = tarifPadaTanggal(input.tarif, s.variantId, s.tanggal);
       if (t === null) {
         // (3) Sesi lebih tua dari tarif paling awal. TIDAK dihitung nol
         //     diam-diam — itu uang yang hilang tanpa jejak. Ia dilaporkan.

@@ -96,29 +96,57 @@ export function periksaTanggal(mentah: string): PeriksaTanggal {
  * ketimbang membocorkan pesan Postgres apa adanya.
  */
 export const PESAN = {
-  layananWajib: "Layanan wajib dipilih.",
-  layananTakDikenal: "Layanan tidak dikenal. Pilih salah satu layanan yang ada.",
+  varianWajib: "Varian wajib dipilih.",
+  varianTakDikenal: "Varian tidak dikenal. Pilih salah satu varian yang ada.",
   honorMelebihiHarga: "Honor mitra tidak boleh melebihi harga klien.",
-  kembar: "Sudah ada tarif untuk layanan ini pada tanggal tersebut.",
-  mundur: "Tarif baru harus berlaku setelah tarif terakhir layanan ini",
+  coretLebihMurah:
+    "Harga coret tidak boleh lebih murah dari harga klien — itu terbaca sebagai kenaikan harga.",
+  kembar: "Sudah ada tarif untuk varian ini pada tanggal tersebut.",
+  mundur: "Tarif baru harus berlaku setelah tarif terakhir varian ini",
   takWajar: "Nilai tarif tidak wajar.",
   gagal: "Gagal menyimpan tarif.",
   tidakTersimpan: "Tarif tidak tersimpan. Panel ini hanya untuk pemilik.",
 } as const;
 
 /**
- * Terjemahan kode Postgres yang mungkin muncul dari `service_rates`.
+ * Terjemahan kode Postgres yang mungkin muncul dari `variant_rates`.
  *
- * Pagar basis datanya (UNIQUE per tanggal, CHECK nilai wajar, trigger penolak
- * tanggal mundur) adalah lapisan TERAKHIR — pemeriksaan di server action
- * berjalan lebih dulu supaya pesannya berupa kalimat. Terjemahan ini tetap ada
- * karena dua pemanggil serentak bisa lolos pemeriksaan aplikasi bersama-sama
- * dan hanya salah satu yang dimenangkan basis data.
+ * Pagar basis datanya (UNIQUE per tanggal, CHECK nilai wajar — termasuk harga
+ * coret, trigger penolak tanggal mundur) adalah lapisan TERAKHIR — pemeriksaan
+ * di server action berjalan lebih dulu supaya pesannya berupa kalimat.
+ * Terjemahan ini tetap ada karena dua pemanggil serentak bisa lolos
+ * pemeriksaan aplikasi bersama-sama dan hanya salah satu yang dimenangkan
+ * basis data.
  */
 export function pesanKodePostgres(kode: string | undefined): string {
   if (kode === "23505") return PESAN.kembar;
   if (kode === "42501") return `${PESAN.mundur}.`;
   if (kode === "23514") return PESAN.takWajar;
-  if (kode === "23503") return PESAN.layananTakDikenal;
+  if (kode === "23503") return PESAN.varianTakDikenal;
   return PESAN.gagal;
+}
+
+export type PeriksaHargaCoret =
+  | { ok: true; nilai: number | null }
+  | { ok: false; pesan: string };
+
+/**
+ * Harga coret adalah angka PEMASARAN: harga sebelum diskon soft launch.
+ *
+ * Kosong berarti "tidak sedang promo" dan itu keadaan yang sah — bukan galat.
+ * Yang tidak sah adalah harga coret yang lebih MURAH dari harga jual: badge
+ * promonya tetap tampil, dan pengunjung membacanya sebagai kenaikan harga.
+ * CHECK `variant_rates_nilai_wajar` menjaga hal yang sama di basis data; yang
+ * di sini ada supaya jawabannya berupa KALIMAT.
+ */
+export function periksaHargaCoret(mentah: string, hargaKlien: number): PeriksaHargaCoret {
+  const teks = mentah.trim();
+  if (teks === "") return { ok: true, nilai: null };
+
+  const nominal = periksaNominal(teks, "Harga coret");
+  if (!nominal.ok) return { ok: false, pesan: nominal.pesan };
+  if (nominal.nilai < hargaKlien) {
+    return { ok: false, pesan: PESAN.coretLebihMurah };
+  }
+  return { ok: true, nilai: nominal.nilai };
 }

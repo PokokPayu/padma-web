@@ -7,7 +7,7 @@
  * Lima kelas regresi yang dijaga berkas ini — semuanya berakhir dengan uang
  * yang salah dibayarkan, tanpa satu pun error di layar:
  *
- *  1. UPDATE ALIH-ALIH INSERT. Menimpa `service_rates` yang lama adalah cara
+ *  1. UPDATE ALIH-ALIH INSERT. Menimpa `variant_rates` yang lama adalah cara
  *     paling wajar menulis "ubah tarif" — dan efeknya RETROAKTIF: rekap pekan
  *     yang honornya SUDAH dibayar ikut bergeser, karena rekap membaca tarif
  *     yang berlaku pada tanggal sesi. Spec bagian 5 menuntut sebaliknya:
@@ -25,7 +25,7 @@
  *     action ini wajib `["owner"]`, BUKAN `["admin","owner"]`: satu kata
  *     kelebihan membuka penetapan harga PADMA untuk admin klinik.
  *
- *  4. TOMBOL HAPUS. Hak DELETE atas `service_rates` sudah dicabut dari peran
+ *  4. TOMBOL HAPUS. Hak DELETE atas `variant_rates` sudah dicabut dari peran
  *     aplikasi — owner pun dijawab 42501. Itu keadaan yang BENAR: tarif lama
  *     adalah bukti berapa honor yang seharusnya dibayarkan pekan lalu.
  *
@@ -47,6 +47,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { awalPekan, geserHari } from "@/lib/owner/pekan";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
+import { periksaHargaCoret } from "@/app/owner/tarif/status";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -85,10 +86,22 @@ vi.mock("next/navigation", () => ({
 const LAYANAN_BARU = "11111111-1111-1111-1111-1111111111e1"; // belum bertarif
 const LAYANAN_MUNDUR = "11111111-1111-1111-1111-1111111111e2"; // sudah bertarif
 const LAYANAN_REKAP = "11111111-1111-1111-1111-1111111111e3"; // punya sesi pekan lalu
-const LAYANAN_HANTU = "11111111-1111-1111-1111-1111111111ef"; // tidak pernah ada
+const LAYANAN_MULTI = "11111111-1111-1111-1111-1111111111e4"; // dua varian, tarif berbeda
+
+// Harga menempel di VARIAN sejak Task 3 — setiap layanan fixture di atas
+// memperoleh varian BAKU sendiri (label kosong, sama seperti backfill Task 1).
+const VARIAN_BARU = "11111111-1111-1111-1111-2111111111e1";
+const VARIAN_MUNDUR = "11111111-1111-1111-1111-2111111111e2";
+const VARIAN_REKAP = "11111111-1111-1111-1111-2111111111e3";
+const VARIAN_MULTI_A = "11111111-1111-1111-1111-2111111111e4"; // 60 menit
+const VARIAN_MULTI_B = "11111111-1111-1111-1111-3111111111e4"; // 90 menit
+const VARIAN_HANTU = "11111111-1111-1111-1111-2111111111ef"; // tidak pernah ada
 
 const TARIF_MUNDUR = "99999999-9999-9999-9999-9999999999e2";
 const TARIF_REKAP = "99999999-9999-9999-9999-9999999999e3";
+const TARIF_MULTI_A = "99999999-9999-9999-9999-9999999999e4";
+const TARIF_MULTI_A_DEPAN = "99999999-9999-9999-9999-9999999999e5"; // masa depan, belum berlaku
+const TARIF_MULTI_B = "99999999-9999-9999-9999-9999999999e6";
 
 const MITRA = "33333333-3333-3333-3333-3333333333e1";
 const KLIEN = "44444444-4444-4444-4444-4444444444e1";
@@ -106,9 +119,18 @@ const HONOR_LAMA = 150_000;
 const HARGA_BARU = 900_000;
 const HONOR_BARU = 400_000;
 
+// Tarif fixture LAYANAN_MULTI: dua varian, dua harga berbeda pada tanggal yang
+// SAMA — inilah yang dulu mustahil salah (satu tarif per layanan, bukan per
+// varian).
+const HARGA_MULTI_A = 350_000;
+const HONOR_MULTI_A = 150_000;
+const HARGA_MULTI_B = 400_000;
+const HONOR_MULTI_B = 180_000;
+
 const HARI_INI = hariIniJakarta();
 const SENIN = awalPekan(HARI_INI);
 const SENIN_LALU = geserHari(SENIN, -7);
+const DEPAN_30_HARI = geserHari(HARI_INI, 30);
 
 // `berlaku_sejak` jauh sebelum seluruh tanggal sesi fixture, sehingga tarif
 // yang terpilih untuk pekan lalu selalu tarif ini — tidak bergantung pada
@@ -124,11 +146,17 @@ async function bersihkan() {
     await admin.from("jejak_status_bayar").delete().eq("sesi_id", id);
   }
   await admin.from("clients").delete().eq("id", KLIEN);
-  for (const svc of [LAYANAN_BARU, LAYANAN_MUNDUR, LAYANAN_REKAP]) {
-    await admin.from("service_rates").delete().eq("service_id", svc);
+  const varianSemua = [VARIAN_BARU, VARIAN_MUNDUR, VARIAN_REKAP, VARIAN_MULTI_A, VARIAN_MULTI_B];
+  for (const v of varianSemua) {
+    await admin.from("variant_rates").delete().eq("variant_id", v);
   }
   await admin.from("partners").delete().eq("id", MITRA);
-  for (const svc of [LAYANAN_BARU, LAYANAN_MUNDUR, LAYANAN_REKAP]) {
+  // `service_variants` dulu — FK-nya menunjuk `services`, urutan penghapusan
+  // terbalik dari urutan penyisipan.
+  for (const v of varianSemua) {
+    await admin.from("service_variants").delete().eq("id", v);
+  }
+  for (const svc of [LAYANAN_BARU, LAYANAN_MUNDUR, LAYANAN_REKAP, LAYANAN_MULTI]) {
     await admin.from("services").delete().eq("id", svc);
   }
 }
@@ -156,18 +184,19 @@ function formulir(isi: Record<string, string>): FormData {
 
 type BarisTarif = {
   id: string;
-  service_id: string;
+  variant_id: string;
   harga_klien: number;
+  harga_coret: number | null;
   honor_mitra: number;
   berlaku_sejak: string;
 };
 
-/** Seluruh baris tarif satu layanan, dibaca lewat SERVICE ROLE (bukan RLS). */
-async function tarifLayanan(serviceId: string): Promise<BarisTarif[]> {
+/** Seluruh baris tarif satu VARIAN, dibaca lewat SERVICE ROLE (bukan RLS). */
+async function tarifVarian(variantId: string): Promise<BarisTarif[]> {
   const { data } = await admin
-    .from("service_rates")
-    .select("id, service_id, harga_klien, honor_mitra, berlaku_sejak")
-    .eq("service_id", serviceId)
+    .from("variant_rates")
+    .select("id, variant_id, harga_klien, harga_coret, honor_mitra, berlaku_sejak")
+    .eq("variant_id", variantId)
     .order("berlaku_sejak")
     .returns<BarisTarif[]>();
   return data ?? [];
@@ -199,25 +228,67 @@ beforeAll(async () => {
       nama: "PAD-UJI Tarif Layanan Rekap",
       aktif: true,
     },
+    {
+      id: LAYANAN_MULTI,
+      phase_id: "kehamilan",
+      nama: "PAD-UJI Tarif Layanan Multi Varian",
+      aktif: true,
+    },
+  ]);
+  // Setiap layanan wajib punya minimal satu varian (V3) — inilah yang
+  // dulu menempel di `services`, sejak Task 1 hidup terpisah di sini.
+  await admin.from("service_variants").insert([
+    // `urutan` diisi eksplisit di SETIAP baris: PostgREST membangun satu INSERT
+    // dari gabungan kolom seluruh baris batch ini, jadi kolom yang hilang di
+    // sebagian baris terkirim sebagai NULL literal — bukan "tidak diisi" yang
+    // jatuh ke DEFAULT kolomnya.
+    { id: VARIAN_BARU, service_id: LAYANAN_BARU, label: "", urutan: 0 },
+    { id: VARIAN_MUNDUR, service_id: LAYANAN_MUNDUR, label: "", urutan: 0 },
+    { id: VARIAN_REKAP, service_id: LAYANAN_REKAP, label: "", urutan: 0 },
+    { id: VARIAN_MULTI_A, service_id: LAYANAN_MULTI, label: "", durasi_menit: 60, format: "private", urutan: 0 },
+    { id: VARIAN_MULTI_B, service_id: LAYANAN_MULTI, label: "", durasi_menit: 90, format: "private", urutan: 1 },
   ]);
   await admin.from("partners").insert({
     id: MITRA,
     nama: "PAD-UJI Bidan Tarif",
     no_hp: "0811-0000-9101",
   });
-  await admin.from("service_rates").insert([
+  await admin.from("variant_rates").insert([
     {
       id: TARIF_MUNDUR,
-      service_id: LAYANAN_MUNDUR,
+      variant_id: VARIAN_MUNDUR,
       harga_klien: HARGA_LAMA,
       honor_mitra: HONOR_LAMA,
       berlaku_sejak: BERLAKU_LAMA,
     },
     {
       id: TARIF_REKAP,
-      service_id: LAYANAN_REKAP,
+      variant_id: VARIAN_REKAP,
       harga_klien: HARGA_LAMA,
       honor_mitra: HONOR_LAMA,
+      berlaku_sejak: BERLAKU_LAMA,
+    },
+    {
+      id: TARIF_MULTI_A,
+      variant_id: VARIAN_MULTI_A,
+      harga_klien: HARGA_MULTI_A,
+      honor_mitra: HONOR_MULTI_A,
+      berlaku_sejak: BERLAKU_LAMA,
+    },
+    // Bertanggal MASA DEPAN: wajib ditandai `belumBerlaku`, tidak boleh
+    // dianggap "berlaku" hari ini.
+    {
+      id: TARIF_MULTI_A_DEPAN,
+      variant_id: VARIAN_MULTI_A,
+      harga_klien: HARGA_MULTI_A + 100_000,
+      honor_mitra: HONOR_MULTI_A,
+      berlaku_sejak: DEPAN_30_HARI,
+    },
+    {
+      id: TARIF_MULTI_B,
+      variant_id: VARIAN_MULTI_B,
+      harga_klien: HARGA_MULTI_B,
+      honor_mitra: HONOR_MULTI_B,
       berlaku_sejak: BERLAKU_LAMA,
     },
   ]);
@@ -233,6 +304,7 @@ beforeAll(async () => {
       id: SESI.lalu1,
       client_id: KLIEN,
       service_id: LAYANAN_REKAP,
+      variant_id: VARIAN_REKAP,
       partner_id: MITRA,
       tanggal: SENIN_LALU,
       status: "selesai",
@@ -244,6 +316,7 @@ beforeAll(async () => {
       id: SESI.lalu2,
       client_id: KLIEN,
       service_id: LAYANAN_REKAP,
+      variant_id: VARIAN_REKAP,
       partner_id: MITRA,
       tanggal: SENIN_LALU,
       status: "selesai",
@@ -267,11 +340,11 @@ beforeEach(() => {
 
 describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
   it("layanan yang belum bertarif memperoleh baris pertamanya", async () => {
-    expect(await tarifLayanan(LAYANAN_BARU)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_BARU)).toHaveLength(0);
 
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_BARU,
+        varian: VARIAN_BARU,
         harga: String(HARGA_LAMA),
         honor: String(HONOR_LAMA),
         mulai: HARI_INI,
@@ -279,7 +352,7 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
     );
     expect(hasil.ok).toBe(true);
 
-    const baris = await tarifLayanan(LAYANAN_BARU);
+    const baris = await tarifVarian(VARIAN_BARU);
     expect(baris).toHaveLength(1);
     expect(baris[0]).toMatchObject({
       harga_klien: HARGA_LAMA,
@@ -292,12 +365,12 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
     // Inilah janji spec bagian 5: "Edit rate card = insert baris baru, tidak
     // update baris lama." Baris lama adalah bukti berapa honor yang seharusnya
     // dibayarkan pekan lalu; menimpanya menghapus bukti itu selamanya.
-    const sebelum = await tarifLayanan(LAYANAN_MUNDUR);
+    const sebelum = await tarifVarian(VARIAN_MUNDUR);
     expect(sebelum).toHaveLength(1);
 
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_MUNDUR,
+        varian: VARIAN_MUNDUR,
         harga: String(HARGA_BARU),
         honor: String(HONOR_BARU),
         mulai: HARI_INI,
@@ -305,7 +378,7 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
     );
     expect(hasil.ok).toBe(true);
 
-    const sesudah = await tarifLayanan(LAYANAN_MUNDUR);
+    const sesudah = await tarifVarian(VARIAN_MUNDUR);
     expect(sesudah).toHaveLength(2);
 
     const lama = sesudah.find((b) => b.id === TARIF_MUNDUR);
@@ -322,7 +395,7 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
     // bagi satu-satunya layar yang membayarkan honor.
     await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_BARU,
+        varian: VARIAN_BARU,
         harga: String(HARGA_BARU),
         honor: String(HONOR_BARU),
         mulai: geserHari(HARI_INI, 30),
@@ -336,14 +409,14 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
   it("tanggal berlaku kosong berarti HARI INI menurut kalender Jakarta", async () => {
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_REKAP,
+        varian: VARIAN_REKAP,
         harga: String(HARGA_BARU),
         honor: String(HONOR_BARU),
         mulai: "",
       }),
     );
     expect(hasil.ok).toBe(true);
-    const baris = await tarifLayanan(LAYANAN_REKAP);
+    const baris = await tarifVarian(VARIAN_REKAP);
     expect(baris.map((b) => b.berlaku_sejak)).toContain(HARI_INI);
   });
 });
@@ -368,7 +441,7 @@ describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah lewat", () => {
     // Tarif naik lebih dari dua kali lipat, berlaku HARI INI.
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_REKAP,
+        varian: VARIAN_REKAP,
         harga: String(HARGA_BARU * 2),
         honor: String(HONOR_BARU * 2),
         mulai: geserHari(HARI_INI, 1),
@@ -400,11 +473,11 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
   it("tanggal berlaku MUNDUR ditolak tanpa menyentuh basis data", async () => {
     // Insert-only saja tidak cukup: baris baru bertanggal mundur berefek PERSIS
     // sama dengan menimpa baris lama — rekap pekan yang sudah dibayar bergeser.
-    const sebelum = await tarifLayanan(LAYANAN_MUNDUR);
+    const sebelum = await tarifVarian(VARIAN_MUNDUR);
 
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_MUNDUR,
+        varian: VARIAN_MUNDUR,
         harga: String(HARGA_BARU),
         honor: String(HONOR_BARU),
         mulai: MUNDUR_SEHARI,
@@ -415,18 +488,18 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
     expect(hasil.pesan).toMatch(/setelah tarif terakhir/i);
     pesanManusiawi(hasil.pesan);
 
-    expect(await tarifLayanan(LAYANAN_MUNDUR)).toEqual(sebelum);
+    expect(await tarifVarian(VARIAN_MUNDUR)).toEqual(sebelum);
   });
 
   it("tarif KEMBAR pada tanggal yang sama ditolak", async () => {
     // Tanpa penolakan ini, pemilihan "berlaku_sejak terbesar" menjadi
     // non-deterministik: tidak ada created_at pemecah seri.
-    const sebelum = await tarifLayanan(LAYANAN_MUNDUR);
+    const sebelum = await tarifVarian(VARIAN_MUNDUR);
     const tanggalTerpakai = sebelum.at(-1)!.berlaku_sejak;
 
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_MUNDUR,
+        varian: VARIAN_MUNDUR,
         harga: String(HARGA_BARU + 1),
         honor: String(HONOR_BARU),
         mulai: tanggalTerpakai,
@@ -437,13 +510,13 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
     expect(hasil.pesan).toMatch(/sudah ada tarif/i);
     pesanManusiawi(hasil.pesan);
 
-    expect(await tarifLayanan(LAYANAN_MUNDUR)).toEqual(sebelum);
+    expect(await tarifVarian(VARIAN_MUNDUR)).toEqual(sebelum);
   });
 
   it("honor mitra melebihi harga klien ditolak (margin negatif)", async () => {
     const hasil = await tetapkanTarif(
       formulir({
-        layanan: LAYANAN_BARU,
+        varian: VARIAN_BARU,
         harga: "100000",
         honor: "150000",
         mulai: geserHari(HARI_INI, 60),
@@ -458,11 +531,11 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
   it("nominal kosong, negatif, pecahan, dan bukan angka semuanya ditolak", async () => {
     // `Number("")` adalah 0 dan lolos `>= 0` — nol rupiah yang tidak pernah
     // diketik siapa pun, tetapi ikut menghitung honor setiap pekan sesudahnya.
-    const sebelum = await tarifLayanan(LAYANAN_BARU);
+    const sebelum = await tarifVarian(VARIAN_BARU);
     for (const nilai of ["", " ", "-1", "12.5", "abc", "1e6", "400_000"]) {
       const hasil = await tetapkanTarif(
         formulir({
-          layanan: LAYANAN_BARU,
+          varian: VARIAN_BARU,
           harga: nilai,
           honor: "1000",
           mulai: geserHari(HARI_INI, 90),
@@ -472,14 +545,14 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
       if (hasil.ok) continue;
       pesanManusiawi(hasil.pesan);
     }
-    expect(await tarifLayanan(LAYANAN_BARU)).toEqual(sebelum);
+    expect(await tarifVarian(VARIAN_BARU)).toEqual(sebelum);
   });
 
   it("honor pun diperiksa sebagai TEKS, bukan hanya harga", async () => {
     for (const nilai of ["", "-1", "12.5", "abc"]) {
       const hasil = await tetapkanTarif(
         formulir({
-          layanan: LAYANAN_BARU,
+          varian: VARIAN_BARU,
           harga: "500000",
           honor: nilai,
           mulai: geserHari(HARI_INI, 91),
@@ -493,7 +566,7 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
     for (const tgl of ["30-08-2026", "2026-8-1", "besok", "2026-02-31", "2026-13-01"]) {
       const hasil = await tetapkanTarif(
         formulir({
-          layanan: LAYANAN_BARU,
+          varian: VARIAN_BARU,
           harga: "500000",
           honor: "100000",
           mulai: tgl,
@@ -505,14 +578,14 @@ describe("tetapkanTarif — penolakan yang bisa dibaca pemilik klinik", () => {
     }
   });
 
-  it("layanan kosong & layanan yang tidak ada ditolak dengan kalimat", async () => {
-    for (const id of ["", LAYANAN_HANTU, "bukan-uuid"]) {
+  it("varian kosong & varian yang tidak ada ditolak dengan kalimat", async () => {
+    for (const id of ["", VARIAN_HANTU, "bukan-uuid"]) {
       const hasil = await tetapkanTarif(
-        formulir({ layanan: id, harga: "500000", honor: "100000", mulai: HARI_INI }),
+        formulir({ varian: id, harga: "500000", honor: "100000", mulai: HARI_INI }),
       );
-      expect(hasil.ok, `layanan="${id}" seharusnya ditolak`).toBe(false);
+      expect(hasil.ok, `varian="${id}" seharusnya ditolak`).toBe(false);
       if (hasil.ok) continue;
-      expect(hasil.pesan).toMatch(/layanan/i);
+      expect(hasil.pesan).toMatch(/varian/i);
       pesanManusiawi(hasil.pesan);
     }
   });
@@ -527,13 +600,13 @@ describe("penjaga peran di DALAM action — layout tidak menjaga server action",
     // Dibuktikan sebelumnya bahwa action panel admin bisa di-POST dari rute
     // lain dan mutasinya jadi; `/owner/layout.tsx` karena itu tidak melindungi
     // apa pun di sini. Penjaga peran wajib hidup di dalam action ini sendiri.
-    const sebelum = await tarifLayanan(LAYANAN_BARU);
+    const sebelum = await tarifVarian(VARIAN_BARU);
 
     ref.sesi = sesiAdmin;
     await expect(
       tetapkanTarif(
         formulir({
-          layanan: LAYANAN_BARU,
+          varian: VARIAN_BARU,
           harga: "1",
           honor: "0",
           mulai: geserHari(HARI_INI, 120),
@@ -541,7 +614,7 @@ describe("penjaga peran di DALAM action — layout tidak menjaga server action",
       ),
     ).rejects.toThrow(/REDIRECT/);
 
-    expect(await tarifLayanan(LAYANAN_BARU)).toEqual(sebelum);
+    expect(await tarifVarian(VARIAN_BARU)).toEqual(sebelum);
   });
 
   it("KLIEN yang login DITOLAK", async () => {
@@ -549,7 +622,7 @@ describe("penjaga peran di DALAM action — layout tidak menjaga server action",
     await expect(
       tetapkanTarif(
         formulir({
-          layanan: LAYANAN_BARU,
+          varian: VARIAN_BARU,
           harga: "1",
           honor: "0",
           mulai: geserHari(HARI_INI, 121),
@@ -561,14 +634,14 @@ describe("penjaga peran di DALAM action — layout tidak menjaga server action",
   it("admin TETAP dijawab 0 baris oleh RLS bahkan lewat REST langsung", async () => {
     // Penjaga di action adalah lapisan kedua. Lapisan pertamanya adalah RLS,
     // dan lapisan pertama itu harus tetap berdiri sendiri.
-    const { data, error } = await sesiAdmin.from("service_rates").select("id, harga_klien");
+    const { data, error } = await sesiAdmin.from("variant_rates").select("id, harga_klien");
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
   });
 
   it("admin yang menyisipkan tarif langsung lewat REST ditolak RLS", async () => {
-    const { error } = await sesiAdmin.from("service_rates").insert({
-      service_id: LAYANAN_BARU,
+    const { error } = await sesiAdmin.from("variant_rates").insert({
+      variant_id: VARIAN_BARU,
       harga_klien: 1,
       honor_mitra: 0,
       berlaku_sejak: geserHari(HARI_INI, 122),
@@ -647,6 +720,30 @@ describe("ambilRateCard — tarif berlaku + riwayat, dihitung di TypeScript", ()
 });
 
 // ---------------------------------------------------------------------------
+// Rate card memilih tarif PER VARIAN — dulu mustahil salah karena hanya ada
+// satu tarif per layanan; sejak Task 3 satu layanan boleh punya banyak varian
+// berharga berbeda, dan tarif varian A tidak boleh bocor menjadi "berlaku"
+// bagi varian B satu layanan.
+// ---------------------------------------------------------------------------
+
+describe("ambilRateCard — tarif dipilih per VARIAN, bukan per layanan", () => {
+  it("rate card memilih tarif berlaku per VARIAN, bukan per layanan", async () => {
+    const baris = await ambilRateCard(HARI_INI);
+    const a = baris.find((b) => b.variantId === VARIAN_MULTI_A)!;
+    const b = baris.find((b) => b.variantId === VARIAN_MULTI_B)!;
+    expect(a.berlaku!.hargaKlien).toBe(HARGA_MULTI_A);
+    expect(b.berlaku!.hargaKlien).toBe(HARGA_MULTI_B);
+  });
+
+  it("tarif bertanggal masa depan tidak dianggap berlaku", async () => {
+    const baris = await ambilRateCard(HARI_INI);
+    const a = baris.find((b) => b.variantId === VARIAN_MULTI_A)!;
+    expect(a.riwayat.some((r) => r.belumBerlaku)).toBe(true);
+    expect(a.berlaku!.berlakuSejak <= HARI_INI).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Halaman /owner/tarif
 // ---------------------------------------------------------------------------
 
@@ -690,7 +787,7 @@ describe("halaman rate card (/owner/tarif)", () => {
   });
 
   it("menyediakan form penetapan tarif dengan medan tanggal berlaku", () => {
-    expect(sumberForm).toContain('name="layanan"');
+    expect(sumberForm).toContain('name="varian"');
     expect(sumberForm).toContain('name="harga"');
     expect(sumberForm).toContain('name="honor"');
     expect(sumberForm).toContain('name="mulai"');
@@ -705,11 +802,11 @@ describe("halaman rate card (/owner/tarif)", () => {
 
   it("owner pun ditolak 42501 saat menghapus tarif — itu keadaan yang BENAR", async () => {
     const { error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .delete()
       .eq("id", TARIF_MUNDUR);
     expect(error?.code).toBe("42501");
-    expect(await tarifLayanan(LAYANAN_MUNDUR)).not.toHaveLength(0);
+    expect(await tarifVarian(VARIAN_MUNDUR)).not.toHaveLength(0);
   });
 
   it("judul mengandalkan template `%s · PADMA`", () => {
@@ -788,7 +885,7 @@ describe("berkas server action rate card", () => {
     }
   });
 
-  it("tidak ada .update() ke service_rates — modul ini INSERT-only", () => {
+  it("tidak ada .update() ke variant_rates — modul ini INSERT-only", () => {
     expect(sumberAksi).not.toContain(".update(");
   });
 
@@ -841,5 +938,21 @@ describe("berkas server action rate card", () => {
 
   it("navigasi owner menautkan modul ini", () => {
     expect(baca("src/app/owner/_shell/nav-owner.tsx")).toContain('href: "/owner/tarif"');
+  });
+});
+
+describe("harga coret", () => {
+  it("kosong berarti tanpa badge — bukan galat", () => {
+    expect(periksaHargaCoret("", 179000)).toEqual({ ok: true, nilai: null });
+  });
+
+  it("menolak harga coret lebih murah dari harga klien", () => {
+    const hasil = periksaHargaCoret("150000", 179000);
+    expect(hasil.ok).toBe(false);
+    if (!hasil.ok) expect(hasil.pesan).toMatch(/tidak boleh lebih murah/i);
+  });
+
+  it("menerima harga coret di atas harga klien", () => {
+    expect(periksaHargaCoret("199000", 179000)).toEqual({ ok: true, nilai: 199000 });
   });
 });

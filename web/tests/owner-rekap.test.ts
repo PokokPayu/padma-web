@@ -16,12 +16,17 @@ import {
 // ============================================================================
 
 const tarif = (o: Partial<TarifRingkas>): TarifRingkas => ({
-  id: "r1", serviceId: "svc-massage", hargaKlien: 500_000, honorMitra: 200_000,
+  id: "r1", variantId: "svc-massage", hargaKlien: 500_000, hargaCoret: null, honorMitra: 200_000,
   berlakuSejak: "2026-01-01", ...o,
 });
 
+// `serviceId` dan `variantId` sengaja berbagi string opaque yang sama di sini
+// ("svc-massage" dst.): fungsi rekap adalah fungsi MURNI yang tidak tahu-menahu
+// bentuk UUID sungguhan, dan pencocokan tarif kini lewat `variantId` — bukan
+// `serviceId`, yang tetap dibawa tipe ini untuk pengelompokan tampilan.
 const sesi = (o: Partial<SesiRekap>): SesiRekap => ({
-  id: "s1", serviceId: "svc-massage", namaLayanan: "Sankalpa Fertility Massage",
+  id: "s1", serviceId: "svc-massage", variantId: "svc-massage",
+  namaLayanan: "Sankalpa Fertility Massage",
   partnerId: "p-ananda", namaMitra: "Bidan Ananda", tanggal: "2026-08-26",
   status: "selesai", clientPackageId: null, selesaiPada: null, ...o,
 });
@@ -33,7 +38,7 @@ describe("tarifPadaTanggal", () => {
   const daftar = [
     tarif({ id: "r-lama", berlakuSejak: "2026-01-01", hargaKlien: 500_000, honorMitra: 200_000 }),
     tarif({ id: "r-baru", berlakuSejak: "2026-08-01", hargaKlien: 600_000, honorMitra: 250_000 }),
-    tarif({ id: "r-lain", serviceId: "svc-yoga", berlakuSejak: "2026-01-01", hargaKlien: 300_000, honorMitra: 120_000 }),
+    tarif({ id: "r-lain", variantId: "svc-yoga", berlakuSejak: "2026-01-01", hargaKlien: 300_000, honorMitra: 120_000 }),
   ];
 
   it("memilih berlaku_sejak TERBESAR yang <= tanggal sesi", () => {
@@ -258,7 +263,7 @@ describe("hitungRekap — sesi tak-bertarif DILAPORKAN, bukan dihitung nol diam-
       tarif: daftar,
       sesi: [
         sesi({ id: "bertarif", tanggal: "2026-08-05" }),
-        sesi({ id: "yatim", serviceId: "svc-belum-ada", tanggal: "2026-08-06" }),
+        sesi({ id: "yatim", variantId: "svc-belum-ada", tanggal: "2026-08-06" }),
       ],
       tanda: [],
     });
@@ -273,7 +278,7 @@ describe("hitungRekap — sesi tak-bertarif DILAPORKAN, bukan dihitung nol diam-
       tarif: daftar,
       sesi: [
         sesi({ id: "a", partnerId: "p-ananda", namaMitra: "Bidan Ananda", tanggal: "2026-08-05" }),
-        sesi({ id: "b", partnerId: "p-sari", namaMitra: "Bidan Sari", serviceId: "svc-belum-ada", tanggal: "2026-08-06" }),
+        sesi({ id: "b", partnerId: "p-sari", namaMitra: "Bidan Sari", variantId: "svc-belum-ada", tanggal: "2026-08-06" }),
       ],
       tanda: [],
     });
@@ -297,16 +302,16 @@ describe("hitungRekap — sesi tak-bertarif DILAPORKAN, bukan dihitung nol diam-
 
 describe("hitungRekap — agregasi per mitra & margin per pekan", () => {
   const daftar = [
-    tarif({ id: "r-massage", serviceId: "svc-massage", hargaKlien: 500_000, honorMitra: 200_000 }),
-    tarif({ id: "r-yoga", serviceId: "svc-yoga", hargaKlien: 300_000, honorMitra: 120_000 }),
+    tarif({ id: "r-massage", variantId: "svc-massage", hargaKlien: 500_000, honorMitra: 200_000 }),
+    tarif({ id: "r-yoga", variantId: "svc-yoga", hargaKlien: 300_000, honorMitra: 120_000 }),
   ];
 
   const dua = hitungRekap({
     tarif: daftar,
     sesi: [
-      sesi({ id: "a1", partnerId: "p-ananda", namaMitra: "Bidan Ananda", serviceId: "svc-massage", tanggal: "2026-08-24" }),
-      sesi({ id: "a2", partnerId: "p-ananda", namaMitra: "Bidan Ananda", serviceId: "svc-yoga", tanggal: "2026-08-26" }),
-      sesi({ id: "b1", partnerId: "p-sari", namaMitra: "Bidan Sari", serviceId: "svc-massage", tanggal: "2026-08-27" }),
+      sesi({ id: "a1", partnerId: "p-ananda", namaMitra: "Bidan Ananda", variantId: "svc-massage", tanggal: "2026-08-24" }),
+      sesi({ id: "a2", partnerId: "p-ananda", namaMitra: "Bidan Ananda", variantId: "svc-yoga", tanggal: "2026-08-26" }),
+      sesi({ id: "b1", partnerId: "p-sari", namaMitra: "Bidan Sari", variantId: "svc-massage", tanggal: "2026-08-27" }),
     ],
     tanda: [],
   });
