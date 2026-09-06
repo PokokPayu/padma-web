@@ -59,6 +59,7 @@ const TABEL_TERTUTUP_ANON = [
   "honor_marks",
   "transport_rates",
   "transport_khusus",
+  "geocode_cache",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
