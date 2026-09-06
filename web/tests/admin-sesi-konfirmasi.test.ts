@@ -542,10 +542,11 @@ describe("berkas server action sesi", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi.
-    // Angkanya sengaja tepat, bukan `toBeGreaterThan`: action baru yang lupa
-    // memasang penjaganya harus memerahkan berkas ini, bukan lewat diam-diam.
-    expect(jumlahAction).toBe(4);
+    // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi,
+    // tetapkanJenjang (Task 7). Angkanya sengaja tepat, bukan
+    // `toBeGreaterThan`: action baru yang lupa memasang penjaganya harus
+    // memerahkan berkas ini, bukan lewat diam-diam.
+    expect(jumlahAction).toBe(5);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

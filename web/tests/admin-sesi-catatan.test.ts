@@ -43,8 +43,19 @@ import { varianBaku } from "./helpers/varian";
 import { badgeDari, progresPaket, type SesiRingkas } from "@/lib/passport/turunan";
 
 const admin = createAdminSupabase();
+// Alias mengikuti pola singkat yang dipakai berkas uji lain (mis.
+// `admin-mitra.test.ts`) untuk baca/tulis lewat service role sebagai "bahan
+// uji, bukan jalur yang diuji".
+const svc = admin;
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
+
+/** FormData dari pasangan medan — perkakas kecil untuk uji server action. */
+function formOf(bidang: Record<string, string>): FormData {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(bidang)) fd.set(k, v);
+  return fd;
+}
 
 const KLIEN = "44444444-4444-4444-4444-444444444401"; // Ananda (punya paket aktif)
 const KLIEN_LAIN = "44444444-4444-4444-4444-444444444402"; // Rina (tanpa paket)
@@ -84,7 +95,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/sesi",
 }));
 
-const { jadwalkanSesi, selesaikanSesi } = await import("@/app/admin/sesi/aksi");
+const { jadwalkanSesi, selesaikanSesi, tetapkanJenjang } = await import("@/app/admin/sesi/aksi");
 const { default: SesiPage } = await import("@/app/admin/sesi/page");
 
 const sumberAksi = baca("src/app/admin/sesi/aksi.ts");
@@ -604,6 +615,104 @@ describe("menjadwalkan sesi langsung", () => {
 });
 
 // ---------------------------------------------------------------------------
+// tetapkanJenjang — penimpaan admin
+// ---------------------------------------------------------------------------
+
+describe("tetapkanJenjang — penimpaan admin", () => {
+  let sesiId: string;
+
+  beforeEach(async () => {
+    sesiId = await buatSesi("terjadwal", { denganPaket: true });
+  });
+
+  it("menyimpan jenjang beserta sumbernya saat admin menimpa saran", async () => {
+    const r = await tetapkanJenjang(
+      formOf({ sesi: sesiId, jenjang: "10_15", alasan: "Alamat di seberang sungai, memutar." }),
+    );
+    expect(r.ok).toBe(true);
+
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber, jenjang_alasan")
+      .eq("id", sesiId)
+      .single();
+    expect(data!.jenjang).toBe("10_15");
+    expect(data!.jenjang_sumber).toBe("admin");
+    expect(data!.jenjang_alasan).toMatch(/sungai/);
+  });
+
+  it("menolak penimpaan tanpa alasan, dengan KALIMAT", async () => {
+    const r = await tetapkanJenjang(formOf({ sesi: sesiId, jenjang: "10_15", alasan: "  " }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.pesan).toMatch(/alasan/i);
+
+    // Bukti bahwa penolakan adalah KALIMAT dari server action, bukan kode
+    // Postgres dari CHECK `sessions_alasan_penimpaan` — baris di basis data
+    // TIDAK berubah sama sekali, jadi CHECK itu tidak pernah sempat diuji.
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber")
+      .eq("id", sesiId)
+      .single();
+    expect(data!.jenjang).toBeNull();
+    expect(data!.jenjang_sumber).toBeNull();
+  });
+
+  it("menolak jenjang yang bukan anggota enum jenjang_transport", async () => {
+    const r = await tetapkanJenjang(
+      formOf({ sesi: sesiId, jenjang: "seberang_galaksi", alasan: "Alasan yang sah." }),
+    );
+    expect(r.ok).toBe(false);
+    const { data } = await svc.from("sessions").select("jenjang").eq("id", sesiId).single();
+    expect(data!.jenjang).toBeNull();
+  });
+
+  it("sesi yang tidak ada ditolak, bukan 'ok' palsu", async () => {
+    const r = await tetapkanJenjang(
+      formOf({ sesi: HANTU, jenjang: "10_15", alasan: "Alasan yang sah." }),
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("jenjang_sumber SELALU 'admin' di jalur ini — tidak pernah dari FormData", async () => {
+    // Keadaan tujuan tidak pernah datang dari FormData (pola yang sama dengan
+    // `selesaikanSesi`/`konfirmasiPermintaan`): mengirim `jenjang_sumber`
+    // sebagai medan formulir tidak boleh mengubah apa pun.
+    const r = await tetapkanJenjang(
+      formOf({
+        sesi: sesiId,
+        jenjang: "5_10",
+        alasan: "Alasan yang sah.",
+        jenjang_sumber: "otomatis",
+      }),
+    );
+    expect(r.ok).toBe(true);
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang_sumber")
+      .eq("id", sesiId)
+      .single();
+    expect(data!.jenjang_sumber).toBe("admin");
+  });
+
+  it("PENJAGA PERAN: klien yang login tidak bisa menimpa jenjang sesi", async () => {
+    ref.sesi = sesiKlien;
+    await expect(
+      tetapkanJenjang(formOf({ sesi: sesiId, jenjang: "10_15", alasan: "Alasan yang sah." })),
+    ).rejects.toThrow(/REDIRECT/);
+    const { data } = await svc.from("sessions").select("jenjang").eq("id", sesiId).single();
+    expect(data!.jenjang).toBeNull();
+  });
+
+  it("tidak memuat satu nominal pun di sumber modulnya", async () => {
+    // Money firewall: admin menetapkan JENJANG, tidak pernah rupiah.
+    const sumber = await baca("src/app/admin/sesi/form-sesi.tsx");
+    expect(sumber).not.toContain("transport_rates");
+    expect(sumber).not.toContain("tarif_klien");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Halaman /admin/sesi — daftar sesi
 // ---------------------------------------------------------------------------
 
@@ -665,7 +774,7 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(4); // konfirmasi, tolak, jadwalkan, selesaikan
+    expect(jumlahAction).toBe(5); // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

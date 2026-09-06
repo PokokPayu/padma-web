@@ -33,7 +33,11 @@ export type BarisMitra = {
   sesiSelesai: number;
 };
 
-export type MitraPilihan = { id: string; nama: string };
+// `lat`/`lon` ikut dipulangkan untuk modul Sesi (`saranJenjang`, Task 7):
+// domisili mitra adalah satu sisi jarak garis lurus yang ditampilkan admin
+// saat memilih mitra untuk sesi baru. Keduanya nullable persis kolom aslinya
+// — domisili yang belum digeocode bukan galat, ia berarti saran tidak muncul.
+export type MitraPilihan = { id: string; nama: string; lat: number | null; lon: number | null };
 
 type BarisPartner = {
   id: string;
@@ -91,7 +95,7 @@ export async function pilihanMitra(): Promise<MitraPilihan[]> {
   const supabase = await createServerSupabase();
   const { data } = await supabase
     .from("partners")
-    .select("id, nama")
+    .select("id, nama, lat, lon")
     .eq("aktif", true)
     .order("nama")
     .returns<MitraPilihan[]>();

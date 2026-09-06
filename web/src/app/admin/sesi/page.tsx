@@ -64,11 +64,16 @@ export default async function SesiPage() {
         .order("tanggal", { ascending: false })
         .limit(BATAS_BARIS)
         .returns<BarisSesiDb[]>(),
+      // `alamat_lat`/`alamat_lon` ikut dibaca untuk saran jenjang (Task 7):
+      // alamat DEFAULT klien dipakai sebagai perkiraan lokasi sesi baru, satu
+      // sisi jarak garis lurus terhadap domisili mitra yang dipilih.
       supabase
         .from("clients")
-        .select("id, nama, padma_id")
+        .select("id, nama, padma_id, alamat_lat, alamat_lon")
         .order("nama")
-        .returns<{ id: string; nama: string; padma_id: string }[]>(),
+        .returns<
+          { id: string; nama: string; padma_id: string; alamat_lat: number | null; alamat_lon: number | null }[]
+        >(),
       // Hanya layanan AKTIF yang boleh ditawarkan untuk sesi baru — alasan yang
       // sama persis dengan mitra di bawah. Daftar NAMA untuk riwayat tidak
       // menyaring apa pun; itu dua kebutuhan berbeda dari satu tabel.
@@ -112,6 +117,8 @@ export default async function SesiPage() {
     id: k.id,
     nama: k.nama,
     padmaId: k.padma_id,
+    alamatLat: k.alamat_lat,
+    alamatLon: k.alamat_lon,
   }));
 
   return (

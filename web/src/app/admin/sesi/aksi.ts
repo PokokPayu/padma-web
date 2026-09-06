@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { JENJANG_SAH, periksaAlasanPenimpaan } from "./status";
+import type { JenjangTransport } from "@/lib/transport/jarak";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -335,5 +337,76 @@ export async function selesaikanSesi(
   revalidatePath("/admin");
   // Catatan bidan baru terbit di riwayat sesi klien.
   revalidatePath("/passport");
+  return { ok: true };
+}
+
+/**
+ * Menetapkan atau MENIMPA jenjang transport sebuah sesi.
+ *
+ * `saranJenjang()` (`@/lib/transport/saran`) hanya MENYARANKAN — ia dihitung
+ * di klien dari koordinat yang tersedia dan tidak pernah menulis apa pun.
+ * Fungsi inilah satu-satunya jalur yang benar-benar mengubah
+ * `sessions.jenjang`, dan ia SELALU dianggap penimpaan admin:
+ *
+ *  1. `jenjang_sumber` ditulis MATI sebagai `'admin'` — keadaan tujuan tidak
+ *     pernah datang dari FormData, pola yang sama dengan `status: "selesai"`
+ *     di `selesaikanSesi` dan `status: "dikonfirmasi"` di `konfirmasiPermintaan`.
+ *     Jenjang bersumber `'otomatis'` (bila kelak ada jalurnya) tidak pernah
+ *     lewat sini.
+ *
+ *  2. Alasan WAJIB dan divalidasi sebagai KALIMAT di `periksaAlasanPenimpaan`
+ *     (status.ts) sebelum menyentuh basis data — CHECK
+ *     `sessions_alasan_penimpaan` dari Task 2 tetap ada, tetapi sebagai
+ *     lapisan TERAKHIR, bukan satu-satunya. Tanpa validasi di sini, penolakan
+ *     yang sampai ke admin adalah kode galat Postgres, bukan kalimat yang bisa
+ *     dibaca.
+ *
+ *  3. `jenjang` diperiksa terhadap `JENJANG_SAH` (daftar putih yang identik
+ *     dengan enum `jenjang_transport`) SEBELUM menulis — nilai yang bukan
+ *     anggota enum itu ditolak dengan kalimat, bukan menunggu error Postgres
+ *     dari CHECK/enum di baris insert.
+ *
+ * TIDAK ADA satu rupiah pun di sini: sesi menyimpan JENJANG (data
+ * operasional), dan rupiahnya baru diturunkan dari `transport_rates` di panel
+ * owner menurut tanggal sesi (money firewall, spec T8/T9).
+ */
+export async function tetapkanJenjang(formData: FormData): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const sesiId = String(formData.get("sesi") ?? "").trim();
+  const jenjangMentah = String(formData.get("jenjang") ?? "").trim();
+
+  if (!sesiId) {
+    return { ok: false, pesan: "Sesi wajib dipilih." };
+  }
+  if (!JENJANG_SAH.includes(jenjangMentah as JenjangTransport)) {
+    return { ok: false, pesan: "Jenjang tidak sah. Pilih salah satu jenjang yang tersedia." };
+  }
+
+  const alasanCek = periksaAlasanPenimpaan(String(formData.get("alasan") ?? ""));
+  if (!alasanCek.ok) {
+    return { ok: false, pesan: alasanCek.pesan };
+  }
+
+  const supabase = await createServerSupabase();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .update({
+      jenjang: jenjangMentah,
+      jenjang_sumber: "admin",
+      jenjang_alasan: alasanCek.nilai,
+    })
+    .eq("id", sesiId)
+    .select("id");
+
+  // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST 200 + [] —
+  // sesi yang tidak ada mendarat di sini, bukan sebagai "berhasil" senyap.
+  if (error || (data ?? []).length === 0) {
+    return { ok: false, pesan: "Sesi tidak ditemukan." };
+  }
+
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
   return { ok: true };
 }
