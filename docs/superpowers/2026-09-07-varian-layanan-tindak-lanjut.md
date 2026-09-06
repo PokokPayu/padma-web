@@ -39,8 +39,12 @@ dan sesinya jatuh "tak bertarif" di rekap owner. Layar `/owner/tarif` punya peri
 
 **5. `npm run test:e2e:owner` harus dijalankan pada basis data yang tidak dipakai checkout lain.**
 `bersihkan()` menyapu berdasarkan awalan bersama `E2E-OWNR%`, jadi dua run yang bertumpang tindih
-saling menghapus fixture di tengah jalan. Itu penyebab paling mungkin kegagalan langkah 5 yang
-teramati saat pengembangan — bukan regresi varian; jalur tulis `honor_marks`
+saling menghapus fixture di tengah jalan.
+
+**Terbukti, bukan lagi dugaan.** Saat pengembangan, langkah 5 ("Tandai dibayar") gagal konsisten
+dengan `honor_marks` kosong padahal tombolnya lenyap. Dijalankan SENDIRIAN pada basis data tanpa
+sisa fixture dan tanpa proses uji lain: **10/10 lolos**. Jadi kegagalan itu memang kontensi fixture,
+bukan regresi varian — konsisten dengan fakta bahwa jalur tulis `honor_marks`
 (`src/app/owner/rekap/aksi.ts`) tidak pernah disentuh branch ini.
 
 ## Utang tindak lanjut
