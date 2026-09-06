@@ -462,6 +462,7 @@ describe("halaman daftar klien (/admin/klien)", () => {
     for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
     }
   });
 });

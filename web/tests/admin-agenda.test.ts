@@ -167,6 +167,7 @@ describe("pagar lapisan agenda", () => {
     expect(sumber).not.toContain("createAdminSupabase");
     expect(sumber).not.toContain("SERVICE_ROLE");
     expect(sumber).not.toContain("service_rates");
+    expect(sumber).not.toContain("variant_rates");
     expect(sumber).not.toContain("honor_marks");
     expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
   });

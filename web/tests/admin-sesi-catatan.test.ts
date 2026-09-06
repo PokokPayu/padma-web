@@ -579,6 +579,7 @@ describe("daftar sesi di halaman /admin/sesi", () => {
     for (const sumber of [sumberHalaman, sumberFormSesi, sumberFormSelesai, sumberAksi]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });

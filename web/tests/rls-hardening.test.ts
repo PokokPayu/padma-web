@@ -192,12 +192,20 @@ describe("HARDENING — money firewall tetap utuh setelah percobaan eskalasi", (
       .select("nama, service_variants(variant_rates(harga_klien,honor_mitra))")
       .limit(5);
     expect(error).toBeNull();
-    for (const row of data ?? []) {
-      const varian = (row as { service_variants: { variant_rates: unknown[] }[] })
-        .service_variants;
-      for (const v of varian) {
-        expect(v.variant_rates).toHaveLength(0);
-      }
+    const baris = (data ?? []) as { service_variants: { variant_rates: unknown[] }[] }[];
+    // Kontrol yang WAJIB dulu: tanpa ini, `service_variants` kosong (bukan
+    // tertutup RLS, melainkan memang tidak pernah embed) membuat badan loop di
+    // bawah tidak pernah berjalan dan ujinya hijau tanpa menembak jalur
+    // berisiko sama sekali — kelemahan yang tidak ada pada versi lama, karena
+    // di sana `toHaveLength` atas embed yang gagal melempar, bukan hijau diam.
+    expect(baris.length, "services kosong — embed tidak sempat diuji").toBeGreaterThan(0);
+    const seluruhVarian = baris.flatMap((row) => row.service_variants);
+    expect(
+      seluruhVarian.length,
+      "service_variants kosong — embed variant_rates tidak sempat diuji",
+    ).toBeGreaterThan(0);
+    for (const v of seluruhVarian) {
+      expect(v.variant_rates).toHaveLength(0);
     }
   });
 

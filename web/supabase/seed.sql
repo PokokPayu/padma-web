@@ -41,6 +41,13 @@ insert into service_variants (service_id, label)
 -- pada `db reset` bersih); Task 5 meleburnya menjadi satu insert langsung ke
 -- `variant_rates` yang menunjuk varian baku tiap layanan. Nominalnya sengaja
 -- SAMA PERSIS dengan seed lama.
+--
+-- `where not exists (...)` di bawah dipertahankan dari blok CERMIN lama
+-- dengan alasan yang SAMA: `berlaku_sejak` tidak disebut di sini (default
+-- `current_date`), jadi berkas ini aman dijalankan ulang pada basis data yang
+-- sudah berisi tarif produksi (mis. `seed.sql` dijalankan lagi pada hari yang
+-- sama) — tanpa penjaga ini, pengulangan itu menabrak
+-- `variant_rates_unik_per_tanggal` alih-alih no-op senyap.
 insert into variant_rates (variant_id, harga_klien, honor_mitra)
   select v.id, r.harga, r.honor
     from (values
@@ -55,7 +62,11 @@ insert into variant_rates (variant_id, harga_klien, honor_mitra)
       ('11111111-1111-1111-1111-111111111109'::uuid, 400000, 180000),
       ('11111111-1111-1111-1111-111111111110'::uuid, 300000, 125000)
     ) as r(service_id, harga, honor)
-    join service_variants v on v.service_id = r.service_id;
+    join service_variants v on v.service_id = r.service_id
+   where not exists (
+     select 1 from variant_rates vr
+      where vr.variant_id = v.id and vr.berlaku_sejak = current_date
+   );
 
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);

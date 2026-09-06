@@ -1045,6 +1045,7 @@ describe("halaman materi (/admin/materi)", () => {
     for (const sumber of SEMUA_SUMBER) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });

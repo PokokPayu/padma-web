@@ -901,6 +901,16 @@ describe("halaman rate card (/owner/tarif)", () => {
       .delete()
       .eq("id", TARIF_MUNDUR);
     expect(error?.code).toBe("42501");
+    // `not.toHaveLength(0)` saja tidak cukup: bila VARIAN_MUNDUR punya baris
+    // tarif lain, hilangnya baris yang DITARGET (TARIF_MUNDUR) lolos tanpa
+    // terdeteksi. Baris di bawah memeriksa id barisnya sendiri, bukan cuma
+    // cacah barisnya.
+    const { data: barisDihapus } = await admin
+      .from("variant_rates")
+      .select("id")
+      .eq("id", TARIF_MUNDUR)
+      .maybeSingle();
+    expect(barisDihapus).not.toBeNull();
     expect(await tarifVarian(VARIAN_MUNDUR)).not.toHaveLength(0);
   });
 

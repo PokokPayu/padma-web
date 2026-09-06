@@ -905,12 +905,13 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   });
 
   it("TIDAK ada nominal uang di modul layanan (money firewall)", () => {
-    // Harga layanan hidup di `service_rates`, wilayah owner. Modul ini
-    // mengelola katalognya, bukan angkanya.
+    // Harga layanan hidup di `variant_rates` (dulu `service_rates`, dijatuhkan
+    // Task 5), wilayah owner. Modul ini mengelola katalognya, bukan angkanya.
     expect(markup).not.toMatch(/Rp\s?\d/);
     for (const sumber of SEMUA_SUMBER) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
       expect(sumber).not.toContain("honor_mitra");
     }

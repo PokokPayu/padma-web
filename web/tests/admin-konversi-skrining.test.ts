@@ -459,6 +459,7 @@ describe("inbox menampilkan jembatan ke modul klien", () => {
     for (const sumber of [sumberTabel, sumberDialog, sumberAksi, sumberHalaman]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
     }
   });
 });
