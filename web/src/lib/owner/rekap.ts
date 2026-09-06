@@ -111,11 +111,11 @@ export function tarifPadaTanggal(
       terpilih = t;
       continue;
     }
-    // Seri. UNIQUE (service_id, berlaku_sejak) baru dipasang belakangan dan
-    // tidak ada `created_at` pemecah seri, jadi seri masih mungkin ada di data
-    // lama. Dipecah dengan `id` supaya hasilnya tidak bergantung pada urutan
-    // baris yang dipulangkan PostgREST — rekap yang sama harus selalu
-    // menghasilkan angka yang sama.
+    // Seri. UNIQUE (variant_id, berlaku_sejak) — `variant_rates_unik_per_tanggal`
+    // — baru dipasang belakangan dan tidak ada `created_at` pemecah seri, jadi
+    // seri masih mungkin ada di data lama. Dipecah dengan `id` supaya hasilnya
+    // tidak bergantung pada urutan baris yang dipulangkan PostgREST — rekap
+    // yang sama harus selalu menghasilkan angka yang sama.
     if (t.berlakuSejak === terpilih.berlakuSejak && t.id < terpilih.id) {
       terpilih = t;
     }

@@ -71,9 +71,12 @@ describe("daftarPenugasan — otomatis mengikuti aturan yang sama dengan berhak_
     const db = svc();
     // Urutan wajib: sessions dulu (referensi service_id tanpa cascade), lalu
     // materials (cascade menyapu material_assignments & material_services),
-    // baru services.
+    // lalu service_variants (trigger `trg_terbitkan_varian_baku` menerbitkan
+    // satu varian baku otomatis begitu `services` disisipkan — FK-nya menahan
+    // penghapusan `services` sampai variannya ikut disapu), baru services.
     await db.from("sessions").delete().eq("service_id", serviceId);
     await db.from("materials").delete().eq("id", materiId);
+    await db.from("service_variants").delete().eq("service_id", serviceId);
     await db.from("services").delete().eq("id", serviceId);
   });
 

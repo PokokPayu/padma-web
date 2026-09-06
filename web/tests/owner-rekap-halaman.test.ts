@@ -157,9 +157,14 @@ async function bersihkan() {
     await admin.from("partners").delete().eq("id", mitra);
   }
   // `service_variants` dulu — FK-nya menunjuk `services`, urutan penghapusan
-  // terbalik dari urutan penyisipan.
-  for (const v of [VARIAN_BERTARIF, VARIAN_TANPA_TARIF]) {
-    await admin.from("service_variants").delete().eq("id", v);
+  // terbalik dari urutan penyisipan. Disapu per SERVICE_ID (bukan per id
+  // varian yang kita catat sendiri): trigger `trg_terbitkan_varian_baku`
+  // menerbitkan satu varian baku OTOMATIS begitu tiap layanan fixture
+  // disisipkan, dengan id acak yang tidak pernah kita tahu — menyapu hanya
+  // `VARIAN_BERTARIF` dkk. meninggalkan varian otomatis itu yatim, dan FK-nya
+  // menahan penghapusan `services` di bawah.
+  for (const svc of [LAYANAN_BERTARIF, LAYANAN_TANPA_TARIF]) {
+    await admin.from("service_variants").delete().eq("service_id", svc);
   }
   for (const svc of [LAYANAN_BERTARIF, LAYANAN_TANPA_TARIF]) {
     await admin.from("services").delete().eq("id", svc);

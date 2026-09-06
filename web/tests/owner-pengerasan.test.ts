@@ -117,6 +117,13 @@ async function bersihkan() {
     await admin.from("service_rates").delete().eq("service_id", s);
   }
   await admin.from("partners").delete().eq("id", MITRA_KERAS);
+  // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
+  // begitu `services` disisipkan — FK-nya menahan penghapusan `services`
+  // sampai variannya ikut disapu duluan. Berkas ini tidak pernah menyentuh
+  // `service_variants`/`variant_rates` sendiri, jadi cukup disapu per layanan.
+  for (const s of [LAYANAN_KERAS, LAYANAN_KEDUA]) {
+    await admin.from("service_variants").delete().eq("service_id", s);
+  }
   for (const s of [LAYANAN_KERAS, LAYANAN_KEDUA]) {
     await admin.from("services").delete().eq("id", s);
   }

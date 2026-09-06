@@ -84,7 +84,6 @@ describe("variant_rates — pagar uang dipindah apa adanya", () => {
   it("pernyataan salinan migrasi memindahkan baris service_rates apa adanya (rollback)", async () => {
     await dalamTransaksiRollback(async (jalankan) => {
       const LAYANAN_UJI = "11111111-1111-1111-1111-11111111ab01";
-      const VARIAN_UJI = "11111111-1111-1111-1111-11111111ab02";
 
       // Kosongkan dulu: pernyataan migrasi TIDAK berfilter, jadi ia menyalin
       // SELURUH service_rates yang ada. Tanpa ini ia bentrok dengan 10 baris
@@ -97,11 +96,16 @@ describe("variant_rates — pagar uang dipindah apa adanya", () => {
          values ($1, 'prekonsepsi', 'PAD-UJI Layanan Salin Tarif', 'fixture', true)`,
         [LAYANAN_UJI],
       );
-      await jalankan(
-        `insert into public.service_variants (id, service_id, label)
-         values ($1, $2, '')`,
-        [VARIAN_UJI, LAYANAN_UJI],
-      );
+      // Varian bakunya TIDAK disisipkan manual di sini: trigger
+      // `trg_terbitkan_varian_baku` (migrasi 20260906130000) sudah
+      // menerbitkannya otomatis begitu baris `services` di atas lahir.
+      // Menyisipkannya lagi secara manual akan melahirkan VARIAN KEDUA untuk
+      // layanan yang sama, dan invarian "satu service_rates -> satu
+      // variant_rates" di bawah (b) diam-diam menjadi "satu -> dua".
+      const [{ id: VARIAN_UJI }] = (await jalankan(
+        `select id from public.service_variants where service_id = $1`,
+        [LAYANAN_UJI],
+      )) as Array<{ id: string }>;
       await jalankan(
         `insert into public.service_rates (service_id, harga_klien, honor_mitra, berlaku_sejak)
          values ($1, 275000, 120000, '2021-06-15')`,

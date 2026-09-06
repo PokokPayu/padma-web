@@ -105,6 +105,14 @@ describe("daftarPenugasan — 'otomatis' tidak terpotong PostgREST max_rows (Fix
       if (error) throw error;
     }
     if (serviceId) {
+      // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku
+      // otomatis begitu `services` disisipkan — FK-nya menahan penghapusan
+      // `services` sampai variannya ikut disapu duluan.
+      const { error: eVarian } = await admin
+        .from("service_variants")
+        .delete()
+        .eq("service_id", serviceId);
+      if (eVarian) throw eVarian;
       const { error } = await admin.from("services").delete().eq("id", serviceId);
       if (error) throw error;
     }

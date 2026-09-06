@@ -52,7 +52,7 @@ describe("tarifPadaTanggal", () => {
     expect(tarifPadaTanggal(daftar, "svc-massage", "2026-07-31")?.id).toBe("r-lama");
   });
 
-  it("tidak mencampur tarif antar layanan", () => {
+  it("tidak mencampur tarif antar varian", () => {
     expect(tarifPadaTanggal(daftar, "svc-yoga", "2026-08-26")?.hargaKlien).toBe(300_000);
   });
 
@@ -60,7 +60,7 @@ describe("tarifPadaTanggal", () => {
     expect(tarifPadaTanggal(daftar, "svc-massage", "2025-12-31")).toBeNull();
   });
 
-  it("layanan yang belum punya tarif sama sekali mengembalikan null", () => {
+  it("varian yang belum punya tarif sama sekali mengembalikan null", () => {
     expect(tarifPadaTanggal(daftar, "svc-belum-ada", "2026-08-26")).toBeNull();
   });
 

@@ -182,8 +182,12 @@ afterAll(async () => {
   await svc.from("partners").delete().eq("id", MITRA_UJI);
   await svc.from("packages").delete().eq("id", PAKET_UJI);
   // Varian sebelum layanannya: FK `service_variants.service_id -> services.id`
-  // tidak ber-cascade (varian yang pernah dipakai sesi adalah riwayat).
-  await svc.from("service_variants").delete().eq("id", VARIAN_UJI);
+  // tidak ber-cascade (varian yang pernah dipakai sesi adalah riwayat). Disapu
+  // per SERVICE_ID, bukan hanya `VARIAN_UJI`: trigger `trg_terbitkan_varian_baku`
+  // menerbitkan satu varian baku OTOMATIS (id acak) begitu LAYANAN_UJI lahir di
+  // `beforeAll` — menyapu hanya `VARIAN_UJI` meninggalkan varian otomatis itu
+  // yatim, dan FK-nya menahan penghapusan `services` di bawah.
+  await svc.from("service_variants").delete().eq("service_id", LAYANAN_UJI);
   await svc.from("services").delete().eq("id", LAYANAN_UJI);
 });
 

@@ -171,6 +171,18 @@ async function bersihkan() {
   await admin.from("client_packages").delete().eq("id", PAKET_KLIEN_UJI);
   await admin.from("clients").delete().eq("id", KLIEN_UJI);
   await admin.from("packages").delete().like("nama", "PAD-UJI%");
+  // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
+  // untuk setiap layanan yang lahir di atas (termasuk lewat `simpanLayanan()`
+  // sungguhan, yang id-nya tidak diketahui di sini) — FK-nya menahan
+  // penghapusan `services` sampai variannya disapu duluan. Id layanan dicari
+  // lewat pola nama yang sama, bukan disebut satu per satu.
+  const { data: layananUji } = await admin.from("services").select("id").like("nama", "PAD-UJI%");
+  if (layananUji && layananUji.length > 0) {
+    await admin
+      .from("service_variants")
+      .delete()
+      .in("service_id", layananUji.map((l) => l.id));
+  }
   await admin.from("services").delete().like("nama", "PAD-UJI%");
 
   // Baris seed yang dipinjam dikembalikan utuh.

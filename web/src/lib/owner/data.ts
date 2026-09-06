@@ -221,7 +221,21 @@ export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
     daftar.push(v);
     varianPerLayanan.set(v.service_id, daftar);
   }
-  for (const daftar of varianPerLayanan.values()) daftar.sort((a, b) => a.urutan - b.urutan);
+  // `urutan` dulu, lalu label, lalu id — pemecah seri STABIL. Varian baku
+  // (label kosong, `urutan = 0` untuk seluruhnya, baik yang dibackfill Task 1
+  // maupun yang diterbitkan trigger `trg_terbitkan_varian_baku`) tanpa
+  // pemecah seri ini jatuh ke urutan baris PostgREST — nondeterministik, dan
+  // berbeda dari disiplin "urutan ditegaskan ulang" yang dipakai riwayat
+  // tarif tepat di bawahnya.
+  for (const daftar of varianPerLayanan.values()) {
+    daftar.sort((a, b) => {
+      const selisih = a.urutan - b.urutan;
+      if (selisih !== 0) return selisih;
+      const selisihLabel = a.label.localeCompare(b.label, "id");
+      if (selisihLabel !== 0) return selisihLabel;
+      return a.id.localeCompare(b.id);
+    });
+  }
 
   return terurut.flatMap((l) =>
     (varianPerLayanan.get(l.id) ?? []).map((v) => {
