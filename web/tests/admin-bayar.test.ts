@@ -317,6 +317,74 @@ describe("daftar tagihan admin", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Label tagihan menyertakan varian (Task 7)
+// ---------------------------------------------------------------------------
+
+describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
+  // Fixture SENDIRI, bukan SVC_MASSAGE/SVC_NUTRISI seed: dua sesi layanan
+  // yang sama bisa berbeda harga bila variannya berbeda, dan label yang tidak
+  // menyebut variannya membuat klien ditagih untuk hal yang salah.
+  const SVC_VARIAN = "11111111-1111-1111-1111-111111111c01";
+  const VARIAN_NAMED = "77777777-7777-7777-7777-777777777c01";
+  const SESI_VARIAN = "66666666-6666-6666-6666-666666666c01";
+
+  beforeAll(async () => {
+    await admin.from("services").insert({
+      id: SVC_VARIAN,
+      phase_id: "prekonsepsi",
+      nama: "PAD-UJI Layanan Varian Tagihan",
+      deskripsi: "fixture",
+    });
+    // Trigger `trg_terbitkan_varian_baku` sudah menerbitkan varian baku untuk
+    // layanan di atas; baris di bawah adalah varian BERNAMA yang dipesan sesi
+    // uji ini — beda varian, beda harga, karena itu labelnya wajib beda juga.
+    await admin.from("service_variants").insert({
+      id: VARIAN_NAMED,
+      service_id: SVC_VARIAN,
+      label: "VIP",
+      durasi_menit: 90,
+      format: "private",
+      urutan: 1,
+    });
+    await admin.from("sessions").insert(
+      baris(SESI_VARIAN, {
+        service_id: SVC_VARIAN,
+        variant_id: VARIAN_NAMED,
+        status_bayar: "belum",
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await admin.from("sessions").delete().eq("id", SESI_VARIAN);
+    // `service_variants` dulu — FK menahan penghapusan `services` di bawah.
+    // Dihapus per SERVICE_ID (bukan hanya VARIAN_NAMED): trigger
+    // `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
+    // dengan id acak yang tidak kita catat.
+    await admin.from("service_variants").delete().eq("service_id", SVC_VARIAN);
+    await admin.from("services").delete().eq("id", SVC_VARIAN);
+  });
+
+  it("label menyertakan nama layanan DAN label varian", async () => {
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN);
+    expect(item).toBeDefined();
+    expect(item!.label).toContain("PAD-UJI Layanan Varian Tagihan");
+    expect(item!.label).toContain("VIP");
+    expect(item!.label).toMatch(/90 menit/);
+  });
+
+  it("varian BAKU (tanpa nama) tidak menambah apa pun ke label — perilaku lama dipertahankan", async () => {
+    // SESI_MENUNGGU (fixture modul ini) tidak pernah menyetel `variant_id`,
+    // jadi baris ini membuktikan sesi TANPA varian bernama tetap berlabel
+    // persis seperti sebelum Task 7: "<nama layanan> · <tanggal>" — satu
+    // pemisah " · " saja.
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_MENUNGGU);
+    expect(item).toBeDefined();
+    expect((item!.label.match(/ · /g) ?? []).length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // tandaiLunas
 // ---------------------------------------------------------------------------
 
