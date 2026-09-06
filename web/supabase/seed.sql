@@ -45,6 +45,25 @@ insert into service_rates (service_id, harga_klien, honor_mitra) values
   ('11111111-1111-1111-1111-111111111109',400000,180000),
   ('11111111-1111-1111-1111-111111111110',300000,125000);
 
+-- Blok CERMIN dari langkah salin tarif migrasi `tarif_per_varian`
+-- (`insert into variant_rates ... select ... from service_rates join
+-- service_variants ...`). Pada `db reset` yang bersih, migrasi berjalan
+-- SEBELUM berkas seed ini — jadi saat pernyataan salinan migrasi berjalan
+-- `service_rates` masih kosong dan ia menyalin NOL baris, sama seperti nasib
+-- backfill varian di atas. Pernyataan yang SAMA diulang di sini SESUDAH
+-- `service_rates` diisi, dengan `where not exists` supaya idempoten terhadap
+-- salinan migrasi pada basis data yang sudah berisi tarif produksi. Task 5
+-- melebur kedua blok ini menjadi satu insert langsung, sesudah `service_rates`
+-- dijatuhkan.
+insert into variant_rates (variant_id, harga_klien, honor_mitra, berlaku_sejak)
+  select v.id, r.harga_klien, r.honor_mitra, r.berlaku_sejak
+    from service_rates r
+    join service_variants v on v.service_id = r.service_id
+   where not exists (
+     select 1 from variant_rates vr
+      where vr.variant_id = v.id and vr.berlaku_sejak = r.berlaku_sejak
+   );
+
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);
 

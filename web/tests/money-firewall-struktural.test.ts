@@ -12,9 +12,16 @@ import { querySql } from "./helpers/db";
  * baca — firewall bocor tanpa satu pun assertion berubah merah.
  *
  * Invarian yang dijaga di sini: KOLOM NOMINAL UANG HANYA BOLEH HIDUP DI
- * `service_rates` DAN `honor_marks`. Dijaga dengan membaca
+ * `service_rates`, `variant_rates`, DAN `honor_marks`. Dijaga dengan membaca
  * information_schema.columns, jadi berlaku untuk kolom yang BELUM ADA saat
  * test ini ditulis — termasuk kolom pada tabel yang belum lahir (Plan 2 dst).
+ *
+ * `variant_rates` (migration `tarif_per_varian`) ditambahkan SADAR, bukan
+ * pengecualian diam-diam: ia pengganti `service_rates` per varian, membawa
+ * SELURUH pagar uangnya (lihat tests/varian-tarif-pengerasan.test.ts), dan
+ * bukan bocoran baru. `service_rates` sengaja TETAP terdaftar di sini
+ * meskipun kini paralel dengan `variant_rates` — ia baru dijatuhkan Task 5,
+ * sesudah kode owner berhenti membacanya, supaya pohon selalu bisa dijalankan.
  *
  * Yang sengaja TIDAK dituduh: kolom STATUS. `sessions.status_bayar` dan
  * `client_packages.status_bayar` memang mengandung kata "bayar", tetapi
@@ -26,7 +33,7 @@ import { querySql } from "./helpers/db";
  */
 
 /** Satu-satunya tempat sah bagi nominal uang. */
-const TABEL_UANG = new Set(["service_rates", "honor_marks"]);
+const TABEL_UANG = new Set(["service_rates", "variant_rates", "honor_marks"]);
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -120,6 +127,8 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
 
     expect(diTabelUang).toContain("service_rates.harga_klien");
     expect(diTabelUang).toContain("service_rates.honor_mitra");
+    expect(diTabelUang).toContain("variant_rates.harga_klien");
+    expect(diTabelUang).toContain("variant_rates.honor_mitra");
   });
 
   it("kolom STATUS bayar TIDAK dituduh sebagai nominal (bukan false positive)", () => {

@@ -1196,6 +1196,15 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
    *     select count(*) from public.service_rates;
    *   -- ERROR: permission denied for table service_rates
    *   rollback;
+   *
+   * `variant_rates` (Task 3, migration `tarif_per_varian`) bergabung ke
+   * daftar ini SADAR, bukan warisan default privileges: ia tabel uang BARU
+   * dengan bentuk risiko yang SAMA PERSIS dengan `service_rates` — owner
+   * butuh SELURUH kolom & SELURUH verba baca/tulisnya, jadi peta haknya wajib
+   * identik (SELECT/INSERT/UPDATE, DELETE tercabut). MAKSUD peta ini tidak
+   * berubah — hanya bertambah satu tabel yang menjalankan doktrin yang sama.
+   * `service_rates` sengaja TETAP di daftar meski kini paralel dengan
+   * `variant_rates`: ia baru dijatuhkan Task 5.
    */
   it("hak tabel non-DELETE tabel uang WAJIB tetap dipegang authenticated", async () => {
     const baris = await querySql<{ table_name: string; privilege_type: string }>(`
@@ -1203,7 +1212,7 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
         from information_schema.role_table_grants
        where table_schema='public'
          and grantee='authenticated'
-         and table_name in ('service_rates','honor_marks')
+         and table_name in ('service_rates','honor_marks','variant_rates')
          and privilege_type in ('SELECT','INSERT','UPDATE')
        order by 1, 2`);
     expect(baris.map((b) => `${b.table_name}:${b.privilege_type}`)).toEqual([
@@ -1213,6 +1222,9 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
       "service_rates:INSERT",
       "service_rates:SELECT",
       "service_rates:UPDATE",
+      "variant_rates:INSERT",
+      "variant_rates:SELECT",
+      "variant_rates:UPDATE",
     ]);
   });
 
