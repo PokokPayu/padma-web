@@ -63,6 +63,62 @@ describe("transport_khusus", () => {
     }
   });
 
+  /**
+   * >>> Ruling 5 (coordinator, 7 Sep 2026) <<<
+   *
+   * Ditemukan lewat self-review empiris: `transport_khusus` memberi UPDATE
+   * kepada `authenticated` tapi hanya punya trigger perebut identitas saat
+   * INSERT — tanpa pengunci gaya `kunci_tanda_honor`, owner bisa menulis
+   * ulang `ditetapkan_oleh` (atau nominal) sesudah baris berdiri. Ini PERSIS
+   * temuan B5b (lihat 20260830150000_pengerasan_tabel_uang.sql bagian 7):
+   * "Merebut kolom pada INSERT tidak ada gunanya bila baris yang sudah
+   * berdiri masih bisa ditimpa sesudahnya."
+   *
+   * Pola uji ini SAMA dengan kontrol A5/A6 di tests/hak-hapus-berlebih.test.ts
+   * ("KONTROL: owner TETAP bisa membaca & menandai honor; MENIMPA tanda
+   * ditolak"): dua asersi, bukan satu — UPDATE ditolak 42501 LEWAT REST
+   * SEBAGAI OWNER SUNGGUHAN, DAN baris yang tersimpan tidak berubah sesudahnya
+   * (dibaca lewat service role, yang tidak tersentuh trigger kunci).
+   */
+  it("UPDATE ditolak untuk peran API, dan barisnya tidak berubah — menutup temuan B5b", async () => {
+    const { data: sesi, error: eSesi } = await svc
+      .from("sessions")
+      .select("id")
+      .limit(1)
+      .single();
+    expect(eSesi).toBeNull();
+
+    const owner = await signInAs("owner@padma.test");
+
+    const { data: baris, error: eIns } = await owner
+      .from("transport_khusus")
+      .insert({ session_id: sesi!.id, tarif_klien: 50000, honor_mitra: 40000 })
+      .select("tarif_klien, honor_mitra, ditetapkan_oleh")
+      .single();
+    expect(eIns).toBeNull();
+
+    try {
+      const { error: eUbah } = await owner
+        .from("transport_khusus")
+        .update({ tarif_klien: 999999 })
+        .eq("session_id", sesi!.id)
+        .select("tarif_klien");
+      expect(eUbah?.code).toBe("42501");
+
+      const { data: sesudah, error: eBaca } = await svc
+        .from("transport_khusus")
+        .select("tarif_klien, honor_mitra, ditetapkan_oleh")
+        .eq("session_id", sesi!.id)
+        .single();
+      expect(eBaca).toBeNull();
+      expect(sesudah!.tarif_klien).toBe(50000);
+      expect(sesudah!.honor_mitra).toBe(40000);
+      expect(sesudah!.ditetapkan_oleh).toBe(baris!.ditetapkan_oleh);
+    } finally {
+      await svc.from("transport_khusus").delete().eq("session_id", sesi!.id);
+    }
+  });
+
   it("menolak nominal negatif", async () => {
     await dalamTransaksiRollback(async (jalankan) => {
       const [s] = (await jalankan(`select id from public.sessions limit 1`)) as Array<{ id: string }>;

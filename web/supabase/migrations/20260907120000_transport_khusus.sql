@@ -55,6 +55,48 @@ create trigger trg_jaga_transport_khusus
   before insert on public.transport_khusus
   for each row execute function public.jaga_transport_khusus();
 
+-- ===== PAGAR TAMBAHAN (Ruling 5) — BARIS TIDAK BISA DITULIS ULANG =====
+-- Temuan B5b (20260830150000_pengerasan_tabel_uang.sql bagian 7): "Merebut
+-- kolom pada INSERT tidak ada gunanya bila baris yang sudah berdiri masih
+-- bisa ditimpa sesudahnya." Draft pertama migrasi ini hanya memasang
+-- trg_jaga_transport_khusus (BEFORE INSERT) dan lupa pasangannya — owner bisa
+-- UPDATE ditetapkan_oleh (atau tarif_klien/honor_mitra) sesudah baris
+-- berdiri, membuat identitas rebutan trigger INSERT tidak berarti apa pun.
+-- Ditemukan lewat self-review empiris (drop trigger di transaksi rollback,
+-- UPDATE lolos tanpa error) sebelum berkas ini dikirim untuk review.
+create or replace function public.kunci_transport_khusus()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if current_user in ('anon', 'authenticated', 'authenticator') then
+    raise exception
+      'nominal transport khusus adalah bukti berapa yang ditagihkan dan siapa yang menetapkannya; bukti yang bisa ditulis ulang bukan bukti'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.kunci_transport_khusus() is
+  'Menolak SETIAP UPDATE transport_khusus dari peran API (anon, authenticated, '
+  'authenticator) — owner sekalipun. Menutup temuan B5b: merebut '
+  'ditetapkan_oleh pada INSERT (trg_jaga_transport_khusus) tidak ada gunanya '
+  'bila baris yang sudah berdiri masih bisa ditimpa sesudahnya. Verba UPDATE '
+  'sengaja TIDAK dicabut dari authenticated (owner login sebagai peran itu); '
+  'yang dimatikan kemampuannya, bukan haknya. Service role tetap bebas '
+  'sebagai jalur pemulihan data — dan, untuk saat ini, satu-satunya jalur '
+  'koreksi nominal transport khusus yang sudah ditetapkan. Apakah koreksi SAH '
+  'butuh pola "fakta baru" seperti honor_marks (bukan penulisan ulang fakta '
+  'lama) belum diputuskan; lihat task-3-4-report.md.';
+
+revoke all on function public.kunci_transport_khusus() from public, anon, authenticated;
+
+create trigger trg_kunci_transport_khusus
+  before update on public.transport_khusus
+  for each row execute function public.kunci_transport_khusus();
+
 alter table public.transport_khusus enable row level security;
 
 create policy "transport_khusus: hanya owner" on public.transport_khusus
@@ -68,6 +110,10 @@ revoke delete on public.transport_khusus from authenticated;
 comment on table public.transport_khusus is
   'Nominal transport >20 km, DITETAPKAN OWNER PER KASUS — bukan rate card. '
   'ditetapkan_oleh & ditetapkan_pada DIREBUT dari payload (trigger '
-  'trg_jaga_transport_khusus), sama seperti honor_marks. session_id sebagai '
-  'primary key: satu sesi, satu tarif khusus, tanpa riwayat — koreksi sesudah '
-  'ditetapkan adalah persoalan berbeda, bukan UPDATE baris ini.';
+  'trg_jaga_transport_khusus), sama seperti honor_marks. UPDATE ditolak '
+  'SELURUHNYA untuk peran API (trigger trg_kunci_transport_khusus, menutup '
+  'temuan B5b) — DELETE sudah dicabut. session_id sebagai primary key: satu '
+  'sesi, satu tarif khusus, tanpa riwayat. Koreksi nominal yang sudah '
+  'ditetapkan HANYA lewat service role untuk saat ini; apakah jalur koreksi '
+  'sah lewat peran API perlu dibangun (pola "fakta baru", bukan penulisan '
+  'ulang, seperti honor_marks) belum diputuskan.';
