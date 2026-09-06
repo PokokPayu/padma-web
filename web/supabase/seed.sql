@@ -68,6 +68,58 @@ insert into variant_rates (variant_id, harga_klien, honor_mitra)
       where vr.variant_id = v.id and vr.berlaku_sejak = current_date
    );
 
+-- Contoh varian BERTINGKAT untuk data pengembangan.
+-- Tiga layanan ini dipilih karena TIDAK dirujuk satu berkas uji pun
+-- (diverifikasi dengan grep atas UUID-nya di tests/), sehingga contohnya masuk
+-- tanpa memerahkan asersi yang tidak berhubungan dengan varian.
+--
+-- Varian baku bawaan migrasi diberi urutan 0 dan dinonaktifkan untuk kedua
+-- layanan bervarian: layanan tidak boleh punya dua "harga utama" yang keduanya
+-- aktif, karena landing akan menampilkan keduanya sebagai pilihan yang sah.
+update service_variants set aktif = false
+ where service_id in ('11111111-1111-1111-1111-111111111107',
+                      '11111111-1111-1111-1111-111111111109')
+   and label = '' and durasi_menit is null and format is null;
+
+insert into service_variants (service_id, label, durasi_menit, format, urutan)
+  select v.service_id, v.label, v.durasi_menit, v.format, v.urutan
+    from (values
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',60, null::varian_format,1),
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',90, null::varian_format,2),
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',120,null::varian_format,3),
+      ('11111111-1111-1111-1111-111111111109'::uuid,'',90,'private',1),
+      ('11111111-1111-1111-1111-111111111109'::uuid,'',90,'circle', 2)
+    ) as v(service_id, label, durasi_menit, format, urutan)
+   where not exists (
+     select 1 from service_variants sv
+      where sv.service_id = v.service_id
+        and sv.durasi_menit is not distinct from v.durasi_menit
+        and sv.format is not distinct from v.format
+   );
+
+-- Harga coret sengaja terisi pada sebagian baris saja: kedua cabang tampilan
+-- (dicoret / polos) harus ada di data pengembangan.
+insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
+  select v.id,
+         h.harga,
+         h.coret,
+         h.honor
+    from (values
+      (60,  null::varian_format, '11111111-1111-1111-1111-111111111107'::uuid, 350000, 370000, 150000),
+      (90,  null,                '11111111-1111-1111-1111-111111111107'::uuid, 400000, 420000, 175000),
+      (120, null,                '11111111-1111-1111-1111-111111111107'::uuid, 450000, null,   200000),
+      (90,  'private',           '11111111-1111-1111-1111-111111111109'::uuid, 400000, 420000, 180000),
+      (90,  'circle',            '11111111-1111-1111-1111-111111111109'::uuid, 250000, null,   110000)
+    ) as h(durasi, format, service_id, harga, coret, honor)
+    join service_variants v
+      on v.service_id = h.service_id
+     and v.durasi_menit = h.durasi
+     and v.format is not distinct from h.format
+   where not exists (
+     select 1 from variant_rates vr
+      where vr.variant_id = v.id and vr.berlaku_sejak = current_date
+   );
+
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);
 
