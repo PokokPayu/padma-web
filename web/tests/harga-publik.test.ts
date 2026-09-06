@@ -41,7 +41,18 @@ describe("view harga_publik", () => {
     const { data: varian } = await svc.from("service_variants").select("id").limit(1);
     const variantId = varian![0].id as string;
 
-    const besok = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    // Kalender uji ini WAJIB kalender Jakarta yang SAMA dengan yang dipakai
+    // view (`(now() at time zone 'Asia/Jakarta')::date`) — bukan
+    // `new Date(...).toISOString()`, yang membaca kalender UTC. Pada jam UTC
+    // >= 17:00 (pukul 00:00–06:59 WIB), "besok" versi UTC sudah SAMA dengan
+    // hari ini versi Jakarta, sehingga baris yang seharusnya "belum berlaku"
+    // ternyata sudah berlaku menurut view dan uji ini gagal 7 jam setiap
+    // hari — persis jendela waktu yang jadi alasan klausa Jakarta itu ada.
+    // `Intl.DateTimeFormat("en-CA", ...)` memulangkan `YYYY-MM-DD` langsung
+    // dalam zona waktu yang diminta, tanpa perlu aritmetika tanggal manual.
+    const formatJakarta = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
+    const besok = formatJakarta.format(new Date(Date.now() + 86_400_000));
+
     const { data: sisip, error: sisipError } = await svc
       .from("variant_rates")
       .insert({
@@ -54,20 +65,33 @@ describe("view harga_publik", () => {
       .single();
     expect(sisipError).toBeNull();
 
+    let hasilBocor: number[] = [];
+    let hapusError: { message: string } | null = null;
     try {
       const { data } = await anonClient()
         .from("harga_publik")
         .select("harga_klien")
         .eq("variant_id", variantId);
-      expect((data ?? []).map((b) => b.harga_klien)).not.toContain(12_345_678);
+      hasilBocor = (data ?? []).map((b) => b.harga_klien);
     } finally {
-      // Baris masa depan ini dibuat lewat service role di luar transaksi uji
-      // manapun (harus SETELAH insert asli agar guard_tarif_varian_maju tidak
-      // ikut menolaknya sebagai "mundur"). Tanpa pembersihan ini, ia bertahan
-      // di database bersama dan meracuni test lain di suite yang sama — baris
-      // kedua per variant_id membuat trigger pagar tarif bereaksi berbeda pada
-      // UPDATE tanpa filter (mis. tests/varian-tarif-pengerasan.test.ts).
-      await svc.from("variant_rates").delete().eq("id", sisip!.id);
+      // Baris masa depan ini disisipkan lewat service role di luar transaksi
+      // uji manapun. Tanpa pembersihan, ia bertahan di database bersama dan
+      // meracuni uji lain dalam proses vitest yang sama: baris KEDUA untuk
+      // varian yang sama membuat `guard_tarif_varian_maju` (yang menyaring
+      // baris SELAIN yang sedang ditulis) bereaksi berbeda pada UPDATE tanpa
+      // filter di tests/varian-tarif-pengerasan.test.ts, menutupi pesan
+      // "append-only" yang seharusnya diuji di sana dengan pesan "harus
+      // berlaku sesudah" milik guard yang lain.
+      //
+      // supabase-js tidak MELEMPAR pada kegagalan delete — errornya hanya
+      // muncul di `error` hasil panggilan. Errornya ditangkap di sini lalu
+      // diasersikan SESUDAH blok try/finally (bukan di dalamnya), supaya
+      // kegagalan pembersihan tidak diam-diam menutupi assertion `hasilBocor`
+      // di atas bila keduanya sama-sama gagal.
+      const hasil = await svc.from("variant_rates").delete().eq("id", sisip!.id);
+      hapusError = hasil.error;
     }
+    expect(hasilBocor).not.toContain(12_345_678);
+    expect(hapusError, "pembersihan baris racun gagal senyap").toBeNull();
   });
 });

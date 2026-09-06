@@ -40,9 +40,10 @@ import { querySql } from "./helpers/db";
  * boleh tampil dikunci sebagai assertion terpisah di
  * tests/harga-publik.test.ts. Harga klien memang DIPUTUSKAN tampil publik
  * (spec V4, §4.4); yang tidak berubah adalah honor mitra tidak pernah keluar
- * dari `variant_rates`. Pengecualian di bawah karena itu mengecualikan VIEW
- * itu dari pemindaian, bukan melebarkan `TABEL_UANG` atau melonggarkan
- * `POLA_NOMINAL`.
+ * dari `variant_rates`. Pengecualian di bawah karena itu HANYA membebaskan
+ * `harga_klien` & `harga_coret` pada view ini — bukan seluruh view, bukan
+ * melebarkan `TABEL_UANG`, dan bukan melonggarkan `POLA_NOMINAL` — sehingga
+ * `honor_mitra` yang seandainya muncul di view ini tetap memerahkan uji ini.
  */
 
 /**
@@ -54,15 +55,21 @@ import { querySql } from "./helpers/db";
 const TABEL_UANG = new Set(["variant_rates", "honor_marks"]);
 
 /**
- * Satu-satunya view yang boleh memuat kolom nominal.
+ * Satu-satunya view yang boleh memuat kolom nominal — dan hanya DUA kolomnya.
  *
  * Harga klien memang DIPUTUSKAN tampil publik (spec V4): pengunjung harus bisa
  * melihat pricelist sebelum mendaftar. Yang tidak berubah: honor mitra tidak
  * pernah keluar dari variant_rates, dan daftar kolom view ini dikunci terpisah
- * di tests/harga-publik.test.ts — pengecualian ini tidak memberi izin untuk
- * menambah kolom, hanya untuk empat kolom yang sudah diuji di sana.
+ * di tests/harga-publik.test.ts.
+ *
+ * Pengecualian di bawah dipersempit ke KOLOM, bukan ke seluruh view: bila
+ * `honor_mitra` kelak muncul di proyeksi `harga_publik`, nama kolomnya sendiri
+ * tidak ada dalam daftar ini, sehingga uji ini TETAP merah — dua uji menjaga
+ * satu batas, bukan satu uji yang bisa dilewati begitu view-nya dikecualikan
+ * secara keseluruhan.
  */
 const VIEW_HARGA_PUBLIK = "harga_publik";
+const KOLOM_HARGA_PUBLIK_DIIZINKAN = new Set(["harga_klien", "harga_coret"]);
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -146,7 +153,10 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
   it("tidak ada kolom bernuansa nominal uang di luar variant_rates & honor_marks", () => {
     const pelanggaran = semuaKolom
       .filter((k) => !TABEL_UANG.has(k.table_name))
-      .filter((k) => k.table_name !== VIEW_HARGA_PUBLIK)
+      .filter(
+        (k) =>
+          !(k.table_name === VIEW_HARGA_PUBLIK && KOLOM_HARGA_PUBLIK_DIIZINKAN.has(k.column_name)),
+      )
       .filter((k) => bernuansaUang(k.column_name))
       .filter((k) => !statusSah(k))
       .map((k) => `${k.table_name}.${k.column_name} (${k.data_type})`);
