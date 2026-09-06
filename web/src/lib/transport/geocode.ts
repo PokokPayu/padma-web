@@ -21,8 +21,15 @@ import type { Koordinat } from "./jarak";
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
-/** Kebijakan Nominatim: maksimal 1 permintaan per detik. */
-const JEDA_MINIMAL_MS = 1100;
+/**
+ * Kebijakan Nominatim: maksimal 1 permintaan per detik.
+ *
+ * Dibaca dari env (bukan konstanta tetap) SEMATA agar uji bisa menyetelnya ke
+ * 0 lewat `vitest.config.ts` — tanpa itu setiap uji yang memanggil
+ * `geocodeAlamat` dua kali membayar ~1,1 detik tidur sungguhan. Di produksi
+ * env ini tidak pernah diset, jadi jeda sungguhan tetap berlaku.
+ */
+const JEDA_MINIMAL_MS = Number(process.env.NOMINATIM_JEDA_MINIMAL_MS ?? 1100);
 let terakhirDipanggil = 0;
 
 function userAgent(): string {
@@ -44,48 +51,63 @@ export async function geocodeAlamat(alamat: string): Promise<Koordinat | null> {
   const kunci = normalkanAlamat(alamat);
   if (kunci === "") return null;
 
-  const supabase = createAdminSupabase();
-
-  const { data: tersimpan } = await supabase
-    .from("geocode_cache")
-    .select("lat, lon")
-    .eq("alamat_normal", kunci)
-    .maybeSingle();
-
-  // Baris yang ADA sudah menjawab, termasuk bila jawabannya "gagal" (lat NULL).
-  if (tersimpan) {
-    return tersimpan.lat === null || tersimpan.lon === null
-      ? null
-      : { lat: tersimpan.lat as number, lon: tersimpan.lon as number };
-  }
-
-  let hasil: Koordinat | null = null;
+  // Seluruh sisa fungsi dibungkus SATU try/catch — bukan cuma pemanggilan
+  // Nominatim. `createAdminSupabase()` MELEMPAR bila env Supabase kosong, dan
+  // `select`/`upsert` postgrest-js bisa melempar pada kegagalan tak terduga
+  // (mis. koneksi DB putus). Membiarkan salah satunya lolos akan membocorkan
+  // janji "tidak pernah melempar" di dokblok atas pada jalur salah-pasang-env,
+  // bukan cuma jalur jaringan Nominatim — dan pemanggilnya (jalur simpan
+  // alamat) tidak boleh gagal karena itu.
   try {
-    await tungguGiliran();
-    const url = `${NOMINATIM}?q=${encodeURIComponent(alamat)}&format=jsonv2&limit=1&countrycodes=id`;
-    const jawaban = await fetch(url, { headers: { "User-Agent": userAgent() } });
-    if (jawaban.ok) {
-      const isi = (await jawaban.json()) as Array<{ lat: string; lon: string }>;
-      if (isi.length > 0) {
-        const lat = Number(isi[0].lat);
-        const lon = Number(isi[0].lon);
-        if (Number.isFinite(lat) && Number.isFinite(lon)) hasil = { lat, lon };
-      }
+    const supabase = createAdminSupabase();
+
+    const { data: tersimpan } = await supabase
+      .from("geocode_cache")
+      .select("lat, lon")
+      .eq("alamat_normal", kunci)
+      .maybeSingle();
+
+    // Baris yang ADA sudah menjawab, termasuk bila jawabannya "gagal" (lat NULL).
+    if (tersimpan) {
+      return tersimpan.lat === null || tersimpan.lon === null
+        ? null
+        : { lat: tersimpan.lat as number, lon: tersimpan.lon as number };
     }
+
+    let hasil: Koordinat | null = null;
+    try {
+      await tungguGiliran();
+      const url = `${NOMINATIM}?q=${encodeURIComponent(alamat)}&format=jsonv2&limit=1&countrycodes=id`;
+      const jawaban = await fetch(url, { headers: { "User-Agent": userAgent() } });
+      if (jawaban.ok) {
+        const isi = (await jawaban.json()) as Array<{ lat: string; lon: string }>;
+        if (isi.length > 0) {
+          const lat = Number(isi[0].lat);
+          const lon = Number(isi[0].lon);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) hasil = { lat, lon };
+        }
+      }
+    } catch {
+      // Sengaja ditelan (lapis dalam). Kegagalan jaringan Nominatim harus
+      // tetap lanjut ke pencatatan cache di bawah, bukan lompat langsung ke
+      // catch terluar dan MELEWATKAN pencatatan kegagalannya.
+      hasil = null;
+    }
+
+    // Kegagalan pun disimpan — itulah yang mencegah alamat tak dikenal
+    // ditanyakan ulang setiap kali formulirnya dibuka.
+    await supabase.from("geocode_cache").upsert({
+      alamat_normal: kunci,
+      lat: hasil?.lat ?? null,
+      lon: hasil?.lon ?? null,
+      dicoba_pada: new Date().toISOString(),
+    });
+
+    return hasil;
   } catch {
-    // Sengaja ditelan. Lihat komentar puncak berkas: kegagalan geocoding tidak
-    // pernah menggagalkan penyimpanan alamat.
-    hasil = null;
+    // Lapis TERLUAR: env Supabase kosong, atau kegagalan tak terduga lain di
+    // luar panggilan Nominatim itu sendiri. Lihat dokblok di atas — fungsi
+    // ini TIDAK PERNAH melempar, bahkan pada salah-pasang env sekalipun.
+    return null;
   }
-
-  // Kegagalan pun disimpan — itulah yang mencegah alamat tak dikenal
-  // ditanyakan ulang setiap kali formulirnya dibuka.
-  await supabase.from("geocode_cache").upsert({
-    alamat_normal: kunci,
-    lat: hasil?.lat ?? null,
-    lon: hasil?.lon ?? null,
-    dicoba_pada: new Date().toISOString(),
-  });
-
-  return hasil;
 }

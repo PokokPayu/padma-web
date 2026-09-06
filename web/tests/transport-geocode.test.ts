@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { geocodeAlamat } from "@/lib/transport/geocode";
 import { normalkanAlamat } from "@/lib/transport/alamat";
@@ -16,12 +16,40 @@ async function bersihkan() {
 
 beforeEach(bersihkan);
 
+// vi.stubGlobal MENIMPA `globalThis.fetch` sepenuhnya. Kalau ditimpa dengan
+// mock yang menjawab APA SAJA, panggilan `geocodeAlamat` ke Supabase lokal
+// (select/upsert `geocode_cache`, lewat `createAdminSupabase()`) ikut
+// terbajak — bukan cuma panggilan ke Nominatim yang MEMANG ingin dipalsukan.
+// `stubNominatim` menutup celah itu: hanya URL yang menyentuh Nominatim yang
+// dijawab `palsu`; sisanya diteruskan ke `fetch` asli (yang di suite ini
+// adalah pagar tests/setup-fetch-guard.ts, meloloskan 127.0.0.1 — tempat
+// Supabase lokal — dan menolak host lain).
+function stubNominatim(jawab: () => Promise<Response> | Response) {
+  const asli = globalThis.fetch;
+  // `palsu` menerima argumen fetch APA ADANYA (url, init) — bukan supaya
+  // dipakai `jawab` (yang mengabaikannya), tapi supaya `palsu.mock.calls`
+  // merekam panggilan sungguhan geocode.ts, termasuk `init` (RequestInit)
+  // yang diperiksa uji "User-Agent" lewat `palsu.mock.calls[0][1]`.
+  const palsu = vi.fn((..._args: Parameters<typeof fetch>) => jawab());
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    return url.includes("nominatim") ? palsu(...args) : asli(...args);
+  });
+  return palsu;
+}
+
+afterEach(() => {
+  // Di `afterEach`, bukan di akhir badan tiap `it`: kalau sebuah asersi di
+  // atasnya gagal, badan `it` berhenti di situ dan baris unstub di bawahnya
+  // TIDAK PERNAH jalan — stub lantas bocor ke test berikutnya.
+  vi.unstubAllGlobals();
+});
+
 describe("geocodeAlamat", () => {
   it("menyimpan hasil ke cache, dan tidak menanya dua kali", async () => {
-    const palsu = vi.fn(async () =>
+    const palsu = stubNominatim(() =>
       new Response(JSON.stringify([{ lat: "-6.9175", lon: "107.6191" }]), { status: 200 }),
     );
-    vi.stubGlobal("fetch", palsu);
 
     const pertama = await geocodeAlamat(ALAMAT);
     const kedua = await geocodeAlamat(ALAMAT);
@@ -31,28 +59,22 @@ describe("geocodeAlamat", () => {
     // Panggilan kedua dijawab cache — kalau tidak, batas laju Nominatim
     // dilanggar oleh pemakaian normal.
     expect(palsu).toHaveBeenCalledTimes(1);
-
-    vi.unstubAllGlobals();
   });
 
   it("mengirim User-Agent yang mengidentifikasi PADMA", async () => {
-    const palsu = vi.fn(async () =>
+    const palsu = stubNominatim(() =>
       new Response(JSON.stringify([{ lat: "-6.9", lon: "107.6" }]), { status: 200 }),
     );
-    vi.stubGlobal("fetch", palsu);
 
     await geocodeAlamat(ALAMAT);
 
     const opsi = palsu.mock.calls[0][1] as RequestInit;
     const ua = new Headers(opsi.headers).get("User-Agent") ?? "";
     expect(ua).toMatch(/PADMA/i);
-
-    vi.unstubAllGlobals();
   });
 
   it("kegagalan DICATAT, sehingga tidak ditanyakan ulang", async () => {
-    const palsu = vi.fn(async () => new Response("[]", { status: 200 }));
-    vi.stubGlobal("fetch", palsu);
+    const palsu = stubNominatim(() => new Response("[]", { status: 200 }));
 
     expect(await geocodeAlamat(ALAMAT_GAGAL)).toBeNull();
     expect(await geocodeAlamat(ALAMAT_GAGAL)).toBeNull();
@@ -65,16 +87,15 @@ describe("geocodeAlamat", () => {
       .maybeSingle();
     expect(data).not.toBeNull();
     expect(data!.lat).toBeNull();
-
-    vi.unstubAllGlobals();
   });
 
   it("galat jaringan memulangkan null, bukan melempar", async () => {
     // Pemanggilnya adalah jalur SIMPAN ALAMAT. Melempar di sini berarti klien
     // gagal menyimpan alamatnya karena OSM sedang bermasalah (spec T6).
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("jaringan mati"); }));
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
     expect(await geocodeAlamat(ALAMAT)).toBeNull();
-    vi.unstubAllGlobals();
   });
 
   it("alamat kosong tidak pernah memanggil jaringan", async () => {
@@ -82,6 +103,5 @@ describe("geocodeAlamat", () => {
     vi.stubGlobal("fetch", palsu);
     expect(await geocodeAlamat("   ")).toBeNull();
     expect(palsu).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 });

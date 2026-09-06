@@ -28,7 +28,10 @@ export default defineConfig({
     // service role sebelum satu assertion pun berjalan; batas 10 detik bawaan
     // Vitest membuat berkas yang sehat gagal sebagai "hook timed out".
     hookTimeout: 60_000,
-    setupFiles: ["dotenv/config"],
+    // "tests/setup-fetch-guard.ts": pagar struktural — lihat komentar di
+    // berkas itu untuk alasan lengkap dipasang lewat setupFiles, bukan
+    // globalSetup (yang berjalan di proses terpisah dari worker test).
+    setupFiles: ["dotenv/config", "./tests/setup-fetch-guard.ts"],
     // Seed user demo otomatis sebelum test — `npm test` harus hijau langsung
     // sesudah `npx supabase db reset`, tanpa `npm run seed:users` manual.
     globalSetup: ["tests/global-setup.ts"],
@@ -43,6 +46,12 @@ export default defineConfig({
       // `next dev` lokal) diuji tersendiri di tests/skrining-pembatas.test.ts.
       // Ditulis di sini agar tidak bergantung pada isi .env.local mesin siapa pun.
       PADMA_PROXY_TEPERCAYA: "1",
+      // geocodeAlamat() menegakkan batas laju Nominatim (1 req/detik) lewat
+      // jeda sungguhan. Di uji itu hanya biaya waktu tanpa manfaat — Nominatim
+      // sungguhan tidak pernah ditembak dari suite (lihat setup-fetch-guard.ts)
+      // — jadi disetel 0 di sini. Tidak berlaku di produksi karena env ini
+      // tidak pernah diset di luar proses vitest.
+      NOMINATIM_JEDA_MINIMAL_MS: "0",
     },
   },
   resolve: {
