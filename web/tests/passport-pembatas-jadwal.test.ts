@@ -460,6 +460,12 @@ describe("varian wajib — pengajuan tanpa varian sah ditolak", () => {
       }),
     );
     expect(hasil.ok).toBe(false);
+    // Bukti bahwa penolakan ini berasal dari QUERY PRA-INSERT (kalimat yang
+    // bisa dibaca), bukan dari kegagalan FK gabungan yang jatuh sampai ke
+    // pesan generik "Gagal mengirim permintaan." — bila query itu dihapus,
+    // insert tetap gagal (FK tetap menahan) tetapi PESANNYA berubah, dan
+    // hanya asersi pesan yang bisa menangkap itu.
+    expect(hasil.ok === false && hasil.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
     expect(await barisAnanda()).toHaveLength(0);
   });
 
@@ -481,6 +487,33 @@ describe("varian wajib — pengajuan tanpa varian sah ditolak", () => {
       .limit(1)
       .single();
     expect(data!.variant_id).toBe(VARIAN_NUTRISI);
+  });
+
+  it("menolak varian yang sudah dinonaktifkan admin, walau tetap milik layanan yang benar", async () => {
+    // Pasangan uji dari "layanan nonaktif tidak bisa dipesan" di bawah, untuk
+    // VARIAN alih-alih layanan: menghapus `.eq("aktif", true)` dari query
+    // varian akan meloloskan uji "menolak varian milik layanan lain" (varian
+    // itu tetap TIDAK aktif) tapi tidak akan tertangkap sama sekali kalau
+    // hanya diuji lewat pasangan layanan yang salah — kombinasi service_id +
+    // variant_id di sini SAH, hanya `aktif`-nya yang dimatikan.
+    await admin.from("service_variants").update({ aktif: false }).eq("id", VARIAN_NUTRISI);
+    try {
+      const hasil = await ajukanJadwal(
+        formulir({
+          layanan: SVC_NUTRISI,
+          varian: VARIAN_NUTRISI,
+          tanggal: TGL_DEPAN,
+          waktu: "pagi",
+        }),
+      );
+      expect(hasil.ok).toBe(false);
+      expect(hasil.ok === false && hasil.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
+      expect(await barisAnanda()).toHaveLength(0);
+    } finally {
+      // Dikembalikan aktif: VARIAN_NUTRISI dipakai berkas ini di banyak test
+      // lain, dan test-test itu tidak boleh mewarisi keadaan nonaktif.
+      await admin.from("service_variants").update({ aktif: true }).eq("id", VARIAN_NUTRISI);
+    }
   });
 });
 

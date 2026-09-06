@@ -546,6 +546,11 @@ describe("menjadwalkan sesi langsung", () => {
     // tapi query di action ini wajib menolaknya lebih dulu dengan KALIMAT.
     const r = await jadwalkanSesi(fdJadwal({ variant_id: VARIAN_MATERI }));
     expect(r.ok).toBe(false);
+    // Bukti bahwa penolakan berasal dari QUERY PRA-INSERT (kalimat), bukan
+    // dari FK gabungan yang jatuh sampai ke pesan generik "Gagal menyimpan
+    // jadwal sesi." — bila query itu dihapus, FK tetap menahan insert-nya
+    // tapi PESANNYA berubah, dan hanya asersi pesan yang menangkap itu.
+    expect(r.ok === false && r.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
     const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
     expect(data ?? []).toHaveLength(0);
   });
@@ -559,6 +564,26 @@ describe("menjadwalkan sesi langsung", () => {
       .eq("tanggal", TGL)
       .single();
     expect(data!.variant_id).toBe(VARIAN_BARU);
+  });
+
+  it("menolak varian yang sudah dinonaktifkan admin, walau tetap milik layanan yang benar", async () => {
+    // Pasangan uji "mitra NONAKTIF ditolak" & "layanan tidak tersedia" di
+    // atas, untuk VARIAN: kombinasi service_id + variant_id di sini SAH,
+    // hanya `aktif`-nya yang dimatikan — menghapus `.eq("aktif", true)` dari
+    // query varian akan meloloskan ini walau "menolak varian milik layanan
+    // lain" (pasangan yang salah) tetap tertangkap.
+    await admin.from("service_variants").update({ aktif: false }).eq("id", VARIAN_BARU);
+    try {
+      const r = await jadwalkanSesi(fdJadwal());
+      expect(r.ok).toBe(false);
+      expect(r.ok === false && r.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
+      const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+      expect(data ?? []).toHaveLength(0);
+    } finally {
+      // Dikembalikan aktif: VARIAN_BARU dipakai berkas ini di banyak test
+      // lain, dan test-test itu tidak boleh mewarisi keadaan nonaktif.
+      await admin.from("service_variants").update({ aktif: true }).eq("id", VARIAN_BARU);
+    }
   });
 
   it("tanggal yang bukan YYYY-MM-DD ditolak sebelum menyentuh basis data", async () => {

@@ -141,12 +141,15 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
       id: s.id,
       namaKlien: s.clients?.nama ?? "—",
       padmaId: s.clients?.padma_id ?? "—",
-      // CATATAN: label ini sengaja LEBIH LENGKAP daripada yang dibaca klien
-      // di `susunTagihan()` (`@/lib/passport/turunan`) untuk sesi ber-varian
-      // bernama — modul itu belum menyebut varian sama sekali. Keduanya tidak
-      // lagi identik huruf demi huruf sejak baris ini, tetapi keduanya tetap
-      // MENUNJUK sesi yang sama; admin hanya melihat detail tambahan yang
-      // klien belum lihat, bukan detail yang bertentangan dengannya.
+      // Label ini IDENTIK huruf demi huruf dengan yang dibaca klien di
+      // `susunTagihan()` (`@/lib/passport/turunan`) — sejak Ruling 13 (Task 9)
+      // keduanya merangkai lewat `labelVarian()` yang SAMA persis, dari medan
+      // varian yang sama, dengan komposisi "<layanan> · <varian?> · <tanggal>"
+      // yang sama. Dikunci lewat uji parity di
+      // `tests/admin-bayar.test.ts` ("label klien dan label admin IDENTIK
+      // huruf demi huruf untuk sesi ber-varian yang sama") — bila salah satu
+      // sisi berubah tanpa yang lain, uji itu yang harus merah duluan, bukan
+      // komentar ini yang dibiarkan berbohong.
       label:
         varLabel === ""
           ? `${namaLayanan} · ${formatTanggalID(s.tanggal)}`
