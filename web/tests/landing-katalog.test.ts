@@ -22,6 +22,16 @@ const VARIAN_60 = "11111111-1111-1111-1111-2111111118e2"; // urutan 0
 const VARIAN_90 = "11111111-1111-1111-1111-2111111118e3"; // urutan 1
 const VARIAN_OFF = "11111111-1111-1111-1111-2111111118e4"; // aktif = false
 
+// Tarif VARIAN_60 dipaku ke angka HARFIAH (bukan sekadar "non-null vs null")
+// supaya diperiksa dua hal sekaligus: (1) pemilihan baris ber-`berlaku_sejak`
+// TERBESAR benar-benar bekerja saat satu varian punya BANYAK baris tarif
+// (keadaan NORMAL untuk `variant_rates` yang append-only, bukan tepi) — dan
+// (2) `bacaKatalog()` memetakan kolom dengan benar (harga_klien harfiah
+// beda dari honor_mitra harfiah, jadi keduanya tertukar akan tertangkap).
+const HARGA_60 = 350_000;
+const CORET_60 = 425_000;
+const HARGA_60_LAMA = 200_000; // tarif LAMPAU — harus KALAH oleh yang baru
+
 async function bersihkanFixtureVarian() {
   await admin
     .from("variant_rates")
@@ -56,7 +66,7 @@ beforeAll(async () => {
     },
   ]);
   const { error: errorTarif } = await admin.from("variant_rates").insert([
-    { variant_id: VARIAN_60, harga_klien: 350_000, harga_coret: 425_000, honor_mitra: 150_000 },
+    { variant_id: VARIAN_60, harga_klien: HARGA_60, harga_coret: CORET_60, honor_mitra: 150_000 },
     { variant_id: VARIAN_90, harga_klien: 450_000, harga_coret: null, honor_mitra: 180_000 },
     { variant_id: VARIAN_120, harga_klien: 550_000, harga_coret: null, honor_mitra: 220_000 },
     // Varian nonaktif TETAP diberi tarif — memastikan kegagalan uji "tidak
@@ -67,6 +77,24 @@ beforeAll(async () => {
   // di bawah akan gagal dengan pesan yang menyesatkan (array kosong) alih-alih
   // menunjuk akar masalahnya (mis. kolom NOT NULL yang lupa diisi).
   if (errorTarif) throw errorTarif;
+
+  // Baris tarif KEDUA untuk VARIAN_60, bertanggal LAMPAU — `variant_rates`
+  // append-only berarti "satu varian, banyak baris" adalah keadaan NORMAL,
+  // bukan tepi, dan tanpa baris ini cabang
+  // `h.berlaku_sejak > ada.berlaku_sejak` di `bacaKatalog()` tidak pernah
+  // benar-benar dievaluasi (fixture lain di berkas ini semuanya satu baris
+  // per varian). Lewat SERVICE ROLE: `guard_tarif_varian_maju` hanya
+  // menyasar peran API (anon/authenticated/authenticator), jadi penyisipan
+  // tanggal mundur ini diterima — persis pola yang sama dipakai
+  // `tests/owner-tarif.test.ts` untuk menyemai tarif pekan lalu.
+  const { error: errorTarifLama } = await admin.from("variant_rates").insert({
+    variant_id: VARIAN_60,
+    harga_klien: HARGA_60_LAMA,
+    harga_coret: null,
+    honor_mitra: 60_000,
+    berlaku_sejak: "2020-01-01",
+  });
+  if (errorTarifLama) throw errorTarifLama;
 });
 
 afterAll(async () => {
@@ -123,6 +151,23 @@ describe("katalog publik", () => {
       .flatMap((f) => f.layanan)
       .find((l) => l.id === LAYANAN_BERVARIAN)!;
     expect(layanan.varian.map((v) => v.label)).toEqual(["60 menit", "90 menit", "120 menit"]);
+  });
+
+  it("harga berlaku dipilih dari berlaku_sejak TERBESAR, bukan tarif lampau", async () => {
+    const layanan = (await bacaKatalog())
+      .flatMap((f) => f.layanan)
+      .find((l) => l.id === LAYANAN_BERVARIAN)!;
+    const v60 = layanan.varian.find((v) => v.label === "60 menit")!;
+    // VARIAN_60 punya DUA baris tarif (lampau 2020-01-01 & hari ini). Bila
+    // pemilihannya salah — baris PERTAMA yang dikembalikan PostgREST, atau
+    // yang paling AWAL alih-alih paling BARU — nilai di sini jatuh ke tarif
+    // lampau (200.000, tanpa harga_coret) alih-alih tarif berlaku (350.000
+    // dicoret dari 425.000). Nilainya dipaku harfiah, bukan sekadar
+    // "beda dari null", supaya kolom yang tertukar (mis. honor_mitra masuk
+    // ke hargaKlien) ikut tertangkap.
+    expect(v60.hargaKlien).toBe(HARGA_60);
+    expect(v60.hargaCoret).toBe(CORET_60);
+    expect(v60.hargaKlien).not.toBe(HARGA_60_LAMA);
   });
 });
 

@@ -719,7 +719,11 @@ describe("menonaktifkan layanan TIDAK menghapus namanya dari riwayat klien", () 
     expect(data!.map((s) => s.id)).not.toContain(SVC_SEED);
 
     const katalog = await bacaKatalog();
-    expect(katalog.flatMap((f) => f.layanan)).not.toContain(NAMA_SVC_SEED);
+    // `f.layanan` sejak Task 8 berisi OBJEK ({id, nama, varian}), bukan
+    // string — `not.toContain(NAMA_SVC_SEED)` atas array objek tidak pernah
+    // gagal (perbandingan referensi objek vs string selalu false), sehingga
+    // assertion ini VAKUM tanpa `.map((l) => l.nama)` di bawah.
+    expect(katalog.flatMap((f) => f.layanan).map((l) => l.nama)).not.toContain(NAMA_SVC_SEED);
   });
 
   it("layanan nonaktif TIDAK ditawarkan saat menjadwalkan sesi baru", async () => {

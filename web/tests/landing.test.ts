@@ -15,13 +15,14 @@
  *     (nomor WA tidak ditulis keras, katalog tidak di-hardcode, dekorasi yang
  *     meluber wajib terkurung agar tidak lahir scroll horizontal di 390px).
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterAll } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import Home from "@/app/page";
 import { bacaKatalog } from "@/lib/katalog";
 import { bacaPengaturan } from "@/lib/settings";
+import { createAdminSupabase } from "@/lib/supabase/admin";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -32,6 +33,56 @@ const sumberLanding = Object.fromEntries(
   berkasLanding.map((f) => [f, baca(path.join("src/app/_landing", f))]),
 );
 const semuaSumberLanding = sumberHalaman + Object.values(sumberLanding).join("\n");
+
+// --- Fixture: badge "Soft Launch" -------------------------------------------
+// Seed dummy TIDAK punya satu pun baris `harga_coret` non-NULL, jadi tanpa
+// fixture ini jalur render `<s>` + badge "Soft Launch" (`lini-layanan.tsx`)
+// tidak pernah disentuh markup yang diuji di berkas ini — ia lulus bukan
+// karena benar, melainkan karena tidak pernah dicoba. ID sengaja berbeda
+// dari fixture `tests/landing-katalog.test.ts` (famili `…9e1`, bukan
+// `…8e1`) supaya dua berkas tidak pernah berebut baris yang sama.
+const LAYANAN_SOFT_LAUNCH = "11111111-1111-1111-1111-1111111119e1";
+const VARIAN_SOFT_LAUNCH = "11111111-1111-1111-1111-2111111119e1";
+const HARGA_SOFT_LAUNCH = 275_000;
+const CORET_SOFT_LAUNCH = 325_000;
+
+const adminFixture = createAdminSupabase();
+
+async function bersihkanFixtureSoftLaunch() {
+  await adminFixture.from("variant_rates").delete().eq("variant_id", VARIAN_SOFT_LAUNCH);
+  await adminFixture.from("service_variants").delete().eq("service_id", LAYANAN_SOFT_LAUNCH);
+  await adminFixture.from("services").delete().eq("id", LAYANAN_SOFT_LAUNCH);
+}
+
+await bersihkanFixtureSoftLaunch();
+{
+  const { error: errLayanan } = await adminFixture.from("services").insert({
+    id: LAYANAN_SOFT_LAUNCH,
+    phase_id: "menopause",
+    nama: "PAD-UJI Landing Soft Launch",
+    aktif: true,
+  });
+  if (errLayanan) throw errLayanan;
+  const { error: errVarian } = await adminFixture.from("service_variants").insert({
+    id: VARIAN_SOFT_LAUNCH,
+    service_id: LAYANAN_SOFT_LAUNCH,
+    label: "",
+    urutan: 0,
+    aktif: true,
+  });
+  if (errVarian) throw errVarian;
+  const { error: errTarif } = await adminFixture.from("variant_rates").insert({
+    variant_id: VARIAN_SOFT_LAUNCH,
+    harga_klien: HARGA_SOFT_LAUNCH,
+    harga_coret: CORET_SOFT_LAUNCH,
+    honor_mitra: 100_000,
+  });
+  if (errTarif) throw errTarif;
+}
+
+afterAll(async () => {
+  await bersihkanFixtureSoftLaunch();
+});
 
 const katalog = await bacaKatalog();
 const pengaturan = await bacaPengaturan();
@@ -188,6 +239,21 @@ describe("landing publik — pagar konten & tata letak", () => {
     for (const nominal of ditemukan) {
       expect(nominalSah, `Rp ${nominal} bukan harga varian yang dikenal`).toContain(nominal);
     }
+  });
+
+  // Deliverable UTAMA task ini: `harga_coret` non-NULL harus benar-benar
+  // mencoret harga lama (elemen `<s>` sungguhan, bukan cuma teks bergaris)
+  // dan menempelkan badge "Soft Launch" — tanpanya, jalur ini bisa rusak
+  // tanpa satu pun uji berubah merah.
+  it("harga_coret non-NULL merender <s> beserta badge Soft Launch", () => {
+    const hargaLama = `Rp ${CORET_SOFT_LAUNCH.toLocaleString("id-ID")}`;
+    const hargaBaru = `Rp ${HARGA_SOFT_LAUNCH.toLocaleString("id-ID")}`;
+    const escRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    expect(markup).toContain("Soft Launch");
+    expect(markup).toContain(hargaBaru);
+    // Regex, bukan sekadar `toContain(hargaLama)`: yang wajib dicoret adalah
+    // elemen `<s>` sungguhan, bukan teks polos yang kebetulan sama.
+    expect(markup).toMatch(new RegExp(`<s[^>]*>${escRegex(hargaLama)}</s>`));
   });
 
   it("dekorasi yang meluber terkurung overflow-hidden (anti scroll horizontal 390px)", () => {
