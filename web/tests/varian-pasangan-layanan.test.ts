@@ -59,6 +59,11 @@ describe("FK gabungan (service_id, variant_id)", () => {
 });
 
 describe("backfill varian", () => {
+  // Menjaga KEADAAN AKHIR sesudah seluruh migrasi + seed jalan — bukan
+  // logika `update` backfill itu sendiri. `sessions` seed lahir dengan
+  // `variant_id` sudah terisi lewat `seed-users.ts` (Ruling 1), jadi baris
+  // di sini tidak pernah benar-benar NULL saat migrasi menjalankan
+  // backfill-nya; uji ini hanya membuktikan tidak ada yang tertinggal salah.
   it("tidak ada sesi lama yang variannya kosong atau salah layanan", async () => {
     const salah = await querySql<{ id: string }>(
       `select s.id from public.sessions s
@@ -69,6 +74,13 @@ describe("backfill varian", () => {
     expect(salah).toEqual([]);
   });
 
+  // TIDAK ADA jalur seed (seed.sql, seed-users.ts, maupun global-setup.ts)
+  // yang pernah membuat baris `booking_requests` permanen — jadi query di
+  // bawah selalu memulangkan array kosong dan lulus HAMPA: ia tidak bisa
+  // membuktikan backfill `booking_requests` benar, hanya bahwa tidak ada
+  // baris yang salah (karena tidak ada baris sama sekali). Pernyataan
+  // `update` migrasi untuk `booking_requests` justru divalidasi oleh uji
+  // rollback pada describe di bawah, yang menyemai baris NULL sungguhan.
   it("tidak ada permintaan jadwal lama yang variannya kosong atau salah layanan", async () => {
     const salah = await querySql<{ id: string }>(
       `select b.id from public.booking_requests b
@@ -77,5 +89,89 @@ describe("backfill varian", () => {
                            where v.id = b.variant_id and v.service_id = b.service_id)`,
     );
     expect(salah).toEqual([]);
+  });
+});
+
+/**
+ * `db reset` bersih menjalankan migrasi SAAT `sessions` & `booking_requests`
+ * masih kosong (migrasi berjalan sebelum seed apa pun) — jadi pernyataan
+ * `update ... where variant_id is null` di migrasi tidak pernah tersentuh
+ * baris NULL sungguhan lewat `db reset` + `npm test` biasa: uji `sessions` di
+ * atas hijau karena `seed-users.ts` menulis `variant_id` eksplisit saat
+ * INSERT (Ruling 1), dan `booking_requests` tidak punya baris sama sekali.
+ * Satu-satunya cara memvalidasi LOGIKA backfill-nya sendiri adalah menyemai
+ * baris ber-`variant_id` NULL di sini, di dalam transaksi yang di-rollback,
+ * lalu menjalankan pernyataan `update` yang SAMA PERSIS dengan migrasi
+ * `20260906110000_sesi_menunjuk_varian.sql` — disalin apa adanya, sengaja,
+ * supaya uji ini menjaga kode produksi itu sendiri, bukan versi lain yang
+ * kebetulan terlihat mirip.
+ */
+describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () => {
+  it("mengisi variant_id sessions yang NULL dengan varian baku layanannya", async () => {
+    await dalamTransaksiRollback(async (jalankan) => {
+      const [a] = (await jalankan(
+        `select s.id as service_id, v.id as variant_id
+           from public.services s
+           join public.service_variants v on v.service_id = s.id
+          order by s.nama limit 1`,
+      )) as Array<{ service_id: string; variant_id: string }>;
+      const [klien] = (await jalankan(`select id from public.clients limit 1`)) as Array<{ id: string }>;
+      const [mitra] = (await jalankan(`select id from public.partners limit 1`)) as Array<{ id: string }>;
+
+      const [sesi] = (await jalankan(
+        `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal)
+         values ($1, $2, null, $3, current_date) returning id`,
+        [klien.id, a.service_id, mitra.id],
+      )) as Array<{ id: string }>;
+
+      // Identik dengan migrasi 20260906110000_sesi_menunjuk_varian.sql.
+      await jalankan(
+        `update public.sessions s
+            set variant_id = (select v.id from public.service_variants v
+                               where v.service_id = s.service_id
+                               order by v.urutan, v.created_at, v.id limit 1)
+          where s.variant_id is null`,
+      );
+
+      const [hasil] = (await jalankan(
+        `select variant_id from public.sessions where id = $1`,
+        [sesi.id],
+      )) as Array<{ variant_id: string }>;
+      expect(hasil.variant_id).toBe(a.variant_id);
+    });
+  });
+
+  it("mengisi variant_id booking_requests yang NULL dengan varian baku layanannya", async () => {
+    await dalamTransaksiRollback(async (jalankan) => {
+      const [a] = (await jalankan(
+        `select s.id as service_id, v.id as variant_id
+           from public.services s
+           join public.service_variants v on v.service_id = s.id
+          order by s.nama limit 1`,
+      )) as Array<{ service_id: string; variant_id: string }>;
+      const [klien] = (await jalankan(`select id from public.clients limit 1`)) as Array<{ id: string }>;
+
+      const [permintaan] = (await jalankan(
+        `insert into public.booking_requests
+           (client_id, service_id, variant_id, tanggal, preferensi_waktu)
+         values ($1, $2, null, current_date, 'pagi') returning id`,
+        [klien.id, a.service_id],
+      )) as Array<{ id: string }>;
+
+      // Identik dengan migrasi 20260906110000_sesi_menunjuk_varian.sql.
+      await jalankan(
+        `update public.booking_requests b
+            set variant_id = (select v.id from public.service_variants v
+                               where v.service_id = b.service_id
+                               order by v.urutan, v.created_at, v.id limit 1)
+          where b.variant_id is null`,
+      );
+
+      const [hasil] = (await jalankan(
+        `select variant_id from public.booking_requests where id = $1`,
+        [permintaan.id],
+      )) as Array<{ variant_id: string }>;
+      expect(hasil.variant_id).toBe(a.variant_id);
+    });
   });
 });
