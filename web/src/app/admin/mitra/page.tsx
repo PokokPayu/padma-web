@@ -84,6 +84,7 @@ export default async function DaftarMitraPage() {
                         id={m.id}
                         nama={m.nama}
                         noHp={m.noHp}
+                        alamat={m.alamat}
                         aktif={m.aktif}
                       />
                     </td>

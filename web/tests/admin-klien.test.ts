@@ -30,7 +30,7 @@
  * bukan Ananda — `rls-firewall.test.ts` dan `passport-beranda.test.ts`
  * meng-assert jumlah baris miliknya secara PERSIS.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -98,9 +98,25 @@ function formulir(isi: Record<string, string>): FormData {
 async function barisKlien(kolom: string, nilai: string) {
   const { data } = await admin
     .from("clients")
-    .select("id, padma_id, nama, email, no_hp, phase_id, user_id, linked_at")
+    .select("id, padma_id, nama, email, no_hp, phase_id, user_id, linked_at, alamat, alamat_lat, alamat_lon")
     .eq(kolom, nilai);
   return data ?? [];
+}
+
+// `vi.stubGlobal` MENIMPA `globalThis.fetch` sepenuhnya — men-stub PENUH akan
+// ikut menjatuhkan panggilan Supabase lokal yang dipakai `buatKlien`/
+// `perbaruiKlien` sendiri, bukan cuma Nominatim. Pola sama dengan
+// `tests/transport-geocode.test.ts`: hanya URL yang menyentuh Nominatim yang
+// dijawab `palsu`; sisanya diteruskan ke `fetch` asli (pagar
+// `tests/setup-fetch-guard.ts`, meloloskan 127.0.0.1 tempat Supabase lokal).
+function stubNominatim(jawab: () => Promise<Response> | Response) {
+  const asli = globalThis.fetch;
+  const palsu = vi.fn(() => jawab());
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    return url.includes("nominatim") ? palsu() : asli(...args);
+  });
+  return palsu;
 }
 
 async function bersihkan() {
@@ -141,6 +157,12 @@ afterAll(bersihkan);
 beforeEach(() => {
   ref.sesi = sesiAdmin;
   jejak.revalidate.length = 0;
+});
+
+afterEach(() => {
+  // Bukan di akhir badan tiap `it`: bila sebuah asersi gagal, baris unstub di
+  // bawahnya tidak pernah jalan — stub lantas bocor ke test berikutnya.
+  vi.unstubAllGlobals();
 });
 
 // ---------------------------------------------------------------------------
@@ -268,6 +290,73 @@ describe("buatKlien — pendaftaran klien oleh admin", () => {
     // Dan tidak ada baris yang sempat lahir sebelum penjaga menyala.
     expect(await barisKlien("email", "pad-uji-dariklien@padma.test")).toHaveLength(0);
   });
+
+  it("alamat default BOLEH kosong — klien tetap lahir tanpa alamat", async () => {
+    const hasil = await buatKlien(
+      formulir({
+        nama: "Uji Klien Tanpa Alamat",
+        email: "pad-uji-tanpaalamat@padma.test",
+        fase: "prekonsepsi",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    const baris = await barisKlien("id", hasil.id);
+    expect(baris[0].alamat).toBe("");
+    expect(baris[0].alamat_lat).toBeNull();
+    expect(baris[0].alamat_lon).toBeNull();
+  });
+
+  it("menyimpan alamat default beserta koordinatnya (spec T6)", async () => {
+    await admin
+      .from("geocode_cache")
+      .delete()
+      .eq("alamat_normal", "jl. uji klien geocode no. 1");
+    const palsu = stubNominatim(() =>
+      new Response(JSON.stringify([{ lat: "-6.9", lon: "107.6" }]), { status: 200 }),
+    );
+
+    const hasil = await buatKlien(
+      formulir({
+        nama: "Uji Klien Geocode",
+        email: "pad-uji-geocode@padma.test",
+        fase: "prekonsepsi",
+        alamat: "Jl. Uji Klien Geocode No. 1",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    expect(palsu).toHaveBeenCalled();
+    const baris = await barisKlien("id", hasil.id);
+    expect(baris[0].alamat).toBe("Jl. Uji Klien Geocode No. 1");
+    expect(baris[0].alamat_lat).toBe(-6.9);
+    expect(baris[0].alamat_lon).toBe(107.6);
+  });
+
+  it("alamat TETAP tersimpan meski geocoding gagal (katup pengaman T6)", async () => {
+    // `stubNominatim`, bukan `vi.stubGlobal("fetch", ...)` penuh: stub penuh
+    // akan ikut menjatuhkan panggilan Supabase lokal yang dipakai `buatKlien`
+    // sendiri (insert `clients`), membuat `hasil.ok` bernilai `false` untuk
+    // alasan yang salah sama sekali — bukan karena geocoding gagal.
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
+
+    const hasil = await buatKlien(
+      formulir({
+        nama: "Uji Klien Geocode Gagal",
+        email: "pad-uji-geocodegagal@padma.test",
+        fase: "prekonsepsi",
+        alamat: "Jl. Gang Sempit Tanpa Nama Klien",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    const baris = await barisKlien("id", hasil.id);
+    expect(baris[0].alamat).toBe("Jl. Gang Sempit Tanpa Nama Klien");
+    expect(baris[0].alamat_lat).toBeNull();
+    expect(baris[0].alamat_lon).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +446,58 @@ describe("perbaruiKlien — hanya data operasional", () => {
       ),
     ).rejects.toThrow(/REDIRECT/);
     expect((await barisKlien("id", KLIEN_FIXTURE))[0].nama).toBe("Uji Klien Fixture");
+  });
+
+  it("menyimpan alamat beserta koordinatnya (spec T6)", async () => {
+    await admin
+      .from("geocode_cache")
+      .delete()
+      .eq("alamat_normal", "jl. uji klien edit geocode no. 2");
+    const palsu = stubNominatim(() =>
+      new Response(JSON.stringify([{ lat: "-6.8", lon: "107.5" }]), { status: 200 }),
+    );
+
+    const hasil = await perbaruiKlien(
+      KLIEN_EDIT,
+      formulir({
+        nama: "Uji Klien Edit Baru",
+        no_hp: "0899-0000-0006",
+        fase: "kehamilan",
+        alamat: "Jl. Uji Klien Edit Geocode No. 2",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    expect(palsu).toHaveBeenCalled();
+
+    const baris = await barisKlien("id", KLIEN_EDIT);
+    expect(baris[0].alamat).toBe("Jl. Uji Klien Edit Geocode No. 2");
+    expect(baris[0].alamat_lat).toBe(-6.8);
+    expect(baris[0].alamat_lon).toBe(107.5);
+  });
+
+  it("alamat TETAP tersimpan meski geocoding gagal (katup pengaman T6)", async () => {
+    // `stubNominatim`, bukan `vi.stubGlobal("fetch", ...)` penuh — lihat
+    // komentar di sekitar deklarasinya. Stub penuh akan ikut menjatuhkan
+    // panggilan Supabase lokal `perbaruiKlien` sendiri (UPDATE `clients`).
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
+
+    const hasil = await perbaruiKlien(
+      KLIEN_EDIT,
+      formulir({
+        nama: "Uji Klien Edit Baru",
+        no_hp: "0899-0000-0006",
+        fase: "kehamilan",
+        alamat: "Jl. Gang Sempit Edit Tanpa Nama",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+
+    const baris = await barisKlien("id", KLIEN_EDIT);
+    expect(baris[0].alamat).toBe("Jl. Gang Sempit Edit Tanpa Nama");
+    expect(baris[0].alamat_lat).toBeNull();
+    expect(baris[0].alamat_lon).toBeNull();
   });
 });
 

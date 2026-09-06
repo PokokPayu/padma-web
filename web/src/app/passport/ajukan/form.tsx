@@ -150,6 +150,18 @@ export function FormAjukan({
         </fieldset>
 
         <label className="mb-4 block text-sm">
+          <span className="font-semibold text-ink-soft">Alamat kunjungan</span>
+          <textarea
+            name="alamat"
+            required
+            minLength={10}
+            rows={2}
+            placeholder="Alamat lengkap tempat mitra datang — bisa berbeda dari alamat profil"
+            className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
+          />
+        </label>
+
+        <label className="mb-4 block text-sm">
           <span className="font-semibold text-ink-soft">Catatan (opsional)</span>
           <textarea
             name="catatan"

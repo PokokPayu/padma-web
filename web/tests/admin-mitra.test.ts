@@ -31,7 +31,7 @@
  * untuk uji riwayat lalu DIKEMBALIKAN aktif — `passport-beranda.test.ts` dan
  * `passport-sesi.test.ts` meng-assert nama bidan di riwayat Ananda.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -100,10 +100,34 @@ function formulir(isi: Record<string, string>): FormData {
 async function barisMitra(id: string) {
   const { data } = await admin
     .from("partners")
-    .select("id, nama, no_hp, aktif")
+    .select("id, nama, no_hp, alamat, lat, lon, aktif")
     .eq("id", id)
-    .maybeSingle<{ id: string; nama: string; no_hp: string; aktif: boolean }>();
+    .maybeSingle<{
+      id: string;
+      nama: string;
+      no_hp: string;
+      alamat: string;
+      lat: number | null;
+      lon: number | null;
+      aktif: boolean;
+    }>();
   return data;
+}
+
+// `vi.stubGlobal` MENIMPA `globalThis.fetch` sepenuhnya — men-stub PENUH akan
+// ikut menjatuhkan panggilan Supabase lokal yang dipakai `simpanMitra`/
+// `perbaruiMitra` sendiri, bukan cuma Nominatim. Pola sama dengan
+// `tests/transport-geocode.test.ts`: hanya URL yang menyentuh Nominatim yang
+// dijawab `palsu`; sisanya diteruskan ke `fetch` asli (pagar
+// `tests/setup-fetch-guard.ts`, meloloskan 127.0.0.1 tempat Supabase lokal).
+function stubNominatim(jawab: () => Promise<Response> | Response) {
+  const asli = globalThis.fetch;
+  const palsu = vi.fn(() => jawab());
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    return url.includes("nominatim") ? palsu() : asli(...args);
+  });
+  return palsu;
 }
 
 async function bersihkan() {
@@ -129,6 +153,12 @@ afterAll(bersihkan);
 beforeEach(() => {
   ref.sesi = sesiAdmin;
   jejak.revalidate.length = 0;
+});
+
+afterEach(() => {
+  // Bukan di akhir badan tiap `it`: bila sebuah asersi gagal, baris unstub di
+  // bawahnya tidak pernah jalan — stub lantas bocor ke test berikutnya.
+  vi.unstubAllGlobals();
 });
 
 // ---------------------------------------------------------------------------
@@ -203,6 +233,58 @@ describe("simpanMitra — mendaftarkan mitra baru", () => {
       .eq("nama", "PAD-UJI Bidan Dari Klien");
     expect(data ?? []).toHaveLength(0);
   });
+
+  it("domisili BOLEH kosong — mitra tetap lahir tanpa alamat", async () => {
+    const hasil = await simpanMitra(formulir({ nama: "PAD-UJI Bidan Tanpa Domisili" }));
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    const baris = await barisMitra(hasil.id);
+    expect(baris!.alamat).toBe("");
+    expect(baris!.lat).toBeNull();
+    expect(baris!.lon).toBeNull();
+  });
+
+  it("menyimpan domisili beserta koordinatnya (spec T6)", async () => {
+    await admin
+      .from("geocode_cache")
+      .delete()
+      .eq("alamat_normal", "jl. uji bidan geocode no. 1");
+    const palsu = stubNominatim(() =>
+      new Response(JSON.stringify([{ lat: "-7.0", lon: "107.7" }]), { status: 200 }),
+    );
+
+    const hasil = await simpanMitra(
+      formulir({ nama: "PAD-UJI Bidan Geocode", alamat: "Jl. Uji Bidan Geocode No. 1" }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    expect(palsu).toHaveBeenCalled();
+
+    const baris = await barisMitra(hasil.id);
+    expect(baris!.alamat).toBe("Jl. Uji Bidan Geocode No. 1");
+    expect(baris!.lat).toBe(-7.0);
+    expect(baris!.lon).toBe(107.7);
+  });
+
+  it("domisili TETAP tersimpan meski geocoding gagal (katup pengaman T6)", async () => {
+    // `stubNominatim`, bukan `vi.stubGlobal("fetch", ...)` penuh — lihat
+    // komentar di sekitar deklarasinya. Stub penuh akan ikut menjatuhkan
+    // panggilan Supabase lokal `simpanMitra` sendiri (insert `partners`).
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
+
+    const hasil = await simpanMitra(
+      formulir({ nama: "PAD-UJI Bidan Geocode Gagal", alamat: "Jl. Gang Sempit Tanpa Nama Bidan" }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+
+    const baris = await barisMitra(hasil.id);
+    expect(baris!.alamat).toBe("Jl. Gang Sempit Tanpa Nama Bidan");
+    expect(baris!.lat).toBeNull();
+    expect(baris!.lon).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -259,6 +341,56 @@ describe("perbaruiMitra — mengubah nama & kontak", () => {
       perbaruiMitra(MITRA_EDIT, formulir({ nama: "PAD-UJI Direbut Klien" })),
     ).rejects.toThrow(/REDIRECT/);
     expect((await barisMitra(MITRA_EDIT))!.nama).toBe("PAD-UJI Bidan Edit Baru");
+  });
+
+  it("menyimpan domisili beserta koordinatnya (spec T6)", async () => {
+    await admin
+      .from("geocode_cache")
+      .delete()
+      .eq("alamat_normal", "jl. uji bidan edit geocode no. 2");
+    const palsu = stubNominatim(() =>
+      new Response(JSON.stringify([{ lat: "-6.7", lon: "107.4" }]), { status: 200 }),
+    );
+
+    const hasil = await perbaruiMitra(
+      MITRA_EDIT,
+      formulir({
+        nama: "PAD-UJI Bidan Edit Baru",
+        no_hp: "0899-9000-0001",
+        alamat: "Jl. Uji Bidan Edit Geocode No. 2",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    expect(palsu).toHaveBeenCalled();
+
+    const baris = await barisMitra(MITRA_EDIT);
+    expect(baris!.alamat).toBe("Jl. Uji Bidan Edit Geocode No. 2");
+    expect(baris!.lat).toBe(-6.7);
+    expect(baris!.lon).toBe(107.4);
+  });
+
+  it("domisili TETAP tersimpan meski geocoding gagal (katup pengaman T6)", async () => {
+    // `stubNominatim`, bukan `vi.stubGlobal("fetch", ...)` penuh — lihat
+    // komentar di sekitar deklarasinya. Stub penuh akan ikut menjatuhkan
+    // panggilan Supabase lokal `perbaruiMitra` sendiri (UPDATE `partners`).
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
+
+    const hasil = await perbaruiMitra(
+      MITRA_EDIT,
+      formulir({
+        nama: "PAD-UJI Bidan Edit Baru",
+        no_hp: "0899-9000-0001",
+        alamat: "Jl. Gang Sempit Edit Tanpa Nama Bidan",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+
+    const baris = await barisMitra(MITRA_EDIT);
+    expect(baris!.alamat).toBe("Jl. Gang Sempit Edit Tanpa Nama Bidan");
+    expect(baris!.lat).toBeNull();
+    expect(baris!.lon).toBeNull();
   });
 });
 

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { geocodeAlamat } from "@/lib/transport/geocode";
 import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
+import { periksaAlamat } from "./status";
 import { hariIniJakarta } from "./waktu";
 
 /**
@@ -95,6 +97,12 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     return { ok: false, pesan: "Preferensi waktu tidak sah." };
   }
 
+  // Alamat WAJIB di sini (spec T6) — beda dari profil klien/domisili mitra
+  // yang boleh kosong. Mitra harus tahu ke mana ia datang; format diperiksa
+  // sebagai fungsi murni di `./status`, terpisah dari geocoding di bawah.
+  const cekAlamat = periksaAlamat(String(formData.get("alamat") ?? ""));
+  if (!cekAlamat.ok) return { ok: false, pesan: cekAlamat.pesan };
+
   // Perbandingan STRING, bukan aritmatika Date: kolom `tanggal` bertipe date
   // dan hidup sebagai 'YYYY-MM-DD'. "Hari ini" diambil dari kalender Jakarta —
   // server berjalan UTC, jadi jam mesin akan salah hari selama 7 jam setiap
@@ -164,6 +172,14 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     return { ok: false, pesan: "Permintaan yang sama sudah terkirim dan sedang diproses." };
   }
 
+  // Geocoding TIDAK PERNAH menggagalkan penyimpanan (spec T6). `geocodeAlamat`
+  // sudah menelan setiap galatnya dan memulangkan null; yang tersisa di sini
+  // hanyalah menyimpan apa adanya, termasuk ketika koordinatnya tidak ada.
+  // Dipanggil SESUDAH seluruh pemeriksaan lain lolos — supaya permintaan yang
+  // pasti ditolak (layanan mati, tanggal lampau, dst.) tidak ikut membakar
+  // jatah 1 permintaan/detik Nominatim untuk sesuatu yang tidak akan tersimpan.
+  const koordinat = await geocodeAlamat(cekAlamat.nilai);
+
   // Insert memakai SESI PENGGUNA, bukan service role: RLS + trigger
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
   // Nilai apa pun yang ikut dikirim browser di FormData diabaikan — hanya
@@ -175,6 +191,9 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     tanggal,
     preferensi_waktu: waktu,
     catatan,
+    alamat: cekAlamat.nilai,
+    alamat_lat: koordinat?.lat ?? null,
+    alamat_lon: koordinat?.lon ?? null,
     status: "menunggu", // hardcoded; trigger DB menolak nilai lain dari klien
   });
   if (error) return { ok: false, pesan: "Gagal mengirim permintaan." };

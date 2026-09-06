@@ -26,11 +26,12 @@
  * Pagar waktu: tanggal dibandingkan sebagai STRING (kolomnya date, hidup
  * sebagai 'YYYY-MM-DD'); tidak ada aritmatika Date di berkas ini.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { normalkanAlamat } from "@/lib/transport/alamat";
 import { BATAS_PERMINTAAN_MENUNGGU as BATAS } from "@/lib/passport/batas";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
@@ -115,9 +116,15 @@ const { ajukanJadwal } = await import("@/lib/passport/aksi");
 
 let sesiAnanda: SupabaseClient;
 
+// Alamat WAJIB sejak Task 6 (spec T6) dan tidak relevan untuk skenario
+// berkas ini (pembatas antrean, dedup, layanan nonaktif) — dibubuhkan sebagai
+// DEFAULT di sini, bukan diulang di puluhan pemanggilan `formulir(...)`, dan
+// tetap bisa ditimpa lewat `isi.alamat` oleh test yang justru menguji alamat.
 function formulir(isi: Record<string, string>): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries(isi)) fd.set(k, v);
+  for (const [k, v] of Object.entries({ alamat: "Jl. Uji Alamat Baku No. 1", ...isi })) {
+    fd.set(k, v);
+  }
   return fd;
 }
 
@@ -132,6 +139,14 @@ async function barisAnanda() {
   const { data } = await admin
     .from("booking_requests")
     .select("id, status, tanggal, service_id")
+    .eq("client_id", ANANDA);
+  return data ?? [];
+}
+
+async function barisAnandaAlamat() {
+  const { data } = await admin
+    .from("booking_requests")
+    .select("id, alamat, alamat_lat, alamat_lon")
     .eq("client_id", ANANDA);
   return data ?? [];
 }
@@ -186,6 +201,35 @@ afterAll(async () => {
 beforeEach(async () => {
   ref.sesi = sesiAnanda;
   await bersihkanAnanda();
+});
+
+// `vi.stubGlobal` MENIMPA `globalThis.fetch` sepenuhnya — kalau ditimpa dengan
+// mock yang menjawab APA SAJA, panggilan `geocodeAlamat` ke Supabase lokal
+// (select/upsert `geocode_cache`) IKUT terbajak, bukan cuma panggilan ke
+// Nominatim yang memang ingin dipalsukan. Dibuktikan langsung: men-stub penuh
+// lalu memanggil Supabase lokal membuat query itu gagal (retry ~7 detik lalu
+// {error}), yang berarti SELURUH query `ajukanJadwal` (cek layanan, varian,
+// antrean, insert) ikut gagal — bukan cuma geocoding — dan `hasil.ok` akan
+// `false` untuk alasan yang salah sama sekali. `stubNominatim` (pola yang sama
+// dengan `tests/transport-geocode.test.ts`) menutup celah itu: hanya URL yang
+// menyentuh Nominatim yang dijawab `palsu`; sisanya diteruskan ke `fetch` asli
+// (di suite ini adalah pagar `tests/setup-fetch-guard.ts`, meloloskan
+// 127.0.0.1 tempat Supabase lokal berada).
+function stubNominatim(jawab: () => Promise<Response> | Response) {
+  const asli = globalThis.fetch;
+  const palsu = vi.fn(() => jawab());
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    return url.includes("nominatim") ? palsu() : asli(...args);
+  });
+  return palsu;
+}
+
+afterEach(() => {
+  // Di `afterEach`, bukan di akhir badan tiap `it`: bila sebuah asersi gagal,
+  // badan `it` berhenti di situ dan baris unstub di bawahnya tidak pernah
+  // jalan — stub lantas bocor ke test berikutnya.
+  vi.unstubAllGlobals();
 });
 
 describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () => {
@@ -514,6 +558,98 @@ describe("varian wajib — pengajuan tanpa varian sah ditolak", () => {
       // lain, dan test-test itu tidak boleh mewarisi keadaan nonaktif.
       await admin.from("service_variants").update({ aktif: true }).eq("id", VARIAN_NUTRISI);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6: alamat pengajuan — WAJIB diisi, geocoding tidak pernah menggagalkan
+// penyimpanan.
+// ---------------------------------------------------------------------------
+describe("alamat pengajuan jadwal (spec T6)", () => {
+  // `geocode_cache` bertahan lintas run test lokal (bukan dibersihkan
+  // `bersihkanAnanda`, yang hanya menyapu `booking_requests`). Tanpa
+  // pembersihan ini, sisa cache dari run sebelumnya bisa menjawab lebih dulu
+  // dan membuat asersi koordinat di bawah lulus/gagal karena alasan yang
+  // sama sekali tidak berhubungan dengan stub Nominatim di test ini.
+  beforeAll(async () => {
+    await admin.from("geocode_cache").delete().in("alamat_normal", [
+      normalkanAlamat("Jl. Uji Transport No. 7"),
+      normalkanAlamat("Jl. Gang Sempit Tanpa Nama"),
+    ]);
+  });
+
+  it("menolak pengajuan tanpa alamat", async () => {
+    const hasil = await ajukanJadwal(
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi", alamat: "" }),
+    );
+    expect(hasil.ok).toBe(false);
+    expect(await barisAnanda()).toHaveLength(0);
+  });
+
+  it("menolak alamat yang terlalu pendek untuk dituju mitra", async () => {
+    const hasil = await ajukanJadwal(
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi", alamat: "rumah" }),
+    );
+    expect(hasil.ok).toBe(false);
+    expect(await barisAnanda()).toHaveLength(0);
+  });
+
+  it("menyimpan alamat sesi beserta koordinatnya", async () => {
+    const palsu = stubNominatim(() =>
+      new Response(JSON.stringify([{ lat: "-6.9175", lon: "107.6191" }]), { status: 200 }),
+    );
+
+    const hasil = await ajukanJadwal(
+      formulir({
+        layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
+        tanggal: TGL_DEPAN,
+        waktu: "pagi",
+        alamat: "Jl. Uji Transport No. 7",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    expect(palsu).toHaveBeenCalled();
+
+    const baris = await admin
+      .from("booking_requests")
+      .select("alamat, alamat_lat, alamat_lon")
+      .eq("client_id", ANANDA)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+    expect(baris.data!.alamat).toBe("Jl. Uji Transport No. 7");
+    expect(baris.data!.alamat_lat).toBe(-6.9175);
+    expect(baris.data!.alamat_lon).toBe(107.6191);
+  });
+
+  it("alamat TETAP tersimpan meski geocoding gagal (katup pengaman T6)", async () => {
+    // Katup pengaman spec T6. Tanpa uji ini ia hanya niat di komentar kode.
+    // Nominatim dipalsukan agar GAGAL — bukan `globalThis.fetch` PENUH (lihat
+    // komentar `stubNominatim` di atas): stub penuh akan ikut menjatuhkan
+    // panggilan Supabase lokal yang dipakai `ajukanJadwal` sendiri (cek
+    // layanan, varian, antrean, insert), membuat `hasil.ok` bernilai `false`
+    // untuk alasan yang SALAH SAMA SEKALI — bukan karena geocoding gagal.
+    stubNominatim(async () => {
+      throw new Error("jaringan mati");
+    });
+
+    const hasil = await ajukanJadwal(
+      formulir({
+        layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
+        tanggal: TGL_DEPAN,
+        waktu: "pagi",
+        alamat: "Jl. Gang Sempit Tanpa Nama",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+
+    const baris = await barisAnandaAlamat();
+    expect(baris).toHaveLength(1);
+    expect(baris[0].alamat).toBe("Jl. Gang Sempit Tanpa Nama");
+    expect(baris[0].alamat_lat).toBeNull();
+    expect(baris[0].alamat_lon).toBeNull();
   });
 });
 

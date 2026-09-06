@@ -28,13 +28,20 @@ export type BarisMitra = {
   id: string;
   nama: string;
   noHp: string;
+  alamat: string;
   aktif: boolean;
   sesiSelesai: number;
 };
 
 export type MitraPilihan = { id: string; nama: string };
 
-type BarisPartner = { id: string; nama: string; no_hp: string; aktif: boolean };
+type BarisPartner = {
+  id: string;
+  nama: string;
+  no_hp: string;
+  alamat: string;
+  aktif: boolean;
+};
 
 /** Semua mitra — aktif maupun tidak — beserta jumlah sesi yang sudah selesai. */
 export async function ambilDaftarMitra(): Promise<BarisMitra[]> {
@@ -47,7 +54,7 @@ export async function ambilDaftarMitra(): Promise<BarisMitra[]> {
   const [{ data: mitra }, { data: sesi }] = await Promise.all([
     supabase
       .from("partners")
-      .select("id, nama, no_hp, aktif")
+      .select("id, nama, no_hp, alamat, aktif")
       .order("aktif", { ascending: false })
       .order("nama")
       .returns<BarisPartner[]>(),
@@ -67,6 +74,7 @@ export async function ambilDaftarMitra(): Promise<BarisMitra[]> {
     id: m.id,
     nama: m.nama,
     noHp: m.no_hp,
+    alamat: m.alamat,
     aktif: m.aktif,
     sesiSelesai: selesaiPer.get(m.id) ?? 0,
   }));

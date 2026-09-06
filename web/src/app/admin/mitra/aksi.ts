@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { geocodeAlamat } from "@/lib/transport/geocode";
+import { bersihkanAlamat } from "./status";
 
 /**
  * Jalur tulis panel admin untuk data mitra.
@@ -42,6 +44,7 @@ export async function simpanMitra(formData: FormData): Promise<Dibuat | Gagal> {
 
   const nama = String(formData.get("nama") ?? "").trim();
   const noHp = String(formData.get("no_hp") ?? "").trim();
+  const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < PANJANG_NAMA_MINIMAL) {
     return { ok: false, pesan: "Nama mitra terlalu pendek." };
@@ -49,12 +52,17 @@ export async function simpanMitra(formData: FormData): Promise<Dibuat | Gagal> {
 
   const supabase = await createServerSupabase();
 
+  // Geocoding TIDAK PERNAH menggagalkan penyimpanan mitra (spec T6).
+  // `geocodeAlamat` sudah menelan setiap galatnya dan memulangkan null; domisili
+  // mitra pun BOLEH kosong (terisi menyusul).
+  const koordinat = await geocodeAlamat(alamat);
+
   // `aktif` tidak ikut dikirim: kolomnya `default true` di basis data, dan
   // membiarkan default yang memutuskan berarti tidak ada satu pun jalan bagi
   // formulir untuk melahirkan mitra yang langsung nonaktif tanpa disadari.
   const { data, error } = await supabase
     .from("partners")
-    .insert({ nama, no_hp: noHp })
+    .insert({ nama, no_hp: noHp, alamat, lat: koordinat?.lat ?? null, lon: koordinat?.lon ?? null })
     .select("id")
     .single();
 
@@ -72,6 +80,7 @@ export async function perbaruiMitra(
 
   const nama = String(formData.get("nama") ?? "").trim();
   const noHp = String(formData.get("no_hp") ?? "").trim();
+  const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < PANJANG_NAMA_MINIMAL) {
     return { ok: false, pesan: "Nama mitra terlalu pendek." };
@@ -79,12 +88,14 @@ export async function perbaruiMitra(
 
   const supabase = await createServerSupabase();
 
-  // Hanya dua kolom identitas yang pernah menyentuh basis data. Medan `aktif`
-  // yang ikut dikirim browser diabaikan tanpa pernah masuk payload — keadaan
-  // mitra punya action tersendiri.
+  // Geocoding TIDAK PERNAH menggagalkan penyimpanan (spec T6) — lihat `simpanMitra`.
+  const koordinat = await geocodeAlamat(alamat);
+
+  // Medan `aktif` yang ikut dikirim browser diabaikan tanpa pernah masuk
+  // payload — keadaan mitra punya action tersendiri.
   const { data, error } = await supabase
     .from("partners")
-    .update({ nama, no_hp: noHp })
+    .update({ nama, no_hp: noHp, alamat, lat: koordinat?.lat ?? null, lon: koordinat?.lon ?? null })
     .eq("id", id)
     .select("id");
 

@@ -87,7 +87,7 @@ export async function konfirmasiPermintaan(
     .update({ status: "dikonfirmasi" })
     .eq("id", permintaanId)
     .eq("status", "menunggu")
-    .select("id, client_id, service_id, variant_id, tanggal");
+    .select("id, client_id, service_id, variant_id, tanggal, alamat, alamat_lat, alamat_lon");
 
   // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
   // — melaporkan "berhasil" tanpa memeriksa jumlah barisnya adalah kebohongan
@@ -103,6 +103,13 @@ export async function konfirmasiPermintaan(
     variant_id: p.variant_id,
     partner_id: partnerId,
     tanggal: p.tanggal,
+    // Alamat & koordinat DISALIN dari baris permintaan ini, bukan diambil
+    // ulang dari profil klien (spec T6) — persis pola `variant_id` di atas.
+    // Klien boleh memesan untuk alamat lain; mengambil ulang dari profil akan
+    // diam-diam mengubah ke mana mitra dikirim.
+    alamat: p.alamat,
+    alamat_lat: p.alamat_lat,
+    alamat_lon: p.alamat_lon,
     status: "terjadwal",
     booking_request_id: p.id,
   });

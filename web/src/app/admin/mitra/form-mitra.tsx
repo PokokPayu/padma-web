@@ -76,6 +76,16 @@ export function FormMitraBaru() {
           <span className={KELAS_LABEL}>No. WhatsApp</span>
           <input name="no_hp" type="tel" placeholder="08xx" className={KELAS_MEDAN} />
         </label>
+        {/* Domisili BOLEH kosong di sini — boleh terisi menyusul. */}
+        <label className="sm:col-span-2">
+          <span className={KELAS_LABEL}>Domisili (opsional, bisa diisi menyusul)</span>
+          <textarea
+            name="alamat"
+            rows={2}
+            placeholder="Alamat domisili mitra"
+            className={KELAS_MEDAN}
+          />
+        </label>
       </div>
 
       {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
@@ -115,11 +125,13 @@ export function AksiMitra({
   id,
   nama,
   noHp,
+  alamat,
   aktif,
 }: {
   id: string;
   nama: string;
   noHp: string;
+  alamat: string;
   aktif: boolean;
 }) {
   const [ubah, setUbah] = useState(false);
@@ -156,6 +168,14 @@ export function AksiMitra({
           type="tel"
           defaultValue={noHp}
           aria-label={`Kontak mitra ${nama}`}
+          className={KELAS_MEDAN}
+        />
+        <textarea
+          name="alamat"
+          rows={2}
+          defaultValue={alamat}
+          aria-label={`Domisili mitra ${nama}`}
+          placeholder="Domisili mitra"
           className={KELAS_MEDAN}
         />
         {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}

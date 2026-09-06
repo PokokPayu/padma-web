@@ -99,6 +99,12 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
             ))}
           </select>
         </label>
+        {/* Alamat BOLEH kosong di sini — beda dari alamat pengajuan jadwal
+            klien sendiri yang wajib. Boleh terisi menyusul. */}
+        <label className="sm:col-span-2">
+          <span className={KELAS_LABEL}>Alamat (opsional, bisa diisi menyusul)</span>
+          <textarea name="alamat" rows={2} placeholder="Alamat rumah klien" className={KELAS_MEDAN} />
+        </label>
       </div>
 
       {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
@@ -145,7 +151,7 @@ export function FormEditKlien({
   fase,
 }: {
   id: string;
-  awal: { nama: string; noHp: string; faseId: string };
+  awal: { nama: string; noHp: string; faseId: string; alamat: string };
   fase: PilihanFase[];
 }) {
   const [pending, mulai] = useTransition();
@@ -190,6 +196,16 @@ export function FormEditKlien({
               </option>
             ))}
           </select>
+        </label>
+        <label className="sm:col-span-2">
+          <span className={KELAS_LABEL}>Alamat (opsional, bisa diisi menyusul)</span>
+          <textarea
+            name="alamat"
+            rows={2}
+            defaultValue={awal.alamat}
+            placeholder="Alamat rumah klien"
+            className={KELAS_MEDAN}
+          />
         </label>
       </div>
 

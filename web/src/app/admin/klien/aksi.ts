@@ -5,6 +5,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { buatPadmaId } from "@/lib/admin/padma-id";
 import { createClientInvite, normalizeEmail } from "@/lib/auth/link-client";
+import { geocodeAlamat } from "@/lib/transport/geocode";
+import { bersihkanAlamat } from "./status";
 
 /**
  * Jalur tulis panel admin untuk data klien.
@@ -50,6 +52,7 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
   const alamatSurel = normalizeEmail(String(formData.get("email") ?? ""));
   const noHp = String(formData.get("no_hp") ?? "").trim();
   const faseId = String(formData.get("fase") ?? "").trim();
+  const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < 2) return { ok: false, pesan: "Nama terlalu pendek." };
   if (!POLA_EMAIL.test(alamatSurel)) {
@@ -58,6 +61,12 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
   if (!faseId) return { ok: false, pesan: "Fase wajib dipilih." };
 
   const supabase = await createServerSupabase();
+
+  // Geocoding TIDAK PERNAH menggagalkan penyimpanan klien (spec T6).
+  // `geocodeAlamat` sudah menelan setiap galatnya dan memulangkan null; alamat
+  // profil klien pun BOLEH kosong (terisi menyusul) — alamat kosong memulangkan
+  // null lebih awal di dalam `geocodeAlamat` sendiri, tanpa perlu dicabang di sini.
+  const koordinat = await geocodeAlamat(alamat);
 
   for (let percobaan = 0; percobaan < PERCOBAAN_ID; percobaan++) {
     const padmaId = await buatPadmaId(supabase);
@@ -70,6 +79,9 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
         email: alamatSurel,
         no_hp: noHp,
         phase_id: faseId,
+        alamat,
+        alamat_lat: koordinat?.lat ?? null,
+        alamat_lon: koordinat?.lon ?? null,
       })
       .select("id")
       .single();
@@ -106,18 +118,29 @@ export async function perbaruiKlien(
   const nama = String(formData.get("nama") ?? "").trim();
   const noHp = String(formData.get("no_hp") ?? "").trim();
   const faseId = String(formData.get("fase") ?? "").trim();
+  const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < 2) return { ok: false, pesan: "Nama terlalu pendek." };
   if (!faseId) return { ok: false, pesan: "Fase wajib dipilih." };
 
   const supabase = await createServerSupabase();
 
-  // Hanya tiga kolom operasional yang pernah menyentuh basis data. Medan lain
-  // yang ikut dikirim browser diabaikan tanpa pernah masuk payload — termasuk
+  // Geocoding TIDAK PERNAH menggagalkan penyimpanan (spec T6) — lihat `buatKlien`.
+  const koordinat = await geocodeAlamat(alamat);
+
+  // Hanya kolom operasional yang pernah menyentuh basis data. Medan lain yang
+  // ikut dikirim browser diabaikan tanpa pernah masuk payload — termasuk
   // alamat surel (kunci pencocokan saat aktivasi) dan kolom penautan akun.
   const { data, error } = await supabase
     .from("clients")
-    .update({ nama, no_hp: noHp, phase_id: faseId })
+    .update({
+      nama,
+      no_hp: noHp,
+      phase_id: faseId,
+      alamat,
+      alamat_lat: koordinat?.lat ?? null,
+      alamat_lon: koordinat?.lon ?? null,
+    })
     .eq("id", id)
     .select("id");
 

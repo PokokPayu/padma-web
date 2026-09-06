@@ -96,9 +96,14 @@ async function setStatusBayar(
   await admin.from(tabel).update({ status_bayar: nilai }).eq("id", id);
 }
 
+// Alamat WAJIB sejak Task 6 (spec T6) dan tidak relevan untuk skenario di
+// berkas ini — dibubuhkan sebagai DEFAULT di sini, bukan diulang di setiap
+// pemanggilan `formulir(...)`.
 function formulir(isi: Record<string, string>): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries(isi)) fd.set(k, v);
+  for (const [k, v] of Object.entries({ alamat: "Jl. Uji Alamat Baku No. 1", ...isi })) {
+    fd.set(k, v);
+  }
   return fd;
 }
 

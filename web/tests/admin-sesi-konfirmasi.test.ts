@@ -127,7 +127,9 @@ async function baris(id: string) {
 async function sesiPadaTanggal() {
   const { data } = await admin
     .from("sessions")
-    .select("id, client_id, service_id, variant_id, partner_id, status, booking_request_id")
+    .select(
+      "id, client_id, service_id, variant_id, partner_id, status, booking_request_id, alamat, alamat_lat, alamat_lon",
+    )
     .eq("tanggal", TGL);
   return data ?? [];
 }
@@ -202,6 +204,39 @@ describe("konfirmasi permintaan jadwal", () => {
       status: "terjadwal",
       booking_request_id: permintaanId,
     });
+  });
+
+  it("menyalin alamat & koordinat DARI BARIS PERMINTAAN, bukan dari profil klien (spec T6)", async () => {
+    // Klien boleh memesan untuk alamat lain — profilnya (`clients.alamat`)
+    // sengaja dibiarkan KOSONG di sini (nilai default seed), berbeda dari
+    // alamat permintaan ini. Bila `konfirmasiPermintaan` diam-diam mengambil
+    // ulang dari `clients` alih-alih menyalin dari baris permintaan, sesi
+    // akan berakhir dengan alamat kosong — bukan alamat yang sebenarnya
+    // dipesan klien untuk kunjungan ini.
+    await admin
+      .from("booking_requests")
+      .update({ alamat: "Jl. Alamat Permintaan Ini No. 9", alamat_lat: -6.9, alamat_lon: 107.6 })
+      .eq("id", permintaanId);
+
+    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    expect(r.ok).toBe(true);
+
+    const sesi = await sesiPadaTanggal();
+    expect(sesi).toHaveLength(1);
+    expect(sesi[0]).toMatchObject({
+      alamat: "Jl. Alamat Permintaan Ini No. 9",
+      alamat_lat: -6.9,
+      alamat_lon: 107.6,
+    });
+
+    // Bukti tambahan bahwa nilainya BUKAN kebetulan sama dengan profil klien:
+    // profilnya memang kosong.
+    const { data: klien } = await admin
+      .from("clients")
+      .select("alamat")
+      .eq("id", KLIEN)
+      .single();
+    expect(klien!.alamat).not.toBe(sesi[0].alamat);
   });
 
   it("identitas klien & layanan diambil dari baris permintaan, bukan dari pemanggil", async () => {
