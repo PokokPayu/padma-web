@@ -51,8 +51,16 @@ import { querySql } from "./helpers/db";
  *
  * `service_rates` dibubarkan (migration `bubarkan_service_rates`); tarif kini
  * per VARIAN. Daftarnya tidak diperlebar — ia dipindahkan.
+ *
+ * `transport_rates` (Task 3) & `transport_khusus` (Task 4) bergabung ke
+ * daftar ini SADAR: keduanya tabel uang baru dengan pagar yang sama persis
+ * dengan `variant_rates`/`honor_marks` (append-only berjenjang untuk yang
+ * pertama, identitas direbut dari payload untuk yang kedua). Nominal
+ * transport tidak pernah boleh hidup di `sessions` atau tabel operasional
+ * lain — itulah yang uji ini jaga secara terus-menerus untuk kolom yang
+ * belum lahir sekalipun.
  */
-const TABEL_UANG = new Set(["variant_rates", "honor_marks"]);
+const TABEL_UANG = new Set(["variant_rates", "honor_marks", "transport_rates", "transport_khusus"]);
 
 /**
  * Satu-satunya view yang boleh memuat kolom nominal — dan hanya DUA kolomnya.

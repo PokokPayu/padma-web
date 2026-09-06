@@ -57,6 +57,8 @@ const TABEL_TERTUTUP_ANON = [
   // tabel uang
   "variant_rates",
   "honor_marks",
+  "transport_rates",
+  "transport_khusus",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */

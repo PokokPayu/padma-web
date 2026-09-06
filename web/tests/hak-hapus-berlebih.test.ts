@@ -1206,6 +1206,12 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
    * SUDAH DIJATUHKAN (Task 5, migration `bubarkan_service_rates`) — probe di
    * bawah ini karena itu kini menyasar `variant_rates` sepenuhnya, bukan lagi
    * berdampingan dengannya.
+   *
+   * `transport_rates` (Task 3, migration `tarif_transport`) & `transport_khusus`
+   * (Task 4, migration `transport_khusus`) bergabung ke daftar ini dengan
+   * alasan yang SAMA PERSIS: keduanya tabel uang baru, owner butuh SELURUH
+   * kolom & SELURUH verba baca/tulisnya, DELETE tercabut lewat pola generik
+   * (E) di bawah, bukan pengecualian tersendiri.
    */
   it("hak tabel non-DELETE tabel uang WAJIB tetap dipegang authenticated", async () => {
     const baris = await querySql<{ table_name: string; privilege_type: string }>(`
@@ -1213,13 +1219,19 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
         from information_schema.role_table_grants
        where table_schema='public'
          and grantee='authenticated'
-         and table_name in ('honor_marks','variant_rates')
+         and table_name in ('honor_marks','variant_rates','transport_rates','transport_khusus')
          and privilege_type in ('SELECT','INSERT','UPDATE')
        order by 1, 2`);
     expect(baris.map((b) => `${b.table_name}:${b.privilege_type}`)).toEqual([
       "honor_marks:INSERT",
       "honor_marks:SELECT",
       "honor_marks:UPDATE",
+      "transport_khusus:INSERT",
+      "transport_khusus:SELECT",
+      "transport_khusus:UPDATE",
+      "transport_rates:INSERT",
+      "transport_rates:SELECT",
+      "transport_rates:UPDATE",
       "variant_rates:INSERT",
       "variant_rates:SELECT",
       "variant_rates:UPDATE",

@@ -120,6 +120,27 @@ insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
       where vr.variant_id = v.id and vr.berlaku_sejak = current_date
    );
 
+-- Tarif transport soft launch, dari materi klien. `di_atas_20` sengaja tidak
+-- ada: tarifnya ditetapkan owner per kasus (lihat transport_khusus).
+--
+-- Perhatikan 0–5 km: klien Rp0, mitra Rp10.000. Itu BUKAN salah ketik — ia
+-- subsidi PADMA, dan angka ketiganya (selisih) sengaja tidak disimpan.
+--
+-- Honor mitra untuk jenjang selain `0_5` BELUM PERNAH DISEBUT KLIEN (spec §2
+-- "Yang tidak dijamin"). Angka 5_10/10_15/15_20 di bawah adalah semaian
+-- PENGEMBANGAN semata — JANGAN menyalinnya ke produksi tanpa konfirmasi klien.
+--
+-- `on conflict (jenjang, berlaku_sejak)` aman dipakai langsung (bukan
+-- `where not exists` seperti blok variant_rates di atas): constraint-nya
+-- adalah unique BIASA (bukan sebagian/parsial), jadi ON CONFLICT DO NOTHING
+-- sudah idempoten terhadap pengulangan `seed.sql` pada hari yang sama.
+insert into transport_rates (jenjang, tarif_klien, honor_mitra) values
+  ('0_5',       0, 10000),
+  ('5_10',  10000, 10000),
+  ('10_15', 20000, 15000),
+  ('15_20', 30000, 20000)
+  on conflict (jenjang, berlaku_sejak) do nothing;
+
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);
 
