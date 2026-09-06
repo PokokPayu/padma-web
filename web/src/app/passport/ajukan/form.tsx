@@ -15,6 +15,7 @@ export function FormAjukan({
   layanan,
   varian,
   tanggalPalingAwal,
+  alamatDefault,
 }: {
   layanan: Array<{ id: string; nama: string }>;
   // Varian AKTIF seluruh layanan, disaring per layanan terpilih di klien —
@@ -24,6 +25,11 @@ export function FormAjukan({
   // String 'YYYY-MM-DD' menurut kalender Jakarta, dirakit di server. Jangan
   // menghitungnya di browser: jam perangkat pemakai bisa apa saja.
   tanggalPalingAwal: string;
+  // Alamat PROFIL klien (bisa "" bila belum pernah diisi) — hanya isian AWAL
+  // (Ruling 9 T6). Medan tetap `<textarea>` biasa yang bisa diketik ulang;
+  // apa pun yang terkirim di FormData saat submit itulah yang tersimpan,
+  // bukan nilai prop ini.
+  alamatDefault: string;
 }) {
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
@@ -151,14 +157,24 @@ export function FormAjukan({
 
         <label className="mb-4 block text-sm">
           <span className="font-semibold text-ink-soft">Alamat kunjungan</span>
+          {/* `defaultValue`, bukan `value` terkendali: sekali diisi dari
+              profil, klien tetap mengetik bebas di atasnya — apa pun yang ada
+              di medan ini saat submit itulah yang tersimpan (lihat komentar
+              prop `alamatDefault`). */}
           <textarea
             name="alamat"
             required
             minLength={10}
             rows={2}
-            placeholder="Alamat lengkap tempat mitra datang — bisa berbeda dari alamat profil"
+            defaultValue={alamatDefault}
+            placeholder="Alamat lengkap tempat mitra datang"
             className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
           />
+          <span className="mt-1 block text-xs text-ink-soft">
+            {alamatDefault
+              ? "Diisi otomatis dari alamat profil Anda — boleh diganti khusus untuk kunjungan ini."
+              : "Belum ada alamat tersimpan di profil Anda — isi alamat tempat mitra datang untuk kunjungan ini."}
+          </span>
         </label>
 
         <label className="mb-4 block text-sm">

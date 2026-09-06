@@ -26,8 +26,15 @@ export default async function HalamanAjukan() {
   // query terpisah (bukan embed): FK `service_variants` ke `services` bukan
   // yang dipakai relasi sesi (gabungan service_id+id), dan pola dua-query yang
   // sama sudah dipakai di seluruh proyek untuk katalog varian.
+  //
+  // Alamat profil dibaca lewat jalur SESI PENGGUNA yang sama (bukan service
+  // role, bukan `ambilKlien()` yang di-cache lintas-halaman) — Ruling 9 T6:
+  // hanya untuk MENGISI AWAL medan alamat di formulir (spec T7 desain), klien
+  // tetap bebas mengubahnya. `ajukanJadwal` sendiri TIDAK PERNAH membaca
+  // kolom ini — nilai yang tersimpan selalu apa yang ada di FormData saat
+  // submit, prefilled atau tidak.
   const supabase = await createServerSupabase();
-  const [{ data: layanan }, { data: varian }] = await Promise.all([
+  const [{ data: layanan }, { data: varian }, { data: profil }] = await Promise.all([
     supabase.from("services").select("id, nama").eq("aktif", true).order("nama"),
     supabase
       .from("service_variants")
@@ -35,6 +42,11 @@ export default async function HalamanAjukan() {
       .eq("aktif", true)
       .order("urutan")
       .returns<BarisVarian[]>(),
+    supabase
+      .from("clients")
+      .select("alamat")
+      .eq("id", klien.id) // operator setara, tidak pernah pola
+      .maybeSingle<{ alamat: string }>(),
   ]);
 
   // Label dirangkai lewat `labelVarian()` — SATU-SATUNYA perangkai label
@@ -54,6 +66,7 @@ export default async function HalamanAjukan() {
       layanan={(layanan ?? []) as Array<{ id: string; nama: string }>}
       varian={varianTampil}
       tanggalPalingAwal={hariIniJakarta()}
+      alamatDefault={profil?.alamat ?? ""}
     />
   );
 }

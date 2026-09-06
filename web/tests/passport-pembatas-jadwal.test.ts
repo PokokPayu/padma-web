@@ -651,6 +651,42 @@ describe("alamat pengajuan jadwal (spec T6)", () => {
     expect(baris[0].alamat_lat).toBeNull();
     expect(baris[0].alamat_lon).toBeNull();
   });
+
+  it("menyimpan alamat yang DIUBAH klien, bukan alamat profilnya (Ruling 9)", async () => {
+    // Halaman ajukan mengisi awal medan alamat dari profil klien (Ruling 9 —
+    // lihat `passport/ajukan/page.tsx` dan `passport-bayar-ajukan.test.ts` untuk
+    // uji prefill-nya). Tapi `ajukanJadwal` sendiri TIDAK PERNAH membaca
+    // `clients.alamat` — kalau ia diam-diam jatuh kembali ke alamat profil
+    // ketika submit-nya beda, mitra dikirim ke tempat yang salah, kegagalan
+    // yang LEBIH BURUK daripada tidak ada prefill sama sekali.
+    try {
+      await admin
+        .from("clients")
+        .update({ alamat: "Jl. Alamat Profil Ananda Yang Lama" })
+        .eq("id", ANANDA);
+
+      const hasil = await ajukanJadwal(
+        formulir({
+          layanan: SVC_NUTRISI,
+          varian: VARIAN_NUTRISI,
+          tanggal: TGL_DEPAN,
+          waktu: "pagi",
+          alamat: "Jl. Alamat Yang Diketik Ulang Klien No. 3",
+        }),
+      );
+      expect(hasil.ok).toBe(true);
+
+      const baris = await barisAnandaAlamat();
+      expect(baris).toHaveLength(1);
+      expect(baris[0].alamat).toBe("Jl. Alamat Yang Diketik Ulang Klien No. 3");
+      expect(baris[0].alamat).not.toBe("Jl. Alamat Profil Ananda Yang Lama");
+    } finally {
+      // Ananda dipakai fixture di banyak berkas test lain — profilnya
+      // dikembalikan kosong (nilai default sebelum test ini) supaya tidak ada
+      // yang mewarisi alamat profil palsu ini.
+      await admin.from("clients").update({ alamat: "" }).eq("id", ANANDA);
+    }
+  });
 });
 
 describe("pagar sumber — pembatas hidup di action DAN di basis data", () => {

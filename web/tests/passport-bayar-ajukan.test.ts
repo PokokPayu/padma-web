@@ -664,6 +664,34 @@ describe("halaman ajukan jadwal — bentuk formulir", () => {
     expect(m).toContain('name="varian"');
   });
 
+  it("mengisi awal medan alamat dari alamat profil klien (Ruling 9 T6 / spec T7)", async () => {
+    // Keputusan T7 spec: alamat default `clients.alamat` ada PERSIS supaya
+    // wizard ini bisa mengisi otomatis. Tanpa test ini, kolom yang diisi
+    // Task 6 di profil klien tidak punya konsumen sama sekali di sisi klien.
+    try {
+      await admin
+        .from("clients")
+        .update({ alamat: "Jl. Profil Ananda Untuk Prefill No. 5" })
+        .eq("id", ANANDA);
+
+      const m = await markup();
+      // React SSR merender nilai awal `<textarea>` sebagai isi teksnya.
+      expect(m).toMatch(
+        /<textarea[^>]*name="alamat"[^>]*>Jl\. Profil Ananda Untuk Prefill No\. 5<\/textarea>/,
+      );
+    } finally {
+      await admin.from("clients").update({ alamat: "" }).eq("id", ANANDA);
+    }
+  });
+
+  it("alamat profil KOSONG tidak melahirkan isian 'null' atau 'undefined'", async () => {
+    await admin.from("clients").update({ alamat: "" }).eq("id", ANANDA);
+    const m = await markup();
+    expect(m).not.toContain(">null<");
+    expect(m).not.toContain(">undefined<");
+    expect(m).toContain('name="alamat"');
+  });
+
   it("berkata jujur bahwa ini permintaan, bukan booking final", async () => {
     const m = await markup();
     expect(m).toContain("Ini permintaan, bukan booking final");
