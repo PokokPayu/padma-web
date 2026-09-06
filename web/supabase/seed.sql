@@ -50,11 +50,13 @@ insert into service_rates (service_id, harga_klien, honor_mitra) values
 -- service_variants ...`). Pada `db reset` yang bersih, migrasi berjalan
 -- SEBELUM berkas seed ini — jadi saat pernyataan salinan migrasi berjalan
 -- `service_rates` masih kosong dan ia menyalin NOL baris, sama seperti nasib
--- backfill varian di atas. Pernyataan yang SAMA diulang di sini SESUDAH
--- `service_rates` diisi, dengan `where not exists` supaya idempoten terhadap
--- salinan migrasi pada basis data yang sudah berisi tarif produksi. Task 5
--- melebur kedua blok ini menjadi satu insert langsung, sesudah `service_rates`
--- dijatuhkan.
+-- backfill varian di atas. Proyeksi & sumbernya (SELECT dari `service_rates`
+-- join `service_variants`) diulang di sini SESUDAH `service_rates` diisi,
+-- ditambah satu penjaga idempotensi yang TIDAK ada di migrasi — klausa
+-- `where not exists (...)` di bawah — supaya blok ini aman dijalankan ulang
+-- pada basis data yang sudah berisi tarif produksi (mis. migrasi produksi
+-- yang sudah pernah menyalin sebagian). Task 5 melebur kedua blok ini menjadi
+-- satu insert langsung, sesudah `service_rates` dijatuhkan.
 insert into variant_rates (variant_id, harga_klien, honor_mitra, berlaku_sejak)
   select v.id, r.harga_klien, r.honor_mitra, r.berlaku_sejak
     from service_rates r
