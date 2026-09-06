@@ -615,6 +615,132 @@ describe("menjadwalkan sesi langsung", () => {
 });
 
 // ---------------------------------------------------------------------------
+// jadwalkanSesi — jenjang transport (Ruling 11: dihitung & disimpan di sini,
+// bukan lewat aksi terpisah, karena inilah layar tempat mitra DITUGASKAN dan
+// kedua koordinat sudah diketahui).
+// ---------------------------------------------------------------------------
+
+describe("jadwalkanSesi menghitung & menyimpan jenjang transport", () => {
+  // Titik yang sama persis -> jarak 0 km -> "0_5" (lihat transport-saran.test.ts).
+  const KOORD_SAMA = { lat: -6.9175, lon: 107.6191 };
+
+  // Koordinat KLIEN & MITRA milik baris SEED yang dipakai berkas ini secara
+  // luas — ditimpa sementara per test, dan SELALU dikembalikan ke NULL (bukan
+  // "keadaan sebelumnya", yang mungkin sendiri tidak pasti) di afterEach.
+  // Tanpa ini, koordinat palsu akan bocor ke berkas uji LAIN yang memakai baris
+  // seed yang sama (mis. saran jenjang tiba-tiba muncul di test yang tidak
+  // memintanya).
+  afterEach(async () => {
+    await admin.from("clients").update({ alamat_lat: null, alamat_lon: null }).eq("id", KLIEN);
+    await admin.from("partners").update({ lat: null, lon: null }).eq("id", MITRA);
+  });
+
+  async function pasangKoordinat(mitra: { lat: number; lon: number } | null, klienKoord: { lat: number; lon: number } | null) {
+    await admin
+      .from("clients")
+      .update({ alamat_lat: klienKoord?.lat ?? null, alamat_lon: klienKoord?.lon ?? null })
+      .eq("id", KLIEN);
+    await admin
+      .from("partners")
+      .update({ lat: mitra?.lat ?? null, lon: mitra?.lon ?? null })
+      .eq("id", MITRA);
+  }
+
+  it("menyimpan jenjang OTOMATIS saat koordinat mitra & klien lengkap", async () => {
+    await pasangKoordinat(KOORD_SAMA, KOORD_SAMA);
+
+    const r = await jadwalkanSesi(fdJadwal());
+    expect(r.ok).toBe(true);
+
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber, jenjang_alasan")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBe("0_5");
+    expect(data!.jenjang_sumber).toBe("otomatis");
+    expect(data!.jenjang_alasan).toBe("");
+  });
+
+  it("jenjang tetap NULL bila salah satu koordinat kosong — bukan galat", async () => {
+    // Hanya mitra yang punya koordinat; alamat default klien kosong.
+    await pasangKoordinat(KOORD_SAMA, null);
+
+    const r = await jadwalkanSesi(fdJadwal());
+    expect(r.ok).toBe(true);
+
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBeNull();
+    expect(data!.jenjang_sumber).toBeNull();
+  });
+
+  it("admin bisa menimpa saran SAAT membuat sesi, dengan alasan", async () => {
+    await pasangKoordinat(KOORD_SAMA, KOORD_SAMA); // saran = "0_5"
+
+    const r = await jadwalkanSesi(
+      fdJadwal({ jenjang: "10_15", alasan: "Alamat sebenarnya di seberang, memutar jauh." }),
+    );
+    expect(r.ok).toBe(true);
+
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber, jenjang_alasan")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBe("10_15");
+    expect(data!.jenjang_sumber).toBe("admin");
+    expect(data!.jenjang_alasan).toMatch(/memutar/);
+  });
+
+  it("menolak penimpaan tanpa alasan SAAT membuat sesi — sesi TIDAK jadi tersimpan", async () => {
+    await pasangKoordinat(KOORD_SAMA, KOORD_SAMA); // saran = "0_5"
+
+    const r = await jadwalkanSesi(fdJadwal({ jenjang: "10_15", alasan: "  " }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.pesan).toMatch(/alasan/i);
+
+    // Bukan cuma jenjangnya yang batal — SELURUH sesi batal, supaya admin
+    // tidak kaget menemukan sesi lain sudah terjadwal tanpa jenjang yang benar.
+    const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("menolak jenjang penimpaan yang bukan anggota enum, sebelum menulis apa pun", async () => {
+    await pasangKoordinat(KOORD_SAMA, KOORD_SAMA);
+
+    const r = await jadwalkanSesi(
+      fdJadwal({ jenjang: "seberang_galaksi", alasan: "Alasan yang sah." }),
+    );
+    expect(r.ok).toBe(false);
+    const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("jenjang_sumber TIDAK BISA disuntik 'admin' lewat FormData saat mengikuti saran", async () => {
+    // Keadaan tujuan tidak pernah datang dari FormData (pola berkas ini):
+    // mengirim jenjang_sumber sebagai medan formulir tidak boleh mengubah apa
+    // pun — server sendiri yang menyimpulkan 'otomatis' vs 'admin' dari
+    // perbandingan dengan saran, bukan membaca klaim pemanggil.
+    await pasangKoordinat(KOORD_SAMA, KOORD_SAMA); // saran = "0_5"
+
+    const r = await jadwalkanSesi(fdJadwal({ jenjang_sumber: "admin" }));
+    expect(r.ok).toBe(true);
+
+    const { data } = await svc
+      .from("sessions")
+      .select("jenjang, jenjang_sumber")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBe("0_5");
+    expect(data!.jenjang_sumber).toBe("otomatis"); // bukan 'admin' yang disuntikkan
+  });
+});
+
+// ---------------------------------------------------------------------------
 // tetapkanJenjang — penimpaan admin
 // ---------------------------------------------------------------------------
 
@@ -761,6 +887,38 @@ describe("daftar sesi di halaman /admin/sesi", () => {
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
+  });
+
+  it("sesi tanpa jenjang menawarkan koreksinya lewat 'ubah jenjang' (Ruling 11)", async () => {
+    // `buatSesi` menulis lewat service role tanpa jenjang — persis sesi yang
+    // lahir dari `jadwalkanSesi` saat koordinatnya kosong.
+    await buatSesi("terjadwal", { denganPaket: true });
+    const markup = renderToStaticMarkup(await SesiPage());
+    expect(markup).toContain("Jenjang: belum ditetapkan");
+    expect(markup).toContain("ubah jenjang");
+  });
+
+  it("sesi dengan jenjang OTOMATIS menampilkan label jenjangnya", async () => {
+    const id = await buatSesi("terjadwal", { denganPaket: true });
+    await admin
+      .from("sessions")
+      .update({ jenjang: "5_10", jenjang_sumber: "otomatis" })
+      .eq("id", id);
+
+    const markup = renderToStaticMarkup(await SesiPage());
+    // `renderToStaticMarkup` meng-escape "&gt;" pada teks — LABEL_JENJANG
+    // sendiri tetap ">5–10 km" (lihat status.ts), hanya markupnya yang beda.
+    expect(markup).toContain("Jenjang: &gt;5–10 km · otomatis");
+  });
+
+  it("koreksi jenjang benar-benar tersambung ke tetapkanJenjang, bukan dekoratif", () => {
+    // form-sesi.tsx (T7 ronde 1) sempat punya pemilih tanpa `name` yang tidak
+    // pernah sampai ke FormData — inilah pagar supaya laci koreksi baris sesi
+    // tidak jatuh ke cacat yang sama.
+    expect(sumberFormSelesai).toContain("tetapkanJenjang(fd)");
+    expect(sumberFormSelesai).toMatch(/name="sesi"/);
+    expect(sumberFormSelesai).toMatch(/name="jenjang"/);
+    expect(sumberFormSelesai).toMatch(/name="alasan"/);
   });
 });
 

@@ -7,6 +7,7 @@ import { BlokPermintaan, type PermintaanAntre } from "./antrean-permintaan";
 import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
 import { BarisSesi, type BarisSesiTampil } from "./form-selesai";
 import { LABEL_WAKTU, type PreferensiWaktu, type StatusSesi } from "./status";
+import type { JenjangTransport } from "@/lib/transport/jarak";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Sesi" };
@@ -27,6 +28,8 @@ type BarisSesiDb = {
   catatan: string;
   rekomendasi: string;
   client_package_id: string | null;
+  jenjang: JenjangTransport | null;
+  jenjang_sumber: "otomatis" | "admin" | null;
   clients: { nama: string; padma_id: string } | null;
   services: { nama: string } | null;
   partners: { nama: string } | null;
@@ -56,10 +59,13 @@ export default async function SesiPage() {
         .returns<BarisPermintaan[]>(),
       // Sesi terbaru di atas: yang baru saja dijalani bidan adalah yang paling
       // mungkin perlu ditandai selesai.
+      // `jenjang`/`jenjang_sumber` ikut dibaca supaya baris sesi bisa
+      // menampilkan jenjang saat ini dan menawarkan koreksinya lewat
+      // `tetapkanJenjang` (Ruling 11) — data OPERASIONAL, bukan rupiah.
       supabase
         .from("sessions")
         .select(
-          "id, tanggal, status, catatan, rekomendasi, client_package_id, clients ( nama, padma_id ), services ( nama ), partners ( nama )",
+          "id, tanggal, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, clients ( nama, padma_id ), services ( nama ), partners ( nama )",
         )
         .order("tanggal", { ascending: false })
         .limit(BATAS_BARIS)
@@ -111,6 +117,8 @@ export default async function SesiPage() {
     dalamPaket: s.client_package_id !== null,
     catatan: s.catatan,
     rekomendasi: s.rekomendasi,
+    jenjang: s.jenjang,
+    jenjangSumber: s.jenjang_sumber,
   }));
 
   const pilihanKlien: PilihanKlien[] = (klien ?? []).map((k) => ({

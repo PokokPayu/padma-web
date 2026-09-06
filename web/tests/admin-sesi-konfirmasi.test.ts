@@ -28,7 +28,7 @@
  * dibersihkan di `afterAll`: `passport-beranda.test.ts` meng-assert jumlah
  * stempel Ananda PERSIS, jadi tidak boleh ada sesi sisa yang menempel padanya.
  */
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -369,6 +369,62 @@ describe("konfirmasi permintaan jadwal", () => {
 
     expect((await baris(permintaanId))!.status).toBe("menunggu");
     expect(await sesiPadaTanggal()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// konfirmasiPermintaan — jenjang transport (Ruling 11): jalur KEDUA yang
+// menugaskan mitra, dan booking_requests SUDAH punya koordinatnya sendiri
+// sejak Task 6 — tidak perlu proksi alamat default klien seperti jadwalkanSesi.
+// ---------------------------------------------------------------------------
+
+describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => {
+  const KOORD_SAMA = { lat: -6.9175, lon: 107.6191 }; // jarak 0 km -> "0_5"
+
+  // MITRA di berkas ini (Bidan Sri Wahyuni) dipakai di banyak `it()` lain yang
+  // tidak peduli koordinat sama sekali — dikembalikan ke NULL supaya tidak
+  // membocorkan saran jenjang ke test lain.
+  afterEach(async () => {
+    await admin.from("partners").update({ lat: null, lon: null }).eq("id", MITRA);
+  });
+
+  it("menyimpan jenjang OTOMATIS dari koordinat permintaan & mitra", async () => {
+    await admin
+      .from("booking_requests")
+      .update({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon })
+      .eq("id", permintaanId);
+    await admin.from("partners").update({ lat: KOORD_SAMA.lat, lon: KOORD_SAMA.lon }).eq("id", MITRA);
+
+    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    expect(r.ok).toBe(true);
+
+    const { data } = await admin
+      .from("sessions")
+      .select("jenjang, jenjang_sumber, jenjang_alasan")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBe("0_5");
+    expect(data!.jenjang_sumber).toBe("otomatis");
+    expect(data!.jenjang_alasan).toBe("");
+  });
+
+  it("jenjang tetap NULL bila koordinat mitra belum ada — bukan galat", async () => {
+    await admin
+      .from("booking_requests")
+      .update({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon })
+      .eq("id", permintaanId);
+    // MITRA sengaja TIDAK diberi koordinat (default seed: NULL).
+
+    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    expect(r.ok).toBe(true);
+
+    const { data } = await admin
+      .from("sessions")
+      .select("jenjang, jenjang_sumber")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.jenjang).toBeNull();
+    expect(data!.jenjang_sumber).toBeNull();
   });
 });
 

@@ -82,6 +82,26 @@ export function FormJadwalSesi({
       : null;
   const saran = saranJenjang(koordinatMitra, koordinatKlien);
 
+  // "" berarti "ikuti saran" — pilihan admin sendiri hanya dianggap ada
+  // sesudah `onChange` benar-benar tersentuh. Direset ke "" tiap kali klien
+  // atau mitra berganti, supaya pilihan manual pada pasangan klien/mitra
+  // SEBELUMNYA tidak diam-diam ikut terbawa ke pasangan yang baru dipilih.
+  // Disesuaikan SELAMA render (pola "Adjusting state when a prop changes"
+  // dari dokumentasi React), bukan lewat `useEffect`, supaya nilai lama tidak
+  // sempat terlihat sekejap sebelum efeknya berjalan.
+  const [jenjangPilihan, setJenjangPilihan] = useState("");
+  const [pasanganSebelumnya, setPasanganSebelumnya] = useState([clientId, partnerId]);
+  if (pasanganSebelumnya[0] !== clientId || pasanganSebelumnya[1] !== partnerId) {
+    setPasanganSebelumnya([clientId, partnerId]);
+    setJenjangPilihan("");
+  }
+  const nilaiJenjang = jenjangPilihan || saran?.jenjang || JENJANG_SAH[0];
+  // Alasan hanya diwajibkan (dan hanya DIKIRIM sebagai penimpaan) ketika ada
+  // saran DAN pilihan admin berbeda darinya. Tanpa saran, `jadwalkanSesi`
+  // sendiri yang menjamin jenjang tidak pernah ditulis dari pemilih ini
+  // (lihat komentar di aksi.ts) — kotak alasan tidak perlu tampil sama sekali.
+  const menimpaSaran = saran !== null && nilaiJenjang !== saran.jenjang;
+
   if (!terbuka) {
     return (
       <div className="text-right">
@@ -216,9 +236,15 @@ export function FormJadwalSesi({
       </div>
 
       {/* Tiga hal berdampingan saat mitra dipilih (spec §5.2): jarak garis
-          lurus, jenjang yang disarankan, dan pemilih jenjang. INFORMASI SAJA
-          — jenjang sesi yang sebenarnya baru ditetapkan lewat `tetapkanJenjang`
-          setelah sesinya ada (sesi baru ini belum punya alamat sendiri).
+          lurus, jenjang yang disarankan, dan pemilih jenjang. `jadwalkanSesi`
+          menyimpan jenjang ini BERSAMA barisnya: mengikuti saran menjadi
+          `jenjang_sumber = 'otomatis'`, menimpanya (dengan alasan) menjadi
+          `'admin'` — server yang memutuskan mana dari keduanya dengan
+          menghitung ulang sarannya sendiri, bukan mempercayai klaim formulir.
+          Bila `saranJenjang()` memulangkan `null`, saran tidak muncul dan
+          pemilih tetap ada — TANPA pesan galat — tapi jenjangnya sendiri
+          tidak akan tersimpan (lihat komentar di aksi.ts): pemilih di sini
+          hanyalah perkiraan tanpa dasar untuk dibandingkan.
           Nol rupiah di blok ini: admin melihat "5–10 km", tidak pernah harga. */}
       <div className="mt-3 rounded-xl border border-black/10 bg-paper px-3 py-2.5 text-[12.5px] text-ink-soft">
         <span className="block font-bold text-ink">Perkiraan jarak ke mitra</span>
@@ -231,14 +257,15 @@ export function FormJadwalSesi({
         ) : (
           <span className="mt-0.5 block">
             Jarak tidak bisa diperkirakan — alamat klien atau domisili mitra belum punya koordinat.
-            Pilih jenjang secara manual bila sudah tahu perkiraannya.
+            Jenjang sesi ini belum akan tersimpan; tetapkan belakangan dari daftar sesi.
           </span>
         )}
         <label className="mt-2 block">
-          <span className={KELAS_LABEL}>Jenjang transport (perkiraan)</span>
+          <span className={KELAS_LABEL}>Jenjang transport</span>
           <select
-            key={saran?.jenjang ?? "tanpa-saran"}
-            defaultValue={saran?.jenjang ?? JENJANG_SAH[0]}
+            name="jenjang"
+            value={nilaiJenjang}
+            onChange={(e) => setJenjangPilihan(e.target.value)}
             className={KELAS_MEDAN}
           >
             {JENJANG_SAH.map((j) => (
@@ -247,11 +274,19 @@ export function FormJadwalSesi({
               </option>
             ))}
           </select>
-          <span className="mt-1 block text-[11.5px] italic text-ink-soft">
-            Perkiraan untuk membantu memilih mitra — jenjang sesi ini sendiri baru dicatat resmi
-            sesudah sesinya tersimpan dan alamatnya diketahui.
-          </span>
         </label>
+        {menimpaSaran && (
+          <label className="mt-2 block">
+            <span className={KELAS_LABEL}>Alasan berbeda dari saran (wajib)</span>
+            <textarea
+              name="alasan"
+              rows={2}
+              required
+              placeholder="Mis. alamat di seberang sungai, memutar jauh…"
+              className={KELAS_MEDAN}
+            />
+          </label>
+        )}
       </div>
 
       <label className="mt-3 flex items-start gap-2 text-[12.5px] text-ink">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { JENJANG_SAH, periksaAlasanPenimpaan } from "./status";
+import { saranJenjang } from "@/lib/transport/saran";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 
 /**
@@ -65,9 +66,14 @@ export async function konfirmasiPermintaan(
   // sedangkan daftar pilihan di UI menyaring `aktif` — dan action ini tidak
   // pernah melewati UI itu; (b) memeriksanya belakangan berarti permintaan
   // sudah terlanjur keluar dari antrean untuk sesuatu yang pasti gagal.
+  // `lat`/`lon` ikut dibaca di sini (Ruling 11): inilah jalur KEDUA yang
+  // menugaskan mitra ke sebuah sesi, dan booking_requests sudah punya
+  // koordinatnya sendiri (Task 6) — saran jenjang dihitung & disimpan
+  // langsung bersama sesi yang terbit, bukan menunggu action terpisah yang
+  // tidak akan pernah dipanggil siapa pun untuk sesi yang lahir dari sini.
   const { data: mitra } = await supabase
     .from("partners")
-    .select("id")
+    .select("id, lat, lon")
     .eq("id", partnerId)
     .eq("aktif", true)
     .maybeSingle();
@@ -99,6 +105,21 @@ export async function konfirmasiPermintaan(
   }
   const p = klaim![0];
 
+  // Saran jenjang dihitung dari koordinat yang SUDAH ada di baris ini —
+  // tidak ada pemilih untuk ditimpa admin di jalur konfirmasi (spec §5.2
+  // hanya menyebut penimpaan di layar memilih mitra; di sini keputusan
+  // "mitra mana" dan "jenjang berapa" jatuh bersamaan pada klik yang sama).
+  // Koordinat kosong bukan galat — `saranJenjang()` memulangkan `null`, dan
+  // jenjangnya tetap NULL: admin menetapkannya belakangan lewat
+  // `tetapkanJenjang`.
+  const koordinatMitra =
+    mitra.lat != null && mitra.lon != null ? { lat: mitra.lat, lon: mitra.lon } : null;
+  const koordinatSesi =
+    p.alamat_lat != null && p.alamat_lon != null
+      ? { lat: p.alamat_lat, lon: p.alamat_lon }
+      : null;
+  const saran = saranJenjang(koordinatMitra, koordinatSesi);
+
   const { error } = await supabase.from("sessions").insert({
     client_id: p.client_id,
     service_id: p.service_id,
@@ -112,6 +133,13 @@ export async function konfirmasiPermintaan(
     alamat: p.alamat,
     alamat_lat: p.alamat_lat,
     alamat_lon: p.alamat_lon,
+    // `jenjang_sumber` ditulis MATI sebagai 'otomatis' — atau `null` bersama
+    // `jenjang` bila tidak ada saran — tidak pernah 'admin': jalur ini tidak
+    // membaca FormData sama sekali (lihat dokblok atas), jadi tidak ada
+    // klaim pemanggil untuk dipercaya atau ditolak.
+    jenjang: saran?.jenjang ?? null,
+    jenjang_sumber: saran ? "otomatis" : null,
+    jenjang_alasan: "",
     status: "terjadwal",
     booking_request_id: p.id,
   });
@@ -205,9 +233,21 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   // layanan ia sama sekali tidak menolong: yang sudah dipensiunkan tetap ada
   // barisnya. Formulir menyaring `aktif` di UI, dan server action adalah
   // endpoint POST tersendiri yang tidak pernah melewati UI itu.
+  // `alamat_lat`/`alamat_lon` (klien) dan `lat`/`lon` (mitra) ikut dibaca di
+  // sini (Ruling 11): inilah layar tempat mitra DITUGASKAN untuk sesi baru,
+  // dan kedua koordinat sudah diketahui pada klik yang sama — jenjang
+  // transport dihitung & disimpan langsung, bukan lewat action terpisah yang
+  // tidak akan pernah dipanggil siapa pun untuk sesi yang lahir dari sini.
+  // Alamat SESI ini sendiri belum ada (jalur langsung tidak mengumpulkannya),
+  // jadi alamat DEFAULT klien dipakai sebagai perkiraan — persis keputusan
+  // yang sama dipakai pratinjau di form-sesi.tsx.
   const [{ data: klien }, { data: layanan }, { data: varian }, { data: mitra }] =
     await Promise.all([
-      supabase.from("clients").select("id").eq("id", clientId).maybeSingle(),
+      supabase
+        .from("clients")
+        .select("id, alamat_lat, alamat_lon")
+        .eq("id", clientId)
+        .maybeSingle(),
       supabase
         .from("services")
         .select("id")
@@ -227,7 +267,7 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
         .maybeSingle(),
       supabase
         .from("partners")
-        .select("id")
+        .select("id, lat, lon")
         .eq("id", partnerId)
         .eq("aktif", true)
         .maybeSingle(),
@@ -241,6 +281,47 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
     return { ok: false, pesan: "Varian tidak tersedia untuk layanan ini." };
   }
   if (!mitra) return { ok: false, pesan: "Mitra tidak tersedia. Pilih mitra yang aktif." };
+
+  // Saran jenjang, dihitung dari koordinat AUTORITATIF yang baru dibaca di
+  // atas — bukan dari nilai yang diklaim FormData. `null` berarti sistem
+  // tidak punya pendapat (koordinat kosong), dan itu bukan galat: jenjang
+  // tetap NULL, admin menetapkannya belakangan lewat `tetapkanJenjang`.
+  const koordinatMitra =
+    mitra.lat != null && mitra.lon != null ? { lat: mitra.lat, lon: mitra.lon } : null;
+  const koordinatKlien =
+    klien.alamat_lat != null && klien.alamat_lon != null
+      ? { lat: klien.alamat_lat, lon: klien.alamat_lon }
+      : null;
+  const saran = saranJenjang(koordinatMitra, koordinatKlien);
+
+  // Jenjang final: mengikuti saran ('otomatis') KECUALI admin memilih nilai
+  // lain di pemilih ('admin', menuntut alasan). Perbandingannya dilakukan DI
+  // SINI, terhadap saran yang dihitung server sendiri — bukan mempercayai
+  // klaim FormData soal "ini penimpaan atau bukan". Tanpa saran, jenjang
+  // TIDAK PERNAH ditulis dari sini sama sekali, apa pun isi FormData-nya:
+  // pemilih di layar hanyalah perkiraan tanpa dasar untuk dibandingkan.
+  let jenjangSimpan: JenjangTransport | null = null;
+  let sumberSimpan: "otomatis" | "admin" | null = null;
+  let alasanSimpan = "";
+
+  if (saran) {
+    const jenjangKirim = String(formData.get("jenjang") ?? "").trim();
+    if (jenjangKirim && !JENJANG_SAH.includes(jenjangKirim as JenjangTransport)) {
+      return { ok: false, pesan: "Jenjang tidak sah. Pilih salah satu jenjang yang tersedia." };
+    }
+    if (jenjangKirim && jenjangKirim !== saran.jenjang) {
+      const alasanCek = periksaAlasanPenimpaan(String(formData.get("alasan") ?? ""));
+      if (!alasanCek.ok) {
+        return { ok: false, pesan: alasanCek.pesan };
+      }
+      jenjangSimpan = jenjangKirim as JenjangTransport;
+      sumberSimpan = "admin";
+      alasanSimpan = alasanCek.nilai;
+    } else {
+      jenjangSimpan = saran.jenjang;
+      sumberSimpan = "otomatis";
+    }
+  }
 
   // Paket dibaca dari klien yang dipilih — tidak pernah dari formulir.
   let paketId: string | null = null;
@@ -266,6 +347,9 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
     catatan: "",
     rekomendasi: "",
     client_package_id: paketId,
+    jenjang: jenjangSimpan,
+    jenjang_sumber: sumberSimpan,
+    jenjang_alasan: alasanSimpan,
   });
 
   if (error) return { ok: false, pesan: "Gagal menyimpan jadwal sesi." };
@@ -341,18 +425,24 @@ export async function selesaikanSesi(
 }
 
 /**
- * Menetapkan atau MENIMPA jenjang transport sebuah sesi.
+ * MENGOREKSI jenjang transport sebuah sesi yang SUDAH ADA.
  *
- * `saranJenjang()` (`@/lib/transport/saran`) hanya MENYARANKAN — ia dihitung
- * di klien dari koordinat yang tersedia dan tidak pernah menulis apa pun.
- * Fungsi inilah satu-satunya jalur yang benar-benar mengubah
- * `sessions.jenjang`, dan ia SELALU dianggap penimpaan admin:
+ * `jadwalkanSesi` dan `konfirmasiPermintaan` sudah menghitung & menyimpan
+ * jenjang saat sesinya LAHIR (Ruling 11) — di sanalah mitra ditugaskan dan
+ * kedua koordinat sudah diketahui pada klik yang sama, jadi penimpaan admin
+ * SAAT MEMBUAT sesi pun ditangani di sana, bukan di sini. Fungsi inilah yang
+ * dipakai belakangan: alamat ternyata meleset, geocoding-nya salah, atau
+ * sesinya lahir tanpa koordinat sama sekali (`jenjang` masih NULL) dan admin
+ * baru sekarang tahu jenjang yang benar. Dipanggil dari laci "ubah jenjang"
+ * pada baris sesi (`form-selesai.tsx`).
+ *
+ * Karena ia mengoreksi sesudah fakta, ia SELALU dianggap penimpaan admin:
  *
  *  1. `jenjang_sumber` ditulis MATI sebagai `'admin'` — keadaan tujuan tidak
  *     pernah datang dari FormData, pola yang sama dengan `status: "selesai"`
  *     di `selesaikanSesi` dan `status: "dikonfirmasi"` di `konfirmasiPermintaan`.
- *     Jenjang bersumber `'otomatis'` (bila kelak ada jalurnya) tidak pernah
- *     lewat sini.
+ *     Jenjang bersumber `'otomatis'` hanya lahir di `jadwalkanSesi`/
+ *     `konfirmasiPermintaan`, tidak pernah lewat sini.
  *
  *  2. Alasan WAJIB dan divalidasi sebagai KALIMAT di `periksaAlasanPenimpaan`
  *     (status.ts) sebelum menyentuh basis data — CHECK
@@ -365,6 +455,10 @@ export async function selesaikanSesi(
  *     dengan enum `jenjang_transport`) SEBELUM menulis — nilai yang bukan
  *     anggota enum itu ditolak dengan kalimat, bukan menunggu error Postgres
  *     dari CHECK/enum di baris insert.
+ *
+ * Sengaja TIDAK memeriksa `status` sesi (beda dari `selesaikanSesi`): jenjang
+ * adalah data logistik/tagihan yang bisa saja perlu dikoreksi bahkan sesudah
+ * sesinya selesai atau batal — riwayat tarifnya tetap harus benar.
  *
  * TIDAK ADA satu rupiah pun di sini: sesi menyimpan JENJANG (data
  * operasional), dan rupiahnya baru diturunkan dari `transport_rates` di panel
