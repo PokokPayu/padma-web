@@ -166,7 +166,7 @@ async function main() {
         memuat(teksBeranda, "Klien belum aktif"),
       `isi: ${teksBeranda.slice(0, 140)}`,
     );
-    // Nominal uang tidak pernah tampil di panel admin — `service_rates`
+    // Nominal uang tidak pernah tampil di panel admin — `variant_rates`
     // mengembalikan [] untuk admin dengan HTTP 200, dan tidak ada halaman admin
     // yang boleh menampilkan angka rupiah.
     catat(

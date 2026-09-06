@@ -46,6 +46,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -159,8 +160,13 @@ async function siapkan() {
   ]);
 }
 
+// Sejak Task 9 `sessions.variant_id` NOT NULL: id-nya lahir
+// `gen_random_uuid()` saat migrasi/trigger berjalan, jadi dibaca dari basis
+// data sekali di `beforeAll` alih-alih ditulis literal.
+const variantPerSvc = new Map<string, string>();
+
 function baris(id: string, ubah: Record<string, unknown>) {
-  return {
+  const dasar = {
     id,
     client_id: KLIEN,
     client_package_id: null,
@@ -172,6 +178,9 @@ function baris(id: string, ubah: Record<string, unknown>) {
     rekomendasi: "",
     ...ubah,
   };
+  const serviceId = dasar.service_id as string;
+  const variantId = (dasar as Record<string, unknown>).variant_id ?? variantPerSvc.get(serviceId);
+  return { ...dasar, variant_id: variantId };
 }
 
 async function statusSesi(id: string): Promise<string> {
@@ -205,6 +214,8 @@ beforeAll(async () => {
   // miliknya sendiri.
   const { data } = await sesiAdmin.auth.getUser();
   idAdmin = data.user!.id;
+  variantPerSvc.set(SVC_MASSAGE, await varianBaku(admin, SVC_MASSAGE));
+  variantPerSvc.set(SVC_NUTRISI, await varianBaku(admin, SVC_NUTRISI));
 });
 
 beforeEach(async () => {
@@ -313,6 +324,102 @@ describe("daftar tagihan admin", () => {
     expect(daftar.filter((t) => t.status === "menunggu_verifikasi").length).toBe(
       sebelum - 1,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Label tagihan menyertakan varian (Task 7)
+// ---------------------------------------------------------------------------
+
+describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
+  // Fixture SENDIRI, bukan SVC_MASSAGE/SVC_NUTRISI seed: dua sesi layanan
+  // yang sama bisa berbeda harga bila variannya berbeda, dan label yang tidak
+  // menyebut variannya membuat klien ditagih untuk hal yang salah.
+  const SVC_VARIAN = "11111111-1111-1111-1111-111111111c01";
+  const VARIAN_NAMED = "77777777-7777-7777-7777-777777777c01";
+  const SESI_VARIAN = "66666666-6666-6666-6666-666666666c01";
+
+  beforeAll(async () => {
+    await admin.from("services").insert({
+      id: SVC_VARIAN,
+      phase_id: "prekonsepsi",
+      nama: "PAD-UJI Layanan Varian Tagihan",
+      deskripsi: "fixture",
+    });
+    // Trigger `trg_terbitkan_varian_baku` sudah menerbitkan varian baku untuk
+    // layanan di atas; baris di bawah adalah varian BERNAMA yang dipesan sesi
+    // uji ini — beda varian, beda harga, karena itu labelnya wajib beda juga.
+    await admin.from("service_variants").insert({
+      id: VARIAN_NAMED,
+      service_id: SVC_VARIAN,
+      label: "VIP",
+      durasi_menit: 90,
+      format: "private",
+      urutan: 1,
+    });
+    await admin.from("sessions").insert(
+      baris(SESI_VARIAN, {
+        service_id: SVC_VARIAN,
+        variant_id: VARIAN_NAMED,
+        status_bayar: "belum",
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await admin.from("sessions").delete().eq("id", SESI_VARIAN);
+    // `service_variants` dulu — FK menahan penghapusan `services` di bawah.
+    // Dihapus per SERVICE_ID (bukan hanya VARIAN_NAMED): trigger
+    // `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
+    // dengan id acak yang tidak kita catat.
+    await admin.from("service_variants").delete().eq("service_id", SVC_VARIAN);
+    await admin.from("services").delete().eq("id", SVC_VARIAN);
+  });
+
+  it("label menyertakan nama layanan DAN label varian", async () => {
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN);
+    expect(item).toBeDefined();
+    expect(item!.label).toContain("PAD-UJI Layanan Varian Tagihan");
+    expect(item!.label).toContain("VIP");
+    expect(item!.label).toMatch(/90 menit/);
+  });
+
+  it("varian BAKU (tanpa nama) tidak menambah apa pun ke label — perilaku lama dipertahankan", async () => {
+    // SESI_MENUNGGU (fixture modul ini) tidak pernah menyetel `variant_id`,
+    // jadi baris ini membuktikan sesi TANPA varian bernama tetap berlabel
+    // persis seperti sebelum Task 7: "<nama layanan> · <tanggal>" — satu
+    // pemisah " · " saja.
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_MENUNGGU);
+    expect(item).toBeDefined();
+    expect((item!.label.match(/ · /g) ?? []).length).toBe(1);
+  });
+
+  // Ruling 13 (Task 9): sebelum ini, `susunTagihan()` sisi klien tidak
+  // menyebut varian sama sekali sementara `daftarTagihanAdmin()` sudah
+  // menyebutnya sejak Task 7 — admin dan klien membaca label BERBEDA untuk
+  // sesi yang SAMA, dan jaminan "label klien & admin sama persis" yang
+  // tertulis di `susunTagihan()` jadi bohong. Dua test di bawah membuktikan
+  // klien kini menyebut variannya, dan bahwa keduanya kembali identik.
+  it("label sesi klien (susunTagihan) menyebut varian yang sama seperti admin (Ruling 13)", async () => {
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+
+    const item = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_VARIAN);
+    expect(item).toBeDefined();
+    expect(item!.label).toContain("VIP");
+    expect(item!.label).toMatch(/90 menit/);
+  });
+
+  it("label klien dan label admin IDENTIK huruf demi huruf untuk sesi ber-varian yang sama (Ruling 13)", async () => {
+    const labelAdmin = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN)!.label;
+
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+    const labelKlien = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_VARIAN)!.label;
+
+    expect(labelKlien).toBe(labelAdmin);
   });
 });
 
@@ -487,6 +594,7 @@ describe("halaman /admin/bayar", () => {
     for (const sumber of [sumberHalaman, sumberTabel, sumberAksi, sumberStatus, sumberData]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });

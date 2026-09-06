@@ -346,7 +346,9 @@ describe("yang TIDAK boleh ikut rusak", () => {
     expect(klien.data!.length).toBeGreaterThanOrEqual(2);
 
     const owner = await signInAs("owner@padma.test");
-    const tarif = await owner.from("service_rates").select("harga_klien");
+    // `service_rates` dijatuhkan Task 5 — tarif kini hidup di `variant_rates`,
+    // dijaga policy `user_role()` yang sama.
+    const tarif = await owner.from("variant_rates").select("harga_klien");
     expect(tarif.error).toBeNull();
     expect(tarif.data!.length).toBeGreaterThanOrEqual(10);
   });

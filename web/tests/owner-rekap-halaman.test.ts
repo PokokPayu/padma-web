@@ -91,6 +91,10 @@ vi.mock("next/navigation", () => ({
 
 const LAYANAN_BERTARIF = "11111111-1111-1111-1111-1111111111a5";
 const LAYANAN_TANPA_TARIF = "11111111-1111-1111-1111-1111111112a5";
+// Harga menempel di VARIAN sejak Task 3 — setiap layanan fixture di atas
+// memperoleh varian BAKU sendiri (label kosong, sama seperti backfill Task 1).
+const VARIAN_BERTARIF = "11111111-1111-1111-1111-2111111111a5";
+const VARIAN_TANPA_TARIF = "11111111-1111-1111-1111-2111111112a5";
 const TARIF_LAMA_ID = "99999999-9999-9999-9999-9999999999a5";
 
 const MITRA_A = "33333333-3333-3333-3333-3333333331a5"; // tidak pernah ditandai
@@ -146,11 +150,21 @@ async function bersihkan() {
   for (const mitra of [MITRA_A, MITRA_B, MITRA_C]) {
     await admin.from("honor_marks").delete().eq("partner_id", mitra);
   }
-  for (const svc of [LAYANAN_BERTARIF, LAYANAN_TANPA_TARIF]) {
-    await admin.from("service_rates").delete().eq("service_id", svc);
+  for (const v of [VARIAN_BERTARIF, VARIAN_TANPA_TARIF]) {
+    await admin.from("variant_rates").delete().eq("variant_id", v);
   }
   for (const mitra of [MITRA_A, MITRA_B, MITRA_C]) {
     await admin.from("partners").delete().eq("id", mitra);
+  }
+  // `service_variants` dulu — FK-nya menunjuk `services`, urutan penghapusan
+  // terbalik dari urutan penyisipan. Disapu per SERVICE_ID (bukan per id
+  // varian yang kita catat sendiri): trigger `trg_terbitkan_varian_baku`
+  // menerbitkan satu varian baku OTOMATIS begitu tiap layanan fixture
+  // disisipkan, dengan id acak yang tidak pernah kita tahu — menyapu hanya
+  // `VARIAN_BERTARIF` dkk. meninggalkan varian otomatis itu yatim, dan FK-nya
+  // menahan penghapusan `services` di bawah.
+  for (const svc of [LAYANAN_BERTARIF, LAYANAN_TANPA_TARIF]) {
+    await admin.from("service_variants").delete().eq("service_id", svc);
   }
   for (const svc of [LAYANAN_BERTARIF, LAYANAN_TANPA_TARIF]) {
     await admin.from("services").delete().eq("id", svc);
@@ -237,14 +251,20 @@ beforeAll(async () => {
       aktif: true,
     },
   ]);
+  // Setiap layanan wajib punya minimal satu varian (V3) — inilah yang dulu
+  // menempel di `services`, sejak Task 1 hidup terpisah di sini.
+  await admin.from("service_variants").insert([
+    { id: VARIAN_BERTARIF, service_id: LAYANAN_BERTARIF, label: "" },
+    { id: VARIAN_TANPA_TARIF, service_id: LAYANAN_TANPA_TARIF, label: "" },
+  ]);
   await admin.from("partners").insert([
     { id: MITRA_A, nama: "PAD-UJI Bidan Rekap Alfa", no_hp: "0811-0000-9201" },
     { id: MITRA_B, nama: "PAD-UJI Bidan Rekap Beta", no_hp: "0811-0000-9202" },
     { id: MITRA_C, nama: "PAD-UJI Bidan Rekap Gama", no_hp: "0811-0000-9203" },
   ]);
-  await admin.from("service_rates").insert({
+  await admin.from("variant_rates").insert({
     id: TARIF_LAMA_ID,
-    service_id: LAYANAN_BERTARIF,
+    variant_id: VARIAN_BERTARIF,
     harga_klien: HARGA,
     honor_mitra: HONOR,
     berlaku_sejak: BERLAKU_LAMA,
@@ -257,6 +277,12 @@ beforeAll(async () => {
     phase_id: "nifas",
   });
 
+  // `variant_id` diturunkan dari `layanan`: setiap layanan fixture di atas
+  // punya tepat satu varian baku, jadi pemetaannya tidak ambigu.
+  const variantDariLayanan = new Map([
+    [LAYANAN_BERTARIF, VARIAN_BERTARIF],
+    [LAYANAN_TANPA_TARIF, VARIAN_TANPA_TARIF],
+  ]);
   const sesi = (
     id: string,
     partner: string,
@@ -267,6 +293,7 @@ beforeAll(async () => {
     id,
     client_id: KLIEN,
     service_id: layanan,
+    variant_id: variantDariLayanan.get(layanan),
     partner_id: partner,
     tanggal,
     status,
@@ -343,7 +370,7 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
 
   it("ADMIN yang membaca rekap tidak memperoleh satu nominal pun", async () => {
     // Sesi memang terbaca staf operasional; yang WAJIB kosong adalah uangnya.
-    // Itu RLS `service_rates` yang menjawab, bukan penyaringan di TypeScript.
+    // Itu RLS `variant_rates` yang menjawab, bukan penyaringan di TypeScript.
     ref.sesi = sesiAdmin;
     const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_A);
     expect(pekan, "sesi hilang seluruhnya — assertion di bawah jadi hampa").toBeDefined();
@@ -659,8 +686,8 @@ describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah ditandai dibaya
     const sebelum = (await ambilRekap()).find((p) => p.senin === PEKAN_A)!;
 
     // Tarif baru berlaku hari ini — jauh sesudah seluruh sesi fixture.
-    const { error } = await admin.from("service_rates").insert({
-      service_id: LAYANAN_BERTARIF,
+    const { error } = await admin.from("variant_rates").insert({
+      variant_id: VARIAN_BERTARIF,
       harga_klien: HARGA * 3,
       honor_mitra: HONOR * 3,
       berlaku_sejak: HARI_INI,

@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const PARTNER_ID = "33333333-3333-3333-3333-333333333301"; // partner seed sungguhan
@@ -83,10 +84,12 @@ describe("daftarPenugasan — 'otomatis' tidak terpotong PostgREST max_rows (Fix
     klienIds.push(...(klien ?? []).map((k) => k.id as string));
     expect(klienIds).toHaveLength(JUMLAH_KLIEN);
 
+    const variantId = await varianBaku(admin, serviceId);
     const { error: eSesi } = await admin.from("sessions").insert(
       klienIds.map((clientId) => ({
         client_id: clientId,
         service_id: serviceId,
+        variant_id: variantId,
         partner_id: PARTNER_ID,
         tanggal: "2026-01-01",
         status: "selesai" as const,
@@ -105,6 +108,14 @@ describe("daftarPenugasan — 'otomatis' tidak terpotong PostgREST max_rows (Fix
       if (error) throw error;
     }
     if (serviceId) {
+      // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku
+      // otomatis begitu `services` disisipkan — FK-nya menahan penghapusan
+      // `services` sampai variannya ikut disapu duluan.
+      const { error: eVarian } = await admin
+        .from("service_variants")
+        .delete()
+        .eq("service_id", serviceId);
+      if (eVarian) throw eVarian;
       const { error } = await admin.from("services").delete().eq("id", serviceId);
       if (error) throw error;
     }

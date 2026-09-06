@@ -132,7 +132,10 @@ skrining, dan `/passport` masih memakainya.
 `nilai: number` dan fungsi format sebagai prop; keduanya tidak pernah tahu soal rupiah. Yang
 menyuntikkan `formatRupiah` hanya halaman owner. Pagar lama ("markup dashboard admin tidak
 mengandung `Rp\s?\d`") tetap berlaku, ditambah pagar baru: `src/lib/admin/tren.ts` tidak boleh
-menyentuh `service_rates` maupun `honor_marks`, dan tidak boleh memuat `createAdminSupabase`.
+menyentuh `variant_rates` maupun `harga_publik` (tabel & view uang yang menggantikan
+`service_rates`, dijatuhkan oleh branch varian-layanan — lihat
+`docs/superpowers/specs/2026-09-06-padma-varian-layanan-design.md`) maupun `honor_marks`, dan
+tidak boleh memuat `createAdminSupabase`.
 
 ## 7. Logo baru
 

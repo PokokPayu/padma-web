@@ -5,10 +5,12 @@ import { signInAs, anonClient } from "./helpers/as-user";
 // Regression test untuk temuan red team: eskalasi hak lewat tabel `profiles`.
 // Akar masalah lama: policy "profil: staf kelola" (FOR ALL) membuat admin bisa
 // menulis kolom `role` — termasuk barisnya sendiri — menjadi 'owner', lalu
-// menembus money firewall (service_rates & honor_marks).
+// menembus money firewall (variant_rates & honor_marks; variant_rates
+// menggantikan service_rates sejak Task 3, service_rates sendiri dijatuhkan
+// Task 5).
 //
 // Invarian yang dijaga di sini:
-//   (a) hanya owner yang bisa menyentuh service_rates & honor_marks;
+//   (a) hanya owner yang bisa menyentuh variant_rates & honor_marks;
 //   (b) TIDAK ADA jalur bagi anon/klien/admin/owner (lewat API) untuk mengubah
 //       kolom `role` pada profiles — perubahan peran hanya lewat service-role;
 //   (c) klien hanya melihat datanya sendiri;
@@ -169,30 +171,47 @@ describe("HARDENING — kolom profiles.role tidak bisa disentuh lewat API", () =
 });
 
 describe("HARDENING — money firewall tetap utuh setelah percobaan eskalasi", () => {
-  it("admin (sesi baru) tetap 0 baris di service_rates & honor_marks", async () => {
+  it("admin (sesi baru) tetap 0 baris di variant_rates & honor_marks", async () => {
     const admin = await signInAs("admin@padma.test");
-    const rates = await admin.from("service_rates").select("harga_klien,honor_mitra");
+    const rates = await admin.from("variant_rates").select("harga_klien,honor_mitra");
     const honor = await admin.from("honor_marks").select("*");
     expect(rates.error).toBeNull();
     expect(rates.data).toHaveLength(0);
     expect(honor.data).toHaveLength(0);
   });
 
-  it("admin tidak bisa menembus lewat embedding services(service_rates)", async () => {
+  it("admin tidak bisa menembus lewat embedding services(service_variants(variant_rates))", async () => {
+    // Rantai FK berubah sejak Task 3: harga menempel di VARIAN, bukan lagi
+    // langsung di layanan (`services -> service_variants -> variant_rates`,
+    // dulu `services -> service_rates`). PostgREST mendukung embed BERSARANG
+    // sejauh dua lompatan FK — tembusan lewat rantai baru ini karena itu
+    // perlu dibuktikan sendiri, bukan diasumsikan tertutup oleh test lama.
     const admin = await signInAs("admin@padma.test");
     const { data, error } = await admin
       .from("services")
-      .select("nama, service_rates(harga_klien,honor_mitra)")
+      .select("nama, service_variants(variant_rates(harga_klien,honor_mitra))")
       .limit(5);
     expect(error).toBeNull();
-    for (const row of data ?? []) {
-      expect((row as { service_rates: unknown[] }).service_rates).toHaveLength(0);
+    const baris = (data ?? []) as { service_variants: { variant_rates: unknown[] }[] }[];
+    // Kontrol yang WAJIB dulu: tanpa ini, `service_variants` kosong (bukan
+    // tertutup RLS, melainkan memang tidak pernah embed) membuat badan loop di
+    // bawah tidak pernah berjalan dan ujinya hijau tanpa menembak jalur
+    // berisiko sama sekali — kelemahan yang tidak ada pada versi lama, karena
+    // di sana `toHaveLength` atas embed yang gagal melempar, bukan hijau diam.
+    expect(baris.length, "services kosong — embed tidak sempat diuji").toBeGreaterThan(0);
+    const seluruhVarian = baris.flatMap((row) => row.service_variants);
+    expect(
+      seluruhVarian.length,
+      "service_variants kosong — embed variant_rates tidak sempat diuji",
+    ).toBeGreaterThan(0);
+    for (const v of seluruhVarian) {
+      expect(v.variant_rates).toHaveLength(0);
     }
   });
 
-  it("owner TETAP bisa membaca service_rates (fungsi tidak ikut rusak)", async () => {
+  it("owner TETAP bisa membaca variant_rates (fungsi tidak ikut rusak)", async () => {
     const owner = await signInAs("owner@padma.test");
-    const { data, error } = await owner.from("service_rates").select("*");
+    const { data, error } = await owner.from("variant_rates").select("*");
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThanOrEqual(10);
   });

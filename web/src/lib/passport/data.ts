@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
+import type { FormatVarian } from "@/lib/varian";
 import { saringDaftarMateri } from "./materi-tampil";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
 
@@ -69,24 +70,43 @@ type BarisSesi = {
   status_bayar: PayStatus;
   client_package_id: string | null;
   service_id: string;
+  variant_id: string;
   partner_id: string;
   services: { nama: string } | null;
 };
 
 type BarisMitra = { id: string; nama: string };
 
+type BarisVarianSesi = {
+  id: string;
+  label: string;
+  durasi_menit: number | null;
+  format: FormatVarian | null;
+};
+
+// Varian baku (label kosong, durasi & format NULL) — jatuh-tempo bila
+// `variant_id` sesi entah kenapa tidak ditemukan di katalog varian (tidak
+// pernah terjadi lewat jalur tulis manapun sejak `service_variants` melarang
+// DELETE, tetapi `labelVarian()` tetap butuh sesuatu untuk dipanggil).
+const VARIAN_BAKU = { label: "", durasiMenit: null, format: null } as const;
+
 export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
   const supabase = await createServerSupabase();
 
-  // DUA QUERY, digabung di JS — sengaja TIDAK memakai embed PostgREST ke view
-  // nama mitra. Embed ke sebuah VIEW bergantung pada inferensi relasi yang
-  // tidak dijamin, dan kegagalannya SENYAP (nama bidan jadi null, atau dengan
-  // `!inner` seluruh riwayat kosong tanpa error). Dua query selalu bekerja.
-  const [{ data: sesi }, { data: mitra }] = await Promise.all([
+  // TIGA QUERY, digabung di JS — sengaja TIDAK memakai embed PostgREST ke
+  // view nama mitra maupun ke `service_variants`. Embed ke sebuah VIEW
+  // bergantung pada inferensi relasi yang tidak dijamin, dan kegagalannya
+  // SENYAP (nama bidan jadi null, atau dengan `!inner` seluruh riwayat kosong
+  // tanpa error). `service_variants` pun tidak bisa di-embed langsung dari
+  // `sessions`: FK-nya gabungan (service_id, variant_id), dan PostgREST butuh
+  // hint constraint untuk embed semacam itu — pola yang sama dipakai
+  // `daftarTagihanAdmin()` (`@/lib/admin/tagihan`). Query terpisah selalu
+  // bekerja.
+  const [{ data: sesi }, { data: mitra }, { data: varian }] = await Promise.all([
     supabase
       .from("sessions")
       .select(
-        "id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, partner_id, services(nama)",
+        "id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, services(nama)",
       )
       .eq("client_id", clientId) // eksplisit, walau RLS sudah menyaring
       // `tanggal` bertipe date dan sudah berupa string YYYY-MM-DD: urutannya
@@ -94,22 +114,36 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
       .order("tanggal", { ascending: false })
       .returns<BarisSesi[]>(),
     supabase.from("partner_publik").select("id, nama").returns<BarisMitra[]>(),
+    // Katalog varian saja — RLS "service_variants: baca terautentikasi"
+    // menjawab TRUE untuk siapa pun yang login, jadi baris ini tetap ada bagi
+    // klien walau variannya sendiri sudah dinonaktifkan admin sesudahnya.
+    supabase
+      .from("service_variants")
+      .select("id, label, durasi_menit, format")
+      .returns<BarisVarianSesi[]>(),
   ]);
 
   const namaMitraPer = new Map((mitra ?? []).map((m) => [m.id, m.nama]));
+  const varianPerId = new Map((varian ?? []).map((v) => [v.id, v] as const));
 
-  return (sesi ?? []).map((r) => ({
-    id: r.id,
-    serviceId: r.service_id,
-    namaLayanan: r.services?.nama ?? "Layanan",
-    namaMitra: namaMitraPer.get(r.partner_id) ?? "Tim PADMA",
-    tanggal: r.tanggal,
-    status: r.status,
-    clientPackageId: r.client_package_id,
-    catatan: r.catatan ?? "",
-    rekomendasi: r.rekomendasi ?? "",
-    statusBayar: r.status_bayar,
-  }));
+  return (sesi ?? []).map((r) => {
+    const v = varianPerId.get(r.variant_id);
+    return {
+      id: r.id,
+      serviceId: r.service_id,
+      namaLayanan: r.services?.nama ?? "Layanan",
+      namaMitra: namaMitraPer.get(r.partner_id) ?? "Tim PADMA",
+      tanggal: r.tanggal,
+      status: r.status,
+      clientPackageId: r.client_package_id,
+      catatan: r.catatan ?? "",
+      rekomendasi: r.rekomendasi ?? "",
+      statusBayar: r.status_bayar,
+      varian: v
+        ? { label: v.label, durasiMenit: v.durasi_menit, format: v.format }
+        : VARIAN_BAKU,
+    };
+  });
 }
 
 type BarisPaket = {

@@ -19,6 +19,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { awalPekan, geserHari } from "@/lib/owner/pekan";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -79,6 +80,7 @@ beforeAll(async () => {
   const dasarSesi = {
     client_id: KLIEN_UJI,
     service_id: SVC,
+    variant_id: await varianBaku(admin, SVC),
     partner_id: MITRA,
     status_bayar: "belum" as const,
     catatan: "",
@@ -166,6 +168,7 @@ describe("trenSesiSelesai", () => {
     expect(sumber).not.toContain("createAdminSupabase");
     expect(sumber).not.toContain("SERVICE_ROLE");
     expect(sumber).not.toContain("service_rates");
+    expect(sumber).not.toContain("variant_rates");
     expect(sumber).not.toContain("honor_marks");
     expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
   });

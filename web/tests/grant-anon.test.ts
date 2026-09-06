@@ -6,7 +6,8 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
 /**
  * PERTAHANAN BERLAPIS — hak tabel peran `anon`.
  *
- * Temuan auditor: `service_rates`, `honor_marks`, dan `material_videos` sudah
+ * Temuan auditor: tabel uang (kini `variant_rates`, dulu `service_rates`
+ * sebelum dijatuhkan Task 5), `honor_marks`, dan `material_videos` sudah
  * dicabut hak `anon`-nya, tetapi tabel data pasien (`clients`, `sessions`,
  * `screenings`, `materials`, `material_pages`, `profiles`, dan kerabatnya)
  * masih memegang GRANT `anon` PENUH — SELECT sampai TRUNCATE. Keamanannya
@@ -23,8 +24,9 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
  * Invarian yang dijaga di sini:
  *   1. peran `anon` tidak memegang hak APA PUN (tabel maupun kolom) atas tabel
  *      data pasien/operasional/internal;
- *   2. `anon` tetap boleh SELECT katalog publik (phases/services/packages) —
- *      bahan landing Plan 2 — tetapi TIDAK boleh menulisnya;
+ *   2. `anon` tetap boleh SELECT katalog publik
+ *      (phases/services/packages/service_variants) — bahan landing Plan 2 —
+ *      tetapi TIDAK boleh menulisnya;
  *   3. lewat REST, anon menabrak 42501 (permission denied) lebih dulu, bukan
  *      diam-diam "0 baris";
  *   4. yang TIDAK boleh ikut rusak: registrasi & login Supabase Auth, akses
@@ -53,12 +55,12 @@ const TABEL_TERTUTUP_ANON = [
   "partners",
   "app_settings",
   // tabel uang
-  "service_rates",
+  "variant_rates",
   "honor_marks",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
-const TABEL_KATALOG_PUBLIK = ["phases", "services", "packages"] as const;
+const TABEL_KATALOG_PUBLIK = ["phases", "services", "packages", "service_variants"] as const;
 
 const HAK_TABEL = [
   "SELECT",
@@ -141,7 +143,7 @@ describe("GRANT anon — perilaku lewat REST: ditolak 42501, bukan '0 baris'", (
     "material_videos",
     "partners",
     "app_settings",
-    "service_rates",
+    "variant_rates",
     "honor_marks",
   ] as const;
 
@@ -210,7 +212,8 @@ describe("GRANT anon — yang TIDAK boleh ikut rusak", () => {
     expect(semuaKlien.data!.length).toBeGreaterThanOrEqual(2);
 
     const owner = await signInAs("owner@padma.test");
-    const tarif = await owner.from("service_rates").select("harga_klien");
+    // `service_rates` dijatuhkan Task 5 — tarif kini hidup di `variant_rates`.
+    const tarif = await owner.from("variant_rates").select("harga_klien");
     expect(tarif.error).toBeNull();
     expect(tarif.data!.length).toBeGreaterThanOrEqual(10);
   });

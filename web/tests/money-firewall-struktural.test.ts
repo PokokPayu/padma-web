@@ -12,9 +12,16 @@ import { querySql } from "./helpers/db";
  * baca — firewall bocor tanpa satu pun assertion berubah merah.
  *
  * Invarian yang dijaga di sini: KOLOM NOMINAL UANG HANYA BOLEH HIDUP DI
- * `service_rates` DAN `honor_marks`. Dijaga dengan membaca
+ * `variant_rates` DAN `honor_marks`. Dijaga dengan membaca
  * information_schema.columns, jadi berlaku untuk kolom yang BELUM ADA saat
  * test ini ditulis — termasuk kolom pada tabel yang belum lahir (Plan 2 dst).
+ *
+ * `variant_rates` (migration `tarif_per_varian`) ditambahkan SADAR, bukan
+ * pengecualian diam-diam: ia pengganti `service_rates` per varian, membawa
+ * SELURUH pagar uangnya (lihat tests/varian-tarif-pengerasan.test.ts), dan
+ * bukan bocoran baru. `service_rates` dibubarkan (migration
+ * `bubarkan_service_rates`, Task 5); tarif kini hidup HANYA di
+ * `variant_rates` — daftarnya tidak diperlebar, ia dipindahkan.
  *
  * Yang sengaja TIDAK dituduh: kolom STATUS. `sessions.status_bayar` dan
  * `client_packages.status_bayar` memang mengandung kata "bayar", tetapi
@@ -23,10 +30,46 @@ import { querySql } from "./helpers/db";
  * (menagih, memverifikasi) tanpa pernah melihat angka rupiah. Pengecualiannya
  * DIIKAT KE TIPE: `status_bayar int` tetap akan merah, karena itu nominal yang
  * menyamar sebagai status.
+ *
+ * Yang sengaja TIDAK dituduh (kedua): VIEW `harga_publik`. Ini bukan celah
+ * yang sama dengan yang ditolak `lib/owner/rekap.ts` — penolakan di sana
+ * menyasar view AGREGAT yang diam-diam melewati RLS dan pernah membocorkan
+ * rate card LENGKAP (termasuk honor) ke admin lewat SELECT biasa. View ini
+ * sebaliknya: sempit, disengaja, dan pagarnya justru ADA di kolomnya —
+ * `honor_mitra` tidak pernah ikut diproyeksikan, dan daftar empat kolom yang
+ * boleh tampil dikunci sebagai assertion terpisah di
+ * tests/harga-publik.test.ts. Harga klien memang DIPUTUSKAN tampil publik
+ * (spec V4, §4.4); yang tidak berubah adalah honor mitra tidak pernah keluar
+ * dari `variant_rates`. Pengecualian di bawah karena itu HANYA membebaskan
+ * `harga_klien` & `harga_coret` pada view ini — bukan seluruh view, bukan
+ * melebarkan `TABEL_UANG`, dan bukan melonggarkan `POLA_NOMINAL` — sehingga
+ * `honor_mitra` yang seandainya muncul di view ini tetap memerahkan uji ini.
  */
 
-/** Satu-satunya tempat sah bagi nominal uang. */
-const TABEL_UANG = new Set(["service_rates", "honor_marks"]);
+/**
+ * Satu-satunya tempat sah bagi nominal uang.
+ *
+ * `service_rates` dibubarkan (migration `bubarkan_service_rates`); tarif kini
+ * per VARIAN. Daftarnya tidak diperlebar — ia dipindahkan.
+ */
+const TABEL_UANG = new Set(["variant_rates", "honor_marks"]);
+
+/**
+ * Satu-satunya view yang boleh memuat kolom nominal — dan hanya DUA kolomnya.
+ *
+ * Harga klien memang DIPUTUSKAN tampil publik (spec V4): pengunjung harus bisa
+ * melihat pricelist sebelum mendaftar. Yang tidak berubah: honor mitra tidak
+ * pernah keluar dari variant_rates, dan daftar kolom view ini dikunci terpisah
+ * di tests/harga-publik.test.ts.
+ *
+ * Pengecualian di bawah dipersempit ke KOLOM, bukan ke seluruh view: bila
+ * `honor_mitra` kelak muncul di proyeksi `harga_publik`, nama kolomnya sendiri
+ * tidak ada dalam daftar ini, sehingga uji ini TETAP merah — dua uji menjaga
+ * satu batas, bukan satu uji yang bisa dilewati begitu view-nya dikecualikan
+ * secara keseluruhan.
+ */
+const VIEW_HARGA_PUBLIK = "harga_publik";
+const KOLOM_HARGA_PUBLIK_DIIZINKAN = new Set(["harga_klien", "harga_coret"]);
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -96,9 +139,24 @@ beforeAll(async () => {
 });
 
 describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () => {
-  it("tidak ada kolom bernuansa nominal uang di luar service_rates & honor_marks", () => {
+  it("service_rates sudah tidak ada — tarif hidup di variant_rates", async () => {
+    // `service_rates` dijatuhkan migration `bubarkan_service_rates` (Task 5):
+    // dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang
+    // tahu kapan. Uji ini menjaga agar tabelnya tidak diam-diam dihidupkan
+    // kembali oleh migrasi berikutnya.
+    const [row] = await querySql<{ ada: boolean }>(
+      `select to_regclass('public.service_rates') is not null as ada`,
+    );
+    expect(row.ada).toBe(false);
+  });
+
+  it("tidak ada kolom bernuansa nominal uang di luar variant_rates & honor_marks", () => {
     const pelanggaran = semuaKolom
       .filter((k) => !TABEL_UANG.has(k.table_name))
+      .filter(
+        (k) =>
+          !(k.table_name === VIEW_HARGA_PUBLIK && KOLOM_HARGA_PUBLIK_DIIZINKAN.has(k.column_name)),
+      )
       .filter((k) => bernuansaUang(k.column_name))
       .filter((k) => !statusSah(k))
       .map((k) => `${k.table_name}.${k.column_name} (${k.data_type})`);
@@ -118,8 +176,8 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
       .filter((k) => TABEL_UANG.has(k.table_name))
       .map((k) => `${k.table_name}.${k.column_name}`);
 
-    expect(diTabelUang).toContain("service_rates.harga_klien");
-    expect(diTabelUang).toContain("service_rates.honor_mitra");
+    expect(diTabelUang).toContain("variant_rates.harga_klien");
+    expect(diTabelUang).toContain("variant_rates.honor_mitra");
   });
 
   it("kolom STATUS bayar TIDAK dituduh sebagai nominal (bukan false positive)", () => {

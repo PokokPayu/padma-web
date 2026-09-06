@@ -4,6 +4,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 import { OBJEK_VIDEO_TERBUKA } from "./helpers/materi-video-fixture";
 
 // `createServerSupabase()` membaca `cookies()` dari next/headers, yang hanya
@@ -180,6 +181,17 @@ describe("ambilSesi", () => {
     const { ambilSesi } = await import("@/lib/passport/data");
     await expect(ambilSesi(RINA)).resolves.toEqual([]);
   });
+
+  it("membawa medan varian (Ruling 13) — dibutuhkan susunTagihan() untuk label", async () => {
+    const { ambilSesi } = await import("@/lib/passport/data");
+    const sesi = await ambilSesi(ANANDA);
+    // Seluruh sesi seed lahir dengan variant_id BAKU (label kosong, durasi
+    // & format NULL) — bentuknya harus tetap berupa objek, bukan hilang.
+    for (const s of sesi) {
+      expect(s.varian).toBeDefined();
+      expect(typeof s.varian.label).toBe("string");
+    }
+  });
 });
 
 describe("ambilPaket", () => {
@@ -323,10 +335,11 @@ describe("ambilPermintaanJadwal", () => {
   });
 
   it("hanya permintaan berstatus menunggu milik klien yang ditampilkan", async () => {
+    const varianYoga = await varianBaku(svc, SVC_YOGA);
     const { data: baris } = await svc.from("booking_requests").insert([
-      { client_id: ANANDA, service_id: SVC_YOGA, tanggal: "2026-12-18", preferensi_waktu: "pagi", status: "menunggu" },
-      { client_id: ANANDA, service_id: SVC_YOGA, tanggal: "2026-12-19", preferensi_waktu: "sore", status: "dikonfirmasi" },
-      { client_id: RINA, service_id: SVC_YOGA, tanggal: "2026-12-17", preferensi_waktu: "siang", status: "menunggu" },
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-18", preferensi_waktu: "pagi", status: "menunggu" },
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-19", preferensi_waktu: "sore", status: "dikonfirmasi" },
+      { client_id: RINA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-17", preferensi_waktu: "siang", status: "menunggu" },
     ]).select("id, tanggal, status");
     for (const b of baris ?? []) bersihkan.push(b.id);
 

@@ -33,6 +33,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -110,9 +111,15 @@ async function permintaanUji() {
   return data ?? [];
 }
 
+let VARIAN_NUTRISI: string;
+
 beforeAll(async () => {
   sesiAnanda = await signInAs("ananda@padma.test");
   ref.sesi = sesiAnanda;
+  // Sejak Task 9 `variant_id` NOT NULL di kedua tabel: id-nya lahir
+  // `gen_random_uuid()` saat migrasi/trigger berjalan, jadi dibaca dari basis
+  // data sekali di sini alih-alih ditulis literal.
+  VARIAN_NUTRISI = await varianBaku(admin, SVC_NUTRISI);
 
   const { data: rina } = await admin
     .from("clients")
@@ -127,6 +134,7 @@ beforeAll(async () => {
       id: sesiUjiRina,
       client_id: rinaClientId,
       service_id: SVC_MASSAGE,
+      variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA,
       tanggal: "2026-11-20",
       status: "terjadwal",
@@ -323,7 +331,7 @@ describe("penjaga peran di dalam server action (bukan hanya di layout)", () => {
   it("staf yang memanggil action ajukan jadwal dialihkan requireRole", async () => {
     ref.sesi = await signInAs("admin@padma.test");
     await expect(
-      ajukanJadwal(formulir({ layanan: SVC_NUTRISI, tanggal: TGL_UJI, waktu: "pagi" })),
+      ajukanJadwal(formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_UJI, waktu: "pagi" })),
     ).rejects.toThrow(/REDIRECT \/setelah-masuk/);
     expect(await permintaanUji()).toHaveLength(0);
   });
@@ -343,7 +351,13 @@ describe("ajukan jadwal", () => {
 
   it("permintaan sah tersimpan berstatus 'menunggu', BUKAN 'dikonfirmasi'", async () => {
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_UJI, waktu: "sore", catatan: "tolong sore" }),
+      formulir({
+        layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
+        tanggal: TGL_UJI,
+        waktu: "sore",
+        catatan: "tolong sore",
+      }),
     );
     expect(r.ok).toBe(true);
 
@@ -362,6 +376,7 @@ describe("ajukan jadwal", () => {
     const r = await ajukanJadwal(
       formulir({
         layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
         tanggal: TGL_UJI,
         waktu: "pagi",
         status: "dikonfirmasi",
@@ -375,21 +390,21 @@ describe("ajukan jadwal", () => {
 
   it("tanggal wajib berbentuk YYYY-MM-DD (kolom `tanggal` dibandingkan sebagai string)", async () => {
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: "17 November 2026", waktu: "pagi" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: "17 November 2026", waktu: "pagi" }),
     );
     expect(r.ok).toBe(false);
     expect(await permintaanUji()).toHaveLength(0);
   });
 
   it("layanan kosong ditolak sebelum menyentuh basis data", async () => {
-    const r = await ajukanJadwal(formulir({ layanan: "", tanggal: TGL_UJI, waktu: "pagi" }));
+    const r = await ajukanJadwal(formulir({ layanan: "", varian: VARIAN_NUTRISI, tanggal: TGL_UJI, waktu: "pagi" }));
     expect(r.ok).toBe(false);
     expect(await permintaanUji()).toHaveLength(0);
   });
 
   it("preferensi waktu di luar daftar ditolak", async () => {
     const r = await ajukanJadwal(
-      formulir({ layanan: SVC_NUTRISI, tanggal: TGL_UJI, waktu: "tengah malam" }),
+      formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_UJI, waktu: "tengah malam" }),
     );
     expect(r.ok).toBe(false);
     expect(await permintaanUji()).toHaveLength(0);
@@ -399,6 +414,7 @@ describe("ajukan jadwal", () => {
     const r = await ajukanJadwal(
       formulir({
         layanan: SVC_NUTRISI,
+        varian: VARIAN_NUTRISI,
         tanggal: TGL_UJI,
         waktu: "siang",
         catatan: "x".repeat(500),
@@ -413,6 +429,7 @@ describe("ajukan jadwal", () => {
     const r = await ajukanJadwal(
       formulir({
         layanan: "11111111-1111-1111-1111-1111111119ff",
+        varian: VARIAN_NUTRISI,
         tanggal: TGL_UJI,
         waktu: "pagi",
       }),
@@ -632,6 +649,14 @@ describe("halaman ajukan jadwal — bentuk formulir", () => {
     expect(m).toContain('name="tanggal"');
     expect(m).toContain('name="layanan"');
     for (const w of ["pagi", "siang", "sore"]) expect(m).toContain(w);
+  });
+
+  it("menawarkan varian sebagai pilihan kedua (Task 9)", async () => {
+    // Sejak `variant_id` wajib, klien harus memilih variannya sendiri — bukan
+    // hanya layanan. Setiap layanan wajib punya minimal satu varian aktif
+    // (V3 spec), jadi select ini tidak pernah kosong untuk katalog seed.
+    const m = await markup();
+    expect(m).toContain('name="varian"');
   });
 
   it("berkata jujur bahwa ini permintaan, bukan booking final", async () => {

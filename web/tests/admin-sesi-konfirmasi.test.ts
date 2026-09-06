@@ -35,6 +35,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -126,15 +127,21 @@ async function baris(id: string) {
 async function sesiPadaTanggal() {
   const { data } = await admin
     .from("sessions")
-    .select("id, client_id, service_id, partner_id, status, booking_request_id")
+    .select("id, client_id, service_id, variant_id, partner_id, status, booking_request_id")
     .eq("tanggal", TGL);
   return data ?? [];
 }
+
+let VARIAN_SVC: string;
 
 beforeAll(async () => {
   sesiAdmin = await signInAs("admin@padma.test");
   sesiKlien = await signInAs("ananda@padma.test");
   ref.sesi = sesiAdmin;
+  // Sejak Task 9 `booking_requests.variant_id`/`sessions.variant_id` NOT
+  // NULL: id-nya lahir `gen_random_uuid()` saat migrasi/trigger berjalan,
+  // jadi dibaca dari basis data sekali di sini alih-alih ditulis literal.
+  VARIAN_SVC = await varianBaku(admin, SVC);
 
   await admin.from("partners").upsert(
     {
@@ -162,6 +169,7 @@ beforeEach(async () => {
     .insert({
       client_id: KLIEN,
       service_id: SVC,
+      variant_id: VARIAN_SVC,
       tanggal: TGL,
       preferensi_waktu: "pagi",
       catatan: "Kalau bisa sebelum pukul 9.",
@@ -189,6 +197,7 @@ describe("konfirmasi permintaan jadwal", () => {
     expect(sesi[0]).toMatchObject({
       client_id: KLIEN,
       service_id: SVC,
+      variant_id: VARIAN_SVC, // varian ikut dari permintaan asalnya (Task 9)
       partner_id: MITRA,
       status: "terjadwal",
       booking_request_id: permintaanId,
@@ -205,6 +214,9 @@ describe("konfirmasi permintaan jadwal", () => {
     expect(badan).not.toContain("formData");
     expect(badan).toMatch(/client_id:\s*\w+\.client_id/);
     expect(badan).toMatch(/service_id:\s*\w+\.service_id/);
+    // Varian sejak Task 9: harga menempel di varian, bukan hanya layanan —
+    // membacanya dari payload membuka celah yang sama seperti client_id.
+    expect(badan).toMatch(/variant_id:\s*\w+\.variant_id/);
   });
 
   it("menyegarkan cache antrean admin dan passport klien", async () => {
@@ -241,6 +253,7 @@ describe("konfirmasi permintaan jadwal", () => {
     const { error } = await admin.from("sessions").insert({
       client_id: KLIEN,
       service_id: SVC,
+      variant_id: VARIAN_SVC,
       partner_id: MITRA,
       tanggal: TGL,
       status: "terjadwal",
@@ -381,6 +394,7 @@ describe("pagar basis data yang menopang modul ini", () => {
     const { error } = await sesiKlien.from("sessions").insert({
       client_id: KLIEN,
       service_id: SVC,
+      variant_id: VARIAN_SVC,
       partner_id: MITRA,
       tanggal: TGL,
       status: "terjadwal",
@@ -467,6 +481,7 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
     for (const sumber of [sumberHalaman, sumberAntrean, sumberAksi, sumberStatus]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });

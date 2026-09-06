@@ -45,13 +45,18 @@ function BarisRiwayat({ tarif }: { tarif: TarifRiwayat }) {
 
 function BarisLayanan({ baris, hariIni }: { baris: BarisRateCard; hariIni: string }) {
   const t = baris.berlaku;
+  // Varian baku (label kosong, satu-satunya varian layanan yang belum punya
+  // varian bernama) jatuh ke nama layanannya — keputusan tampilan ini milik
+  // layar, sesuai kontrak `labelVarian()`.
+  const namaTampilan = baris.labelVarian === "" ? baris.namaLayanan : baris.labelVarian;
   return (
     <>
       <tr className="border-b border-black/5 align-top">
         <td className="p-4">
-          <b className="text-[14px] text-night">{baris.namaLayanan}</b>
+          <b className="text-[14px] text-night">{namaTampilan}</b>
           <span className="mt-0.5 block text-[11.5px] uppercase tracking-wider text-ink-soft">
             {baris.namaFase}
+            {baris.labelVarian !== "" && ` · ${baris.namaLayanan}`}
             {!baris.aktif && " · tidak ditawarkan lagi"}
           </span>
         </td>
@@ -79,11 +84,12 @@ function BarisLayanan({ baris, hariIni }: { baris: BarisRateCard; hariIni: strin
         </td>
         <td className="p-4">
           <FormTarif
-            serviceId={baris.serviceId}
-            namaLayanan={baris.namaLayanan}
+            variantId={baris.variantId}
+            namaLayanan={namaTampilan}
             hariIni={hariIni}
             hargaSekarang={t?.hargaKlien ?? null}
             honorSekarang={t?.honorMitra ?? null}
+            hargaCoretSekarang={t?.hargaCoret ?? null}
           />
         </td>
       </tr>
@@ -92,7 +98,7 @@ function BarisLayanan({ baris, hariIni }: { baris: BarisRateCard; hariIni: strin
           <td colSpan={6} className="px-4 pb-4">
             <details>
               <summary className="cursor-pointer text-[12px] font-bold text-ink-soft">
-                Riwayat tarif {baris.namaLayanan} ({baris.riwayat.length})
+                Riwayat tarif {namaTampilan} ({baris.riwayat.length})
               </summary>
               <ul className="mt-2 rounded-xl border border-black/10 bg-paper px-3.5 py-1">
                 {baris.riwayat.map((r) => (
@@ -140,9 +146,9 @@ export default async function TarifPage() {
       {belumBertarif.length > 0 && (
         <p className="mb-4 rounded-2xl border border-clay/35 bg-white px-5 py-4 text-[12.5px] leading-relaxed text-ink">
           <b className="text-clay">
-            {belumBertarif.length} layanan aktif belum punya tarif.
+            {belumBertarif.length} varian aktif belum punya tarif.
           </b>{" "}
-          Sesi yang sudah selesai pada layanan itu muncul di rekap sebagai{" "}
+          Sesi yang sudah selesai pada varian itu muncul di rekap sebagai{" "}
           <b>tak bertarif</b> dan honornya belum ikut dihitung di angka mana pun.
         </p>
       )}
@@ -162,7 +168,7 @@ export default async function TarifPage() {
             </thead>
             <tbody>
               {kartu.map((b) => (
-                <BarisLayanan key={b.serviceId} baris={b} hariIni={hariIni} />
+                <BarisLayanan key={b.variantId} baris={b} hariIni={hariIni} />
               ))}
             </tbody>
           </table>

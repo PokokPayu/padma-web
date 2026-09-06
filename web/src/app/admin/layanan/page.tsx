@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
 import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
 import { AksiLayanan, AksiPaket, FormLayananBaru, type PilihanFase } from "./form-layanan";
+import { BlokVarian } from "./form-varian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Layanan & Paket" };
@@ -52,10 +53,13 @@ export default async function LayananPage() {
       </header>
 
       <p className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] text-ink">
-        ✦ Layanan dan paket tidak pernah dihapus, hanya <b>dinonaktifkan</b>.
-        Yang nonaktif berhenti muncul di beranda dan berhenti ditawarkan untuk
-        sesi baru, tetapi namanya <b>tetap</b> menempel pada riwayat sesi klien
-        yang sudah berjalan. Menghapusnya justru akan memutus riwayat itu.
+        ✦ Layanan, paket, dan varian tidak pernah dihapus, hanya{" "}
+        <b>dinonaktifkan</b>. Yang nonaktif berhenti muncul di beranda dan
+        berhenti ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b>{" "}
+        menempel pada riwayat sesi klien yang sudah berjalan. Menghapusnya
+        justru akan memutus riwayat itu. Satu layanan tidak bisa kehilangan
+        varian aktif terakhirnya — aktifkan varian lain dulu sebelum
+        menonaktifkan yang sedang dipakai.
       </p>
 
       {katalog.map((f) => (
@@ -104,6 +108,8 @@ export default async function LayananPage() {
                       fase={pilihanFase}
                     />
                   </div>
+
+                  <BlokVarian serviceId={l.id} namaLayanan={l.nama} varian={l.varian} />
 
                   {l.paket.length > 0 && (
                     <ul className="mt-3 grid gap-2 border-t border-black/5 pt-3">

@@ -5,14 +5,18 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
   PANJANG_DESKRIPSI_MAKS,
+  periksaDurasiVarian,
+  periksaFormatVarian,
   periksaJumlahSesi,
+  periksaLabelVarian,
   periksaNama,
+  periksaUrutanVarian,
 } from "./status";
 
 /**
- * Jalur tulis panel admin untuk katalog layanan & paket.
+ * Jalur tulis panel admin untuk katalog layanan, paket, & varian.
  *
- * Enam aturan yang mengikat berkas ini:
+ * Enam aturan yang mengikat berkas ini — berlaku sama untuk ketiganya:
  *
  *  1. Server action adalah ENDPOINT POST TERSENDIRI. Penjaga di
  *     `src/app/admin/layout.tsx` tidak pernah dilewati saat action dipanggil
@@ -21,31 +25,42 @@ import {
  *     SELURUH pengunjung landing; endpoint terbuka di sini adalah papan nama
  *     klinik yang bisa ditulis ulang siapa saja.
  *
- *  2. KEADAAN TUJUAN TIDAK PERNAH MENJADI PARAMETER. Karena itu ada empat
+ *  2. KEADAAN TUJUAN TIDAK PERNAH MENJADI PARAMETER. Karena itu ada enam
  *     action keadaan terpisah (`aktifkanLayanan`/`nonaktifkanLayanan`,
- *     `aktifkanPaket`/`nonaktifkanPaket`), masing-masing dengan nilai `aktif`
- *     tertulis mati. `perbarui*` pun sengaja tidak pernah membaca medan `aktif`
- *     dari FormData.
+ *     `aktifkanPaket`/`nonaktifkanPaket`, `aktifkanVarian`/`nonaktifkanVarian`),
+ *     masing-masing dengan nilai `aktif` tertulis mati. `perbarui*` pun sengaja
+ *     tidak pernah membaca medan `aktif` dari FormData.
  *
- *  3. TIDAK ADA PENGHAPUSAN. Hak DELETE atas `services`/`packages` sudah
- *     dicabut dari `authenticated` (migration cabut_hak_hapus_berlebih):
- *     jawabannya 403/42501, bukan "0 baris". Menghapus baris layanan juga akan
- *     memutus `sessions.service_id` milik riwayat lama. Pensiun yang benar
- *     adalah `aktif = false`, dan hanya itu yang tersedia di sini.
+ *  3. TIDAK ADA PENGHAPUSAN. Hak DELETE atas `services`/`packages`/
+ *     `service_variants` sudah dicabut dari `authenticated` (migration
+ *     cabut_hak_hapus_berlebih & varian_layanan): jawabannya 403/42501, bukan
+ *     "0 baris". Menghapus baris layanan juga akan memutus `sessions.service_id`
+ *     milik riwayat lama; menghapus varian memutus `sessions.variant_id` DAN
+ *     baris tarif per varian (wilayah owner) yang menunjuknya — riwayat sesi
+ *     maupun riwayat tarif sekaligus. Pensiun yang benar adalah `aktif =
+ *     false`, dan hanya itu yang tersedia di sini.
  *
- *  4. `perbaruiPaket` TIDAK PERNAH memindahkan paket ke layanan lain. Setiap
- *     baris `client_packages` yang sudah menunjuk paket ini akan ikut berpindah
- *     arti — progres passport orang lain berganti layanan tanpa satu pun error.
+ *  4. `perbaruiPaket` DAN `perbaruiVarian` TIDAK PERNAH memindahkan barisnya
+ *     ke layanan lain. Setiap baris `client_packages`/`sessions` yang sudah
+ *     menunjuknya akan ikut berpindah arti — progres passport atau riwayat
+ *     harga orang lain berganti layanan tanpa satu pun error.
  *
  *  5. UPDATE yang tertahan dijawab PostgREST 200 + []. Melaporkan "berhasil"
  *     tanpa memeriksa panjangnya adalah kebohongan senyap.
  *
  *  6. Sesi pengguna, bukan service role. Di bawah service role `user_role()`
  *     mengembalikan 'klien' dan `auth.uid()` NULL: policy `services: staf
- *     kelola` dan `packages: staf kelola` tidak pernah ikut diperiksa.
+ *     kelola`, `packages: staf kelola`, dan `service_variants: staf kelola`
+ *     tidak pernah ikut diperiksa.
  *
  * Berkas `"use server"` hanya boleh mengekspor fungsi async — label, batas, dan
  * validator murni tinggal di `./status`.
+ *
+ * KHUSUS VARIAN — pagar yang BUKAN salah satu dari enam di atas: lihat
+ * catatan panjang di `nonaktifkanVarian()` soal "varian aktif terakhir".
+ * Pagar V3 ("setiap layanan wajib punya minimal satu varian") sendiri sudah
+ * ditegakkan trigger basis data `trg_terbitkan_varian_baku` (migrasi
+ * 20260906130000) — berkas ini TIDAK menduplikasinya.
  */
 type Gagal = { ok: false; pesan: string };
 type Dibuat = { ok: true; id: string };
@@ -318,5 +333,197 @@ export async function aktifkanPaket(id: string): Promise<Berhasil | Gagal> {
   }
 
   segarkanPaket();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Varian
+// ---------------------------------------------------------------------------
+//
+// Empat action di bawah SENGAJA seluruhnya menerima FormData — beda dari
+// `aktifkanLayanan(id)`/`aktifkanPaket(id)` di atas yang menerima id telanjang.
+// Alasannya bukan gaya: `nonaktifkanVarian` butuh membaca `service_id` varian
+// itu SEBELUM menuliskan apa pun (untuk pagar "varian aktif terakhir" di
+// bawah), dan bentuk FormData yang seragam untuk keempatnya membuat
+// `perbaruiVarian` — yang jelas butuh lebih dari satu medan — tidak berdiri
+// sendiri sebagai satu-satunya action varian berbentuk beda.
+
+export async function buatVarian(formData: FormData): Promise<Dibuat | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const serviceId = String(formData.get("service_id") ?? "").trim();
+  const label = periksaLabelVarian(String(formData.get("label") ?? ""));
+  const durasi = periksaDurasiVarian(String(formData.get("durasi_menit") ?? ""));
+  const format = periksaFormatVarian(String(formData.get("format") ?? ""));
+  const urutan = periksaUrutanVarian(String(formData.get("urutan") ?? ""));
+
+  if (!label.ok) return { ok: false, pesan: `Label varian: ${label.pesan}` };
+  if (!durasi.ok) return { ok: false, pesan: durasi.pesan };
+  if (!format.ok) return { ok: false, pesan: format.pesan };
+  if (!urutan.ok) return { ok: false, pesan: urutan.pesan };
+
+  const supabase = await createServerSupabase();
+
+  // Foreign key gabungan (service_id, variant_id) di `sessions` memang
+  // menolak `service_id` yang tidak ada, tetapi pesannya kode Postgres —
+  // bukan kalimat yang boleh dibaca admin klinik. Sama seperti `simpanPaket`.
+  const { data: layanan } = await supabase
+    .from("services")
+    .select("id")
+    .eq("id", serviceId)
+    .maybeSingle();
+  if (!layanan) {
+    return { ok: false, pesan: "Layanan tidak ditemukan. Pilih layanan induknya." };
+  }
+
+  const { data, error } = await supabase
+    .from("service_variants")
+    .insert({
+      service_id: serviceId,
+      label: label.nilai,
+      durasi_menit: durasi.nilai,
+      format: format.nilai,
+      urutan: urutan.nilai,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return { ok: false, pesan: "Gagal menyimpan varian." };
+
+  segarkanKatalog();
+  return { ok: true, id: data.id as string };
+}
+
+/**
+ * Mengubah label, durasi, format, dan urutan tampil sebuah varian.
+ *
+ * `service_id` SENGAJA tidak pernah dibaca dari FormData — pelajaran yang
+ * sama dengan `perbaruiPaket`: setiap baris `sessions` dan setiap baris tarif
+ * per varian (wilayah owner) yang sudah menunjuk varian ini akan ikut
+ * berpindah layanan, dan harga yang menempel padanya berganti arti tanpa
+ * satu pun error.
+ */
+export async function perbaruiVarian(formData: FormData): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const id = String(formData.get("varian") ?? "").trim();
+  const label = periksaLabelVarian(String(formData.get("label") ?? ""));
+  const durasi = periksaDurasiVarian(String(formData.get("durasi_menit") ?? ""));
+  const format = periksaFormatVarian(String(formData.get("format") ?? ""));
+  const urutan = periksaUrutanVarian(String(formData.get("urutan") ?? ""));
+
+  if (!label.ok) return { ok: false, pesan: `Label varian: ${label.pesan}` };
+  if (!durasi.ok) return { ok: false, pesan: durasi.pesan };
+  if (!format.ok) return { ok: false, pesan: format.pesan };
+  if (!urutan.ok) return { ok: false, pesan: urutan.pesan };
+
+  const supabase = await createServerSupabase();
+
+  // Hanya empat kolom identitas/tampilan yang pernah menyentuh basis data di
+  // sini. `service_id` yang ikut dikirim browser diabaikan tanpa pernah masuk
+  // payload di atas — dan tanpa `.eq("service_id", ...)` di WHERE, karena
+  // varian yang mau diubah sudah cukup diidentifikasi oleh `id`-nya sendiri.
+  const { data, error } = await supabase
+    .from("service_variants")
+    .update({
+      label: label.nilai,
+      durasi_menit: durasi.nilai,
+      format: format.nilai,
+      urutan: urutan.nilai,
+    })
+    .eq("id", id)
+    .select("id");
+
+  if (error || (data ?? []).length === 0) {
+    return { ok: false, pesan: "Varian tidak ditemukan atau gagal diperbarui." };
+  }
+
+  segarkanKatalog();
+  return { ok: true };
+}
+
+/**
+ * Menonaktifkan varian: ia berhenti ditawarkan untuk sesi & pengajuan jadwal
+ * baru. Sesi yang sudah menunjuknya tetap menyebutnya apa adanya — policy
+ * baca `service_variants: baca terautentikasi` sengaja tidak menyaring
+ * `aktif`, pola yang sama dengan `nonaktifkanLayanan`.
+ *
+ * PAGAR DI BAWAH INI ("layanan tidak boleh kehilangan varian aktif terakhir")
+ * ADALAH PEMERIKSAAN APLIKASI, BUKAN PAGAR BASIS DATA — beda dari V3 spec
+ * ("setiap layanan wajib punya minimal satu varian") yang sudah ditegakkan
+ * trigger `trg_terbitkan_varian_baku` (migrasi 20260906130000). Trigger itu
+ * hanya menjamin varian SELALU LAHIR saat layanan lahir; ia tidak — dan tidak
+ * bisa tanpa trigger keduanya sendiri — menjamin masih ada varian AKTIF
+ * sesudah admin menonaktifkan satu per satu lewat action ini.
+ *
+ * Konsekuensinya SADAR, bukan lupa: POST langsung ke /rest/v1/service_variants
+ * (atau service role mana pun) bisa melewati pemeriksaan di bawah dan
+ * menonaktifkan varian aktif terakhir sebuah layanan. Itu diterima DI SINI —
+ * beda dari pagar uang di modul `owner/tarif` yang selalu ditegakkan basis
+ * data — karena akibatnya bukan uang maupun riwayat yang rusak: layanan tanpa
+ * varian aktif hanya berhenti bisa dipesan (setiap perhitungan harga jatuh ke
+ * cabang "tak bertarif" yang sudah ditangani `ambilRateCard()` sejak Task 4),
+ * dan admin selalu bisa mengaktifkannya kembali dari layar yang sama. Tidak
+ * ada baris yang hilang, tidak ada nominal yang salah tagih.
+ */
+export async function nonaktifkanVarian(formData: FormData): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const id = String(formData.get("varian") ?? "").trim();
+  const supabase = await createServerSupabase();
+
+  const { data: varian } = await supabase
+    .from("service_variants")
+    .select("id, service_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!varian) return { ok: false, pesan: "Varian tidak ditemukan." };
+
+  const { count } = await supabase
+    .from("service_variants")
+    .select("id", { count: "exact", head: true })
+    .eq("service_id", varian.service_id)
+    .eq("aktif", true)
+    .neq("id", id);
+  if (!count) {
+    return {
+      ok: false,
+      pesan:
+        "Tidak bisa menonaktifkan varian terakhir yang aktif pada layanan ini. " +
+        "Aktifkan varian lain dulu, atau nonaktifkan layanannya sekalian.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("service_variants")
+    .update({ aktif: false })
+    .eq("id", id)
+    .select("id");
+
+  if (error || (data ?? []).length === 0) {
+    return { ok: false, pesan: "Gagal menonaktifkan varian." };
+  }
+
+  segarkanKatalog();
+  return { ok: true };
+}
+
+export async function aktifkanVarian(formData: FormData): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+
+  const id = String(formData.get("varian") ?? "").trim();
+  const supabase = await createServerSupabase();
+
+  const { data, error } = await supabase
+    .from("service_variants")
+    .update({ aktif: true })
+    .eq("id", id)
+    .select("id");
+
+  if (error || (data ?? []).length === 0) {
+    return { ok: false, pesan: "Gagal mengaktifkan varian." };
+  }
+
+  segarkanKatalog();
   return { ok: true };
 }

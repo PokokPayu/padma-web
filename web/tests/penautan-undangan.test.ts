@@ -40,6 +40,7 @@ import * as modulPenautan from "@/lib/auth/link-client";
 import { TOKEN_UNDANGAN_RINA } from "../scripts/seed-users";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 const svc = createAdminSupabase();
 const SANDI = "padma-dev-123";
@@ -164,10 +165,12 @@ beforeAll(async () => {
   await bersihkan();
 
   // Rekam medis korban — bukti kebocoran ditarik sampai baris ini.
+  const svcRahasia = "11111111-1111-1111-1111-111111111104";
   const { error: sErr } = await svc.from("sessions").insert({
     id: SESI_RAHASIA_ID,
     client_id: RINA_CLIENT_ID,
-    service_id: "11111111-1111-1111-1111-111111111104",
+    service_id: svcRahasia,
+    variant_id: await varianBaku(svc, svcRahasia),
     partner_id: "33333333-3333-3333-3333-333333333301",
     tanggal: "2026-08-20",
     status: "selesai",

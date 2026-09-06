@@ -55,6 +55,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { varianBaku } from "../helpers/varian";
 
 config({ path: [".env.local", ".env"] });
 
@@ -219,9 +220,35 @@ async function bersihkan() {
     if (idMateri.length > 0) {
       await admin.from("materials").delete().in("id", idMateri);
     }
-    await admin.from("service_rates").delete().eq("service_id", l.id);
+    // `service_rates` dijatuhkan Task 5 — tarif kini hidup di `variant_rates`,
+    // yang menunjuk `service_variants.id` (bukan `services.id` langsung), dan
+    // FK-nya TIDAK ber-cascade — sama seperti alasan penghapusan
+    // `service_variants` sendiri di bawah. Skrip ini sendiri tidak pernah
+    // menyemai tarif untuk layanan fixture, tapi pembersihan defensif ini
+    // menjaga penghapusan `service_variants`/`services` di bawah tidak pernah
+    // tertahan diam-diam bila suatu saat ada yang menambahkannya.
+    const { data: varianLayanan } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", l.id);
+    const idVarianLama = (varianLayanan ?? []).map((v) => v.id as string);
+    if (idVarianLama.length > 0) {
+      await admin.from("variant_rates").delete().in("variant_id", idVarianLama);
+    }
     await admin.from("packages").delete().eq("service_id", l.id);
-    await admin.from("services").delete().eq("id", l.id);
+    // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku
+    // otomatis (id acak, tidak pernah dicatat di sini) begitu `services` di
+    // atas lahir. FK `service_variants.service_id -> services.id` TIDAK
+    // ber-cascade, jadi tanpa baris ini penghapusan `services` di bawah
+    // tertahan diam-diam — errornya WAJIB diperiksa, sebab silent failure
+    // di sinilah persis yang membuat fixture E2E menumpuk tiap run.
+    const { error: eVarian } = await admin
+      .from("service_variants")
+      .delete()
+      .eq("service_id", l.id);
+    if (eVarian) throw eVarian;
+    const { error: eLayananHapus } = await admin.from("services").delete().eq("id", l.id);
+    if (eLayananHapus) throw eLayananHapus;
   }
 
   const { data: daftar } = await admin.auth.admin.listUsers();
@@ -254,6 +281,10 @@ async function main() {
       .select("id")
       .single();
     if (eLayanan) throw eLayanan;
+    // Sejak Task 9 `sessions.variant_id` NOT NULL: dibaca dari basis data
+    // (trigger `trg_terbitkan_varian_baku` sudah menerbitkannya begitu
+    // layanan di atas lahir) alih-alih ditulis literal.
+    const variantUji = await varianBaku(admin, layananUji!.id as string);
 
     const { data: userBaru, error: eUser } = await admin.auth.admin.createUser({
       email: EMAIL_KLIEN,
@@ -286,6 +317,7 @@ async function main() {
       .insert({
         client_id: klienUji.id,
         service_id: layananUji.id,
+        variant_id: variantUji,
         partner_id: MITRA_SEED,
         tanggal: TANGGAL_SESI,
         status: "selesai",
@@ -331,6 +363,7 @@ async function main() {
       .insert({
         client_id: klienUji.id,
         service_id: layananUji.id,
+        variant_id: variantUji,
         partner_id: MITRA_SEED,
         client_package_id: paketKlien.id,
         tanggal: TANGGAL_SESI_PAKET,

@@ -1,4 +1,5 @@
 import type { FaseKatalog } from "@/lib/katalog";
+import { formatRupiah } from "@/lib/rupiah-publik";
 
 // Aksara Sanskerta per fase — dekorasi, dipetakan dari id fase.
 // Nama fase & daftar layanannya TIDAK ditulis di sini: keduanya datang dari
@@ -10,6 +11,16 @@ const AKSARA: Record<string, string> = {
   menopause: "ध",
   newborn: "शि",
 };
+
+// `formatRupiah` di `lib/owner/rupiah.ts` SENGAJA tidak diimpor di sini —
+// komentar di berkas itu sendiri menandainya "hanya untuk panel owner" justru
+// supaya nominal tidak diam-diam menyebar ke layar publik. Landing memang
+// kini menampilkan harga (spec V4 §4.4, keputusan sadar Task 8, BUKAN
+// kebocoran yang sama dengan yang dijaga di sana), jadi ia memakai
+// `@/lib/rupiah-publik` — modul NETRAL yang tidak hidup di bawah `lib/owner/`
+// dan karena itu tidak melanggar batas yang digambar berkas itu, sekaligus
+// tidak lagi menumbuhkan salinan `formatRupiah` sendiri tanpa penjagaan
+// `Number.isFinite` yang justru menjadi alasan formatter owner ditulis.
 
 export function LiniLayanan({ katalog }: { katalog: FaseKatalog[] }) {
   return (
@@ -42,13 +53,39 @@ export function LiniLayanan({ katalog }: { katalog: FaseKatalog[] }) {
             <p className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-soft">
               {f.nama}
             </p>
-            <ul className="flex flex-wrap gap-1.5">
-              {f.layanan.map((nama) => (
+            <ul className="space-y-2">
+              {f.layanan.map((layanan) => (
                 <li
-                  key={nama}
-                  className="rounded-full border border-black/10 bg-paper px-2.5 py-1 text-[11px] font-semibold text-[#4E6154]"
+                  key={layanan.id}
+                  className="rounded-xl border border-black/10 bg-paper px-3 py-2"
                 >
-                  {nama}
+                  <p className="text-[11.5px] font-semibold text-[#4E6154]">{layanan.nama}</p>
+                  {layanan.varian.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {layanan.varian.map((v, i) => (
+                        <li
+                          key={i}
+                          className="flex flex-wrap items-baseline gap-x-1.5 text-[10.5px] text-ink-soft"
+                        >
+                          {/* Varian baku (labelVarian kembali string kosong)
+                              tidak menyumbang teks apa pun di sini — nama
+                              layanan di atas sudah cukup mewakilinya. */}
+                          {v.label !== "" && <span>{v.label}</span>}
+                          <span className="font-bold text-night">
+                            {formatRupiah(v.hargaKlien)}
+                          </span>
+                          {v.hargaCoret !== null && (
+                            <>
+                              <s className="text-ink-soft/70">{formatRupiah(v.hargaCoret)}</s>
+                              <span className="rounded-full bg-gold/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gold">
+                                Soft Launch
+                              </span>
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

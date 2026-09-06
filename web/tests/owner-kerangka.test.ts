@@ -77,6 +77,10 @@ const admin = createAdminSupabase();
 // Fixture berprefiks PAD-UJI + dibersihkan afterAll (Global Constraints).
 const LAYANAN_UJI = "11111111-1111-1111-1111-1111111111f3";
 const LAYANAN_TANPA_TARIF = "11111111-1111-1111-1111-1111111112f3";
+// Harga menempel di VARIAN sejak Task 3 — setiap layanan fixture di atas
+// memperoleh varian BAKU sendiri (label kosong, sama seperti backfill Task 1).
+const VARIAN_UJI = "11111111-1111-1111-1111-2111111111f3";
+const VARIAN_TANPA_TARIF = "11111111-1111-1111-1111-2111111112f3";
 const MITRA_A = "33333333-3333-3333-3333-3333333333f3";
 const MITRA_B = "33333333-3333-3333-3333-3333333334f3";
 const TARIF_UJI = "99999999-9999-9999-9999-9999999999f3";
@@ -119,10 +123,19 @@ async function bersihkan() {
     await admin.from("jejak_status_bayar").delete().eq("sesi_id", id);
   }
   await admin.from("clients").delete().eq("id", KLIEN_UJI);
-  await admin.from("service_rates").delete().eq("id", TARIF_UJI);
-  await admin.from("service_rates").delete().eq("service_id", LAYANAN_UJI);
+  await admin.from("variant_rates").delete().eq("id", TARIF_UJI);
+  await admin.from("variant_rates").delete().eq("variant_id", VARIAN_UJI);
   await admin.from("partners").delete().eq("id", MITRA_A);
   await admin.from("partners").delete().eq("id", MITRA_B);
+  // `service_variants` dulu — FK-nya menunjuk `services`, urutan penghapusan
+  // terbalik dari urutan penyisipan. Disapu per SERVICE_ID (bukan per id
+  // varian yang kita catat sendiri): trigger `trg_terbitkan_varian_baku`
+  // menerbitkan satu varian baku OTOMATIS begitu tiap layanan fixture
+  // disisipkan, dengan id acak yang tidak pernah kita tahu — menyapu hanya
+  // `VARIAN_UJI` dkk. meninggalkan varian otomatis itu yatim, dan FK-nya
+  // menahan penghapusan `services` di bawah.
+  await admin.from("service_variants").delete().eq("service_id", LAYANAN_UJI);
+  await admin.from("service_variants").delete().eq("service_id", LAYANAN_TANPA_TARIF);
   await admin.from("services").delete().eq("id", LAYANAN_UJI);
   await admin.from("services").delete().eq("id", LAYANAN_TANPA_TARIF);
 }
@@ -170,13 +183,19 @@ beforeAll(async () => {
       aktif: true,
     },
   ]);
+  // Setiap layanan wajib punya minimal satu varian (V3) — inilah yang dulu
+  // menempel di `services`, sejak Task 1 hidup terpisah di sini.
+  await admin.from("service_variants").insert([
+    { id: VARIAN_UJI, service_id: LAYANAN_UJI, label: "" },
+    { id: VARIAN_TANPA_TARIF, service_id: LAYANAN_TANPA_TARIF, label: "" },
+  ]);
   await admin.from("partners").insert([
     { id: MITRA_A, nama: "PAD-UJI Bidan Alfa", no_hp: "0811-0000-9001" },
     { id: MITRA_B, nama: "PAD-UJI Bidan Beta", no_hp: "0811-0000-9002" },
   ]);
-  await admin.from("service_rates").insert({
+  await admin.from("variant_rates").insert({
     id: TARIF_UJI,
-    service_id: LAYANAN_UJI,
+    variant_id: VARIAN_UJI,
     harga_klien: HARGA,
     honor_mitra: HONOR,
     berlaku_sejak: BERLAKU_SEJAK,
@@ -192,6 +211,7 @@ beforeAll(async () => {
   const dasarSesi = {
     client_id: KLIEN_UJI,
     service_id: LAYANAN_UJI,
+    variant_id: VARIAN_UJI,
     // 'belum' = kelahiran tanpa keputusan uang; tidak menulis jejak audit.
     status_bayar: "belum" as const,
     catatan: "",
@@ -218,6 +238,7 @@ beforeAll(async () => {
       ...dasarSesi,
       id: SESI.takBertarif,
       service_id: LAYANAN_TANPA_TARIF,
+      variant_id: VARIAN_TANPA_TARIF,
       partner_id: MITRA_B,
       tanggal: SENIN,
       status: "selesai",

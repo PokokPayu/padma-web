@@ -7,7 +7,8 @@ import {
 const s = (o: Partial<SesiRingkas>): SesiRingkas => ({
   id: "s1", serviceId: "svc1", namaLayanan: "Layanan", namaMitra: "Bidan A",
   tanggal: "2026-07-08", status: "selesai", clientPackageId: "pkg1",
-  catatan: "", rekomendasi: "", statusBayar: "belum", ...o,
+  catatan: "", rekomendasi: "", statusBayar: "belum",
+  varian: { label: "", durasiMenit: null, format: null }, ...o,
 });
 
 describe("progresPaket", () => {
@@ -135,5 +136,43 @@ describe("susunTagihan", () => {
       sesi: [s({ id: "x", clientPackageId: null, status: "batal", statusBayar: "belum" })],
     });
     expect(t).toHaveLength(0);
+  });
+
+  // Ruling 13: label sesi yang dibaca KLIEN sempat tidak menyebut varian sama
+  // sekali, padahal label admin sudah menyebutnya sejak Task 7 — dua sesi
+  // layanan sama, tanggal sama, tapi varian (dan harga) beda, tidak bisa
+  // dibedakan klien lewat WhatsApp. Dikunci di sini, bukan cuma di komentar.
+  it("label sesi lepas menyertakan label varian ketika variannya bernama (Ruling 13)", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [
+        s({
+          id: "x",
+          clientPackageId: null,
+          namaLayanan: "Garbha Relief",
+          tanggal: "2026-09-05",
+          varian: { label: "VIP", durasiMenit: 90, format: "private" },
+        }),
+      ],
+    });
+    expect(t[0].label).toContain("VIP");
+    expect(t[0].label).toMatch(/90 menit/);
+    expect(t[0].label).toMatch(/Private/);
+  });
+
+  it("varian BAKU (tanpa nama) tidak menambah apa pun ke label — perilaku lama dipertahankan", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [
+        s({
+          id: "x",
+          clientPackageId: null,
+          namaLayanan: "Konsultasi",
+          tanggal: "2026-09-05",
+          varian: { label: "", durasiMenit: null, format: null },
+        }),
+      ],
+    });
+    expect((t[0].label.match(/ · /g) ?? []).length).toBe(1);
   });
 });

@@ -217,6 +217,7 @@ describe("kartu sesi — perilaku per status", () => {
     catatan: "Ketegangan punggung bawah jauh berkurang.",
     rekomendasi: "Lanjutkan jalan pagi 30 menit.",
     statusBayar: "lunas" as const,
+    varian: { label: "", durasiMenit: null, format: null },
     ...o,
   });
 

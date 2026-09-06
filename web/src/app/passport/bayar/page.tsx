@@ -9,7 +9,7 @@ import { TombolKlaim } from "./tombol-klaim";
 export const metadata = { title: "Pembayaran" };
 
 // Halaman ini menampilkan STATUS, bukan angka: nominal uang hidup di
-// `service_rates`/`honor_marks` dan tidak pernah sampai ke layar klien —
+// `variant_rates`/`honor_marks` dan tidak pernah sampai ke layar klien —
 // besarannya disampaikan tim PADMA lewat WhatsApp (keputusan #10).
 const LABEL: Record<PayStatus, { teks: string; kelas: string }> = {
   lunas: { teks: "Lunas", kelas: "bg-leaf-soft text-leaf border-leaf/25" },

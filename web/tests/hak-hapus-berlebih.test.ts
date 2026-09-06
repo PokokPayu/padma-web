@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql, dalamTransaksiRollback } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 /**
  * HAK DELETE BERLEBIH — sisa yang tidak ikut tercabut di Plan 3A.
@@ -14,8 +15,8 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
  *      `material_chapters` + `material_videos` ikut tersapu ON DELETE CASCADE.
  *      Satu permintaan menghapus seluruh isi sebuah materi.
  *   B. `booking_requests`. DELETE -> barisnya lenyap tanpa jejak apa pun.
- *   C. `service_rates` & `honor_marks` masih memberi DELETE kepada
- *      `authenticated`.
+ *   C. tabel uang (`variant_rates` — dulu `service_rates` sebelum dijatuhkan
+ *      Task 5) & `honor_marks` masih memberi DELETE kepada `authenticated`.
  *   D. `partners`, `services`, `packages`, `phases`, `app_settings` — master
  *      data yang seluruhnya sudah punya bentuk pensiun sendiri.
  *
@@ -56,6 +57,7 @@ const KLIEN_RINA = "44444444-4444-4444-4444-444444444402";
 
 /** Fixture milik berkas ini sendiri; semuanya berawalan PAD-UJI. */
 const LAYANAN_UJI = "11111111-1111-1111-1111-1111111119a1";
+const VARIAN_UJI = "11111111-1111-1111-1111-1111111119a2";
 const PAKET_UJI = "22222222-2222-2222-2222-2222222229a1";
 const MITRA_UJI = "33333333-3333-3333-3333-3333333339a1";
 const MATERI_UJI = "77777777-7777-7777-7777-7777777779a1";
@@ -85,8 +87,10 @@ const PEKAN_HONOR = "2027-03-08";
 const PEKAN_LEWAT = "2026-01-12"; // Senin
 
 let permintaanUji: string;
+let VARIAN_SEED: string;
 
 beforeAll(async () => {
+  VARIAN_SEED = await varianBaku(svc, LAYANAN_SEED);
   await svc.from("services").upsert(
     {
       id: LAYANAN_UJI,
@@ -99,6 +103,10 @@ beforeAll(async () => {
   );
   await svc.from("packages").upsert(
     { id: PAKET_UJI, service_id: LAYANAN_UJI, nama: "PAD-UJI Paket", jumlah_sesi: 3, aktif: true },
+    { onConflict: "id" },
+  );
+  await svc.from("service_variants").upsert(
+    { id: VARIAN_UJI, service_id: LAYANAN_UJI, label: "PAD-UJI Varian", aktif: true },
     { onConflict: "id" },
   );
   await svc.from("partners").upsert(
@@ -128,8 +136,8 @@ beforeAll(async () => {
     { onConflict: "material_id" },
   );
 
-  await svc.from("service_rates").upsert(
-    { id: TARIF_UJI, service_id: LAYANAN_UJI, harga_klien: 111000, honor_mitra: 55000 },
+  await svc.from("variant_rates").upsert(
+    { id: TARIF_UJI, variant_id: VARIAN_UJI, harga_klien: 111000, honor_mitra: 55000 },
     { onConflict: "id" },
   );
   await svc.from("honor_marks").upsert(
@@ -147,6 +155,7 @@ beforeAll(async () => {
     .insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
+      variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan",
@@ -169,13 +178,20 @@ afterAll(async () => {
     .eq("client_id", KLIEN_RINA)
     .eq("tanggal", TGL_PERMINTAAN);
   await svc.from("honor_marks").delete().eq("id", HONOR_UJI);
-  await svc.from("service_rates").delete().eq("id", TARIF_UJI);
+  await svc.from("variant_rates").delete().eq("id", TARIF_UJI);
   await svc.from("material_videos").delete().eq("material_id", MATERI_UJI);
   await svc.from("material_pages").delete().eq("material_id", MATERI_UJI);
   await svc.from("material_services").delete().eq("material_id", MATERI_UJI);
   await svc.from("materials").delete().eq("id", MATERI_UJI);
   await svc.from("partners").delete().eq("id", MITRA_UJI);
   await svc.from("packages").delete().eq("id", PAKET_UJI);
+  // Varian sebelum layanannya: FK `service_variants.service_id -> services.id`
+  // tidak ber-cascade (varian yang pernah dipakai sesi adalah riwayat). Disapu
+  // per SERVICE_ID, bukan hanya `VARIAN_UJI`: trigger `trg_terbitkan_varian_baku`
+  // menerbitkan satu varian baku OTOMATIS (id acak) begitu LAYANAN_UJI lahir di
+  // `beforeAll` — menyapu hanya `VARIAN_UJI` meninggalkan varian otomatis itu
+  // yatim, dan FK-nya menahan penghapusan `services` di bawah.
+  await svc.from("service_variants").delete().eq("service_id", LAYANAN_UJI);
   await svc.from("services").delete().eq("id", LAYANAN_UJI);
 });
 
@@ -465,6 +481,7 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
     const { error: eUlang } = await svc.from("booking_requests").insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
+      variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan ulang",
@@ -514,6 +531,20 @@ describe("master data tidak bisa dihapus staf", () => {
       .eq("id", LAYANAN_UJI)
       .maybeSingle();
     expect(layanan).not.toBeNull();
+  });
+
+  it("varian layanan: ditolak, dan barisnya masih ada", async () => {
+    // Sama seperti layanan & paket di atas: varian yang pernah dipakai sesi
+    // adalah riwayat harga, bukan draft yang boleh lenyap.
+    const a = await signInAs("admin@padma.test");
+    const { error } = await a.from("service_variants").delete().eq("id", VARIAN_UJI);
+    expect(error?.code).toBe("42501");
+    const { data } = await svc
+      .from("service_variants")
+      .select("id")
+      .eq("id", VARIAN_UJI)
+      .maybeSingle();
+    expect(data).not.toBeNull();
   });
 
   it("fase: ditolak, dan barisnya masih ada", async () => {
@@ -600,13 +631,14 @@ describe("master data tidak bisa dihapus staf", () => {
     }
   });
 
-  it("KONTROL: pensiun lewat `aktif = false` TETAP bekerja untuk mitra, layanan, & paket", async () => {
+  it("KONTROL: pensiun lewat `aktif = false` TETAP bekerja untuk mitra, layanan, paket, & varian", async () => {
     const a = await signInAs("admin@padma.test");
 
     for (const [tabel, id] of [
       ["partners", MITRA_UJI],
       ["services", LAYANAN_UJI],
       ["packages", PAKET_UJI],
+      ["service_variants", VARIAN_UJI],
     ] as const) {
       const { data, error } = await a
         .from(tabel)
@@ -831,21 +863,13 @@ describe("kolom identitas tidak bisa ditulis ulang (efek = DELETE)", () => {
 // (D) TABEL UANG — hanya verba DELETE yang dicabut
 // ---------------------------------------------------------------------------
 describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
-  it("owner ditolak menghapus tarif, dan barisnya masih ada", async () => {
-    // `berlaku_sejak` membuat `service_rates` sebuah RIWAYAT harga yang
-    // ditumpuk, bukan satu baris yang ditimpa: tarif lama adalah dasar honor
-    // yang sudah terlanjur dibayarkan. Menghapusnya menulis ulang sejarah uang.
-    const o = await signInAs("owner@padma.test");
-    const { error } = await o.from("service_rates").delete().eq("id", TARIF_UJI);
-    expect(error?.code).toBe("42501");
-
-    const { data } = await svc
-      .from("service_rates")
-      .select("id")
-      .eq("id", TARIF_UJI)
-      .maybeSingle();
-    expect(data).not.toBeNull();
-  });
+  // "owner ditolak menghapus tarif, dan barisnya masih ada" DIPENSIUNKAN di
+  // sini (Task 5, service_rates dijatuhkan): padanannya untuk variant_rates
+  // sudah hidup sejak Task 3/4 di
+  // tests/owner-tarif.test.ts ("owner pun ditolak 42501 saat menghapus tarif
+  // — itu keadaan yang BENAR"), yang memakai fixture TARIF_MUNDUR/VARIAN_MUNDUR
+  // milik berkas itu sendiri. Menduplikasinya di sini hanya menguji trigger
+  // yang sama dua kali dengan fixture berbeda.
 
   it("owner ditolak menghapus tanda honor, dan barisnya masih ada", async () => {
     // `honor_marks` adalah BUKTI bahwa seorang mitra sudah dibayar untuk satu
@@ -896,15 +920,15 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
     const o = await signInAs("owner@padma.test");
 
     const { data: baca, error: eBaca } = await o
-      .from("service_rates")
+      .from("variant_rates")
       .select("id, harga_klien, honor_mitra");
     expect(eBaca).toBeNull();
     expect(baca!.length).toBeGreaterThanOrEqual(10);
 
     const { data: tambah, error: eTambah } = await o
-      .from("service_rates")
+      .from("variant_rates")
       .insert({
-        service_id: LAYANAN_UJI,
+        variant_id: VARIAN_UJI,
         harga_klien: 222000,
         honor_mitra: 90000,
         berlaku_sejak: "2027-01-01",
@@ -915,21 +939,21 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
 
     try {
       const { error: eUbah } = await o
-        .from("service_rates")
+        .from("variant_rates")
         .update({ harga_klien: 333000 })
         .eq("id", tambah!.id)
         .select("harga_klien");
       expect(eUbah?.code).toBe("42501");
 
       const { data: sesudah } = await svc
-        .from("service_rates")
+        .from("variant_rates")
         .select("harga_klien, honor_mitra")
         .eq("id", tambah!.id)
         .single();
       expect(sesudah!.harga_klien).toBe(222000);
       expect(sesudah!.honor_mitra).toBe(90000);
     } finally {
-      await svc.from("service_rates").delete().eq("id", tambah!.id);
+      await svc.from("variant_rates").delete().eq("id", tambah!.id);
     }
   });
 
@@ -968,7 +992,7 @@ describe("tabel uang: DELETE dicabut, sisanya UTUH untuk owner", () => {
 
   it("admin TETAP buta terhadap tabel uang (money firewall tidak ikut bergeser)", async () => {
     const a = await signInAs("admin@padma.test");
-    const { data: tarif } = await a.from("service_rates").select("harga_klien");
+    const { data: tarif } = await a.from("variant_rates").select("harga_klien");
     expect(tarif ?? []).toHaveLength(0);
     const { data: honor } = await a.from("honor_marks").select("id");
     expect(honor ?? []).toHaveLength(0);
@@ -1167,12 +1191,21 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
    *
    * Diprobe sebagai peran `authenticated` sungguhan dengan JWT owner:
    *   begin;
-   *     revoke all on public.service_rates from authenticated;
+   *     revoke all on public.variant_rates from authenticated;
    *     set local role authenticated;
    *     select set_config('request.jwt.claims', <klaim owner>, true);
-   *     select count(*) from public.service_rates;
-   *   -- ERROR: permission denied for table service_rates
+   *     select count(*) from public.variant_rates;
+   *   -- ERROR: permission denied for table variant_rates
    *   rollback;
+   *
+   * `variant_rates` (Task 3, migration `tarif_per_varian`) bergabung ke
+   * daftar ini SADAR, bukan warisan default privileges: ia tabel uang BARU
+   * dengan bentuk risiko yang SAMA PERSIS dengan `service_rates` — owner
+   * butuh SELURUH kolom & SELURUH verba baca/tulisnya, jadi peta haknya wajib
+   * identik (SELECT/INSERT/UPDATE, DELETE tercabut). `service_rates` sendiri
+   * SUDAH DIJATUHKAN (Task 5, migration `bubarkan_service_rates`) — probe di
+   * bawah ini karena itu kini menyasar `variant_rates` sepenuhnya, bukan lagi
+   * berdampingan dengannya.
    */
   it("hak tabel non-DELETE tabel uang WAJIB tetap dipegang authenticated", async () => {
     const baris = await querySql<{ table_name: string; privilege_type: string }>(`
@@ -1180,16 +1213,16 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
         from information_schema.role_table_grants
        where table_schema='public'
          and grantee='authenticated'
-         and table_name in ('service_rates','honor_marks')
+         and table_name in ('honor_marks','variant_rates')
          and privilege_type in ('SELECT','INSERT','UPDATE')
        order by 1, 2`);
     expect(baris.map((b) => `${b.table_name}:${b.privilege_type}`)).toEqual([
       "honor_marks:INSERT",
       "honor_marks:SELECT",
       "honor_marks:UPDATE",
-      "service_rates:INSERT",
-      "service_rates:SELECT",
-      "service_rates:UPDATE",
+      "variant_rates:INSERT",
+      "variant_rates:SELECT",
+      "variant_rates:UPDATE",
     ]);
   });
 
@@ -1205,11 +1238,11 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
            json_build_object('sub', $1::text, 'role', 'authenticated')::text, true)`,
         [uidOwner],
       );
-      const sebelum = await jalankan(`select count(*)::int as n from public.service_rates`);
+      const sebelum = await jalankan(`select count(*)::int as n from public.variant_rates`);
 
       // Lalu jalankan saran auditor di dalam transaksi yang sama.
       await jalankan(`reset role`);
-      await jalankan(`revoke all on public.service_rates from authenticated`);
+      await jalankan(`revoke all on public.variant_rates from authenticated`);
       await jalankan(`set local role authenticated`);
       await jalankan(
         `select set_config('request.jwt.claims',
@@ -1218,7 +1251,7 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
       );
       let pesan = "";
       try {
-        await jalankan(`select count(*) from public.service_rates`);
+        await jalankan(`select count(*) from public.variant_rates`);
       } catch (e) {
         pesan = (e as Error).message;
       }
@@ -1226,12 +1259,12 @@ describe("premis yang dibantah — jangan 'diperbaiki' tanpa membaca ini", () =>
     });
 
     expect(hasil[0].sebelum as number).toBeGreaterThanOrEqual(10);
-    expect(hasil[0].pesan).toContain("permission denied for table service_rates");
+    expect(hasil[0].pesan).toContain("permission denied for table variant_rates");
   });
 
   it("owner membaca rate card lewat REST (bukti perilaku, bukan katalog saja)", async () => {
     const o = await signInAs("owner@padma.test");
-    const { data, error } = await o.from("service_rates").select("harga_klien, honor_mitra");
+    const { data, error } = await o.from("variant_rates").select("harga_klien, honor_mitra");
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThanOrEqual(10);
   });

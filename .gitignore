@@ -7,3 +7,6 @@ node_modules/
 
 # Worktree terisolasi untuk eksekusi rencana. Isinya salinan kerja, bukan sumber.
 .worktrees/
+
+# Ruang kerja SDD (ledger, brief, laporan review). Perancah proses, bukan sumber.
+.superpowers/

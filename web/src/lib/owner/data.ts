@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { labelVarian, type FormatVarian } from "@/lib/varian";
 import { awalPekan, rentangPekan } from "./pekan";
 import {
   hitungRekap,
@@ -30,15 +31,25 @@ import {
 // sementara SELECT langsung memulangkan 0). Penjumlahannya hidup di
 // `./rekap.ts` sebagai fungsi murni.
 
-export type TarifLayanan = TarifRingkas & { namaLayanan: string };
+export type TarifLayanan = TarifRingkas & { namaLayanan: string; labelVarian: string };
+
+type BarisVarianEmbed = {
+  id: string;
+  label: string;
+  durasi_menit: number | null;
+  format: FormatVarian | null;
+  service_id: string;
+  services: { nama: string } | null;
+};
 
 type BarisTarif = {
   id: string;
-  service_id: string;
+  variant_id: string;
   harga_klien: number;
+  harga_coret: number | null;
   honor_mitra: number;
   berlaku_sejak: string;
-  services: { nama: string } | null;
+  service_variants: BarisVarianEmbed | null;
 };
 
 /**
@@ -46,24 +57,70 @@ type BarisTarif = {
  * wajib memakai tarif yang berlaku PADA TANGGAL SESI, sehingga baris lama
  * tetap dibutuhkan selamanya.
  *
+ * Dibaca dari `variant_rates` — harga menempel di VARIAN, bukan di layanan —
+ * dengan varian & layanannya ikut ter-embed sekali jalan, supaya pemanggil
+ * tidak perlu tarik terpisah untuk menampilkan nama layanan/labelnya.
+ *
  * Admin & klien memanggil fungsi ini akan mendapat array kosong — itu RLS yang
  * menjawab, bukan penyaringan di sini.
  */
 export async function ambilTarif(): Promise<TarifLayanan[]> {
   const supabase = await createServerSupabase();
-  const { data } = await supabase
-    .from("service_rates")
-    .select("id, service_id, harga_klien, honor_mitra, berlaku_sejak, services(nama)")
-    // `berlaku_sejak` bertipe date dan sudah berupa string YYYY-MM-DD:
-    // urutannya diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
-    .order("berlaku_sejak", { ascending: false })
-    .returns<BarisTarif[]>();
 
-  return (data ?? []).map((r) => ({
+  // `max_rows = 1000` di `supabase/config.toml` memotong SETIAP bacaan tanpa
+  // `.limit()` pada angka itu, SENYAP — tanpa error, tanpa tanda "terpotong".
+  // Fungsi ini WAJIB membaca SELURUH riwayat (lihat dokumentasi di atas):
+  // rekap pekan lama mencocokkan tarif ke tanggal sesi, dan `variant_rates`
+  // APPEND-ONLY SELAMANYA membuat riwayatnya tumbuh tanpa batas atas.
+  //
+  // Ini beda dari `bacaKatalog()` (lib/katalog.ts), yang cukup diamankan
+  // dengan urutan menurun karena ia hanya perlu baris TERBARU per varian.
+  // Di sini urutan menurun SAJA tidak cukup: memotong di ujung LAMA membuat
+  // sesi lama "tak bertarif" (honor mitra hilang dari total pekan tanpa satu
+  // angka pun terlihat ganjil — ujung sebaliknya, ujung BARU, akan membuat
+  // rate card & rekap pekan INI memakai harga basi). Karena tidak ada satu
+  // arah potong yang aman untuk kedua pemakai fungsi ini, kita PAGINASI:
+  // menarik SELURUH baris lewat `.range()` berulang sampai halamannya kosong,
+  // bukan mempercayakan kebenaran pada urutan baca satu kali.
+  //
+  // Urutan (`berlaku_sejak` lalu `id`) tetap wajib ada di sini juga — bukan
+  // sekadar kosmetik tampilan, melainkan SYARAT paginasi yang benar: tanpa
+  // pemecah seri yang stabil, dua panggilan `.range()` berurutan bisa
+  // melompati atau mengembalikan dua kali baris yang `berlaku_sejak`-nya
+  // kembar (lazim — banyak varian berbeda bisa diberi tarif pada tanggal
+  // efektif yang sama).
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisTarif[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman } = await supabase
+      .from("variant_rates")
+      .select(
+        "id, variant_id, harga_klien, harga_coret, honor_mitra, berlaku_sejak, " +
+          "service_variants(id, label, durasi_menit, format, service_id, services(nama))",
+      )
+      // `berlaku_sejak` bertipe date dan sudah berupa string YYYY-MM-DD:
+      // urutannya diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
+      .order("berlaku_sejak", { ascending: false })
+      .order("id", { ascending: false })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisTarif[]>();
+
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
+
+  return baris.map((r) => ({
     id: r.id,
-    serviceId: r.service_id,
-    namaLayanan: r.services?.nama ?? "Layanan",
+    variantId: r.variant_id,
+    namaLayanan: r.service_variants?.services?.nama ?? "Layanan",
+    labelVarian: labelVarian({
+      label: r.service_variants?.label ?? "",
+      durasiMenit: r.service_variants?.durasi_menit ?? null,
+      format: r.service_variants?.format ?? null,
+    }),
     hargaKlien: r.harga_klien,
+    hargaCoret: r.harga_coret,
     honorMitra: r.honor_mitra,
     berlakuSejak: r.berlaku_sejak,
   }));
@@ -76,6 +133,8 @@ export async function ambilTarif(): Promise<TarifLayanan[]> {
 export type TarifRiwayat = {
   id: string;
   hargaKlien: number;
+  /** Harga PEMASARAN sebelum diskon soft launch, dicoret di layar. Diisi MANUAL. */
+  hargaCoret: number | null;
   honorMitra: number;
   /** Angka PADMA per sesi. Dihitung di sini, TIDAK disimpan sebagai kolom. */
   margin: number;
@@ -87,30 +146,44 @@ export type TarifRiwayat = {
 };
 
 export type BarisRateCard = {
+  variantId: string;
+  /** Dibawa untuk pengelompokan TAMPILAN — beberapa varian berbagi satu layanan. */
   serviceId: string;
   namaLayanan: string;
+  /** String kosong untuk varian baku; layar yang menampilkan jatuh ke `namaLayanan`. */
+  labelVarian: string;
   namaFase: string;
   aktif: boolean;
-  /** Tarif yang berlaku pada `hariIni`; `null` bila layanan belum bertarif. */
+  /** Tarif yang berlaku pada `hariIni`; `null` bila varian belum bertarif. */
   berlaku: TarifRiwayat | null;
-  /** SELURUH baris tarif layanan ini, terbaru di atas. */
+  /** SELURUH baris tarif varian ini, terbaru di atas. */
   riwayat: TarifRiwayat[];
 };
 
 type BarisFase = { id: string; nama: string; urutan: number };
 type BarisLayananRate = { id: string; phase_id: string; nama: string; aktif: boolean };
+type BarisVarianRate = {
+  id: string;
+  service_id: string;
+  label: string;
+  durasi_menit: number | null;
+  format: FormatVarian | null;
+  urutan: number;
+};
 
 /**
- * Rate card untuk `/owner/tarif`: setiap layanan beserta tarif yang berlaku
- * pada `hariIni` dan seluruh riwayatnya.
+ * Rate card untuk `/owner/tarif`: setiap VARIAN beserta tarif yang berlaku
+ * pada `hariIni` dan seluruh riwayatnya. Harga menempel di varian, bukan di
+ * layanan, jadi baris tabelnya pun per varian — `serviceId`/`namaLayanan`
+ * tetap ikut dibawa semata untuk mengelompokkan tampilan.
  *
  * `hariIni` WAJIB diberikan pemanggil (halaman meneruskan `hariIniJakarta()`),
  * dengan alasan yang sama seperti `ringkasanPekanIni`: fungsi yang membaca jam
  * sistem sendiri mustahil diuji pada tanggal tertentu, dan "tarif mana yang
  * berlaku" justru pertanyaan yang paling perlu diuji lintas tanggal.
  *
- * Layanan yang BELUM bertarif tetap muncul dengan `berlaku: null` — bukan
- * disaring keluar. Layanan yang hilang dari rate card adalah layanan yang tidak
+ * Varian yang BELUM bertarif tetap muncul dengan `berlaku: null` — bukan
+ * disaring keluar. Varian yang hilang dari rate card adalah varian yang tidak
  * pernah bisa diberi tarif dari panel mana pun, dan sesinya akan terus muncul
  * di rekap sebagai "tak bertarif" tanpa satu pun jalan perbaikan.
  *
@@ -121,13 +194,13 @@ type BarisLayananRate = { id: string; phase_id: string; nama: string; aktif: boo
  * menampilkan satu angka sementara honor dibayarkan dengan angka lain.
  *
  * Admin & klien yang memanggil fungsi ini memperoleh `berlaku: null` dan
- * `riwayat: []` untuk SETIAP layanan — itu RLS yang menjawab, bukan penyaringan
+ * `riwayat: []` untuk SETIAP varian — itu RLS yang menjawab, bukan penyaringan
  * di sini.
  */
 export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
   const supabase = await createServerSupabase();
 
-  const [{ data: fase }, { data: layanan }, tarif] = await Promise.all([
+  const [{ data: fase }, { data: layanan }, { data: varian }, tarif] = await Promise.all([
     supabase.from("phases").select("id, nama, urutan").order("urutan").returns<BarisFase[]>(),
     supabase
       .from("services")
@@ -137,6 +210,15 @@ export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
       .order("aktif", { ascending: false })
       .order("nama")
       .returns<BarisLayananRate[]>(),
+    // Katalog varian (bukan tarifnya) — RLS "service_variants: baca
+    // terautentikasi" menjawab TRUE untuk siapa pun yang login, jadi baris ini
+    // tetap ada bagi admin & klien; hanya `tarif` di bawah yang disaring RLS
+    // milik owner.
+    supabase
+      .from("service_variants")
+      .select("id, service_id, label, durasi_menit, format, urutan")
+      .order("urutan")
+      .returns<BarisVarianRate[]>(),
     ambilTarif(),
   ]);
 
@@ -146,6 +228,7 @@ export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
   const susun = (t: TarifRingkas, berlakuId: string | null): TarifRiwayat => ({
     id: t.id,
     hargaKlien: t.hargaKlien,
+    hargaCoret: t.hargaCoret,
     honorMitra: t.honorMitra,
     margin: t.hargaKlien - t.honorMitra,
     berlakuSejak: t.berlakuSejak,
@@ -153,7 +236,8 @@ export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
     belumBerlaku: t.berlakuSejak > hariIni,
   });
 
-  // Fase dulu (urutan perjalanan klien), lalu yang masih aktif, lalu abjad.
+  // Fase dulu (urutan perjalanan klien), lalu yang masih aktif, lalu abjad —
+  // layanan dulu, lalu varian di dalamnya menurut `urutan` kolomnya sendiri.
   // Diurutkan di sini dan bukan lewat `.order()` PostgREST: urutan fase hidup
   // di kolom `phases.urutan`, tabel lain, yang tidak bisa dijadikan kunci urut
   // tanpa embed — dan embed-nya akan menyaring baris menurut RLS tabel itu.
@@ -164,30 +248,58 @@ export async function ambilRateCard(hariIni: string): Promise<BarisRateCard[]> {
     return a.nama.localeCompare(b.nama, "id");
   });
 
-  return terurut.map((l) => {
-    const berlaku = tarifPadaTanggal(tarif, l.id, hariIni);
-    const riwayat = tarif
-      .filter((t) => t.serviceId === l.id)
-      .map((t) => susun(t, berlaku?.id ?? null))
-      // `ambilTarif()` sudah mengurutkan menurun, tetapi urutan itu milik
-      // seluruh tabel; sesudah disaring per layanan ia ditegaskan ulang di sini
-      // supaya riwayat tidak pernah bergantung pada urutan baris PostgREST.
-      .sort((a, b) => (a.berlakuSejak > b.berlakuSejak ? -1 : a.berlakuSejak < b.berlakuSejak ? 1 : 0));
+  const varianPerLayanan = new Map<string, BarisVarianRate[]>();
+  for (const v of varian ?? []) {
+    const daftar = varianPerLayanan.get(v.service_id) ?? [];
+    daftar.push(v);
+    varianPerLayanan.set(v.service_id, daftar);
+  }
+  // `urutan` dulu, lalu label, lalu id — pemecah seri STABIL. Varian baku
+  // (label kosong, `urutan = 0` untuk seluruhnya, baik yang dibackfill Task 1
+  // maupun yang diterbitkan trigger `trg_terbitkan_varian_baku`) tanpa
+  // pemecah seri ini jatuh ke urutan baris PostgREST — nondeterministik, dan
+  // berbeda dari disiplin "urutan ditegaskan ulang" yang dipakai riwayat
+  // tarif tepat di bawahnya.
+  for (const daftar of varianPerLayanan.values()) {
+    daftar.sort((a, b) => {
+      const selisih = a.urutan - b.urutan;
+      if (selisih !== 0) return selisih;
+      const selisihLabel = a.label.localeCompare(b.label, "id");
+      if (selisihLabel !== 0) return selisihLabel;
+      return a.id.localeCompare(b.id);
+    });
+  }
 
-    return {
-      serviceId: l.id,
-      namaLayanan: l.nama,
-      namaFase: namaFase.get(l.phase_id) ?? "Tanpa fase",
-      aktif: l.aktif,
-      berlaku: berlaku === null ? null : susun(berlaku, berlaku.id),
-      riwayat,
-    };
-  });
+  return terurut.flatMap((l) =>
+    (varianPerLayanan.get(l.id) ?? []).map((v) => {
+      const berlaku = tarifPadaTanggal(tarif, v.id, hariIni);
+      const riwayat = tarif
+        .filter((t) => t.variantId === v.id)
+        .map((t) => susun(t, berlaku?.id ?? null))
+        // `ambilTarif()` sudah mengurutkan menurun, tetapi urutan itu milik
+        // seluruh tabel; sesudah disaring per varian ia ditegaskan ulang di
+        // sini supaya riwayat tidak pernah bergantung pada urutan baris
+        // PostgREST.
+        .sort((a, b) => (a.berlakuSejak > b.berlakuSejak ? -1 : a.berlakuSejak < b.berlakuSejak ? 1 : 0));
+
+      return {
+        variantId: v.id,
+        serviceId: l.id,
+        namaLayanan: l.nama,
+        labelVarian: labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format }),
+        namaFase: namaFase.get(l.phase_id) ?? "Tanpa fase",
+        aktif: l.aktif,
+        berlaku: berlaku === null ? null : susun(berlaku, berlaku.id),
+        riwayat,
+      };
+    }),
+  );
 }
 
 type BarisSesi = {
   id: string;
   service_id: string;
+  variant_id: string;
   partner_id: string;
   tanggal: string;
   status: SesiRekap["status"];
@@ -203,6 +315,9 @@ type BarisSesi = {
  * yang berhonor" adalah aturan UANG, dan aturan uang yang tersebar di dua
  * lapisan akan berpisah diam-diam pada perubahan berikutnya.
  *
+ * `variant_id` ikut ditarik: `hitungRekap()` mencocokkan tarif ke sesi lewat
+ * VARIAN, bukan layanan — harga menempel di sana sejak Task 3.
+ *
  * `partners` di-embed langsung (bukan lewat view `partner_publik`): owner
  * memang berhak membaca tabelnya, dan `partner_publik` menyaring `aktif =
  * true` — mitra yang sudah dinonaktifkan tetap harus muncul di rekap pekan
@@ -213,7 +328,7 @@ export async function ambilSesiRekap(): Promise<SesiRekap[]> {
   const { data } = await supabase
     .from("sessions")
     .select(
-      "id, service_id, partner_id, tanggal, status, client_package_id, updated_at, services(nama), partners(nama)",
+      "id, service_id, variant_id, partner_id, tanggal, status, client_package_id, updated_at, services(nama), partners(nama)",
     )
     .order("tanggal", { ascending: false })
     .returns<BarisSesi[]>();
@@ -221,6 +336,7 @@ export async function ambilSesiRekap(): Promise<SesiRekap[]> {
   return (data ?? []).map((r) => ({
     id: r.id,
     serviceId: r.service_id,
+    variantId: r.variant_id,
     namaLayanan: r.services?.nama ?? "Layanan",
     partnerId: r.partner_id,
     namaMitra: r.partners?.nama ?? "Mitra PADMA",

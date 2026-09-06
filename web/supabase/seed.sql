@@ -18,17 +18,107 @@ insert into services (id, phase_id, nama) values
   ('11111111-1111-1111-1111-111111111109','newborn','Shishu Parent Touch'),
   ('11111111-1111-1111-1111-111111111110','newborn','Baby Massage Class');
 
-insert into service_rates (service_id, harga_klien, honor_mitra) values
-  ('11111111-1111-1111-1111-111111111101',425000,190000),
-  ('11111111-1111-1111-1111-111111111102',250000,100000),
-  ('11111111-1111-1111-1111-111111111103',300000,130000),
-  ('11111111-1111-1111-1111-111111111104',350000,150000),
-  ('11111111-1111-1111-1111-111111111105',275000,110000),
-  ('11111111-1111-1111-1111-111111111106',450000,200000),
-  ('11111111-1111-1111-1111-111111111107',400000,175000),
-  ('11111111-1111-1111-1111-111111111108',375000,160000),
-  ('11111111-1111-1111-1111-111111111109',400000,180000),
-  ('11111111-1111-1111-1111-111111111110',300000,125000);
+-- Blok CERMIN dari langkah backfill migrasi `varian_layanan`
+-- (`insert into service_variants select id, '' from services`). Pada
+-- `db reset` yang bersih, migrasi berjalan SEBELUM berkas seed ini — jadi
+-- backfill migrasi menyalin NOL baris untuk layanan seed di atas, dan setiap
+-- layanan seed lahir yatim tanpa varian. Pernyataan yang sama diulang di sini
+-- SESUDAH layanan seed ada, dengan `where not exists` supaya idempoten
+-- terhadap backfill migrasi pada basis data yang sudah berisi layanan
+-- produksi. Task berikutnya yang menambahkan varian bertingkat pada layanan
+-- tertentu (…107, …109) menonaktifkan baris baku ini alih-alih menghapusnya —
+-- pensiun lewat `aktif = false`, bukan penghapusan baris, sama seperti aturan
+-- lain di proyek ini.
+insert into service_variants (service_id, label)
+  select id, '' from services
+  where not exists (select 1 from service_variants v where v.service_id = services.id);
+
+-- `service_rates` dijatuhkan Task 5 (migration `bubarkan_service_rates`):
+-- dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang tahu
+-- kapan. Blok ini dulu dua langkah (isi `service_rates`, lalu blok CERMIN
+-- menyalinnya ke `variant_rates` — sama seperti langkah salin migrasi
+-- `tarif_per_varian`, diulang di sini karena migrasi berjalan SEBELUM seed
+-- pada `db reset` bersih); Task 5 meleburnya menjadi satu insert langsung ke
+-- `variant_rates` yang menunjuk varian baku tiap layanan. Nominalnya sengaja
+-- SAMA PERSIS dengan seed lama.
+--
+-- `where not exists (...)` di bawah dipertahankan dari blok CERMIN lama
+-- dengan alasan yang SAMA: `berlaku_sejak` tidak disebut di sini (default
+-- `current_date`), jadi berkas ini aman dijalankan ulang pada basis data yang
+-- sudah berisi tarif produksi (mis. `seed.sql` dijalankan lagi pada hari yang
+-- sama) — tanpa penjaga ini, pengulangan itu menabrak
+-- `variant_rates_unik_per_tanggal` alih-alih no-op senyap.
+insert into variant_rates (variant_id, harga_klien, honor_mitra)
+  select v.id, r.harga, r.honor
+    from (values
+      ('11111111-1111-1111-1111-111111111101'::uuid, 425000, 190000),
+      ('11111111-1111-1111-1111-111111111102'::uuid, 250000, 100000),
+      ('11111111-1111-1111-1111-111111111103'::uuid, 300000, 130000),
+      ('11111111-1111-1111-1111-111111111104'::uuid, 350000, 150000),
+      ('11111111-1111-1111-1111-111111111105'::uuid, 275000, 110000),
+      ('11111111-1111-1111-1111-111111111106'::uuid, 450000, 200000),
+      ('11111111-1111-1111-1111-111111111107'::uuid, 400000, 175000),
+      ('11111111-1111-1111-1111-111111111108'::uuid, 375000, 160000),
+      ('11111111-1111-1111-1111-111111111109'::uuid, 400000, 180000),
+      ('11111111-1111-1111-1111-111111111110'::uuid, 300000, 125000)
+    ) as r(service_id, harga, honor)
+    join service_variants v on v.service_id = r.service_id
+   where not exists (
+     select 1 from variant_rates vr
+      where vr.variant_id = v.id and vr.berlaku_sejak = current_date
+   );
+
+-- Contoh varian BERTINGKAT untuk data pengembangan.
+-- Tiga layanan ini dipilih karena TIDAK dirujuk satu berkas uji pun
+-- (diverifikasi dengan grep atas UUID-nya di tests/), sehingga contohnya masuk
+-- tanpa memerahkan asersi yang tidak berhubungan dengan varian.
+--
+-- Varian baku bawaan migrasi diberi urutan 0 dan dinonaktifkan untuk kedua
+-- layanan bervarian: layanan tidak boleh punya dua "harga utama" yang keduanya
+-- aktif, karena landing akan menampilkan keduanya sebagai pilihan yang sah.
+update service_variants set aktif = false
+ where service_id in ('11111111-1111-1111-1111-111111111107',
+                      '11111111-1111-1111-1111-111111111109')
+   and label = '' and durasi_menit is null and format is null;
+
+insert into service_variants (service_id, label, durasi_menit, format, urutan)
+  select v.service_id, v.label, v.durasi_menit, v.format, v.urutan
+    from (values
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',60, null::varian_format,1),
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',90, null::varian_format,2),
+      ('11111111-1111-1111-1111-111111111107'::uuid,'',120,null::varian_format,3),
+      ('11111111-1111-1111-1111-111111111109'::uuid,'',90,'private',1),
+      ('11111111-1111-1111-1111-111111111109'::uuid,'',90,'circle', 2)
+    ) as v(service_id, label, durasi_menit, format, urutan)
+   where not exists (
+     select 1 from service_variants sv
+      where sv.service_id = v.service_id
+        and sv.durasi_menit is not distinct from v.durasi_menit
+        and sv.format is not distinct from v.format
+   );
+
+-- Harga coret sengaja terisi pada sebagian baris saja: kedua cabang tampilan
+-- (dicoret / polos) harus ada di data pengembangan.
+insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
+  select v.id,
+         h.harga,
+         h.coret,
+         h.honor
+    from (values
+      (60,  null::varian_format, '11111111-1111-1111-1111-111111111107'::uuid, 350000, 370000, 150000),
+      (90,  null,                '11111111-1111-1111-1111-111111111107'::uuid, 400000, 420000, 175000),
+      (120, null,                '11111111-1111-1111-1111-111111111107'::uuid, 450000, null,   200000),
+      (90,  'private',           '11111111-1111-1111-1111-111111111109'::uuid, 400000, 420000, 180000),
+      (90,  'circle',            '11111111-1111-1111-1111-111111111109'::uuid, 250000, null,   110000)
+    ) as h(durasi, format, service_id, harga, coret, honor)
+    join service_variants v
+      on v.service_id = h.service_id
+     and v.durasi_menit = h.durasi
+     and v.format is not distinct from h.format
+   where not exists (
+     select 1 from variant_rates vr
+      where vr.variant_id = v.id and vr.berlaku_sejak = current_date
+   );
 
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);

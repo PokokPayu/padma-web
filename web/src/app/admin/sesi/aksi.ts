@@ -87,7 +87,7 @@ export async function konfirmasiPermintaan(
     .update({ status: "dikonfirmasi" })
     .eq("id", permintaanId)
     .eq("status", "menunggu")
-    .select("id, client_id, service_id, tanggal");
+    .select("id, client_id, service_id, variant_id, tanggal");
 
   // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
   // — melaporkan "berhasil" tanpa memeriksa jumlah barisnya adalah kebohongan
@@ -100,6 +100,7 @@ export async function konfirmasiPermintaan(
   const { error } = await supabase.from("sessions").insert({
     client_id: p.client_id,
     service_id: p.service_id,
+    variant_id: p.variant_id,
     partner_id: partnerId,
     tanggal: p.tanggal,
     status: "terjadwal",
@@ -176,12 +177,13 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
 
   const clientId = String(formData.get("client_id") ?? "").trim();
   const serviceId = String(formData.get("service_id") ?? "").trim();
+  const variantId = String(formData.get("variant_id") ?? "").trim();
   const partnerId = String(formData.get("partner_id") ?? "").trim();
   const tanggal = String(formData.get("tanggal") ?? "").trim();
   const pakaiPaket = formData.get("pakai_paket") !== null;
 
-  if (!clientId || !serviceId || !partnerId) {
-    return { ok: false, pesan: "Klien, layanan, dan mitra wajib dipilih." };
+  if (!clientId || !serviceId || !variantId || !partnerId) {
+    return { ok: false, pesan: "Klien, layanan, varian, dan mitra wajib dipilih." };
   }
   if (!POLA_TANGGAL.test(tanggal)) {
     return { ok: false, pesan: "Tanggal harus berformat YYYY-MM-DD." };
@@ -194,25 +196,40 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   // layanan ia sama sekali tidak menolong: yang sudah dipensiunkan tetap ada
   // barisnya. Formulir menyaring `aktif` di UI, dan server action adalah
   // endpoint POST tersendiri yang tidak pernah melewati UI itu.
-  const [{ data: klien }, { data: layanan }, { data: mitra }] = await Promise.all([
-    supabase.from("clients").select("id").eq("id", clientId).maybeSingle(),
-    supabase
-      .from("services")
-      .select("id")
-      .eq("id", serviceId)
-      .eq("aktif", true)
-      .maybeSingle(),
-    supabase
-      .from("partners")
-      .select("id")
-      .eq("id", partnerId)
-      .eq("aktif", true)
-      .maybeSingle(),
-  ]);
+  const [{ data: klien }, { data: layanan }, { data: varian }, { data: mitra }] =
+    await Promise.all([
+      supabase.from("clients").select("id").eq("id", clientId).maybeSingle(),
+      supabase
+        .from("services")
+        .select("id")
+        .eq("id", serviceId)
+        .eq("aktif", true)
+        .maybeSingle(),
+      // Varian AKTIF dan milik LAYANAN yang sama, disaring dalam satu query —
+      // pola yang sama dengan `ajukanJadwal()` (`@/lib/passport/aksi`), supaya
+      // "varian milik layanan lain" ditolak sebagai kalimat, bukan sekadar
+      // kode Postgres dari FK gabungan (yang tetap menjadi lapisan terakhir).
+      supabase
+        .from("service_variants")
+        .select("id")
+        .eq("id", variantId)
+        .eq("service_id", serviceId)
+        .eq("aktif", true)
+        .maybeSingle(),
+      supabase
+        .from("partners")
+        .select("id")
+        .eq("id", partnerId)
+        .eq("aktif", true)
+        .maybeSingle(),
+    ]);
 
   if (!klien) return { ok: false, pesan: "Klien tidak ditemukan." };
   if (!layanan) {
     return { ok: false, pesan: "Layanan tidak tersedia. Pilih layanan yang aktif." };
+  }
+  if (!varian) {
+    return { ok: false, pesan: "Varian tidak tersedia untuk layanan ini." };
   }
   if (!mitra) return { ok: false, pesan: "Mitra tidak tersedia. Pilih mitra yang aktif." };
 
@@ -233,6 +250,7 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   const { error } = await supabase.from("sessions").insert({
     client_id: clientId,
     service_id: serviceId,
+    variant_id: variantId,
     partner_id: partnerId,
     tanggal,
     status: "terjadwal",

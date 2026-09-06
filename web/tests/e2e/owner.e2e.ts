@@ -217,11 +217,21 @@ async function uidAkun(email: string): Promise<string> {
  *
  * Urutannya mengikat: `jejak_status_bayar` sengaja TANPA foreign key sehingga
  * tidak ikut tersapu cascade dan harus dihapus MENURUT id sesinya, selagi id
- * itu masih bisa dicari. `service_rates` menahan `services` lewat foreign key,
- * dan `honor_marks` menahan `partners` — keduanya harus lebih dulu. Verba
- * DELETE atas kedua tabel uang memang sudah dicabut dari peran API; jalur ini
- * service role, satu-satunya jalan keluar yang disediakan migration
- * `cabut_hak_hapus_berlebih`.
+ * itu masih bisa dicari. `variant_rates` menahan `service_variants`, yang pada
+ * gilirannya menahan `services`, lewat foreign key — dan `honor_marks` menahan
+ * `partners` — keduanya harus lebih dulu. Verba DELETE atas ketiga tabel uang
+ * (`variant_rates`, `service_variants`, `honor_marks`) memang sudah dicabut
+ * dari peran API; jalur ini service role, satu-satunya jalan keluar yang
+ * disediakan migration `cabut_hak_hapus_berlebih`.
+ *
+ * `service_variants` WAJIB disapu meski tidak pernah disisipkan manual di
+ * berkas ini: trigger `trg_terbitkan_varian_baku` (Ruling 11) menerbitkan satu
+ * varian baku OTOMATIS — id acak, tidak pernah dicatat di sini — begitu setiap
+ * `services` fixture di bawah lahir. Tanpa langkah ini, FK-nya menahan
+ * penghapusan `services` secara DIAM-DIAM (Supabase tidak melempar kecuali
+ * errornya diperiksa), dan fixture E2E menumpuk tiap run karena `services.nama`
+ * tidak unik — persis kebocoran yang ditemukan lewat audit fix round 2.
+ * Errornya karena itu WAJIB diperiksa di setiap langkah penghapusan di sini.
  */
 async function bersihkan() {
   const { data: klien } = await admin
@@ -251,9 +261,30 @@ async function bersihkan() {
     .select("id")
     .like("nama", `${PENANDA_ISI}%`);
   for (const l of layanan ?? []) {
-    await admin.from("service_rates").delete().eq("service_id", l.id);
+    const { data: varian } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", l.id);
+    for (const v of varian ?? []) {
+      const { error: eTarifVarian } = await admin
+        .from("variant_rates")
+        .delete()
+        .eq("variant_id", v.id);
+      if (eTarifVarian) {
+        throw new Error(`bersihkan variant_rates gagal: ${eTarifVarian.message}`);
+      }
+    }
+    const { error: eVarian } = await admin
+      .from("service_variants")
+      .delete()
+      .eq("service_id", l.id);
+    if (eVarian) throw new Error(`bersihkan service_variants gagal: ${eVarian.message}`);
   }
-  await admin.from("services").delete().like("nama", `${PENANDA_ISI}%`);
+  const { error: eLayananHapus } = await admin
+    .from("services")
+    .delete()
+    .like("nama", `${PENANDA_ISI}%`);
+  if (eLayananHapus) throw new Error(`bersihkan services gagal: ${eLayananHapus.message}`);
 }
 
 async function main() {
@@ -270,11 +301,27 @@ async function main() {
   if (eLayanan) throw new Error(`fixture layanan gagal: ${eLayanan.message}`);
   const idLayanan = layanan!.id as string;
 
+  // Harga menempel di VARIAN, bukan di layanan, sejak Task 3/4. Trigger
+  // `trg_terbitkan_varian_baku` (Ruling 11) sudah menerbitkan satu varian baku
+  // (label kosong) begitu baris `services` di atas lahir — dicari di sini,
+  // bukan disisipkan manual: menyisipkannya lagi akan melahirkan VARIAN KEDUA
+  // untuk layanan yang sama, dan baris "Tarif baru" di langkah 3 di bawah
+  // menjadi ambigu (dua varian per layanan fixture).
+  const { data: varianBaku, error: eVarianBaku } = await admin
+    .from("service_variants")
+    .select("id")
+    .eq("service_id", idLayanan)
+    .single();
+  if (eVarianBaku) {
+    throw new Error(`varian baku tidak diterbitkan trigger: ${eVarianBaku.message}`);
+  }
+  const idVarian = varianBaku!.id as string;
+
   // `berlaku_sejak` jauh di masa lalu supaya tarif ini pasti yang berlaku pada
   // tanggal sesi fixture, tidak bergantung pada kapan `db reset` terakhir
-  // dijalankan. Jalur service role sengaja dilewatkan trigger guard_tarif_maju.
-  const { error: eTarif } = await admin.from("service_rates").insert({
-    service_id: idLayanan,
+  // dijalankan. Jalur service role sengaja dilewatkan trigger guard_tarif_varian_maju.
+  const { error: eTarif } = await admin.from("variant_rates").insert({
+    variant_id: idVarian,
     harga_klien: HARGA_LAMA,
     honor_mitra: HONOR_LAMA,
     berlaku_sejak: "2020-01-06",
@@ -307,6 +354,10 @@ async function main() {
     [TANGGAL_SESI_A, TANGGAL_SESI_B].map((tanggal) => ({
       client_id: idKlien,
       service_id: idLayanan,
+      // `hitungRekap()` mencocokkan tarif ke sesi lewat `variant_id` sejak
+      // Task 4 — sesi tanpa ini jatuh sebagai "tak bertarif", dan honor pekan
+      // di langkah 2/4 di bawah akan terbaca nol.
+      variant_id: idVarian,
       partner_id: idMitra,
       tanggal,
       status: "selesai",
@@ -373,9 +424,9 @@ async function main() {
       await page.waitForTimeout(600);
 
       const { data: barisTarif } = await admin
-        .from("service_rates")
+        .from("variant_rates")
         .select("harga_klien, honor_mitra, berlaku_sejak")
-        .eq("service_id", idLayanan)
+        .eq("variant_id", idVarian)
         .order("berlaku_sejak");
 
       const dua = (barisTarif ?? []).length === 2;
@@ -513,9 +564,12 @@ async function main() {
       // Nominal yang dicari: tarif uji DAN seluruh rate card seed. Membatasi
       // pencarian pada tarif uji saja akan melewatkan kebocoran yang hanya
       // menyentuh layanan seed — yaitu justru layanan yang dipakai panel admin
-      // sehari-hari.
+      // sehari-hari. `/owner/tarif` membaca `variant_rates` sejak Task 4, bukan
+      // lagi `service_rates` — pemindainya harus mengikuti sumber yang sama
+      // dengan yang benar-benar dirender, atau ia bisa hijau tanpa melihat apa
+      // yang ditampilkan layar.
       const { data: seluruhTarif } = await admin
-        .from("service_rates")
+        .from("variant_rates")
         .select("harga_klien, honor_mitra");
       const nominal = [
         ...new Set(
@@ -578,7 +632,7 @@ async function main() {
     .select("id")
     .like("email", `${PENANDA}%`);
   const { data: sisaTarif } = await admin
-    .from("service_rates")
+    .from("variant_rates")
     .select("id")
     .in("harga_klien", [HARGA_LAMA, HARGA_BARU]);
 

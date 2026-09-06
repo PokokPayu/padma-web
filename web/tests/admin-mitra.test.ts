@@ -560,6 +560,7 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
     for (const sumber of [sumberHalaman, sumberForm, sumberAksi, sumberLib]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
       expect(sumber).not.toContain("honor_mitra");
     }

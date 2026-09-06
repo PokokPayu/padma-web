@@ -61,6 +61,11 @@ const JUMLAH_SESI_SEED = 8;
 // Fixture milik berkas ini.
 const SVC_EDIT = "11111111-1111-1111-1111-1111111119a1";
 const SVC_STATUS = "11111111-1111-1111-1111-1111111119a2";
+// Layanan KHUSUS untuk pagar "varian aktif terakhir": SVC_EDIT juga jadi
+// sasaran `buatVarian` di bawah, jadi jumlah variannya BERTAMBAH sepanjang
+// berkas ini berjalan — tidak aman dijadikan sasaran "hanya satu varian
+// aktif". Layanan ini sengaja tidak pernah disentuh action lain.
+const SVC_VARIAN_TUNGGAL = "11111111-1111-1111-1111-1111111119a4";
 const PAKET_EDIT = "22222222-2222-2222-2222-2222222229a1";
 const PAKET_STATUS = "22222222-2222-2222-2222-2222222229a2";
 const SESI_UJI = "66666666-6666-6666-6666-6666666669a1";
@@ -69,6 +74,13 @@ const PADMA_ID_UJI = "PAD-UJI-9A01";
 const PAKET_KLIEN_UJI = "55555555-5555-5555-5555-5555555559a1";
 const TAK_ADA_SVC = "11111111-1111-1111-1111-1111111119ff";
 const TAK_ADA_PAKET = "22222222-2222-2222-2222-2222222229ff";
+const TAK_ADA_VARIAN = "77777777-7777-7777-7777-7777777779ff";
+// Varian KEDUA milik SVC_STATUS — baris ini yang membuat SVC_STATUS punya DUA
+// varian aktif, sehingga salah satunya bisa dinonaktifkan tanpa melanggar
+// pagar "varian aktif terakhir". SVC_EDIT sengaja dibiarkan hanya dengan
+// varian BAKU otomatisnya (satu-satunya), justru untuk membuktikan pagar itu
+// menyala pada layanan yang belum punya varian kedua.
+const VARIAN_KEDUA_STATUS = "77777777-7777-7777-7777-7777777779a1";
 
 // Lapisan data & action memakai sesi pengguna (`createServerSupabase`). Di
 // vitest tidak ada cookie, jadi klien ber-SESI SUNGGUHAN disuntikkan: RLS dan
@@ -104,6 +116,10 @@ const {
   perbaruiPaket,
   aktifkanPaket,
   nonaktifkanPaket,
+  buatVarian,
+  perbaruiVarian,
+  aktifkanVarian,
+  nonaktifkanVarian,
 } = await import("@/app/admin/layanan/aksi");
 const { daftarKatalogAdmin, pilihanLayanan } = await import("@/lib/admin/katalog-admin");
 const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
@@ -114,12 +130,19 @@ const { default: LayananPage } = await import("@/app/admin/layanan/page");
 const sumberAksi = baca("src/app/admin/layanan/aksi.ts");
 const sumberHalaman = baca("src/app/admin/layanan/page.tsx");
 const sumberForm = baca("src/app/admin/layanan/form-layanan.tsx");
+const sumberFormVarian = baca("src/app/admin/layanan/form-varian.tsx");
 const sumberStatus = baca("src/app/admin/layanan/status.ts");
 const sumberLib = baca("src/lib/admin/katalog-admin.ts");
-const SEMUA_SUMBER = [sumberAksi, sumberHalaman, sumberForm, sumberStatus, sumberLib];
+const SEMUA_SUMBER = [sumberAksi, sumberHalaman, sumberForm, sumberFormVarian, sumberStatus, sumberLib];
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
+// Id varian BAKU yang diterbitkan otomatis oleh trigger `trg_terbitkan_varian_baku`
+// begitu SVC_EDIT/SVC_STATUS disisipkan di bawah — id-nya acak (`gen_random_uuid()`),
+// jadi ditemukan lewat query sesudah insert, bukan ditulis sebagai konstanta.
+let varianBakuEdit: string;
+let varianBakuStatus: string;
+let varianTunggal: string;
 
 function formulir(isi: Record<string, string>): FormData {
   const fd = new FormData();
@@ -157,6 +180,23 @@ async function barisPaket(id: string) {
   return data;
 }
 
+async function barisVarian(id: string) {
+  const { data } = await admin
+    .from("service_variants")
+    .select("id, service_id, label, durasi_menit, format, urutan, aktif")
+    .eq("id", id)
+    .maybeSingle<{
+      id: string;
+      service_id: string;
+      label: string;
+      durasi_menit: number | null;
+      format: string | null;
+      urutan: number;
+      aktif: boolean;
+    }>();
+  return data;
+}
+
 async function bersihkan() {
   // Jejak audit fixture disapu lebih dulu — tabelnya SENGAJA tanpa foreign key
   // (cascade akan menghapus tepat bukti yang menjelaskan penghapusan), jadi
@@ -171,6 +211,18 @@ async function bersihkan() {
   await admin.from("client_packages").delete().eq("id", PAKET_KLIEN_UJI);
   await admin.from("clients").delete().eq("id", KLIEN_UJI);
   await admin.from("packages").delete().like("nama", "PAD-UJI%");
+  // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
+  // untuk setiap layanan yang lahir di atas (termasuk lewat `simpanLayanan()`
+  // sungguhan, yang id-nya tidak diketahui di sini) — FK-nya menahan
+  // penghapusan `services` sampai variannya disapu duluan. Id layanan dicari
+  // lewat pola nama yang sama, bukan disebut satu per satu.
+  const { data: layananUji } = await admin.from("services").select("id").like("nama", "PAD-UJI%");
+  if (layananUji && layananUji.length > 0) {
+    await admin
+      .from("service_variants")
+      .delete()
+      .in("service_id", layananUji.map((l) => l.id));
+  }
   await admin.from("services").delete().like("nama", "PAD-UJI%");
 
   // Baris seed yang dipinjam dikembalikan utuh.
@@ -200,6 +252,12 @@ beforeAll(async () => {
       nama: "PAD-UJI Layanan Status",
       deskripsi: "fixture",
     },
+    {
+      id: SVC_VARIAN_TUNGGAL,
+      phase_id: "nifas",
+      nama: "PAD-UJI Layanan Varian Tunggal",
+      deskripsi: "fixture",
+    },
   ]);
   await admin.from("packages").insert([
     { id: PAKET_EDIT, service_id: SVC_EDIT, nama: "PAD-UJI Paket Edit", jumlah_sesi: 4 },
@@ -210,6 +268,40 @@ beforeAll(async () => {
       jumlah_sesi: 2,
     },
   ]);
+
+  // Trigger `trg_terbitkan_varian_baku` sudah menerbitkan satu varian BAKU
+  // untuk SVC_EDIT & SVC_STATUS di atas — dicari di sini, bukan ditulis
+  // sebagai konstanta, karena id-nya `gen_random_uuid()`.
+  const { data: bakuEdit } = await admin
+    .from("service_variants")
+    .select("id")
+    .eq("service_id", SVC_EDIT)
+    .single();
+  varianBakuEdit = bakuEdit!.id;
+  const { data: bakuStatus } = await admin
+    .from("service_variants")
+    .select("id")
+    .eq("service_id", SVC_STATUS)
+    .single();
+  varianBakuStatus = bakuStatus!.id;
+  const { data: bakuTunggal } = await admin
+    .from("service_variants")
+    .select("id")
+    .eq("service_id", SVC_VARIAN_TUNGGAL)
+    .single();
+  varianTunggal = bakuTunggal!.id;
+
+  // SVC_STATUS memperoleh varian KEDUA di sini — SVC_EDIT sengaja dibiarkan
+  // dengan satu varian saja (varian bakunya), supaya pagar "aktif terakhir"
+  // punya sasaran yang jelas untuk masing-masing skenario.
+  await admin.from("service_variants").insert({
+    id: VARIAN_KEDUA_STATUS,
+    service_id: SVC_STATUS,
+    label: "PAD-UJI Varian Kedua",
+    durasi_menit: 60,
+    format: "private",
+    urutan: 1,
+  });
 
   // Klien KEDUA pada paket seed. Tanpa baris ini, hitungan `dipakai` untuk
   // admin dan untuk klien kebetulan sama (1) dan test RLS di bawah tidak
@@ -345,6 +437,47 @@ describe("daftarKatalogAdmin — katalog kelola, bukan katalog publik", () => {
       .flatMap((l) => l.paket)
       .find((p) => p.id === PAKET_SEED)!;
     expect(untukKlien.dipakai).toBe(1); // hanya paketnya sendiri
+  });
+});
+
+describe("daftarKatalogAdmin — varian menempel pada layanannya", () => {
+  it("varian menempel pada layanannya, termasuk yang nonaktif", async () => {
+    const katalog = await daftarKatalogAdmin();
+    const layanan = katalog.flatMap((f) => f.layanan).find((l) => l.id === SVC_STATUS)!;
+    const idVarian = layanan.varian.map((v) => v.id);
+    expect(idVarian).toContain(varianBakuStatus);
+    expect(idVarian).toContain(VARIAN_KEDUA_STATUS);
+  });
+
+  it("membawa label, durasi, format, urutan, dan status aktif apa adanya", async () => {
+    const katalog = await daftarKatalogAdmin();
+    const varian = katalog
+      .flatMap((f) => f.layanan)
+      .flatMap((l) => l.varian)
+      .find((v) => v.id === VARIAN_KEDUA_STATUS)!;
+    expect(varian).toMatchObject({
+      label: "PAD-UJI Varian Kedua",
+      durasiMenit: 60,
+      format: "private",
+      urutan: 1,
+      aktif: true,
+    });
+  });
+
+  it("menghitung berapa sesi yang memakai tiap varian", async () => {
+    const { count } = await admin
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("variant_id", varianBakuEdit);
+    // Varian baku SVC_EDIT belum pernah dipakai sesi mana pun.
+    expect(count ?? 0).toBe(0);
+
+    const katalog = await daftarKatalogAdmin();
+    const varian = katalog
+      .flatMap((f) => f.layanan)
+      .flatMap((l) => l.varian)
+      .find((v) => v.id === varianBakuEdit)!;
+    expect(varian.sesiTercatat).toBe(count ?? 0);
   });
 });
 
@@ -586,7 +719,11 @@ describe("menonaktifkan layanan TIDAK menghapus namanya dari riwayat klien", () 
     expect(data!.map((s) => s.id)).not.toContain(SVC_SEED);
 
     const katalog = await bacaKatalog();
-    expect(katalog.flatMap((f) => f.layanan)).not.toContain(NAMA_SVC_SEED);
+    // `f.layanan` sejak Task 8 berisi OBJEK ({id, nama, varian}), bukan
+    // string — `not.toContain(NAMA_SVC_SEED)` atas array objek tidak pernah
+    // gagal (perbandingan referensi objek vs string selalu false), sehingga
+    // assertion ini VAKUM tanpa `.map((l) => l.nama)` di bawah.
+    expect(katalog.flatMap((f) => f.layanan).map((l) => l.nama)).not.toContain(NAMA_SVC_SEED);
   });
 
   it("layanan nonaktif TIDAK ditawarkan saat menjadwalkan sesi baru", async () => {
@@ -722,6 +859,224 @@ describe("aktifkanPaket & nonaktifkanPaket", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Server action: varian
+// ---------------------------------------------------------------------------
+
+describe("buatVarian — mendaftarkan varian baru pada sebuah layanan", () => {
+  it("membuat baris service_variants baru yang langsung aktif", async () => {
+    const hasil = await buatVarian(
+      formulir({
+        service_id: SVC_EDIT,
+        label: "PAD-UJI Varian Baru",
+        durasi_menit: "90",
+        format: "private",
+        urutan: "2",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+
+    expect(await barisVarian(hasil.id)).toMatchObject({
+      service_id: SVC_EDIT,
+      label: "PAD-UJI Varian Baru",
+      durasi_menit: 90,
+      format: "private",
+      urutan: 2,
+      aktif: true,
+    });
+  });
+
+  it("label, durasi, dan format BOLEH dikosongkan (varian tanpa dimensi)", async () => {
+    const hasil = await buatVarian(
+      formulir({ service_id: SVC_EDIT, label: "", durasi_menit: "", format: "" }),
+    );
+    expect(hasil.ok).toBe(true);
+    if (!hasil.ok) return;
+    expect(await barisVarian(hasil.id)).toMatchObject({
+      label: "",
+      durasi_menit: null,
+      format: null,
+      urutan: 0, // urutan kosong jatuh ke 0, sama dengan default kolomnya
+    });
+  });
+
+  it("menolak durasi yang bukan angka bulat positif", async () => {
+    for (const nilai of ["0", "-5", "abc", "2.5"]) {
+      const hasil = await buatVarian(
+        formulir({ service_id: SVC_EDIT, label: "PAD-UJI Durasi Salah", durasi_menit: nilai }),
+      );
+      expect(hasil.ok, `durasi_menit="${nilai}" seharusnya ditolak`).toBe(false);
+      if (hasil.ok) continue;
+      expect(hasil.pesan).toMatch(/durasi/i);
+    }
+    const { data } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("label", "PAD-UJI Durasi Salah");
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("menolak format selain private/circle", async () => {
+    const hasil = await buatVarian(
+      formulir({ service_id: SVC_EDIT, label: "PAD-UJI Format Salah", format: "grup" }),
+    );
+    expect(hasil.ok).toBe(false);
+    if (hasil.ok) return;
+    expect(hasil.pesan).toMatch(/format/i);
+  });
+
+  it("menolak layanan yang tidak ada", async () => {
+    const hasil = await buatVarian(formulir({ service_id: TAK_ADA_SVC, label: "PAD-UJI Yatim" }));
+    expect(hasil.ok).toBe(false);
+    if (hasil.ok) return;
+    expect(hasil.pesan).toMatch(/layanan/i);
+  });
+
+  it("PENJAGA PERAN: klien yang login tidak bisa memanggil action ini", async () => {
+    ref.sesi = sesiKlien;
+    await expect(
+      buatVarian(formulir({ service_id: SVC_EDIT, label: "PAD-UJI Dari Klien" })),
+    ).rejects.toThrow(/REDIRECT/);
+    const { data } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("label", "PAD-UJI Dari Klien");
+    expect(data ?? []).toHaveLength(0);
+  });
+});
+
+describe("perbaruiVarian — label/durasi/format/urutan, tidak pernah pindah layanan", () => {
+  it("mengubah label, durasi, format, dan urutan", async () => {
+    const hasil = await perbaruiVarian(
+      formulir({
+        varian: VARIAN_KEDUA_STATUS,
+        label: "PAD-UJI Varian Kedua Ubah",
+        durasi_menit: "120",
+        format: "circle",
+        urutan: "3",
+      }),
+    );
+    expect(hasil.ok).toBe(true);
+    expect(await barisVarian(VARIAN_KEDUA_STATUS)).toMatchObject({
+      label: "PAD-UJI Varian Kedua Ubah",
+      durasi_menit: 120,
+      format: "circle",
+      urutan: 3,
+    });
+
+    // Dikembalikan supaya fixture tetap seperti semula untuk test lain.
+    await admin
+      .from("service_variants")
+      .update({ label: "PAD-UJI Varian Kedua", durasi_menit: 60, format: "private", urutan: 1 })
+      .eq("id", VARIAN_KEDUA_STATUS);
+  });
+
+  it("service_id yang diselundupkan di FormData DIABAIKAN — tidak pernah pindah layanan", async () => {
+    // Setiap sesi yang menunjuk varian ini akan ikut berganti arti tanpa satu
+    // pun error — pelajaran yang sama dengan perbaruiPaket.
+    await perbaruiVarian(
+      formulir({
+        varian: varianBakuEdit,
+        service_id: SVC_STATUS,
+        label: "PAD-UJI Tidak Pindah",
+      }),
+    );
+    const baris = await barisVarian(varianBakuEdit);
+    expect(baris!.service_id).toBe(SVC_EDIT);
+    expect(baris!.label).toBe("PAD-UJI Tidak Pindah");
+
+    // Dikembalikan ke label baku supaya test lain yang bergantung padanya
+    // (mis. pagar "varian aktif terakhir") tidak ikut terpengaruh nama.
+    await admin
+      .from("service_variants")
+      .update({ label: "" })
+      .eq("id", varianBakuEdit);
+  });
+
+  it("menolak durasi/format tidak sah tanpa menimpa nilai lama", async () => {
+    const hasil = await perbaruiVarian(
+      formulir({ varian: VARIAN_KEDUA_STATUS, label: "PAD-UJI Varian Kedua", format: "grup" }),
+    );
+    expect(hasil.ok).toBe(false);
+    expect((await barisVarian(VARIAN_KEDUA_STATUS))!.format).toBe("private");
+  });
+
+  it("id yang tidak ada ditolak, bukan 'ok' palsu", async () => {
+    const hasil = await perbaruiVarian(
+      formulir({ varian: TAK_ADA_VARIAN, label: "PAD-UJI Hantu" }),
+    );
+    expect(hasil.ok).toBe(false);
+  });
+
+  it("PENJAGA PERAN: klien yang login tidak bisa memanggil action ini", async () => {
+    ref.sesi = sesiKlien;
+    await expect(
+      perbaruiVarian(formulir({ varian: VARIAN_KEDUA_STATUS, label: "PAD-UJI Direbut Klien" })),
+    ).rejects.toThrow(/REDIRECT/);
+    ref.sesi = sesiAdmin;
+    expect((await barisVarian(VARIAN_KEDUA_STATUS))!.label).toBe("PAD-UJI Varian Kedua");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PAGAR: layanan tidak boleh kehilangan varian AKTIF TERAKHIRnya
+// ---------------------------------------------------------------------------
+
+describe("aktifkanVarian & nonaktifkanVarian — pagar varian aktif terakhir", () => {
+  it("menolak menonaktifkan varian aktif TERAKHIR sebuah layanan", async () => {
+    // SVC_VARIAN_TUNGGAL hanya punya SATU varian (bakunya sendiri): layanan
+    // tanpa varian aktif membuat setiap perhitungan harga bercabang dua
+    // selamanya, dan cabang keduanya hanya muncul di produksi.
+    const hasil = await nonaktifkanVarian(formulir({ varian: varianTunggal }));
+    expect(hasil.ok).toBe(false);
+    if (hasil.ok) return;
+    expect(hasil.pesan).toMatch(/varian terakhir/i);
+    expect((await barisVarian(varianTunggal))!.aktif).toBe(true);
+  });
+
+  it("membolehkan menonaktifkan varian bila masih ada varian aktif lain", async () => {
+    // SVC_STATUS punya DUA varian aktif (baku + VARIAN_KEDUA_STATUS):
+    // menonaktifkan salah satunya menyisakan yang lain tetap aktif.
+    const hasil = await nonaktifkanVarian(formulir({ varian: VARIAN_KEDUA_STATUS }));
+    expect(hasil.ok).toBe(true);
+    expect((await barisVarian(VARIAN_KEDUA_STATUS))!.aktif).toBe(false);
+    expect((await barisVarian(varianBakuStatus))!.aktif).toBe(true);
+    expect(jejak.revalidate).toContain("/admin/layanan");
+  });
+
+  it("aktifkanVarian menyalakannya kembali", async () => {
+    expect((await aktifkanVarian(formulir({ varian: VARIAN_KEDUA_STATUS }))).ok).toBe(true);
+    expect((await barisVarian(VARIAN_KEDUA_STATUS))!.aktif).toBe(true);
+  });
+
+  it("id yang tidak ada ditolak, bukan 'ok' palsu", async () => {
+    expect((await nonaktifkanVarian(formulir({ varian: TAK_ADA_VARIAN }))).ok).toBe(false);
+    expect((await aktifkanVarian(formulir({ varian: TAK_ADA_VARIAN }))).ok).toBe(false);
+  });
+
+  it("PENJAGA PERAN: klien yang login tidak bisa mengubah status varian", async () => {
+    ref.sesi = sesiKlien;
+    await expect(
+      nonaktifkanVarian(formulir({ varian: VARIAN_KEDUA_STATUS })),
+    ).rejects.toThrow(/REDIRECT/);
+    await expect(
+      aktifkanVarian(formulir({ varian: VARIAN_KEDUA_STATUS })),
+    ).rejects.toThrow(/REDIRECT/);
+    ref.sesi = sesiAdmin;
+    expect((await barisVarian(VARIAN_KEDUA_STATUS))!.aktif).toBe(true);
+  });
+
+  it("keadaan tujuan HARDCODED di dalam action, tidak pernah jadi parameter", () => {
+    for (const pola of [
+      /function\s+\w*[Vv]arian\w*\([^)]*aktif\s*:/,
+      /function\s+\w*[Vv]arian\w*\([^)]*status\s*:/,
+    ]) {
+      expect(sumberAksi).not.toMatch(pola);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PAGAR: jumlah_sesi menggeser progres passport yang sedang berjalan
 // ---------------------------------------------------------------------------
 
@@ -799,6 +1154,13 @@ describe("penghapusan tidak tersedia — dan modul ini tidak menawarkannya", () 
       .eq("id", SVC_EDIT);
     expect(eLayanan?.code).toBe("42501");
     expect(await barisLayanan(SVC_EDIT)).not.toBeNull();
+
+    const { error: eVarian } = await sesiAdmin
+      .from("service_variants")
+      .delete()
+      .eq("id", varianBakuEdit);
+    expect(eVarian?.code).toBe("42501");
+    expect(await barisVarian(varianBakuEdit)).not.toBeNull();
   });
 
   it("tidak ada satu pun .delete() di seluruh berkas modul", () => {
@@ -808,7 +1170,7 @@ describe("penghapusan tidak tersedia — dan modul ini tidak menawarkannya", () 
   });
 
   it("tidak ada tombol/label Hapus di UI modul", () => {
-    for (const sumber of [sumberHalaman, sumberForm]) {
+    for (const sumber of [sumberHalaman, sumberForm, sumberFormVarian]) {
       expect(sumber).not.toMatch(/>\s*Hapus/);
     }
   });
@@ -863,6 +1225,21 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
     expect(markup).toMatch(/10 sesi/);
   });
 
+  it("menampilkan varian di bawah layanannya, termasuk yang nonaktif", () => {
+    expect(markup).toContain("PAD-UJI Varian Kedua");
+    // Varian baku (label kosong) jatuh ke teks penjelas, bukan string kosong
+    // yang membuat baris terlihat rusak.
+    expect(markup).toMatch(/Varian baku/i);
+  });
+
+  it("menawarkan jalan menambah varian baru per layanan", () => {
+    expect(markup).toContain("+ Varian");
+    expect(sumberFormVarian).toContain('name="label"');
+    expect(sumberFormVarian).toContain('name="durasi_menit"');
+    expect(sumberFormVarian).toContain('name="format"');
+    expect(sumberFormVarian).toContain('name="urutan"');
+  });
+
   it("memperingatkan bahwa mengubah jumlah sesi menggeser progres berjalan", () => {
     const teks = markup + sumberForm;
     expect(teks).toMatch(/progres/i);
@@ -893,12 +1270,13 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   });
 
   it("TIDAK ada nominal uang di modul layanan (money firewall)", () => {
-    // Harga layanan hidup di `service_rates`, wilayah owner. Modul ini
-    // mengelola katalognya, bukan angkanya.
+    // Harga layanan hidup di `variant_rates` (dulu `service_rates`, dijatuhkan
+    // Task 5), wilayah owner. Modul ini mengelola katalognya, bukan angkanya.
     expect(markup).not.toMatch(/Rp\s?\d/);
     for (const sumber of SEMUA_SUMBER) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
       expect(sumber).not.toContain("honor_mitra");
     }
@@ -927,8 +1305,9 @@ describe("berkas server action layanan", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // simpan/perbarui/aktifkan/nonaktifkan × (layanan, paket) = 8.
-    expect(jumlahAction).toBe(8);
+    // simpan/perbarui/aktifkan/nonaktifkan × (layanan, paket) = 8, ditambah
+    // buat/perbarui/aktifkan/nonaktifkan × varian = 4 → 12.
+    expect(jumlahAction).toBe(12);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

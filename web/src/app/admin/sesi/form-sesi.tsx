@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { jadwalkanSesi } from "./aksi";
+import type { VarianPilihan } from "@/lib/admin/katalog-admin";
 
 export type PilihanKlien = { id: string; nama: string; padmaId: string };
 export type PilihanSederhana = { id: string; nama: string };
@@ -27,11 +28,15 @@ const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
 export function FormJadwalSesi({
   klien,
   layanan,
+  varian,
   mitra,
   tanggalAwal,
 }: {
   klien: PilihanKlien[];
   layanan: PilihanSederhana[];
+  // Varian AKTIF seluruh layanan, disaring per layanan terpilih di klien —
+  // pola yang sama dengan wizard klien `/passport/ajukan`.
+  varian: VarianPilihan[];
   mitra: PilihanSederhana[];
   tanggalAwal: string;
 }) {
@@ -39,6 +44,9 @@ export function FormJadwalSesi({
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState(false);
+  const [serviceId, setServiceId] = useState(layanan[0]?.id ?? "");
+  const varianLayanan = varian.filter((v) => v.serviceId === serviceId);
+  const [variantId, setVariantId] = useState(varianLayanan[0]?.id ?? "");
 
   if (!terbuka) {
     return (
@@ -64,7 +72,8 @@ export function FormJadwalSesi({
     );
   }
 
-  const kosong = klien.length === 0 || layanan.length === 0 || mitra.length === 0;
+  const kosong =
+    klien.length === 0 || layanan.length === 0 || varian.length === 0 || mitra.length === 0;
 
   return (
     <form
@@ -99,10 +108,41 @@ export function FormJadwalSesi({
         </label>
         <label>
           <span className={KELAS_LABEL}>Layanan</span>
-          <select name="service_id" required className={KELAS_MEDAN}>
+          <select
+            name="service_id"
+            required
+            value={serviceId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setServiceId(id);
+              // Varian terpilih ikut direset ke pilihan pertama layanan baru
+              // — FK gabungan bakal menolak kombinasi lama, dan pesan itu
+              // sebaiknya tidak pernah lahir dari kombinasi yang tidak pernah
+              // dimaksud admin sendiri.
+              setVariantId(varian.find((v) => v.serviceId === id)?.id ?? "");
+            }}
+            className={KELAS_MEDAN}
+          >
             {layanan.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.nama}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className={KELAS_LABEL}>Varian</span>
+          <select
+            name="variant_id"
+            required
+            value={variantId}
+            onChange={(e) => setVariantId(e.target.value)}
+            disabled={varianLayanan.length === 0}
+            className={KELAS_MEDAN}
+          >
+            {varianLayanan.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.nama}
               </option>
             ))}
           </select>
@@ -139,8 +179,8 @@ export function FormJadwalSesi({
 
       {kosong && (
         <p className="mt-3 text-[12.5px] font-semibold text-clay">
-          Klien, layanan, dan mitra aktif harus ada dulu sebelum sesi bisa
-          dijadwalkan.
+          Klien, layanan (dengan varian), dan mitra aktif harus ada dulu
+          sebelum sesi bisa dijadwalkan.
         </p>
       )}
       {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}

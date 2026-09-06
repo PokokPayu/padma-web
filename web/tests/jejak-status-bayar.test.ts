@@ -29,19 +29,27 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
+import { varianBaku } from "./helpers/varian";
 
 const admin = createAdminSupabase();
 
 const SESI_UJI = "66666666-6666-6666-6666-6666666666f1";
 const PAKET_UJI = "55555555-5555-5555-5555-5555555555f1";
 const ANANDA = "44444444-4444-4444-4444-444444444401";
+const SVC_NUTRISI = "11111111-1111-1111-1111-111111111103";
+// Sejak Task 9 `variant_id` NOT NULL: dibaca dari basis data sekali di sini
+// (id-nya lahir `gen_random_uuid()` saat migrasi/trigger berjalan) alih-alih
+// ditulis literal — dipakai di seluruh berkas ini untuk SVC_NUTRISI.
+let VARIAN_NUTRISI: string;
 
 beforeAll(async () => {
+  VARIAN_NUTRISI = await varianBaku(admin, SVC_NUTRISI);
   await admin.from("sessions").upsert(
     {
       id: SESI_UJI,
       client_id: ANANDA,
-      service_id: "11111111-1111-1111-1111-111111111103",
+      service_id: SVC_NUTRISI,
+      variant_id: VARIAN_NUTRISI,
       partner_id: "33333333-3333-3333-3333-333333333302",
       tanggal: "2026-12-28",
       status: "terjadwal",
@@ -359,7 +367,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
   const SESI_LAHIR = "66666666-6666-6666-6666-6666666666f2";
   const PAKET_LAHIR = "55555555-5555-5555-5555-5555555555f2";
   const SESI_SAH = "66666666-6666-6666-6666-6666666666f3";
-  const SVC = "11111111-1111-1111-1111-111111111103";
+  const SVC = SVC_NUTRISI;
   const MITRA = "33333333-3333-3333-3333-333333333302";
   const PAKET = "22222222-2222-2222-2222-222222222201";
 
@@ -389,6 +397,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
         id: SESI_LAHIR,
         client_id: ANANDA,
         service_id: SVC,
+        variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
         status: "terjadwal",
@@ -442,6 +451,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
       id: SESI_LAHIR,
       client_id: ANANDA,
       service_id: SVC,
+      variant_id: VARIAN_NUTRISI,
       partner_id: MITRA,
       tanggal: "2026-12-28",
       status: "terjadwal",
@@ -461,6 +471,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
         id: SESI_SAH,
         client_id: ANANDA,
         service_id: SVC,
+        variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
         status: "terjadwal",
@@ -476,6 +487,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
       .insert({
         client_id: ANANDA,
         service_id: SVC,
+        variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
         status: "terjadwal",

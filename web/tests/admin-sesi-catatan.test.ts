@@ -39,6 +39,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 import { badgeDari, progresPaket, type SesiRingkas } from "@/lib/passport/turunan";
 
 const admin = createAdminSupabase();
@@ -94,6 +95,13 @@ const sumberStatus = baca("src/app/admin/sesi/status.ts");
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
+// Sejak Task 9 `sessions.variant_id` NOT NULL: id-nya lahir
+// `gen_random_uuid()` saat migrasi/trigger berjalan, jadi tidak ada nilai
+// tetap yang bisa ditulis literal di sini — dibaca dari basis data sekali di
+// `beforeAll`. `VARIAN_MATERI` sengaja milik layanan LAIN (SVC_MATERI) dari
+// `SVC_BARU` yang dipakai skenario "menolak varian milik layanan lain".
+let VARIAN_BARU: string;
+let VARIAN_MATERI: string;
 
 // ---------------------------------------------------------------------------
 // Perkakas
@@ -103,6 +111,7 @@ function fdJadwal(ubah: Record<string, string> = {}) {
   const fd = new FormData();
   fd.set("client_id", KLIEN);
   fd.set("service_id", SVC_BARU);
+  fd.set("variant_id", VARIAN_BARU);
   fd.set("partner_id", MITRA);
   fd.set("tanggal", TGL);
   for (const [k, v] of Object.entries(ubah)) {
@@ -124,11 +133,13 @@ async function buatSesi(
   status: "terjadwal" | "batal" | "selesai",
   opsi: { denganPaket?: boolean; serviceId?: string; catatan?: string } = {},
 ) {
+  const serviceId = opsi.serviceId ?? SVC_BARU;
   const { data, error } = await admin
     .from("sessions")
     .insert({
       client_id: KLIEN,
-      service_id: opsi.serviceId ?? SVC_BARU,
+      service_id: serviceId,
+      variant_id: await varianBaku(admin, serviceId),
       partner_id: MITRA,
       tanggal: TGL,
       status,
@@ -180,6 +191,7 @@ function petakan(r: {
     catatan: r.catatan ?? "",
     rekomendasi: r.rekomendasi ?? "",
     statusBayar: "belum",
+    varian: { label: "", durasiMenit: null, format: null },
   };
 }
 
@@ -211,6 +223,8 @@ beforeAll(async () => {
   sesiAdmin = await signInAs("admin@padma.test");
   sesiKlien = await signInAs("ananda@padma.test");
   ref.sesi = sesiAdmin;
+  VARIAN_BARU = await varianBaku(admin, SVC_BARU);
+  VARIAN_MATERI = await varianBaku(admin, SVC_MATERI);
 
   await admin.from("partners").upsert(
     {
@@ -444,12 +458,15 @@ describe("menjadwalkan sesi langsung", () => {
 
     const { data } = await admin
       .from("sessions")
-      .select("client_id, service_id, partner_id, tanggal, status, catatan, client_package_id")
+      .select(
+        "client_id, service_id, variant_id, partner_id, tanggal, status, catatan, client_package_id",
+      )
       .eq("tanggal", TGL);
     expect(data).toHaveLength(1);
     expect(data![0]).toMatchObject({
       client_id: KLIEN,
       service_id: SVC_BARU,
+      variant_id: VARIAN_BARU,
       partner_id: MITRA,
       tanggal: TGL,
       status: "terjadwal",
@@ -507,13 +524,66 @@ describe("menjadwalkan sesi langsung", () => {
     expect(data ?? []).toHaveLength(0);
   });
 
-  it("klien, layanan, dan mitra yang tidak ada ditolak tanpa sesi yatim", async () => {
-    for (const medan of ["client_id", "service_id", "partner_id"]) {
+  it("klien, layanan, varian, dan mitra yang tidak ada ditolak tanpa sesi yatim", async () => {
+    for (const medan of ["client_id", "service_id", "variant_id", "partner_id"]) {
       const r = await jadwalkanSesi(fdJadwal({ [medan]: HANTU }));
       expect(r.ok).toBe(false);
     }
     const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
     expect(data ?? []).toHaveLength(0);
+  });
+
+  it("menolak sesi tanpa varian", async () => {
+    const r = await jadwalkanSesi(fdJadwal({ variant_id: "" }));
+    expect(r.ok).toBe(false);
+    const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("menolak varian milik layanan lain", async () => {
+    // VARIAN_MATERI milik SVC_MATERI, dipasangkan sengaja dengan SVC_BARU —
+    // FK gabungan `sessions_varian_milik_layanan` tetap lapisan terakhir,
+    // tapi query di action ini wajib menolaknya lebih dulu dengan KALIMAT.
+    const r = await jadwalkanSesi(fdJadwal({ variant_id: VARIAN_MATERI }));
+    expect(r.ok).toBe(false);
+    // Bukti bahwa penolakan berasal dari QUERY PRA-INSERT (kalimat), bukan
+    // dari FK gabungan yang jatuh sampai ke pesan generik "Gagal menyimpan
+    // jadwal sesi." — bila query itu dihapus, FK tetap menahan insert-nya
+    // tapi PESANNYA berubah, dan hanya asersi pesan yang menangkap itu.
+    expect(r.ok === false && r.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
+    const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("menyimpan variant_id yang dipilih", async () => {
+    const r = await jadwalkanSesi(fdJadwal());
+    expect(r.ok).toBe(true);
+    const { data } = await admin
+      .from("sessions")
+      .select("variant_id")
+      .eq("tanggal", TGL)
+      .single();
+    expect(data!.variant_id).toBe(VARIAN_BARU);
+  });
+
+  it("menolak varian yang sudah dinonaktifkan admin, walau tetap milik layanan yang benar", async () => {
+    // Pasangan uji "mitra NONAKTIF ditolak" & "layanan tidak tersedia" di
+    // atas, untuk VARIAN: kombinasi service_id + variant_id di sini SAH,
+    // hanya `aktif`-nya yang dimatikan — menghapus `.eq("aktif", true)` dari
+    // query varian akan meloloskan ini walau "menolak varian milik layanan
+    // lain" (pasangan yang salah) tetap tertangkap.
+    await admin.from("service_variants").update({ aktif: false }).eq("id", VARIAN_BARU);
+    try {
+      const r = await jadwalkanSesi(fdJadwal());
+      expect(r.ok).toBe(false);
+      expect(r.ok === false && r.pesan).toBe("Varian tidak tersedia untuk layanan ini.");
+      const { data } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+      expect(data ?? []).toHaveLength(0);
+    } finally {
+      // Dikembalikan aktif: VARIAN_BARU dipakai berkas ini di banyak test
+      // lain, dan test-test itu tidak boleh mewarisi keadaan nonaktif.
+      await admin.from("service_variants").update({ aktif: true }).eq("id", VARIAN_BARU);
+    }
   });
 
   it("tanggal yang bukan YYYY-MM-DD ditolak sebelum menyentuh basis data", async () => {
@@ -579,6 +649,7 @@ describe("daftar sesi di halaman /admin/sesi", () => {
     for (const sumber of [sumberHalaman, sumberFormSesi, sumberFormSelesai, sumberAksi]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
+      expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });

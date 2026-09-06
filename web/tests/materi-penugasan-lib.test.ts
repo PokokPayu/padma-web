@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
+import { varianBaku } from "./helpers/varian";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const svc = () =>
@@ -61,6 +62,7 @@ describe("daftarPenugasan — otomatis mengikuti aturan yang sama dengan berhak_
     // yang seharusnya membuatnya muncul di "otomatis" SELAMA materinya aktif.
     const { error: eSesi } = await db.from("sessions").insert({
       client_id: klienId, service_id: serviceId,
+      variant_id: await varianBaku(db, serviceId),
       partner_id: "33333333-3333-3333-3333-333333333301",
       tanggal: "2026-01-01", status: "selesai",
     });
@@ -71,9 +73,12 @@ describe("daftarPenugasan — otomatis mengikuti aturan yang sama dengan berhak_
     const db = svc();
     // Urutan wajib: sessions dulu (referensi service_id tanpa cascade), lalu
     // materials (cascade menyapu material_assignments & material_services),
-    // baru services.
+    // lalu service_variants (trigger `trg_terbitkan_varian_baku` menerbitkan
+    // satu varian baku otomatis begitu `services` disisipkan — FK-nya menahan
+    // penghapusan `services` sampai variannya ikut disapu), baru services.
     await db.from("sessions").delete().eq("service_id", serviceId);
     await db.from("materials").delete().eq("id", materiId);
+    await db.from("service_variants").delete().eq("service_id", serviceId);
     await db.from("services").delete().eq("id", serviceId);
   });
 

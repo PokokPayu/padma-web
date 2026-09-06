@@ -1,4 +1,5 @@
 import { formatTanggalID, sudahLewat } from "./waktu";
+import { labelVarian, type FormatVarian } from "@/lib/varian";
 
 export type StatusSesi = "terjadwal" | "selesai" | "batal";
 export type PayStatus = "belum" | "menunggu_verifikasi" | "lunas";
@@ -14,6 +15,15 @@ export type SesiRingkas = {
   catatan: string;
   rekomendasi: string;
   statusBayar: PayStatus;
+  /**
+   * Varian yang dipesan sesi ini — dibawa mentah (bukan label jadi) supaya
+   * `susunTagihan()` merangkainya lewat `labelVarian()` (`@/lib/varian`),
+   * SATU-SATUNYA perangkai label varian di proyek ini, dan bukan lewat
+   * perangkai kedua. Inilah yang membuat label yang dibaca KLIEN di sini
+   * dan label yang dibaca ADMIN di `daftarTagihanAdmin()`
+   * (`@/lib/admin/tagihan`) tidak pernah berpisah diam-diam.
+   */
+  varian: { label: string; durasiMenit: number | null; format: FormatVarian | null };
 };
 
 export type PaketRingkas = {
@@ -109,13 +119,25 @@ export function susunTagihan(input: {
   // Hanya sesi LEPAS yang menjadi item. `sessions.status_bayar` untuk sesi
   // berpaket tidak relevan dan memang kontradiktif di data nyata — memakainya
   // akan melahirkan "tagihan hantu" saat presentasi.
+  //
+  // Label menyertakan LABEL varian sejak layanan punya lebih dari satu harga:
+  // dua sesi layanan yang sama bisa berbeda harga bila variannya berbeda (mis.
+  // 60 menit vs 90 menit), dan nominal disampaikan lewat WhatsApp (keputusan
+  // #10) — tanpa varian di label, klien tidak punya cara membedakan DUA
+  // tagihan sesi yang sama layanan & tanggalnya. Dirangkai lewat sama persis
+  // `labelVarian()` yang dipakai `daftarTagihanAdmin()` (`@/lib/admin/tagihan`)
+  // — lihat komentar di `SesiRingkas.varian` di atas.
   for (const s of input.sesi) {
     if (s.clientPackageId !== null) continue;
     if (s.status === "batal") continue;
+    const varLabel = labelVarian(s.varian);
     item.push({
       jenis: "sesi",
       id: s.id,
-      label: `${s.namaLayanan} · ${formatTanggalID(s.tanggal)}`,
+      label:
+        varLabel === ""
+          ? `${s.namaLayanan} · ${formatTanggalID(s.tanggal)}`
+          : `${s.namaLayanan} · ${varLabel} · ${formatTanggalID(s.tanggal)}`,
       status: s.statusBayar,
     });
   }

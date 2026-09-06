@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { tetapkanTarif } from "./aksi";
 import { NOMINAL_MAKS } from "./status";
 
@@ -13,7 +13,7 @@ const KELAS_TOMBOL_UTAMA =
   "rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60";
 
 /**
- * Formulir "Tetapkan tarif baru" untuk SATU layanan.
+ * Formulir "Tetapkan tarif baru" untuk SATU varian.
  *
  * Prototipe (`vRate`/`simpanRate`) menyunting angka di tempat dan menimpanya.
  * Bentuk itu sengaja TIDAK ditiru: rekap honor membaca tarif yang berlaku pada
@@ -24,27 +24,31 @@ const KELAS_TOMBOL_UTAMA =
  * baris BARU bertanggal berlaku.
  *
  * Karena itu pula tidak ada tombol Hapus di sini. Hak DELETE atas
- * `service_rates` sudah dicabut dari peran aplikasi — owner pun dijawab 42501 —
+ * `variant_rates` sudah dicabut dari peran aplikasi — owner pun dijawab 42501 —
  * dan itu keadaan yang benar: baris lama adalah bukti berapa honor yang
  * seharusnya dibayarkan pekan lalu.
  */
 export function FormTarif({
-  serviceId,
+  variantId,
   namaLayanan,
   hariIni,
   hargaSekarang,
   honorSekarang,
+  hargaCoretSekarang,
 }: {
-  serviceId: string;
+  variantId: string;
   namaLayanan: string;
   /** Hari ini menurut kalender Jakarta — dihitung di server, bukan di browser. */
   hariIni: string;
   hargaSekarang: number | null;
   honorSekarang: number | null;
+  hargaCoretSekarang: number | null;
 }) {
   const [terbuka, setTerbuka] = useState(false);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
+  const hargaRef = useRef<HTMLInputElement>(null);
+  const coretRef = useRef<HTMLInputElement>(null);
 
   if (!terbuka) {
     return (
@@ -76,16 +80,17 @@ export function FormTarif({
       }
       className="grid w-full gap-2.5 rounded-xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-3"
     >
-      {/* `layanan` terikat pada baris yang sedang dibuka — tarif tidak pernah
-          bisa mendarat di layanan lain lewat satu medan yang ditulis ulang di
+      {/* `varian` terikat pada baris yang sedang dibuka — tarif tidak pernah
+          bisa mendarat di varian lain lewat satu medan yang ditulis ulang di
           DevTools tanpa pemilik menyadarinya. Server tetap memeriksanya ulang,
           karena argumen action pun masukan jaringan. */}
-      <input type="hidden" name="layanan" value={serviceId} />
+      <input type="hidden" name="varian" value={variantId} />
 
-      <div className="grid gap-2.5 sm:grid-cols-3">
+      <div className="grid gap-2.5 sm:grid-cols-4">
         <label>
           <span className={KELAS_LABEL}>Harga klien (Rp)</span>
           <input
+            ref={hargaRef}
             name="harga"
             type="number"
             required
@@ -97,6 +102,41 @@ export function FormTarif({
             aria-label={`Harga klien ${namaLayanan}`}
             className={KELAS_MEDAN}
           />
+        </label>
+        <label>
+          <span className={KELAS_LABEL}>Harga coret (Rp)</span>
+          <span className="mt-1 flex gap-1.5">
+            <input
+              ref={coretRef}
+              name="harga_coret"
+              type="number"
+              min={0}
+              max={NOMINAL_MAKS}
+              step={1}
+              inputMode="numeric"
+              defaultValue={hargaCoretSekarang ?? undefined}
+              aria-label={`Harga coret ${namaLayanan}`}
+              className={KELAS_MEDAN}
+            />
+            {/* Kenyamanan MENGETIK di sisi klien saja — server TIDAK PERNAH
+                menghitung harga + 20000. Menanamkan "+20rb" sebagai rumus di
+                server berarti kode yang harus diubah saat soft launch
+                berakhir; sebagai tombol ia hanya mengisi medan, dan pemilik
+                tetap bebas mengetik angka lain atau mengosongkannya. */}
+            <button
+              type="button"
+              onClick={() => {
+                const harga = Number(hargaRef.current?.value ?? "");
+                if (coretRef.current && Number.isFinite(harga) && harga > 0) {
+                  coretRef.current.value = String(harga + 20_000);
+                }
+              }}
+              className={KELAS_TOMBOL_KECIL}
+              title="Isi harga coret = harga klien + Rp 20.000"
+            >
+              +20rb
+            </button>
+          </span>
         </label>
         <label>
           <span className={KELAS_LABEL}>Honor mitra (Rp)</span>
@@ -130,6 +170,12 @@ export function FormTarif({
           />
         </label>
       </div>
+
+      <p className="text-[12px] leading-relaxed text-clay">
+        Harga coret bersifat opsional dan diisi MANUAL — harga sebelum diskon
+        soft launch, dipajang tercoret. Kosongkan bila varian ini tidak sedang
+        promo.
+      </p>
 
       <p className="text-[12px] leading-relaxed text-clay">
         Menetapkan tarif baru <b>tidak akan mengubah</b> rekap pekan yang sudah
