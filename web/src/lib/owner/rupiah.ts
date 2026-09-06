@@ -8,7 +8,7 @@
 // basis data dibangun untuk mencegah. Letaknya di sini membuat impor dari luar
 // wilayah owner terlihat ganjil pada saat ditulis, bukan setahun kemudian.
 //
-// Nilai uang PADMA adalah RUPIAH BULAT (`service_rates.harga_klien` dan
+// Nilai uang PADMA adalah RUPIAH BULAT (`variant_rates.harga_klien` dan
 // `honor_mitra` bertipe `int`), jadi tidak ada sen yang perlu dibulatkan dan
 // tidak ada pecahan yang boleh muncul.
 

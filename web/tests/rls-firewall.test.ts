@@ -2,40 +2,20 @@ import { describe, it, expect } from "vitest";
 import { signInAs, anonClient } from "./helpers/as-user";
 
 describe("MONEY FIREWALL — tabel uang hanya untuk owner", () => {
-  it("admin TIDAK bisa membaca service_rates (0 baris)", async () => {
-    const admin = await signInAs("admin@padma.test");
-    const { data, error } = await admin.from("service_rates").select("*");
-    expect(error).toBeNull();
-    expect(data).toHaveLength(0);
-  });
-
-  it("admin TIDAK bisa menulis service_rates (error 42501)", async () => {
-    const admin = await signInAs("admin@padma.test");
-    const { error } = await admin.from("service_rates").insert({
-      service_id: "11111111-1111-1111-1111-111111111101",
-      harga_klien: 1,
-      honor_mitra: 1,
-    });
-    expect(error?.code).toBe("42501");
-  });
+  // Empat `it` yang dulu ada di sini (admin baca/tulis, klien baca, owner
+  // baca — semuanya atas `service_rates`) DIPENSIUNKAN Task 5: tabelnya
+  // dijatuhkan (migration `bubarkan_service_rates`), dan padanan yang sama
+  // persis untuk `variant_rates` sudah hidup di tests/owner-pengerasan.test.ts
+  // (describe "pengerasan tidak menggeser satu pun pagar kerahasiaan", yang
+  // memeriksa admin/klien/anon/owner sekaligus) dan tests/owner-tarif.test.ts
+  // ("admin TETAP dijawab 0 baris..." & "admin yang menyisipkan tarif
+  // langsung lewat REST ditolak RLS"). Menduplikasinya di sini hanya menguji
+  // policy yang sama dua kali dengan fixture berbeda.
 
   it("admin TIDAK bisa membaca honor_marks", async () => {
     const admin = await signInAs("admin@padma.test");
     const { data } = await admin.from("honor_marks").select("*");
     expect(data).toHaveLength(0);
-  });
-
-  it("klien TIDAK bisa membaca service_rates", async () => {
-    const klien = await signInAs("ananda@padma.test");
-    const { data } = await klien.from("service_rates").select("*");
-    expect(data).toHaveLength(0);
-  });
-
-  it("owner BISA membaca service_rates (seed 10 baris)", async () => {
-    const owner = await signInAs("owner@padma.test");
-    const { data, error } = await owner.from("service_rates").select("*");
-    expect(error).toBeNull();
-    expect(data!.length).toBeGreaterThanOrEqual(10);
   });
 });
 

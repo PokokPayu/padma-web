@@ -33,38 +33,29 @@ insert into service_variants (service_id, label)
   select id, '' from services
   where not exists (select 1 from service_variants v where v.service_id = services.id);
 
-insert into service_rates (service_id, harga_klien, honor_mitra) values
-  ('11111111-1111-1111-1111-111111111101',425000,190000),
-  ('11111111-1111-1111-1111-111111111102',250000,100000),
-  ('11111111-1111-1111-1111-111111111103',300000,130000),
-  ('11111111-1111-1111-1111-111111111104',350000,150000),
-  ('11111111-1111-1111-1111-111111111105',275000,110000),
-  ('11111111-1111-1111-1111-111111111106',450000,200000),
-  ('11111111-1111-1111-1111-111111111107',400000,175000),
-  ('11111111-1111-1111-1111-111111111108',375000,160000),
-  ('11111111-1111-1111-1111-111111111109',400000,180000),
-  ('11111111-1111-1111-1111-111111111110',300000,125000);
-
--- Blok CERMIN dari langkah salin tarif migrasi `tarif_per_varian`
--- (`insert into variant_rates ... select ... from service_rates join
--- service_variants ...`). Pada `db reset` yang bersih, migrasi berjalan
--- SEBELUM berkas seed ini — jadi saat pernyataan salinan migrasi berjalan
--- `service_rates` masih kosong dan ia menyalin NOL baris, sama seperti nasib
--- backfill varian di atas. Proyeksi & sumbernya (SELECT dari `service_rates`
--- join `service_variants`) diulang di sini SESUDAH `service_rates` diisi,
--- ditambah satu penjaga idempotensi yang TIDAK ada di migrasi — klausa
--- `where not exists (...)` di bawah — supaya blok ini aman dijalankan ulang
--- pada basis data yang sudah berisi tarif produksi (mis. migrasi produksi
--- yang sudah pernah menyalin sebagian). Task 5 melebur kedua blok ini menjadi
--- satu insert langsung, sesudah `service_rates` dijatuhkan.
-insert into variant_rates (variant_id, harga_klien, honor_mitra, berlaku_sejak)
-  select v.id, r.harga_klien, r.honor_mitra, r.berlaku_sejak
-    from service_rates r
-    join service_variants v on v.service_id = r.service_id
-   where not exists (
-     select 1 from variant_rates vr
-      where vr.variant_id = v.id and vr.berlaku_sejak = r.berlaku_sejak
-   );
+-- `service_rates` dijatuhkan Task 5 (migration `bubarkan_service_rates`):
+-- dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang tahu
+-- kapan. Blok ini dulu dua langkah (isi `service_rates`, lalu blok CERMIN
+-- menyalinnya ke `variant_rates` — sama seperti langkah salin migrasi
+-- `tarif_per_varian`, diulang di sini karena migrasi berjalan SEBELUM seed
+-- pada `db reset` bersih); Task 5 meleburnya menjadi satu insert langsung ke
+-- `variant_rates` yang menunjuk varian baku tiap layanan. Nominalnya sengaja
+-- SAMA PERSIS dengan seed lama.
+insert into variant_rates (variant_id, harga_klien, honor_mitra)
+  select v.id, r.harga, r.honor
+    from (values
+      ('11111111-1111-1111-1111-111111111101'::uuid, 425000, 190000),
+      ('11111111-1111-1111-1111-111111111102'::uuid, 250000, 100000),
+      ('11111111-1111-1111-1111-111111111103'::uuid, 300000, 130000),
+      ('11111111-1111-1111-1111-111111111104'::uuid, 350000, 150000),
+      ('11111111-1111-1111-1111-111111111105'::uuid, 275000, 110000),
+      ('11111111-1111-1111-1111-111111111106'::uuid, 450000, 200000),
+      ('11111111-1111-1111-1111-111111111107'::uuid, 400000, 175000),
+      ('11111111-1111-1111-1111-111111111108'::uuid, 375000, 160000),
+      ('11111111-1111-1111-1111-111111111109'::uuid, 400000, 180000),
+      ('11111111-1111-1111-1111-111111111110'::uuid, 300000, 125000)
+    ) as r(service_id, harga, honor)
+    join service_variants v on v.service_id = r.service_id;
 
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);

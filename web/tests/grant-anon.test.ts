@@ -6,7 +6,8 @@ import { querySql, dalamTransaksiRollback } from "./helpers/db";
 /**
  * PERTAHANAN BERLAPIS — hak tabel peran `anon`.
  *
- * Temuan auditor: `service_rates`, `honor_marks`, dan `material_videos` sudah
+ * Temuan auditor: tabel uang (kini `variant_rates`, dulu `service_rates`
+ * sebelum dijatuhkan Task 5), `honor_marks`, dan `material_videos` sudah
  * dicabut hak `anon`-nya, tetapi tabel data pasien (`clients`, `sessions`,
  * `screenings`, `materials`, `material_pages`, `profiles`, dan kerabatnya)
  * masih memegang GRANT `anon` PENUH — SELECT sampai TRUNCATE. Keamanannya
@@ -54,7 +55,7 @@ const TABEL_TERTUTUP_ANON = [
   "partners",
   "app_settings",
   // tabel uang
-  "service_rates",
+  "variant_rates",
   "honor_marks",
 ] as const;
 
@@ -142,7 +143,7 @@ describe("GRANT anon — perilaku lewat REST: ditolak 42501, bukan '0 baris'", (
     "material_videos",
     "partners",
     "app_settings",
-    "service_rates",
+    "variant_rates",
     "honor_marks",
   ] as const;
 
@@ -211,7 +212,8 @@ describe("GRANT anon — yang TIDAK boleh ikut rusak", () => {
     expect(semuaKlien.data!.length).toBeGreaterThanOrEqual(2);
 
     const owner = await signInAs("owner@padma.test");
-    const tarif = await owner.from("service_rates").select("harga_klien");
+    // `service_rates` dijatuhkan Task 5 — tarif kini hidup di `variant_rates`.
+    const tarif = await owner.from("variant_rates").select("harga_klien");
     expect(tarif.error).toBeNull();
     expect(tarif.data!.length).toBeGreaterThanOrEqual(10);
   });

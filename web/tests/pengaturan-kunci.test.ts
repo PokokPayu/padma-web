@@ -7,7 +7,7 @@ import { querySql } from "./helpers/db";
  * REGISTRI KUNCI PENGATURAN — menutup money firewall lewat BARIS.
  *
  * `tests/money-firewall-struktural.test.ts` menjaga satu invarian yang kuat:
- * nominal uang hanya boleh hidup sebagai KOLOM di `service_rates` &
+ * nominal uang hanya boleh hidup sebagai KOLOM di `variant_rates` &
  * `honor_marks`. Ia buta terhadap satu bentuk: `app_settings (key text,
  * value text)` membuat nominal bisa hidup sebagai BARIS, dan tidak ada satu
  * pun nama kolom yang berubah. Direproduksi sebagai admin sungguhan sebelum

@@ -47,117 +47,35 @@ async function sebagaiAuthenticated<T>(
 
 describe("variant_rates — pagar uang dipindah apa adanya", () => {
   /**
-   * Uji "seluruh baris service_rates tersalin" ala brief MUSTAHIL hijau:
-   * pada `db reset` bersih, migrasi berjalan SEBELUM `seed.sql`, jadi saat
-   * pernyataan salinan migrasi dijalankan `service_rates` MASIH KOSONG — ia
-   * menyalin nol baris — sementara seed sesudahnya mengisi `service_rates`
-   * dengan 10 baris dan `variant_rates` tetap kosong. Membandingkan cacahnya
-   * sesudah `db reset` + seed karena itu selalu membandingkan 10 dengan 0.
+   * >>> DIPENSIUNKAN (Task 5) — bukan dihapus diam-diam <<<
    *
-   * Gantinya (Ruling 3, direvisi Ruling 10): pernyataan salin yang DIUJI harus
-   * IDENTIK — bukan cuma "identik dalam semangat" — dengan yang ada di migrasi
-   * `20260906120000_tarif_per_varian.sql`, tanpa satu klausa pun ditambahkan
-   * demi kenyamanan uji. Draft pertama uji ini menambahkan `where r.service_id
-   * = $1` supaya pernyataan tak berfilter tidak bentrok dengan 10 baris seed
-   * yang sudah dicerminkan blok CERMIN `seed.sql` ke `variant_rates` — tetapi
-   * itu berarti yang diuji adalah STRING LAIN yang kebetulan mirip, bukan kode
-   * produksi: bila migrasi kelak menambah filter atau mengganti kolom sumber,
-   * uji berfilter itu tidak dijamin ikut merah.
+   * Uji ini dulu bernama "pernyataan salinan migrasi memindahkan baris
+   * service_rates apa adanya (rollback)". Yang dijaganya: pernyataan
+   * `insert into variant_rates ... select ... from service_rates join
+   * service_variants ...` di migrasi `tarif_per_varian` menyalin SETIAP baris
+   * `service_rates` verbatim ke `variant_rates` — nominalnya utuh DAN
+   * `berlaku_sejak`-nya tidak dibulatkan ke hari migrasi berjalan — dengan
+   * cara menjalankan pernyataan migrasi itu VERBATIM di dalam transaksi yang
+   * di-rollback, di atas satu baris fixture bertanggal 2021 plus kesepuluh
+   * baris seed asli.
    *
-   * Diperbaiki dengan mengosongkan `variant_rates` lebih dulu (`delete` —
-   * berjalan sebagai `postgres` di dalam transaksi yang di-rollback, jadi
-   * pencabutan DELETE untuk `authenticated` tidak menghalanginya, dan seluruh
-   * baris seed kembali begitu transaksi ini dibatalkan), lalu menyemai satu
-   * baris fixture sendiri, lalu menjalankan pernyataan migrasi TANPA
-   * perubahan apa pun. Karena tabelnya kosong sebelum pernyataan berjalan,
-   * pernyataan tak berfilter itu tidak bentrok dengan siapa pun — dan hasilnya
-   * dites dua arah: baris fixture sendiri (tanggal 2021, memastikan
-   * berlaku_sejak tidak dibulatkan ke hari migrasi) DAN kesepuluh baris seed
-   * asli (memastikan seluruh rate card ikut tersalin dengan tanggalnya
-   * masing-masing utuh — persis niat uji "seluruh baris tersalin" ala brief,
-   * kini terwujud tanpa perbandingan yang mustahil hijau).
+   * Ia tidak lagi bisa dijaga: migration `bubarkan_service_rates` (Task 5)
+   * menjatuhkan `public.service_rates` sepenuhnya. Pernyataan yang diuji
+   * verbatim di sini menjadi SQL yang menyebut tabel yang tidak ada lagi —
+   * bahkan di dalam transaksi yang di-rollback, `service_rates` sudah tidak
+   * ada untuk DISEBUT, bukan cuma kosong. Ini bukan pagar yang jebol; ini satu
+   * pernyataan migrasi yang sudah berjalan SEKALI (saat Task 3 diterapkan ke
+   * riwayat migrasi) dan tidak akan pernah berjalan lagi — migrasi tidak
+   * pernah dijalankan ulang di basis data yang sama. Menjaga string SQL-nya
+   * pasca tabelnya jatuh berarti menjaga sesuatu yang bukan kode produksi lagi.
    *
-   * Pola dasarnya (semai dalam rollback, jalankan pernyataan migrasi apa
-   * adanya) sama dengan tests/varian-pasangan-layanan.test.ts untuk backfill
-   * Task 2.
+   * Jaminan yang SEBENARNYA dibutuhkan pembaca berikutnya — "variant_rates
+   * berisi tarif yang benar, dengan berlaku_sejak riwayat yang utuh" — tetap
+   * hidup dan diuji lewat jalur lain yang TIDAK bergantung pada service_rates:
+   * `tests/owner-tarif.test.ts` (rate card dibaca & ditampilkan dengan nominal
+   * & tanggal yang benar) dan `supabase/seed.sql` sendiri (satu insert
+   * langsung ke `variant_rates`, diverifikasi lewat `npm run db:recover`).
    */
-  it("pernyataan salinan migrasi memindahkan baris service_rates apa adanya (rollback)", async () => {
-    await dalamTransaksiRollback(async (jalankan) => {
-      const LAYANAN_UJI = "11111111-1111-1111-1111-11111111ab01";
-
-      // Kosongkan dulu: pernyataan migrasi TIDAK berfilter, jadi ia menyalin
-      // SELURUH service_rates yang ada. Tanpa ini ia bentrok dengan 10 baris
-      // seed yang sudah dicerminkan blok CERMIN seed.sql lewat
-      // variant_rates_unik_per_tanggal.
-      await jalankan(`delete from public.variant_rates`);
-
-      await jalankan(
-        `insert into public.services (id, phase_id, nama, deskripsi, aktif)
-         values ($1, 'prekonsepsi', 'PAD-UJI Layanan Salin Tarif', 'fixture', true)`,
-        [LAYANAN_UJI],
-      );
-      // Varian bakunya TIDAK disisipkan manual di sini: trigger
-      // `trg_terbitkan_varian_baku` (migrasi 20260906130000) sudah
-      // menerbitkannya otomatis begitu baris `services` di atas lahir.
-      // Menyisipkannya lagi secara manual akan melahirkan VARIAN KEDUA untuk
-      // layanan yang sama, dan invarian "satu service_rates -> satu
-      // variant_rates" di bawah (b) diam-diam menjadi "satu -> dua".
-      const [{ id: VARIAN_UJI }] = (await jalankan(
-        `select id from public.service_variants where service_id = $1`,
-        [LAYANAN_UJI],
-      )) as Array<{ id: string }>;
-      await jalankan(
-        `insert into public.service_rates (service_id, harga_klien, honor_mitra, berlaku_sejak)
-         values ($1, 275000, 120000, '2021-06-15')`,
-        [LAYANAN_UJI],
-      );
-
-      // Verbatim — identik dengan migrasi 20260906120000_tarif_per_varian.sql,
-      // tanpa satu klausa tambahan pun. Bila baris ini berbeda dari migrasi,
-      // uji ini menjaga sesuatu yang bukan kode produksi.
-      await jalankan(
-        `insert into public.variant_rates (variant_id, harga_klien, honor_mitra, berlaku_sejak)
-           select v.id, r.harga_klien, r.honor_mitra, r.berlaku_sejak
-             from public.service_rates r
-             join public.service_variants v on v.service_id = r.service_id`,
-      );
-
-      // (a) Baris fixture sendiri: berlaku_sejak 2021 tidak dibulatkan ke hari
-      // migrasi.
-      const fixture = await jalankan(
-        `select harga_klien, honor_mitra, berlaku_sejak::text as berlaku_sejak
-           from public.variant_rates where variant_id = $1`,
-        [VARIAN_UJI],
-      );
-      expect(fixture).toEqual([
-        { harga_klien: 275000, honor_mitra: 120000, berlaku_sejak: "2021-06-15" },
-      ]);
-
-      // (b) Kesepuluh baris seed asli ikut tersalin, tanggalnya masing-masing
-      // utuh — bukan hanya baris fixture yang diperiksa. Ini bonus nyata dari
-      // pengosongan (1): pernyataan yang sama persis kini bisa diuji atas
-      // SELURUH service_rates yang berjalan, bukan cuma satu baris karangan.
-      const beda = await jalankan(
-        `select count(*)::int as n
-           from public.service_rates r
-           join public.service_variants v on v.service_id = r.service_id
-          where not exists (
-            select 1 from public.variant_rates vr
-             where vr.variant_id = v.id
-               and vr.harga_klien = r.harga_klien
-               and vr.honor_mitra = r.honor_mitra
-               and vr.berlaku_sejak = r.berlaku_sejak)`,
-      );
-      expect(beda[0].n).toBe(0);
-
-      const cacah = await jalankan(
-        `select (select count(*)::int from public.service_rates) as lama,
-                (select count(*)::int from public.variant_rates) as baru`,
-      );
-      expect(cacah[0].baru).toBe(cacah[0].lama);
-      expect(cacah[0].lama).toBeGreaterThanOrEqual(11); // 10 seed + 1 fixture
-    });
-  });
 
   it("CHECK menolak honor melebihi harga", async () => {
     await dalamTransaksiRollback(async (jalankan) => {

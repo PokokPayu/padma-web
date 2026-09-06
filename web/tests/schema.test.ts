@@ -5,7 +5,7 @@ const TABLES = [
   "profiles", "phases", "services", "packages", "partners", "app_settings",
   "clients", "client_packages", "sessions", "screenings", "booking_requests",
   "materials", "material_services", "material_pages", "material_assignments",
-  "material_videos", "service_rates", "honor_marks",
+  "material_videos", "variant_rates", "honor_marks",
 ] as const;
 
 describe("skema database", () => {

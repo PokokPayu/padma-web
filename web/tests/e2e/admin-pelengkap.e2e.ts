@@ -219,7 +219,21 @@ async function bersihkan() {
     if (idMateri.length > 0) {
       await admin.from("materials").delete().in("id", idMateri);
     }
-    await admin.from("service_rates").delete().eq("service_id", l.id);
+    // `service_rates` dijatuhkan Task 5 — tarif kini hidup di `variant_rates`,
+    // yang menunjuk `service_variants.id` (bukan `services.id` langsung), dan
+    // FK-nya TIDAK ber-cascade — sama seperti alasan penghapusan
+    // `service_variants` sendiri di bawah. Skrip ini sendiri tidak pernah
+    // menyemai tarif untuk layanan fixture, tapi pembersihan defensif ini
+    // menjaga penghapusan `service_variants`/`services` di bawah tidak pernah
+    // tertahan diam-diam bila suatu saat ada yang menambahkannya.
+    const { data: varianLayanan } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", l.id);
+    const idVarianLama = (varianLayanan ?? []).map((v) => v.id as string);
+    if (idVarianLama.length > 0) {
+      await admin.from("variant_rates").delete().in("variant_id", idVarianLama);
+    }
     await admin.from("packages").delete().eq("service_id", l.id);
     // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku
     // otomatis (id acak, tidak pernah dicatat di sini) begitu `services` di

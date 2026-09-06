@@ -1,5 +1,6 @@
 /**
- * PENGERASAN TABEL UANG — `service_rates` & `honor_marks` di LAPISAN BASIS DATA.
+ * PENGERASAN TABEL UANG — `variant_rates` (dulu `service_rates`) & `honor_marks`
+ * di LAPISAN BASIS DATA.
  *
  * Kenapa berkas ini ada, dan kenapa ia menembak PostgREST langsung alih-alih
  * memanggil server action:
@@ -11,7 +12,8 @@
  * JWT peran SQL `authenticated` yang sama, dan REST `/rest/v1/...` selalu
  * terbuka baginya: memanggilnya langsung MELEWATI seluruh validator TypeScript
  * itu. Red team membuktikannya sebagai owner sungguhan (owner@padma.test, anon
- * key + JWT owner), bukan membacanya dari policy — semuanya HTTP 201/200:
+ * key + JWT owner), bukan membacanya dari policy — semuanya HTTP 201/200, di
+ * atas `service_rates` (nenek moyang `variant_rates`, dijatuhkan Task 5):
  *
  *   POST   service_rates {berlaku_sejak:"2020-01-01", harga:999999}  -> 201
  *   POST   service_rates {harga_klien:-500000, honor_mitra:-250000}  -> 201
@@ -25,7 +27,7 @@
  *
  * Baseline saat itu: `pg_constraint` atas kedua tabel hanya PK, FK, dan
  * `unique (partner_id, week_start)` — NOL check, NOL trigger. 1298 test hijau
- * di atas tabel telanjang, karena tidak ada satu pun yang menjaganya.
+ * di atas tabel telanjang itu, karena tidak ada satu pun yang menjaganya.
  *
  * Dampaknya bukan kebocoran nominal (money firewall terbukti rapat, dijaga
  * `rls-firewall`, `rls-hardening`, dan `money-firewall-struktural`) melainkan
@@ -35,6 +37,13 @@
  *   (b) `ditandai_oleh` palsu membuat owner menandai honor ATAS NAMA ADMIN
  *       bertanggal 1999, dan karena DELETE `honor_marks` sudah (benar) dicabut,
  *       catatan otorisasi palsu itu PERMANEN — non-repudiation runtuh.
+ *
+ * `service_rates` dipindah ke `variant_rates` per VARIAN (Task 3, migration
+ * `tarif_per_varian`) dengan SELURUH pagar di berkas ini ikut dipindah, lalu
+ * `service_rates` sendiri dijatuhkan (Task 5, migration
+ * `bubarkan_service_rates`). Berkas ini karena itu sekarang menembak
+ * `variant_rates` langsung — bentuk risikonya sama persis, hanya kolom
+ * penunjuknya yang berubah dari `service_id` menjadi `variant_id`.
  *
  * Yang dijaga berkas ini adalah lapisan yang tidak bisa dilewati siapa pun yang
  * bicara ke basis data: CHECK, UNIQUE, dan trigger. Setiap `it` di bawah
@@ -54,6 +63,13 @@ const admin = createAdminSupabase(); // service role — jalur seed & pembersiha
 const LAYANAN_KERAS = "11111111-1111-1111-1111-1111111119c1";
 const LAYANAN_KEDUA = "11111111-1111-1111-1111-1111111119c2";
 const MITRA_KERAS = "33333333-3333-3333-3333-3333333339c1";
+
+// Harga menempel di VARIAN sejak Task 3 — setiap layanan fixture di atas
+// memperoleh satu varian sendiri, diisipkan eksplisit (bukan mengandalkan
+// varian baku otomatis trigger `trg_terbitkan_varian_baku`) supaya id-nya
+// diketahui & bisa dirujuk langsung dari test di bawah.
+const VARIAN_KERAS = "11111111-1111-1111-1111-2111111119c1";
+const VARIAN_KEDUA = "11111111-1111-1111-1111-2111111119c2";
 
 const TARIF_DASAR = "99999999-9999-9999-9999-9999999999c1";
 
@@ -76,7 +92,7 @@ let idAdmin = "";
 
 type BarisTarif = {
   id: string;
-  service_id: string;
+  variant_id: string;
   harga_klien: number;
   honor_mitra: number;
   berlaku_sejak: string;
@@ -90,12 +106,12 @@ type BarisTanda = {
   ditandai_oleh: string | null;
 };
 
-/** Seluruh tarif satu layanan, dibaca lewat SERVICE ROLE (bukan lewat RLS). */
-async function tarifLayanan(serviceId: string): Promise<BarisTarif[]> {
+/** Seluruh tarif satu VARIAN, dibaca lewat SERVICE ROLE (bukan lewat RLS). */
+async function tarifVarian(variantId: string): Promise<BarisTarif[]> {
   const { data } = await admin
-    .from("service_rates")
-    .select("id, service_id, harga_klien, honor_mitra, berlaku_sejak")
-    .eq("service_id", serviceId)
+    .from("variant_rates")
+    .select("id, variant_id, harga_klien, honor_mitra, berlaku_sejak")
+    .eq("variant_id", variantId)
     .order("berlaku_sejak")
     .returns<BarisTarif[]>();
   return data ?? [];
@@ -113,14 +129,16 @@ async function tandaMitra(partnerId: string): Promise<BarisTanda[]> {
 
 async function bersihkan() {
   await admin.from("honor_marks").delete().eq("partner_id", MITRA_KERAS);
-  for (const s of [LAYANAN_KERAS, LAYANAN_KEDUA]) {
-    await admin.from("service_rates").delete().eq("service_id", s);
+  for (const v of [VARIAN_KERAS, VARIAN_KEDUA]) {
+    await admin.from("variant_rates").delete().eq("variant_id", v);
   }
   await admin.from("partners").delete().eq("id", MITRA_KERAS);
   // Trigger `trg_terbitkan_varian_baku` menerbitkan satu varian baku otomatis
   // begitu `services` disisipkan — FK-nya menahan penghapusan `services`
-  // sampai variannya ikut disapu duluan. Berkas ini tidak pernah menyentuh
-  // `service_variants`/`variant_rates` sendiri, jadi cukup disapu per layanan.
+  // sampai SELURUH variannya ikut disapu duluan, termasuk varian baku itu
+  // sendiri (id acak, tidak pernah dicatat di sini) di samping VARIAN_KERAS/
+  // VARIAN_KEDUA yang disisipkan manual — karena itu disapu per SERVICE_ID,
+  // bukan hanya per id varian yang kita catat sendiri.
   for (const s of [LAYANAN_KERAS, LAYANAN_KEDUA]) {
     await admin.from("service_variants").delete().eq("service_id", s);
   }
@@ -144,6 +162,12 @@ beforeAll(async () => {
   ]);
   if (eLayanan) throw new Error(`fixture layanan gagal: ${eLayanan.message}`);
 
+  const { error: eVarian } = await admin.from("service_variants").insert([
+    { id: VARIAN_KERAS, service_id: LAYANAN_KERAS, label: "" },
+    { id: VARIAN_KEDUA, service_id: LAYANAN_KEDUA, label: "" },
+  ]);
+  if (eVarian) throw new Error(`fixture varian gagal: ${eVarian.message}`);
+
   const { error: eMitra } = await admin
     .from("partners")
     .insert({ id: MITRA_KERAS, nama: "PAD-UJI Bidan Keras", no_hp: "0811-0000-9301" });
@@ -152,19 +176,19 @@ beforeAll(async () => {
 
 /**
  * Setiap `it` berangkat dari keadaan yang SAMA PERSIS: satu tarif acuan pada
- * `LAYANAN_KERAS`, nol tarif pada `LAYANAN_KEDUA`, nol tanda bayar. Test yang
+ * `VARIAN_KERAS`, nol tarif pada `VARIAN_KEDUA`, nol tanda bayar. Test yang
  * serangannya BERHASIL (yaitu: test yang merah) karena itu tidak bisa
  * mencemari test sesudahnya dan menyamarkan kegagalannya sebagai kegagalan
  * lain — pola yang sudah dibayar mahal di suite ini.
  */
 beforeEach(async () => {
   await admin.from("honor_marks").delete().eq("partner_id", MITRA_KERAS);
-  for (const s of [LAYANAN_KERAS, LAYANAN_KEDUA]) {
-    await admin.from("service_rates").delete().eq("service_id", s);
+  for (const v of [VARIAN_KERAS, VARIAN_KEDUA]) {
+    await admin.from("variant_rates").delete().eq("variant_id", v);
   }
-  const { error } = await admin.from("service_rates").insert({
+  const { error } = await admin.from("variant_rates").insert({
     id: TARIF_DASAR,
-    service_id: LAYANAN_KERAS,
+    variant_id: VARIAN_KERAS,
     harga_klien: HARGA_DASAR,
     honor_mitra: HONOR_DASAR,
     berlaku_sejak: BERLAKU_DASAR,
@@ -179,17 +203,17 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 // (1) NILAI TARIF — angka mustahil ditolak basis data, bukan hanya TypeScript
 // ---------------------------------------------------------------------------
-describe("service_rates: nilai wajar ditegakkan CHECK, bukan server action", () => {
+describe("variant_rates: nilai wajar ditegakkan CHECK, bukan server action", () => {
   it("harga & honor NEGATIF ditolak 23514", async () => {
     // Red team: {harga_klien:-500000, honor_mitra:-250000} -> HTTP 201.
-    const { error } = await sesiOwner.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error } = await sesiOwner.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: -500_000,
       honor_mitra: -250_000,
       berlaku_sejak: "2030-01-07",
     });
     expect(error?.code).toBe("23514");
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(0);
   });
 
   it("harga negatif saja — dan honor negatif saja — sama-sama ditolak 23514", async () => {
@@ -197,36 +221,36 @@ describe("service_rates: nilai wajar ditegakkan CHECK, bukan server action", () 
       { harga_klien: -1, honor_mitra: 0 },
       { harga_klien: 100_000, honor_mitra: -1 },
     ]) {
-      const { error } = await sesiOwner.from("service_rates").insert({
-        service_id: LAYANAN_KEDUA,
+      const { error } = await sesiOwner.from("variant_rates").insert({
+        variant_id: VARIAN_KEDUA,
         berlaku_sejak: "2030-01-07",
         ...nilai,
       });
       expect(error?.code, JSON.stringify(nilai)).toBe("23514");
     }
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(0);
   });
 
   it("honor MELEBIHI harga (margin negatif) ditolak 23514", async () => {
     // Red team: {harga_klien:1000, honor_mitra:999999} -> HTTP 201. Rekap
     // menampilkan margin negatif sebagai angka mustahil, tanpa peringatan.
-    const { error } = await sesiOwner.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error } = await sesiOwner.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: 1_000,
       honor_mitra: 999_999,
       berlaku_sejak: "2030-01-07",
     });
     expect(error?.code).toBe("23514");
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(0);
   });
 
   it("KONTROL: honor SAMA DENGAN harga (margin nol) tetap diterima", async () => {
     // Batas constraint harus `<=`, bukan `<`: layanan bermargin nol adalah
     // keputusan bisnis yang sah (mis. layanan sosial), bukan data rusak.
     const { data, error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .insert({
-        service_id: LAYANAN_KEDUA,
+        variant_id: VARIAN_KEDUA,
         harga_klien: 300_000,
         honor_mitra: 300_000,
         berlaku_sejak: "2030-01-07",
@@ -237,8 +261,8 @@ describe("service_rates: nilai wajar ditegakkan CHECK, bukan server action", () 
   });
 
   it("KONTROL: harga & honor NOL diterima (layanan gratis bukan data rusak)", async () => {
-    const { error } = await sesiOwner.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error } = await sesiOwner.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: 0,
       honor_mitra: 0,
       berlaku_sejak: "2030-01-07",
@@ -250,28 +274,28 @@ describe("service_rates: nilai wajar ditegakkan CHECK, bukan server action", () 
 // ---------------------------------------------------------------------------
 // (2) TARIF KEMBAR — pemilihan "berlaku_sejak terbesar" harus deterministik
 // ---------------------------------------------------------------------------
-describe("service_rates: satu layanan tidak punya dua tarif pada tanggal sama", () => {
+describe("variant_rates: satu varian tidak punya dua tarif pada tanggal sama", () => {
   it("SERVICE ROLE pun ditolak 23505 — inilah yang benar-benar diadili UNIQUE", async () => {
     // Jalur seed/pemulihan sengaja dilewatkan kedua trigger (lihat gerbang
     // `current_user`), jadi di sanalah index keunikan menjadi satu-satunya
     // pagar — dan justru di sanalah tarif kembar paling mungkin lahir tanpa
     // sadar: `supabase/seed.sql` dan fixture test menulis langsung.
-    const { error: ePertama } = await admin.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error: ePertama } = await admin.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: 100_000,
       honor_mitra: 10_000,
       berlaku_sejak: "2030-02-04",
     });
     expect(ePertama).toBeNull();
 
-    const { error } = await admin.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error } = await admin.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: 200_000,
       honor_mitra: 20_000,
       berlaku_sejak: "2030-02-04",
     });
     expect(error?.code).toBe("23505");
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(1);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(1);
   });
 
   it("owner: dua baris kembar dalam SATU pernyataan pun tidak lahir", async () => {
@@ -279,22 +303,22 @@ describe("service_rates: satu layanan tidak punya dua tarif pada tanggal sama", 
     // jadi baris kedua sudah melihat baris pertama sebagai "tarif terakhir"
     // sebelum index keunikan sempat diperiksa. Kelasnya tetap tertutup — dan
     // keduanya dibuktikan, bukan salah satunya.
-    const { error } = await sesiOwner.from("service_rates").insert([
+    const { error } = await sesiOwner.from("variant_rates").insert([
       {
-        service_id: LAYANAN_KEDUA,
+        variant_id: VARIAN_KEDUA,
         harga_klien: 100_000,
         honor_mitra: 10_000,
         berlaku_sejak: "2030-02-04",
       },
       {
-        service_id: LAYANAN_KEDUA,
+        variant_id: VARIAN_KEDUA,
         harga_klien: 200_000,
         honor_mitra: 20_000,
         berlaku_sejak: "2030-02-04",
       },
     ]);
     expect(error?.code).toBe("42501");
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(0);
   });
 
   it("tarif kembar dengan baris yang SUDAH ADA ditolak (tanggalnya tidak maju)", async () => {
@@ -303,53 +327,53 @@ describe("service_rates: satu layanan tidak punya dua tarif pada tanggal sama", 
     // BEFORE INSERT berjalan SEBELUM index keunikan diperiksa, dan tanggal yang
     // kembar menurut definisinya tidak lebih maju dari tarif terakhir. Dua
     // pagar berbeda menutup pintu yang sama; yang penting barisnya tidak lahir.
-    const { error } = await sesiOwner.from("service_rates").insert({
-      service_id: LAYANAN_KERAS,
+    const { error } = await sesiOwner.from("variant_rates").insert({
+      variant_id: VARIAN_KERAS,
       harga_klien: 999_999,
       honor_mitra: 1,
       berlaku_sejak: BERLAKU_DASAR,
     });
     expect(error?.code).toBe("42501");
-    expect(await tarifLayanan(LAYANAN_KERAS)).toHaveLength(1);
+    expect(await tarifVarian(VARIAN_KERAS)).toHaveLength(1);
   });
 
-  it("STRUKTURAL: index keunikan (service_id, berlaku_sejak) memang terpasang", async () => {
+  it("STRUKTURAL: index keunikan (variant_id, berlaku_sejak) memang terpasang", async () => {
     // Perilaku di atas dijawab trigger, jadi keberadaan UNIQUE-nya sendiri
     // harus dibuktikan di katalog — kalau tidak, mencabut trigger diam-diam
     // membuka kembali tarif kembar tanpa satu pun test merah.
     const baris = await querySql<{ conname: string }>(`
       select conname from pg_constraint
-       where conrelid = 'public.service_rates'::regclass and contype = 'u'
+       where conrelid = 'public.variant_rates'::regclass and contype = 'u'
        order by conname`);
-    expect(baris.map((b) => b.conname)).toContain("service_rates_unik_per_tanggal");
+    expect(baris.map((b) => b.conname)).toContain("variant_rates_unik_per_tanggal");
   });
 });
 
 // ---------------------------------------------------------------------------
 // (3) TARIF RETROAKTIF — sama persis dengan menimpa baris lama
 // ---------------------------------------------------------------------------
-describe("service_rates: tarif hanya boleh berlaku MAJU", () => {
+describe("variant_rates: tarif hanya boleh berlaku MAJU", () => {
   it("berlaku_sejak retroaktif ditolak 42501", async () => {
     // Red team: berlaku_sejak 2019-05-05 & 2020-01-01 -> HTTP 201, dan rekap
     // pekan yang honornya sudah ditandai dibayar ikut bergeser (honor 100.000
     // -> 999.000, margin 150.000 -> -699.000). Spec bagian 5 melarangnya.
     for (const mundur of ["2019-05-05", "2020-01-01", "2026-01-04"]) {
-      const { error } = await sesiOwner.from("service_rates").insert({
-        service_id: LAYANAN_KERAS,
+      const { error } = await sesiOwner.from("variant_rates").insert({
+        variant_id: VARIAN_KERAS,
         harga_klien: 1,
         honor_mitra: 1,
         berlaku_sejak: mundur,
       });
       expect(error?.code, `berlaku_sejak=${mundur}`).toBe("42501");
     }
-    expect(await tarifLayanan(LAYANAN_KERAS)).toHaveLength(1);
+    expect(await tarifVarian(VARIAN_KERAS)).toHaveLength(1);
   });
 
   it("KONTROL: tanggal MAJU tetap diterima — alur sah tidak ikut mati", async () => {
     const { data, error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .insert({
-        service_id: LAYANAN_KERAS,
+        variant_id: VARIAN_KERAS,
         harga_klien: 600_000,
         honor_mitra: 250_000,
         berlaku_sejak: "2026-01-06",
@@ -357,13 +381,13 @@ describe("service_rates: tarif hanya boleh berlaku MAJU", () => {
       .select("id");
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(1);
-    expect(await tarifLayanan(LAYANAN_KERAS)).toHaveLength(2);
+    expect(await tarifVarian(VARIAN_KERAS)).toHaveLength(2);
   });
 
-  it("KONTROL: tarif PERTAMA sebuah layanan boleh bertanggal kapan pun", async () => {
+  it("KONTROL: tarif PERTAMA sebuah varian boleh bertanggal kapan pun", async () => {
     // Tidak ada riwayat yang bisa digeser bila belum ada satu baris pun.
-    const { error } = await sesiOwner.from("service_rates").insert({
-      service_id: LAYANAN_KEDUA,
+    const { error } = await sesiOwner.from("variant_rates").insert({
+      variant_id: VARIAN_KEDUA,
       harga_klien: 100_000,
       honor_mitra: 40_000,
       berlaku_sejak: "2001-01-01",
@@ -375,8 +399,8 @@ describe("service_rates: tarif hanya boleh berlaku MAJU", () => {
     // Gerbang `current_user in (anon, authenticated, authenticator)` bukan
     // hiasan: tanpa itu `supabase/seed.sql`, `scripts/seed-users.ts`, dan
     // seluruh `beforeAll`/`afterAll` suite ini mati.
-    const { error } = await admin.from("service_rates").insert({
-      service_id: LAYANAN_KERAS,
+    const { error } = await admin.from("variant_rates").insert({
+      variant_id: VARIAN_KERAS,
       harga_klien: 123_000,
       honor_mitra: 45_000,
       berlaku_sejak: "2000-01-03",
@@ -388,7 +412,7 @@ describe("service_rates: tarif hanya boleh berlaku MAJU", () => {
 // ---------------------------------------------------------------------------
 // (4) BARIS TARIF LAMA TIDAK BISA DITULIS ULANG DI TEMPAT
 // ---------------------------------------------------------------------------
-describe("service_rates: INSERT-only ditegakkan basis data, bukan hanya doktrin", () => {
+describe("variant_rates: INSERT-only ditegakkan basis data, bukan hanya doktrin", () => {
   it("owner mem-PATCH harga & honor baris lama ditolak 42501, nilainya utuh", async () => {
     // Red team temuan A5: PATCH service_rates?id=eq.<seed> {harga:1,honor:1}
     // -> HTTP 200. Rekap pekan lama bergeser TANPA satu pun insert, jadi
@@ -399,36 +423,36 @@ describe("service_rates: INSERT-only ditegakkan basis data, bukan hanya doktrin"
       { harga_klien: 1, honor_mitra: 1 },
     ]) {
       const { error } = await sesiOwner
-        .from("service_rates")
+        .from("variant_rates")
         .update(tambalan)
         .eq("id", TARIF_DASAR)
         .select("id");
       expect(error?.code, JSON.stringify(tambalan)).toBe("42501");
     }
 
-    const [baris] = await tarifLayanan(LAYANAN_KERAS);
+    const [baris] = await tarifVarian(VARIAN_KERAS);
     expect(baris.harga_klien).toBe(HARGA_DASAR);
     expect(baris.honor_mitra).toBe(HONOR_DASAR);
   });
 
   it("owner memundurkan berlaku_sejak baris lama ditolak 42501", async () => {
     const { error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .update({ berlaku_sejak: "2019-05-05" })
       .eq("id", TARIF_DASAR)
       .select("id");
     expect(error?.code).toBe("42501");
-    expect((await tarifLayanan(LAYANAN_KERAS))[0].berlaku_sejak).toBe(BERLAKU_DASAR);
+    expect((await tarifVarian(VARIAN_KERAS))[0].berlaku_sejak).toBe(BERLAKU_DASAR);
   });
 
-  it("owner memindahkan tarif ke layanan lain ditolak 42501", async () => {
+  it("owner memindahkan tarif ke varian lain ditolak 42501", async () => {
     const { error } = await sesiOwner
-      .from("service_rates")
-      .update({ service_id: LAYANAN_KEDUA })
+      .from("variant_rates")
+      .update({ variant_id: VARIAN_KEDUA })
       .eq("id", TARIF_DASAR)
       .select("id");
     expect(error?.code).toBe("42501");
-    expect(await tarifLayanan(LAYANAN_KEDUA)).toHaveLength(0);
+    expect(await tarifVarian(VARIAN_KEDUA)).toHaveLength(0);
   });
 
   it("PATCH MASSAL seluruh rate card dalam SATU permintaan ditolak — nol baris berubah", async () => {
@@ -437,26 +461,26 @@ describe("service_rates: INSERT-only ditegakkan basis data, bukan hanya doktrin"
     // bukan pembatas baris — pelajaran yang sudah dibayar sekali di
     // material_chapters?urutan=gte.0.
     const sebelum = await querySql<{ id: string; harga_klien: number; honor_mitra: number }>(
-      `select id::text, harga_klien, honor_mitra from public.service_rates order by id`,
+      `select id::text, harga_klien, honor_mitra from public.variant_rates order by id`,
     );
     expect(sebelum.length).toBeGreaterThanOrEqual(10);
 
     const { error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .update({ honor_mitra: 7 })
       .gt("honor_mitra", 0)
       .select("id");
     expect(error?.code).toBe("42501");
 
     const sesudah = await querySql<{ id: string; harga_klien: number; honor_mitra: number }>(
-      `select id::text, harga_klien, honor_mitra from public.service_rates order by id`,
+      `select id::text, harga_klien, honor_mitra from public.variant_rates order by id`,
     );
     expect(sesudah).toEqual(sebelum);
   });
 
   it("KONTROL: service role tetap bisa memperbaiki baris (jalur pemulihan data)", async () => {
     const { data, error } = await admin
-      .from("service_rates")
+      .from("variant_rates")
       .update({ harga_klien: 550_000 })
       .eq("id", TARIF_DASAR)
       .select("harga_klien");
@@ -667,14 +691,14 @@ describe("pengerasan tidak menggeser satu pun pagar kerahasiaan", () => {
       ["admin", sesiAdmin],
       ["klien", sesiKlien],
     ] as const) {
-      const { data: tarif } = await sesi.from("service_rates").select("harga_klien");
+      const { data: tarif } = await sesi.from("variant_rates").select("harga_klien");
       expect(tarif ?? [], nama).toHaveLength(0);
       const { data: tanda } = await sesi.from("honor_marks").select("id");
       expect(tanda ?? [], nama).toHaveLength(0);
     }
 
     const anon = anonClient();
-    const { error: eTarif } = await anon.from("service_rates").select("harga_klien");
+    const { error: eTarif } = await anon.from("variant_rates").select("harga_klien");
     expect(eTarif?.code).toBe("42501");
     const { error: eTanda } = await anon.from("honor_marks").select("id");
     expect(eTanda?.code).toBe("42501");
@@ -683,8 +707,8 @@ describe("pengerasan tidak menggeser satu pun pagar kerahasiaan", () => {
   it("admin menulis tabel uang tetap 42501 — bukan 23514/23505 dari constraint baru", async () => {
     // Kalau constraint baru menjawab lebih dulu, admin belajar bentuk data
     // uang dari pesan errornya. RLS harus tetap yang bicara pertama.
-    const { error } = await sesiAdmin.from("service_rates").insert({
-      service_id: LAYANAN_KERAS,
+    const { error } = await sesiAdmin.from("variant_rates").insert({
+      variant_id: VARIAN_KERAS,
       harga_klien: 1,
       honor_mitra: 1,
       berlaku_sejak: "2030-06-03",
@@ -694,7 +718,7 @@ describe("pengerasan tidak menggeser satu pun pagar kerahasiaan", () => {
 
   it("owner TETAP membaca seluruh rate card — pagar tidak melumpuhkan pemiliknya", async () => {
     const { data, error } = await sesiOwner
-      .from("service_rates")
+      .from("variant_rates")
       .select("id, harga_klien, honor_mitra");
     expect(error).toBeNull();
     expect((data ?? []).length).toBeGreaterThanOrEqual(10);
@@ -705,21 +729,21 @@ describe("pengerasan tidak menggeser satu pun pagar kerahasiaan", () => {
 // (10) STRUKTURAL — pagarnya benar-benar ada di katalog, bukan hanya di layar
 // ---------------------------------------------------------------------------
 describe("STRUKTURAL: constraint & trigger tabel uang terpasang", () => {
-  it("service_rates & honor_marks punya CHECK + UNIQUE bernama", async () => {
+  it("variant_rates & honor_marks punya CHECK + UNIQUE bernama", async () => {
     // Red team menemukan pg_constraint hanya berisi PK/FK/unique(partner_id,
     // week_start) — NOL check. Daftar ini menguncinya.
     const baris = await querySql<{ tabel: string; conname: string; contype: string }>(`
       select c.relname as tabel, k.conname, k.contype::text
         from pg_constraint k
         join pg_class c on c.oid = k.conrelid
-       where c.relname in ('service_rates','honor_marks')
+       where c.relname in ('variant_rates','honor_marks')
          and k.contype in ('c','u')
        order by 1, 2`);
     expect(baris.map((b) => `${b.tabel}.${b.conname}`)).toEqual([
       "honor_marks.honor_marks_awal_pekan_senin",
       "honor_marks.honor_marks_partner_id_week_start_key",
-      "service_rates.service_rates_nilai_wajar",
-      "service_rates.service_rates_unik_per_tanggal",
+      "variant_rates.variant_rates_nilai_wajar",
+      "variant_rates.variant_rates_unik_per_tanggal",
     ]);
   });
 
@@ -730,13 +754,13 @@ describe("STRUKTURAL: constraint & trigger tabel uang terpasang", () => {
         join pg_class c on c.oid = t.tgrelid
         join pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'public' and not t.tgisinternal
-         and c.relname in ('service_rates','honor_marks')
+         and c.relname in ('variant_rates','honor_marks')
        order by 1, 2`);
     expect(baris.map((b) => `${b.tabel}.${b.trigger}`)).toEqual([
       "honor_marks.trg_jaga_tanda_honor",
       "honor_marks.trg_kunci_tanda_honor",
-      "service_rates.trg_guard_tarif_maju",
-      "service_rates.trg_kunci_riwayat_tarif",
+      "variant_rates.trg_guard_tarif_varian_maju",
+      "variant_rates.trg_kunci_riwayat_tarif_varian",
     ]);
   });
 
@@ -751,13 +775,13 @@ describe("STRUKTURAL: constraint & trigger tabel uang terpasang", () => {
         from pg_proc p
         join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public'
-         and p.proname in ('guard_tarif_maju','kunci_riwayat_tarif',
+         and p.proname in ('guard_tarif_varian_maju','kunci_riwayat_tarif_varian',
                            'jaga_tanda_honor','kunci_tanda_honor')
        order by 1`);
     expect(baris.map((b) => b.nama)).toEqual([
-      "guard_tarif_maju",
+      "guard_tarif_varian_maju",
       "jaga_tanda_honor",
-      "kunci_riwayat_tarif",
+      "kunci_riwayat_tarif_varian",
       "kunci_tanda_honor",
     ]);
     for (const b of baris) {
@@ -777,16 +801,16 @@ describe("STRUKTURAL: constraint & trigger tabel uang terpasang", () => {
       select table_name || ':' || privilege_type as hak
         from information_schema.role_table_grants
        where grantee = 'authenticated' and table_schema = 'public'
-         and table_name in ('service_rates','honor_marks')
+         and table_name in ('variant_rates','honor_marks')
          and privilege_type in ('SELECT','INSERT','UPDATE','DELETE')
        order by 1`);
     expect(baris.map((b) => b.hak)).toEqual([
       "honor_marks:INSERT",
       "honor_marks:SELECT",
       "honor_marks:UPDATE",
-      "service_rates:INSERT",
-      "service_rates:SELECT",
-      "service_rates:UPDATE",
+      "variant_rates:INSERT",
+      "variant_rates:SELECT",
+      "variant_rates:UPDATE",
     ]);
   });
 });

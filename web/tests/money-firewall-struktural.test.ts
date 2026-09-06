@@ -12,16 +12,16 @@ import { querySql } from "./helpers/db";
  * baca — firewall bocor tanpa satu pun assertion berubah merah.
  *
  * Invarian yang dijaga di sini: KOLOM NOMINAL UANG HANYA BOLEH HIDUP DI
- * `service_rates`, `variant_rates`, DAN `honor_marks`. Dijaga dengan membaca
+ * `variant_rates` DAN `honor_marks`. Dijaga dengan membaca
  * information_schema.columns, jadi berlaku untuk kolom yang BELUM ADA saat
  * test ini ditulis — termasuk kolom pada tabel yang belum lahir (Plan 2 dst).
  *
  * `variant_rates` (migration `tarif_per_varian`) ditambahkan SADAR, bukan
  * pengecualian diam-diam: ia pengganti `service_rates` per varian, membawa
  * SELURUH pagar uangnya (lihat tests/varian-tarif-pengerasan.test.ts), dan
- * bukan bocoran baru. `service_rates` sengaja TETAP terdaftar di sini
- * meskipun kini paralel dengan `variant_rates` — ia baru dijatuhkan Task 5,
- * sesudah kode owner berhenti membacanya, supaya pohon selalu bisa dijalankan.
+ * bukan bocoran baru. `service_rates` dibubarkan (migration
+ * `bubarkan_service_rates`, Task 5); tarif kini hidup HANYA di
+ * `variant_rates` — daftarnya tidak diperlebar, ia dipindahkan.
  *
  * Yang sengaja TIDAK dituduh: kolom STATUS. `sessions.status_bayar` dan
  * `client_packages.status_bayar` memang mengandung kata "bayar", tetapi
@@ -32,8 +32,13 @@ import { querySql } from "./helpers/db";
  * menyamar sebagai status.
  */
 
-/** Satu-satunya tempat sah bagi nominal uang. */
-const TABEL_UANG = new Set(["service_rates", "variant_rates", "honor_marks"]);
+/**
+ * Satu-satunya tempat sah bagi nominal uang.
+ *
+ * `service_rates` dibubarkan (migration `bubarkan_service_rates`); tarif kini
+ * per VARIAN. Daftarnya tidak diperlebar — ia dipindahkan.
+ */
+const TABEL_UANG = new Set(["variant_rates", "honor_marks"]);
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -103,7 +108,18 @@ beforeAll(async () => {
 });
 
 describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () => {
-  it("tidak ada kolom bernuansa nominal uang di luar service_rates & honor_marks", () => {
+  it("service_rates sudah tidak ada — tarif hidup di variant_rates", async () => {
+    // `service_rates` dijatuhkan migration `bubarkan_service_rates` (Task 5):
+    // dua sumber harga berarti satu di antaranya pasti basi tanpa ada yang
+    // tahu kapan. Uji ini menjaga agar tabelnya tidak diam-diam dihidupkan
+    // kembali oleh migrasi berikutnya.
+    const [row] = await querySql<{ ada: boolean }>(
+      `select to_regclass('public.service_rates') is not null as ada`,
+    );
+    expect(row.ada).toBe(false);
+  });
+
+  it("tidak ada kolom bernuansa nominal uang di luar variant_rates & honor_marks", () => {
     const pelanggaran = semuaKolom
       .filter((k) => !TABEL_UANG.has(k.table_name))
       .filter((k) => bernuansaUang(k.column_name))
@@ -125,8 +141,6 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
       .filter((k) => TABEL_UANG.has(k.table_name))
       .map((k) => `${k.table_name}.${k.column_name}`);
 
-    expect(diTabelUang).toContain("service_rates.harga_klien");
-    expect(diTabelUang).toContain("service_rates.honor_mitra");
     expect(diTabelUang).toContain("variant_rates.harga_klien");
     expect(diTabelUang).toContain("variant_rates.honor_mitra");
   });
