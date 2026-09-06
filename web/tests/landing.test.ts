@@ -66,10 +66,13 @@ describe("landing publik — berisi tanpa login", () => {
   });
 
   it("setiap layanan aktif dari DB benar-benar sampai ke markup (landing tidak kosong)", () => {
+    // Task 8 mengubah `f.layanan` dari `string[]` menjadi objek — yang
+    // dijaga di sini TIDAK berubah: setiap NAMA layanan aktif harus benar-
+    // benar sampai ke markup, bukan cuma ke `katalog`.
     const semuaLayanan = katalog.flatMap((f) => f.layanan);
     expect(semuaLayanan.length).toBeGreaterThanOrEqual(10);
-    for (const nama of semuaLayanan) {
-      expect(markup).toContain(esc(nama));
+    for (const layanan of semuaLayanan) {
+      expect(markup).toContain(esc(layanan.nama));
     }
   });
 
@@ -99,7 +102,7 @@ describe("landing publik — berisi tanpa login", () => {
       );
       for (const layanan of fase.layanan) {
         expect(perenderKartu, "menulis keras nama layanan").not.toContain(
-          layanan,
+          layanan.nama,
         );
       }
     }
@@ -158,8 +161,33 @@ describe("landing publik — pagar konten & tata letak", () => {
     expect(markup).not.toMatch(/menyembuhkan|pengobatan/i);
   });
 
-  it("tidak ada nominal uang di landing (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
+  // Sampai Task 8, TIDAK SATU PUN nominal uang boleh tampil ke pengunjung
+  // anonim — pagar itu sengaja dilonggarkan spec V4 §4.4: pengunjung harus
+  // bisa melihat pricelist sebelum mendaftar (lihat tests/harga-publik.test.ts
+  // & pengecualian di tests/money-firewall-struktural.test.ts). Yang tetap
+  // dijaga di sini BUKAN "tidak ada Rp" — melainkan "setiap Rp yang tampil
+  // adalah harga varian YANG SAH dari `harga_publik`", supaya nominal lain
+  // yang tidak seharusnya publik (mis. honor mitra, atau angka pemasaran yang
+  // menyelinap dari komponen lain) tetap tertangkap merah.
+  it("nominal rupiah di landing hanya harga varian yang disengaja (spec V4), bukan kebocoran lain", () => {
+    const nominalSah = new Set<number>();
+    for (const layanan of katalog.flatMap((f) => f.layanan)) {
+      for (const v of layanan.varian) {
+        nominalSah.add(v.hargaKlien);
+        if (v.hargaCoret !== null) nominalSah.add(v.hargaCoret);
+      }
+    }
+    // Prasyarat: fixture memang membawa harga, kalau tidak assertion di bawah
+    // lolos secara kosong (vacuously true) dan tidak menjaga apa pun.
+    expect(nominalSah.size).toBeGreaterThan(0);
+
+    const ditemukan = [...markup.matchAll(/Rp\s?([\d.,]+)/g)].map((m) =>
+      Number(m[1].replace(/[.,]/g, "")),
+    );
+    expect(ditemukan.length).toBeGreaterThan(0);
+    for (const nominal of ditemukan) {
+      expect(nominalSah, `Rp ${nominal} bukan harga varian yang dikenal`).toContain(nominal);
+    }
   });
 
   it("dekorasi yang meluber terkurung overflow-hidden (anti scroll horizontal 390px)", () => {
