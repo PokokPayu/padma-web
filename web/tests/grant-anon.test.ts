@@ -60,6 +60,12 @@ const TABEL_TERTUTUP_ANON = [
   "transport_rates",
   "transport_khusus",
   "geocode_cache",
+  // View (Ruling 12, Task 8 fix round 1): anti-join sesi menunggu tarif
+  // khusus, security_invoker = off. Nol nominal, tapi tetap bukan urusan
+  // anon — batas perannya sendiri ada di predikat `user_role()` DI DALAM
+  // view, yang membaca identitas pemanggil lewat auth.uid(); anon tidak
+  // pernah punya identitas semacam itu, dan tidak pernah butuh membaca ini.
+  "sesi_menunggu_tarif_transport",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */

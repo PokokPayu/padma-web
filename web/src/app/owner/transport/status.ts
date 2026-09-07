@@ -103,19 +103,42 @@ export const PESAN = {
     "Sesi ini tidak berjenjang di atas 20 km — tarif khusus hanya berlaku untuk jenjang itu.",
   sudahDitetapkan: "Sesi ini sudah punya tarif khusus, dan tidak bisa diubah lewat formulir ini.",
   tidakTersimpanKhusus: "Tarif khusus tidak tersimpan. Panel ini hanya untuk pemilik.",
+  gagalKhusus: "Gagal menyimpan tarif khusus.",
 } as const;
 
 /**
- * Terjemahan kode Postgres yang mungkin muncul dari `transport_rates`.
- * Pagarnya (UNIQUE per tanggal, trigger penolak tanggal mundur, CHECK nilai
- * wajar) adalah lapisan TERAKHIR — pemeriksaan di server action berjalan
- * lebih dulu supaya pesannya berupa kalimat. Terjemahan ini tetap ada karena
- * dua pemanggil serentak bisa lolos pemeriksaan aplikasi bersama-sama dan
- * hanya salah satu yang dimenangkan basis data.
+ * Terjemahan kode Postgres yang mungkin muncul dari INSERT `transport_rates`
+ * (rate card per jenjang). Pagarnya (UNIQUE per tanggal, trigger penolak
+ * tanggal mundur, CHECK nilai wajar) adalah lapisan TERAKHIR — pemeriksaan di
+ * server action berjalan lebih dulu supaya pesannya berupa kalimat.
+ * Terjemahan ini tetap ada karena dua pemanggil serentak bisa lolos
+ * pemeriksaan aplikasi bersama-sama dan hanya salah satu yang dimenangkan
+ * basis data.
  */
 export function pesanKodePostgres(kode: string | undefined): string {
   if (kode === "23505") return PESAN.kembar;
   if (kode === "42501") return `${PESAN.mundur}.`;
   if (kode === "23514") return PESAN.takWajar;
   return PESAN.gagal;
+}
+
+/**
+ * Terjemahan kode Postgres yang mungkin muncul dari INSERT `transport_khusus`
+ * (tarif PER SESI). SENGAJA terpisah dari `pesanKodePostgres()` di atas:
+ * `transport_khusus` tidak punya kolom `berlaku_sejak` maupun trigger penolak
+ * tanggal mundur sama sekali — kalimat "tarif baru harus berlaku setelah
+ * tarif terakhir jenjang ini" (dipetakan dari 42501 di fungsi rate card) tidak
+ * bermakna apa pun untuk sesi PER KASUS ini, dan memetakannya begitu saja ke
+ * sini adalah menempelkan penjelasan yang salah pada kegagalan yang benar.
+ *
+ * 23505 (session_id kembar) sudah ditangkap TERPISAH di `tetapkanTarifKhusus`
+ * SEBELUM memanggil fungsi ini, dengan pesan yang benar-benar menjelaskan
+ * situasinya (`PESAN.sudahDitetapkan`) — cabang di sini hanya jaring pengaman
+ * bila kode itu lolos dari pemeriksaan eksplisit tersebut.
+ */
+export function pesanKodePostgresKhusus(kode: string | undefined): string {
+  if (kode === "23505") return PESAN.sudahDitetapkan;
+  if (kode === "23514") return PESAN.takWajar;
+  if (kode === "23503") return PESAN.sesiTakDikenal;
+  return PESAN.gagalKhusus;
 }

@@ -66,11 +66,11 @@ export default async function AdminPage() {
         </Link>
       </div>
 
-      {/* Keempat angka antrean. `menuntut` menyala hanya saat ada pekerjaan —
+      {/* Kelima angka antrean. `menuntut` menyala hanya saat ada pekerjaan —
           bila semua angka merah, tidak ada yang berarti merah. */}
       <section
         aria-label="Antrean klinik"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
       >
         <StatTile
           label="Skrining baru"
@@ -99,6 +99,20 @@ export default async function AdminPage() {
           keterangan="Tautan aktivasi belum dipakai"
           href="/admin/klien"
           menuntut={antrean.klienBelumAktif > 0}
+        />
+        {/* Angkanya, bukan nominalnya (money firewall) — hitungAntrean()
+            menghitung ini dari VIEW sesi_menunggu_tarif_transport, nol
+            nominal. Hanya OWNER yang berwenang menuntaskannya (aksi
+            tetapkanTarifKhusus menuntut peran pemilik), tapi admin tetap
+            berhak tahu ada pekerjaan menunggu di sana — persis alasan
+            StatTile ini wajib punya href walau sebagian pengunjungnya
+            (admin biasa) akan dialihkan keluar saat mengekliknya. */}
+        <StatTile
+          label="Sesi >20 km menunggu tarif"
+          nilai={String(antrean.menungguTarifTransport)}
+          keterangan="Tarif khusus per kasus, ditetapkan owner"
+          href="/owner/transport"
+          menuntut={antrean.menungguTarifTransport > 0}
         />
       </section>
 

@@ -548,62 +548,75 @@ export type SesiMenungguTarif = {
   tanggal: string;
 };
 
-type BarisSesiJauh = { id: string; tanggal: string; clients: { nama: string } | null };
-type BarisTransportKhususId = { session_id: string };
+type BarisSesiMenunggu = { id: string; nama_klien: string; tanggal: string };
 
 /**
  * Sesi berjenjang `di_atas_20` yang BELUM punya baris `transport_khusus` —
  * pekerjaan yang menunggu OWNER menetapkan nominalnya per kasus.
  *
- * TANPA SATU PUN NOMINAL, SENGAJA (spec money firewall): tipe `SesiMenungguTarif`
- * hanya membawa `id`, `namaKlien`, `tanggal`. Alasannya bukan cuma soal panel
- * ini — `hitungMenungguTarifTransport()` di `lib/admin/antrean.ts` memanggil
- * fungsi PERSIS INI untuk menghitung badge antreannya, supaya saringan badge
- * dan saringan daftar TIDAK PERNAH berbeda (lihat komentar di berkas itu).
- * Bila fungsi ini pernah membawa nominal, badge admin akan ikut membawanya.
+ * Dibaca dari VIEW `public.sesi_menunggu_tarif_transport` (migrasi
+ * `20260907140000_sesi_menunggu_tarif.sql`), BUKAN disusun sendiri di sini
+ * lewat dua bacaan terpisah (`sessions` lalu `transport_khusus` dengan
+ * `.in("session_id", [...])`). Bentuk lama itu punya DUA cacat sekaligus
+ * (Ruling 12, ditemukan review):
  *
- * Sesi `batal` disingkirkan, sama seperti `hitungKlaimMenunggu()`: sesi yang
- * dibatalkan tidak akan pernah ditagih, jadi tidak pernah benar-benar
- * "menunggu" apa pun.
+ *   1. `.in()` bisa memuat sampai ribuan UUID dalam satu query string, dan
+ *      TIDAK dipaginasi — beda dari `ambilTarifTransport()` di atas, yang
+ *      dipaginasi justru karena `max_rows = 1000` (supabase/config.toml)
+ *      memotong bacaan SENYAP. Diurutkan menaik menurut tanggal, potongan
+ *      diam-diam itu membuang sesi TERBARU — yang paling mungkin justru
+ *      masih benar-benar menunggu.
+ *   2. RLS "transport_khusus: hanya owner" membuat bacaan kedua itu
+ *      memulangkan 0 baris untuk ADMIN — bukan karena barisnya tidak ada,
+ *      melainkan karena RLS menyembunyikannya — sehingga dipanggil sebagai
+ *      admin, fungsi lama SALAH menganggap SETIAP sesi `di_atas_20` sedang
+ *      menunggu, termasuk yang sudah ditetapkan tarifnya.
  *
- * Admin & klien yang memanggil fungsi ini tetap membaca baris `sessions`-nya
- * (staf boleh baca tabel itu), tetapi TIDAK PERNAH melihat baris
- * `transport_khusus` yang sudah ada — RLS "transport_khusus: hanya owner"
- * menyembunyikannya seutuhnya, bukan hanya nominalnya. Efeknya: dipanggil
- * sebagai admin, fungsi ini akan salah menganggap SETIAP sesi di_atas_20
- * sebagai "menunggu", termasuk yang sudah ditetapkan tarifnya. Itu sebabnya
- * `hitungMenungguTarifTransport()` hanya memercayai hasil fungsi ini ketika
- * pemanggilnya sungguhan OWNER — lihat komentarnya untuk alasan lengkap.
+ * View-nya melakukan anti-join itu DI SQL dengan `security_invoker = off`
+ * (pola yang sama dengan `partner_publik`/`harga_publik`): admin memang tidak
+ * perlu, dan tidak boleh, punya hak baca `transport_khusus` — view ITULAH
+ * batas kolomnya. Predikat `user_role() in ('admin','owner')` di DALAM view
+ * yang menjaga klien tidak ikut membacanya, bukan penyaringan di sini.
+ *
+ * TANPA SATU PUN NOMINAL, SENGAJA (spec money firewall): baik tipe
+ * `SesiMenungguTarif` maupun proyeksi view-nya hanya membawa `id`,
+ * `nama_klien`/`namaKlien`, `tanggal`. `hitungMenungguTarifTransport()` di
+ * `lib/admin/antrean.ts` memanggil fungsi PERSIS INI untuk menghitung badge
+ * antreannya, supaya saringan badge dan saringan daftar TIDAK PERNAH berbeda
+ * — definisinya kini hidup SEKALI, di SQL, dipakai keduanya.
+ *
+ * Error query TIDAK dibungkam: kegagalan RLS/jaringan yang terbaca sebagai
+ * "tidak ada yang menunggu" tidak bisa dibedakan dari keadaan bersih —
+ * padahal keduanya butuh respons yang sama sekali berbeda dari owner/admin.
  */
 export async function ambilSesiMenungguTarif(): Promise<SesiMenungguTarif[]> {
   const supabase = await createServerSupabase();
 
-  const { data: sesiJauh } = await supabase
-    .from("sessions")
-    .select("id, tanggal, clients(nama)")
-    .eq("jenjang", "di_atas_20")
-    .neq("status", "batal")
-    .order("tanggal", { ascending: true })
-    .returns<BarisSesiJauh[]>();
+  // Paginasi seperti `ambilTarifTransport()` di atas, dengan alasan yang
+  // sama: tidak ada batas atas berapa banyak sesi `di_atas_20` yang bisa
+  // menumpuk sebelum owner sempat menetapkan tarifnya satu per satu.
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisSesiMenunggu[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman, error } = await supabase
+      .from("sesi_menunggu_tarif_transport")
+      .select("id, nama_klien, tanggal")
+      .order("tanggal", { ascending: true })
+      .order("id", { ascending: true })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisSesiMenunggu[]>();
 
-  if (!sesiJauh || sesiJauh.length === 0) return [];
+    if (error) {
+      throw new Error(`Gagal membaca sesi menunggu tarif transport: ${error.message}`);
+    }
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
 
-  const { data: sudahDitetapkan } = await supabase
-    .from("transport_khusus")
-    .select("session_id")
-    .in(
-      "session_id",
-      sesiJauh.map((s) => s.id),
-    )
-    .returns<BarisTransportKhususId[]>();
-
-  const sudahSet = new Set((sudahDitetapkan ?? []).map((r) => r.session_id));
-
-  return sesiJauh
-    .filter((s) => !sudahSet.has(s.id))
-    .map((s) => ({
-      id: s.id,
-      namaKlien: s.clients?.nama ?? "Klien PADMA",
-      tanggal: s.tanggal,
-    }));
+  return baris.map((r) => ({
+    id: r.id,
+    namaKlien: r.nama_klien,
+    tanggal: r.tanggal,
+  }));
 }

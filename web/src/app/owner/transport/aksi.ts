@@ -12,6 +12,7 @@ import {
   periksaNominal,
   periksaTanggal,
   pesanKodePostgres,
+  pesanKodePostgresKhusus,
 } from "./status";
 
 /**
@@ -183,13 +184,22 @@ export async function tetapkanTarifKhusus(formData: FormData): Promise<Berhasil 
     // khusus — UPDATE memang ditolak trigger, jadi ini bukan kegagalan aneh,
     // melainkan tepat yang diharapkan desainnya.
     if (error.code === "23505") return { ok: false, pesan: PESAN.sudahDitetapkan };
-    return { ok: false, pesan: pesanKodePostgres(error.code) };
+    // `pesanKodePostgresKhusus`, BUKAN `pesanKodePostgres` milik rate card:
+    // `transport_khusus` tidak punya tanggal berlaku, jadi kalimat "harus
+    // berlaku setelah tarif terakhir" (dipetakan dari 42501 di sana) tidak
+    // bermakna apa pun di sini.
+    return { ok: false, pesan: pesanKodePostgresKhusus(error.code) };
   }
   // 200 + [] berarti RLS menahan barisnya tanpa melempar error apa pun.
   if ((data ?? []).length === 0) return { ok: false, pesan: PESAN.tidakTersimpanKhusus };
 
+  // `/admin` ikut disegarkan: StatTile "Sesi >20 km menunggu tarif" di
+  // dashboard admin membaca `hitungAntrean()`, dan angka yang tidak
+  // disegarkan sesudah tarifnya ditetapkan adalah angka basi begitu ia
+  // benar-benar dirender di sana (Ruling 12).
   revalidatePath("/owner/transport");
   revalidatePath("/owner/rekap");
   revalidatePath("/owner");
+  revalidatePath("/admin");
   return { ok: true };
 }

@@ -465,13 +465,18 @@ describe("dashboard admin", () => {
     expect(sumberDashboard).toContain('href="/admin/skrining"');
   });
 
-  it("menampilkan keempat angka antrean apa adanya", async () => {
+  it("menampilkan kelima angka antrean apa adanya", async () => {
     const m = await markupDashboard();
     for (const [label, angka] of [
       ["Skrining baru", sesudah.skriningBaru],
       ["Permintaan jadwal", sesudah.permintaanMenunggu],
       ["Klaim pembayaran", sesudah.klaimMenunggu],
       ["Klien belum aktif", sesudah.klienBelumAktif],
+      // Task 8, Ruling 12: dihitung dari VIEW sesi_menunggu_tarif_transport
+      // (nol nominal), dan sungguhan dirender di sini — bukan sekadar
+      // dihitung lalu dibuang. Label dicocokkan dengan "&gt;" (bentuk ESCAPED
+      // React untuk ">" pada markup HTML mentah), bukan literal ">".
+      ["Sesi &gt;20 km menunggu tarif", sesudah.menungguTarifTransport],
     ] as const) {
       expect(m, `stat tile "${label}" tidak ada`).toContain(label);
       expect(m).toContain(`>${angka}<`);
@@ -485,6 +490,7 @@ describe("dashboard admin", () => {
       "/admin/klien",
       "/admin/sesi",
       "/admin/bayar",
+      "/owner/transport",
     ]) {
       expect(m).toContain(`href="${href}"`);
     }

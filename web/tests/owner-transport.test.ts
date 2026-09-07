@@ -19,9 +19,11 @@
  * Ditambah SATU pagar lintas-panel yang tidak dimiliki modul tarif varian:
  * `hitungMenungguTarifTransport()` di `lib/admin/antrean.ts` menghitung badge
  * admin dari saringan yang PERSIS SAMA dengan `ambilSesiMenungguTarif()` di
- * sini (dengan fakta RLS transport_khusus yang HANYA mengizinkan owner
- * membaca — lihat describe "hitungMenungguTarifTransport" di bawah untuk
- * bukti kenapa admin sengaja selalu melihat 0, bukan angka yang menggembung).
+ * sini. Keduanya kini membaca VIEW `sesi_menunggu_tarif_transport` (migrasi
+ * `20260907140000`, Ruling 12) yang melakukan anti-join-nya sendiri di SQL
+ * dengan `security_invoker = off` — admin memperoleh ANGKA YANG BENAR tanpa
+ * pernah butuh hak baca `transport_khusus`, bukan konstanta nol seperti draf
+ * pertama modul ini (lihat describe "hitungMenungguTarifTransport" di bawah).
  *
  * Data uji berprefiks `PAD-UJI`/id akhiran `f4`, dibersihkan `afterAll`.
  */
@@ -36,6 +38,7 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { tarifTransportPadaTanggal, type TarifTransportRingkas } from "@/lib/transport/tarif";
+import { pesanKodePostgres, pesanKodePostgresKhusus } from "@/app/owner/transport/status";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -411,20 +414,51 @@ describe("ambilSesiMenungguTarif", () => {
     }
   });
 
-  it("admin TETAP membaca daftar (staf boleh baca sessions), tapi RLS transport_khusus menyembunyikan yang sudah ditetapkan darinya", async () => {
-    // Ini BUKAN kelemahan yang lolos tak sengaja: inilah tepat alasan
-    // `hitungMenungguTarifTransport()` menolak memercayai fungsi ini kecuali
-    // pemanggilnya sungguhan owner (lihat describe di bawah).
+  it("error query TIDAK dibungkam — kegagalan tidak boleh terbaca sebagai 'tidak ada yang menunggu'", async () => {
+    // Sebelumnya `const { data } = await ...; return (data ?? []).map(...)`
+    // membuat kegagalan RLS/jaringan pulang sebagai array kosong — TIDAK BISA
+    // dibedakan dari keadaan bersih, padahal keduanya menuntut respons yang
+    // sama sekali berbeda dari owner/admin.
+    const rusak = Promise.resolve({ data: null, error: { message: "koneksi database putus" } });
+    const pembangun: Record<string, unknown> = {};
+    pembangun.from = () => pembangun;
+    pembangun.select = () => pembangun;
+    pembangun.order = () => pembangun;
+    pembangun.range = () => pembangun;
+    pembangun.returns = () => rusak;
+
+    ref.sesi = pembangun as unknown as SupabaseClient;
+    await expect(ambilSesiMenungguTarif()).rejects.toThrow(/koneksi database putus/);
+    ref.sesi = sesiOwner;
+  });
+
+  it("admin membaca daftar yang BENAR — sesi yang sudah ditetapkan TIDAK muncul (Ruling 12)", async () => {
+    // Sebelum Ruling 12, fungsi ini membaca `sessions` lalu `transport_khusus`
+    // sebagai DUA bacaan terpisah lewat TypeScript: bacaan kedua itu ditolak
+    // RLS "transport_khusus: hanya owner" untuk admin, dan admin SALAH
+    // menganggap SETIAP sesi di_atas_20 masih menunggu — termasuk yang sudah
+    // ditetapkan. Sesudah Ruling 12, fungsi ini membaca VIEW
+    // `sesi_menunggu_tarif_transport` yang melakukan anti-join-nya sendiri
+    // dengan hak PEMILIK (`security_invoker = off`), jadi admin memperoleh
+    // daftar yang BENAR tanpa pernah butuh hak baca `transport_khusus`.
     ref.sesi = sesiAdmin;
     const menunggu = await ambilSesiMenungguTarif();
     ref.sesi = sesiOwner;
-    expect(menunggu.map((s) => s.id)).toContain(SESI.jauhSudah);
+    expect(menunggu.map((s) => s.id)).toContain(SESI.jauh);
+    expect(menunggu.map((s) => s.id)).not.toContain(SESI.jauhSudah);
+  });
+
+  it("klien SELALU kosong — predikat peran hidup di VIEW (user_role()), bukan gerbang TypeScript", async () => {
+    ref.sesi = sesiKlien;
+    const menunggu = await ambilSesiMenungguTarif();
+    ref.sesi = sesiOwner;
+    expect(menunggu).toEqual([]);
   });
 });
 
 // ---------------------------------------------------------------------------
-// hitungMenungguTarifTransport / hitungAntrean — saringan identik, digerbangi
-// peran
+// hitungMenungguTarifTransport / hitungAntrean — saringan identik lewat SATU
+// view SQL (Ruling 12) — TIDAK ADA lagi gerbang peran di TypeScript
 // ---------------------------------------------------------------------------
 
 describe("hitungMenungguTarifTransport", () => {
@@ -438,8 +472,24 @@ describe("hitungMenungguTarifTransport", () => {
     expect(angka).toBeGreaterThan(0);
   });
 
-  it("admin biasa: SELALU 0 — bukan angka yang menggembung akibat RLS transport_khusus", async () => {
+  it("admin memperoleh angka yang SAMA dengan owner — bukan konstanta nol (Ruling 12)", async () => {
+    // Draf pertama menggerbangi angka ini dengan pemeriksaan peran di
+    // TypeScript (`profilSaatIni().role !== "owner"` -> 0), yang MEMINDAHKAN
+    // masalah alih-alih menutupnya: admin selalu melihat nol, padahal admin
+    // yang sehari-hari mengerjakan antrean klinik. Ruling 12 menutup akar
+    // masalahnya di SQL (view `sesi_menunggu_tarif_transport`,
+    // security_invoker = off), sehingga admin memperoleh ANGKA YANG BENAR.
+    ref.sesi = sesiOwner;
+    const angkaOwner = await hitungMenungguTarifTransport();
     ref.sesi = sesiAdmin;
+    const angkaAdmin = await hitungMenungguTarifTransport();
+    ref.sesi = sesiOwner;
+    expect(angkaAdmin).toBe(angkaOwner);
+    expect(angkaAdmin).toBeGreaterThan(0);
+  });
+
+  it("klien SELALU 0 — predikat peran hidup di VIEW, bukan gerbang TypeScript", async () => {
+    ref.sesi = sesiKlien;
     const angka = await hitungMenungguTarifTransport();
     ref.sesi = sesiOwner;
     expect(angka).toBe(0);
@@ -458,6 +508,15 @@ describe("hitungMenungguTarifTransport", () => {
     // belum punya transport_khusus" versi keduanya sendiri.
     expect(sumberAntrean).toContain("ambilSesiMenungguTarif");
     expect(sumberAntrean).not.toContain('.eq("jenjang"');
+  });
+
+  it("TIDAK ADA gerbang peran di TypeScript — batasnya hidup di SQL (Ruling 12)", () => {
+    // Diperiksa lewat ketiadaan IMPOR-nya, bukan `not.toContain` polos atas
+    // seluruh berkas: komentar JSDoc di atas SENGAJA menyebut nama fungsi itu
+    // untuk menjelaskan pendekatan LAMA yang sudah ditinggalkan, dan
+    // `not.toContain` naif akan ikut memerahkan penjelasan yang justru benar.
+    expect(sumberAntrean).not.toMatch(/from\s+["']@\/lib\/auth\/sesi["']/);
+    expect(sumberAntrean).not.toMatch(/role\s*!==\s*["']owner["']\s*\)\s*return\s*0/);
   });
 });
 
@@ -565,6 +624,27 @@ describe("tetapkanTarifKhusus", () => {
     expect(blokInsert, "blok insert transport_khusus tidak ditemukan").not.toBeNull();
     expect(blokInsert![1]).not.toContain("ditetapkan_oleh");
     expect(blokInsert![1]).not.toContain("ditetapkan_pada");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pesanKodePostgresKhusus — TERPISAH dari pesanKodePostgres milik rate card
+// ---------------------------------------------------------------------------
+
+describe("pesanKodePostgresKhusus — kalimat tersendiri, bukan pinjaman rate card", () => {
+  it("42501 TIDAK diterjemahkan sebagai kalimat 'berlaku setelah tarif terakhir' milik rate card", () => {
+    // transport_khusus tidak punya kolom berlaku_sejak sama sekali — kalimat
+    // itu tidak bermakna apa pun untuk tarif PER SESI ini.
+    expect(pesanKodePostgresKhusus("42501")).not.toMatch(/berlaku setelah tarif terakhir/i);
+    // Kontrol positif: fungsi rate card-nya SENDIRI memang masih memakai
+    // kalimat itu untuk 42501 — pemisahannya bukan menghapus perilaku lama,
+    // hanya memastikan ia tidak lagi dipinjam untuk konteks yang salah.
+    expect(pesanKodePostgres("42501")).toMatch(/berlaku setelah tarif terakhir/i);
+  });
+
+  it("23505 tetap diterjemahkan sebagai 'sudah ditetapkan', bukan 'tarif kembar' rate card", () => {
+    expect(pesanKodePostgresKhusus("23505")).toMatch(/sudah punya tarif khusus/i);
+    expect(pesanKodePostgres("23505")).toMatch(/sudah ada tarif/i);
   });
 });
 

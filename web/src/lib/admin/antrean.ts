@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { profilSaatIni } from "@/lib/auth/sesi";
 import { ambilSesiMenungguTarif } from "@/lib/owner/data";
 
 export type Antrean = {
@@ -8,9 +7,7 @@ export type Antrean = {
   permintaanMenunggu: number;
   klaimMenunggu: number;
   klienBelumAktif: number;
-  /** Sesi >20 km yang menunggu owner menetapkan tarif khusus. Lihat
-   *  `hitungMenungguTarifTransport()` di bawah untuk kenapa angkanya 0 bagi
-   *  admin biasa. */
+  /** Sesi >20 km yang menunggu owner menetapkan tarif khusus. */
   menungguTarifTransport: number;
 };
 
@@ -64,36 +61,31 @@ export async function hitungKlaimMenunggu(): Promise<number> {
  *
  * Saringannya WAJIB identik dengan `ambilSesiMenungguTarif()` di
  * `lib/owner/data.ts` — karena itu fungsi ini MEMANGGIL fungsi itu langsung,
- * bukan menulis ulang predikatnya ("jenjang di_atas_20, belum punya baris
- * transport_khusus, bukan sesi batal") kedua kalinya di berkas ini. Dua
- * salinan predikat yang sama akan berpisah diam-diam pada perubahan
- * berikutnya, dan perpisahan itu berbentuk badge yang menghitung sesuatu yang
- * tidak pernah muncul di daftarnya — badge seperti itu TIDAK BISA
- * DIBERSIHKAN, dan alarm yang tidak bisa dipadamkan berhenti dipercaya,
- * termasuk saat ia benar.
+ * bukan menulis ulang predikatnya kedua kalinya di berkas ini. Dua salinan
+ * predikat yang sama akan berpisah diam-diam pada perubahan berikutnya, dan
+ * perpisahan itu berbentuk badge yang menghitung sesuatu yang tidak pernah
+ * muncul di daftarnya — badge seperti itu TIDAK BISA DIBERSIHKAN, dan alarm
+ * yang tidak bisa dipadamkan berhenti dipercaya, termasuk saat ia benar.
  *
- * PENJAGA PERAN, dan alasannya bukan soal wewenang menulis (itu sudah
- * dijaga `tetapkanTarifKhusus`), melainkan soal apa yang RLS izinkan
- * DIBACA: `transport_khusus` hanya boleh dibaca OWNER (policy "transport_
- * khusus: hanya owner"). Admin biasa yang memanggil `ambilSesiMenungguTarif()`
- * akan mendapat SELECT KOSONG dari `transport_khusus` untuk SETIAP baris —
- * bukan karena barisnya belum ada, melainkan karena RLS menyembunyikannya
- * dari perannya. Menghitung "belum punya baris" dari kekosongan itu akan
- * membuat badge MENGGEMBUNG: sesi yang tarifnya SUDAH ditetapkan owner tetap
- * terhitung "menunggu" di mata admin, dan admin tidak punya cara
- * membersihkannya — persis alarm tak-terpadamkan yang diperingatkan di atas.
+ * >>> Ruling 12 (coordinator, Task 8 fix round 1) <<<
+ * Draf pertama berkas ini menggerbangi angka ini dengan pemeriksaan peran
+ * (`profilSaatIni().role !== "owner"` → 0), karena RLS "transport_khusus:
+ * hanya owner" membuat `ambilSesiMenungguTarif()` versi lama (dua bacaan
+ * terpisah) SALAH menghitung sebagai admin — setiap sesi `di_atas_20` tampak
+ * "menunggu", termasuk yang sudah ditetapkan tarifnya. Gerbang itu
+ * MEMINDAHKAN masalah, bukan menutupnya: bagi admin angkanya jadi KONSTANTA
+ * nol, bukan saringan, padahal admin-lah yang sehari-hari mengerjakan
+ * antrean klinik.
  *
- * Karena itu angka ini hanya dihitung SUNGGUHAN saat pemanggilnya OWNER (yang
- * — sebagai superset admin — memang bisa membuka `/admin`); untuk admin biasa
- * ia sengaja 0. Itu bukan angka yang salah, melainkan angka yang JUJUR:
- * admin tidak berwenang menetapkan tarif khusus sama sekali
- * (`tetapkanTarifKhusus` menuntut `requireRole(["owner"])`), jadi antrean yang
- * tidak bisa ia tindaklanjuti bukan miliknya untuk dilihat.
+ * Perbaikannya bukan gerbang peran di TypeScript, melainkan `security_
+ * invoker = off` di SQL: `ambilSesiMenungguTarif()` kini membaca VIEW
+ * `sesi_menunggu_tarif_transport` (migrasi `20260907140000`) yang melakukan
+ * anti-join-nya sendiri dengan hak PEMILIK view, sehingga admin memperoleh
+ * ANGKA YANG BENAR tanpa pernah butuh hak baca `transport_khusus` — batas
+ * kolomnya ada di proyeksi view (nol nominal), bukan di gerbang peran
+ * TypeScript. Tidak ada lagi pemeriksaan peran di fungsi ini.
  */
 export async function hitungMenungguTarifTransport(): Promise<number> {
-  const profil = await profilSaatIni();
-  if (profil?.role !== "owner") return 0;
-
   const menunggu = await ambilSesiMenungguTarif();
   return menunggu.length;
 }
@@ -110,7 +102,7 @@ export async function hitungMenungguTarifTransport(): Promise<number> {
  * ada satu baris data kesehatan pun yang perlu melintas ke server render.
  *
  * Dibungkus `cache()` dari React: `layout.tsx` memanggilnya untuk badge
- * sidebar dan `page.tsx` memanggilnya lagi untuk keempat StatTile, dua
+ * sidebar dan `page.tsx` memanggilnya lagi untuk kelima StatTile, dua
  * pemanggil di SATU render yang sama pada satu request. Tanpa `cache()`, itu
  * seluruh query di bawah (ditambah query `hitungKlaimMenunggu()` dan
  * `hitungMenungguTarifTransport()` sendiri) DUA KALI untuk satu tampilan
