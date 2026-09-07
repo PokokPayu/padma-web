@@ -1,7 +1,18 @@
 # Ladder geocoding — ditunda sampai pemilih lokasi mendarat
 
 **Tanggal:** 7 September 2026
-**Status:** keputusan diambil, pekerjaan BELUM dikerjakan
+**Status:** ~~ditunda~~ **SUDAH DIKERJAKAN 7 September 2026** — commit `93d4899`.
+
+> Berkas ini disimpan sebagai riwayat keputusan, bukan sebagai pekerjaan yang menunggu. Kedua
+> prasyaratnya terpenuhi: pemilih lokasi mendarat di `main` (`98f5298`), lalu ladder menyusul.
+> Teks amandemen §1.2 di bawah kini SUDAH berlaku dan sudah masuk ke spec pemilih-lokasi —
+> jangan memasukkannya untuk kedua kalinya.
+>
+> Satu hal yang diverifikasi sesudah berkas ini ditulis: angka 19% -> 72% di bawah diukur dengan
+> skrip `sed`, bukan dengan kode. Sesudah ladder dibangun, pengukurannya diulang memakai
+> `variasiAlamat()` yang dipakai produksi dan hasilnya SAMA PERSIS — 6/32 lalu 23/32, nol
+> penolakan wilayah, 70 tembakan untuk 32 alamat. Klaim di dokumen ini karena itu menggambarkan
+> kode yang berjalan, bukan alat ukur yang sudah dibuang.
 **Terkait:** `specs/2026-09-07-padma-pemilih-lokasi-design.md` §1.1, `2026-09-07-transport-tindak-lanjut.md` utang #2
 
 ## Kenapa berkas ini ada
