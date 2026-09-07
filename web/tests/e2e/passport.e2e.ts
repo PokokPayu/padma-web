@@ -305,6 +305,15 @@ async function main() {
     // ---- 5. Ajukan jadwal ----
     await page.goto(`${BASE}/passport/ajukan`, { waitUntil: "networkidle" });
     await page.locator('input[name="tanggal"]').fill(TANGGAL_UJI);
+    // Alamat WAJIB sejak modul transport: mitra harus datang ke suatu tempat,
+    // dan jaraknya menentukan jenjang tarif. Medannya terisi otomatis HANYA
+    // bila profil klien sudah punya alamat — dan `scripts/seed-users.ts` tidak
+    // pernah memberi klien seed satu pun. Jadi pada basis data yang BARU
+    // direset, medan ini kosong dan formulirnya tertahan `required` tanpa
+    // pesan apa pun yang menyebut alamat. Langkah ini juga yang membuat uji
+    // ini benar-benar melewati jalur "klien mengetik alamat kunjungan",
+    // bukan hanya jalur "alamat sudah ada di profil".
+    await page.locator('textarea[name="alamat"]').fill("Jl. Uji E2E No. 1, Denpasar");
     await page.getByRole("button", { name: "sore", exact: true }).click();
     await page.getByRole("button", { name: /Kirim Permintaan Jadwal/i }).click();
     const terkirim = await page
