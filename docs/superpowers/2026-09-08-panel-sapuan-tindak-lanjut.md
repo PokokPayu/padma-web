@@ -33,6 +33,17 @@ enam kali oleh modul-modul di atas:
   token Tailwind dari `src/app/_shell/panel/` ke `src/app/admin/` dan `src/app/owner/`, dan dari
   tiga awalan (`text|bg|border`) ke empat belas (menambah `ring|outline|shadow|…`).
 
+**Dua rute baru ditambahkan ke pagar crawl money-firewall E2E, dan itu sudah DIBUKTIKAN, bukan
+hanya ditulis.** `/admin/layanan/${SVC_SEED_E2E}` dan padanan Materi ditambahkan ke `RUTE_ADMIN` di
+`tests/e2e/owner.e2e.ts`. Draf pertama runbook ini mencatatnya sebagai utang terbuka karena tugas
+verifikasi (Langkah 6) dilarang menjalankan skrip E2E apa pun — hanya diverifikasi lewat pembacaan
+kode. Arvin kemudian menjalankan `npm run start` + `npm run test:e2e:owner` sendiri: **10/10
+pemeriksaan lolos**, dengan 11 rute admin terpindai (naik dari 9) dan nol nominal ditemukan —
+dikonfirmasi bukan pemindai mati lewat kontrol positif di pemeriksaan yang sama
+(`/owner/tarif` tetap menemukan keempat nominal ujinya). Lihat "Verifikasi menyeluruh" di bawah
+untuk baris keluaran persisnya. **Ini sekarang item selesai, bukan utang** — tidak lagi muncul di
+tabel utang.
+
 ---
 
 ## Runbook — baca sebelum meneruskan
@@ -87,6 +98,20 @@ penuh (lihat Global Constraint 13 rencana ini). Diperiksa sebelum menjalankan su
 runbook ini: umur seluruh kontainer `supabase_*_web` seragam (~2 jam), tidak ada tanda pembangunan
 ulang di tengah jalan.
 
+**7. `npm run test:e2e:owner` AMAN dijalankan, dan ia satu-satunya cara membuktikan pagar crawl
+money-firewall sungguhan bekerja — bukan hanya tertulis benar di kode.** Hanya
+`test:e2e:video` dan `test:e2e:semua` yang dilarang total: keduanya mengunggah ke bucket Cloudflare
+R2 PRODUKSI milik klien. `test:e2e:owner` butuh server berjalan di `localhost:3000`
+(`npm run start` di atas build yang sudah ada — bukan `npm run dev`), hanya menyentuh basis data
+Supabase LOKAL, dan membersihkan fixture-nya sendiri (pemeriksaan 9 di skrip itu menegaskan
+pembersihan ini). Skrip ini yang membuktikan dua entri baru `/admin/layanan/${SVC_SEED_E2E}` dan
+padanan Materi benar masuk `RUTE_ADMIN` dan benar-benar dipindai (lihat "Verifikasi menyeluruh" di
+bawah untuk hasilnya). **Siapa pun yang menambah rute `/admin` berikutnya wajib menambahkannya ke
+`RUTE_ADMIN` di `tests/e2e/owner.e2e.ts` DAN menjalankan skrip ini** — sebelum runbook ini ditulis
+ulang, tidak ada satu pun berkas di repo yang mengatakan kewajiban itu secara eksplisit, dan itu
+persis bagaimana kesenjangan yang ditutup rencana ini (halaman baru tanpa pagar crawl) bisa
+terbentuk pertama kali.
+
 ---
 
 ## Verifikasi menyeluruh (Langkah 6)
@@ -125,14 +150,28 @@ $ npm test
 ```
 Seluruh suite hijau: 127 berkas, 2105 uji.
 
-E2E **tidak dijalankan** dalam tugas ini atas instruksi eksplisit — bukan lupa, dan bukan asumsi
-"pasti hijau". `npm run test:e2e:video` dan `test:e2e:semua` dilarang total (menyentuh bucket
-Cloudflare R2 produksi milik klien); ketujuh skrip lain sengaja tidak dijalankan agar tidak
-tumpang tindih dengan uji yang dijalankan manual oleh Arvin. Yang **sudah** diverifikasi lewat
-pembacaan kode saja (bukan eksekusi) untuk `tests/e2e/owner.e2e.ts`: dua entri baru
-`RUTE_ADMIN` — `/admin/layanan/${SVC_SEED_E2E}` dan padanan Materi — memakai id seed yang sama
-yang sudah dipastikan permanen (`SVC_SEED_E2E`), dan mekanisme crawl money-firewall di sekitarnya
-tidak berubah bentuk. Lihat utang #5 di bawah.
+E2E **tidak dijalankan dalam tugas verifikasi ini sendiri** atas instruksi eksplisit — bukan lupa,
+dan bukan asumsi "pasti hijau". `npm run test:e2e:video` dan `test:e2e:semua` dilarang total
+(menyentuh bucket Cloudflare R2 produksi milik klien); ketujuh skrip lain sengaja tidak dijalankan
+di sini agar tidak tumpang tindih dengan uji yang dijalankan manual oleh Arvin.
+
+**`tests/e2e/owner.e2e.ts` sudah dijalankan sungguhan sesudahnya, terpisah dari tugas ini** —
+`npm run start` (build produksi di `localhost:3000`) lalu `npm run test:e2e:owner`. Hasil: **10/10
+pemeriksaan lolos**. Baris penentunya:
+
+```
+PASS  7b. nol nominal rate card di 11 rute /admin + 6 rute /passport
+      17 rute diperiksa terhadap 22 nominal, nol temuan
+```
+
+Sebelas rute admin — naik dari sembilan — membuktikan kedua entri `RUTE_ADMIN` baru
+(`/admin/layanan/${SVC_SEED_E2E}` dan padanan Materi) benar masuk daftar dan benar-benar dipindai,
+bukan sekadar tertulis di kode. Pemeriksaan 8 di skrip yang sama adalah KONTROL POSITIF — ia
+menegaskan pemindai nominal MENEMUKAN keempat angka uji di `/owner/tarif` (`777.000`, `333.000`,
+`999000`, `555000`) — jadi "nol temuan" di pemeriksaan 7b berarti pemindainya bekerja dan memang
+tidak menemukan apa-apa, bukan pemindai yang mati. Ini menutup apa yang sebelumnya tercatat sebagai
+utang di draf pertama runbook ini (diverifikasi lewat pembacaan kode saja saat itu, belum lewat
+eksekusi) — lihat "Apa yang berubah" di atas untuk detailnya.
 
 ---
 
@@ -146,12 +185,18 @@ Diurutkan menurut nilai.
 | 2 | **Saringan `isi=belum` di modul Materi menyaring HALAMAN yang sudah diambil, bukan seluruh daftar.** `ambilDaftarMateri()` (`src/lib/admin/materi-admin.ts:261-295`) menjalankan `.range(dari, sampai)` LEBIH DULU, baru memfilter `!lengkap` di JS sesudahnya (baris 288-295, komentar sudah menyalin persis peringatan yang sama dari `lib/admin/klien.ts` untuk "punya paket"). Katalog dengan lebih banyak materi tak-lengkap daripada muat dalam satu halaman akan under-report jumlahnya secara senyap — total yang ditampilkan benar untuk halaman ini, tapi materi tak-lengkap di halaman lain tidak pernah ikut terjaring saringan. Tidak pernah dilatih uji dengan lebih dari 25 materi tak-lengkap sekaligus. | Struktural identik dengan utang #12 rencana 1 — perbaikannya sebuah view SQL yang menghitung `lengkap` di database, bukan di JS sesudah `.range()`. Di luar bobot rencana ini. |
 | 3 | **Tiga skrip Playwright patah oleh pemecahan Materi menjadi daftar+detail**, mengeklik "Kelola isi"/"Kelola penugasan"/"Aktifkan"/"Nonaktifkan" yang di-scope ke `<li>` daftar — kontrol itu sekarang hidup di halaman detail `/admin/materi/[id]`, bukan lagi di baris daftar: `tests/e2e/materi-pdf.e2e.ts:286` (`Kelola isi`), `:314` (`Aktifkan`), `:360` (`Kelola penugasan`); `tests/e2e/materi-video.e2e.ts:349` (`Kelola isi`); `tests/e2e/admin-pelengkap.e2e.ts:681-691` (`Nonaktifkan`/`Aktifkan` berpasangan). Spec sudah memprediksi ini: "delapan skrip E2E akan merah dan harus ditulis ulang". | Penulisan ulangnya adalah pekerjaan rencana 3 (owner + E2E), bukan rencana ini. Memperbaikinya sepotong-sepotong sekarang berarti menulis selektornya dua kali — sekali untuk struktur sementara, sekali lagi begitu rencana 3 mengubah bentuk halamannya lebih jauh. |
 | 4 | **Enam berkas di bawah `/admin` masih berpalet klien lama** (paper/night/gold): `src/app/admin/page.tsx`, `src/app/admin/pengaturan/page.tsx`, `src/app/admin/pengaturan/form-pengaturan.tsx`, `src/app/admin/materi/form-materi.tsx`, `src/app/admin/layanan/form-layanan.tsx`, `src/app/admin/sesi/antrean-permintaan.tsx` — diverifikasi lewat grep atas `bg-night`, `text-gold-pale`, `border-gold`, `bg-white`, `border-black/1x`, `text-ink(-soft)`. Rencana ini menutup dua utang cetakan (Tugas 1) dan sapuan Klien (task 12); daftar sapuan rencana ini sendiri berbunyi "Sesi, Bayar, Skrining, Layanan, Varian, Materi" — enam berkas di atas jatuh di LUAR daftar itu karena mereka bukan halaman daftar/formulir utama modulnya (mereka form ANAK atau halaman lain). **Katakan ini terus terang: panel `/admin` masih terbaca campuran di beberapa tempat** — pembaca yang mengira sapuan sudah tuntas akan terkejut sendiri begitu membuka `/admin/pengaturan` atau formulir tambah materi/layanan. | Sama seperti utang #5 rencana 1: seluruh halaman `/admin` lain juga masih berpalet lama, yang menonjol hanya yang bertetangga langsung dengan daftar yang sudah disapu. Menutup enam ini sekaligus di luar rencana berarti menyentuh berkas yang tidak terdaftar di brief manapun rencana ini — risiko regresi di luar cakupan yang sedang diverifikasi. |
-| 5 | **Dua entri crawl money-firewall E2E ditambahkan tapi tidak dieksekusi.** `/admin/layanan/${SVC_SEED_E2E}` dan padanan Materi ditambahkan ke `RUTE_ADMIN` di `tests/e2e/owner.e2e.ts` (baris ~139) — id seed-nya dipastikan permanen (dipakai berulang di skrip yang sama), mekanisme crawl-nya dipastikan tidak berubah bentuk lewat pembacaan kode. Tapi skrip `owner.e2e.ts` sendiri **tidak dijalankan** dalam rencana ini (lihat "E2E tidak dijalankan" di atas). | Larangan menjalankan E2E di tugas ini bersifat kebijakan (Global Constraint 12 + instruksi eksplisit tugas ini: dijalankan manual oleh Arvin), bukan kegagalan. Dicatat di sini supaya siapa pun yang menjalankan `test:e2e:owner` berikutnya tahu dua rute baru itu ada dan belum pernah lolos eksekusi sungguhan. |
-| 6 | **`KelompokSaring.label` wajib diisi tapi tidak pernah dirender.** Inherited dari utang #6 rencana 1, sekarang lebih parah: tujuh halaman (`bayar`, `klien`, `layanan`, `materi`, `mitra`, `sesi`, `skrining`) memakai `<BilahDaftar kelompok={[…]}>` dengan lebih dari satu kelompok chip berdampingan tanpa penanda di mana satu kelompok berakhir dan yang lain mulai. `/admin/sesi` adalah kasus terburuk: TIGA kelompok (status · jenjang · waktu) tampil sebagai satu baris chip tanpa jeda visual. | Sama seperti rencana 1: menampilkannya mengubah tata letak bilah di tujuh halaman sekaligus — keputusan visual yang butuh persetujuan sebelum disentuh, bukan cacat yang bisa diperbaiki sepintas. |
-| 7 | **`aria-pressed` pada `<Link>` bukan ARIA yang sah** — atribut itu hanya berlaku pada elemen `role="button"`/`switch`, bukan tautan navigasi. Didefinisikan sekali di primitif `src/app/_shell/panel/bilah-daftar.tsx:78` dan karena itu otomatis menyala di ketujuh halaman yang memakainya (lihat utang #6) — naik dari dua halaman (Mitra, Klien) di rencana 1. Keadaan "chip ini aktif" karena itu hanya tersampaikan lewat warna (`bg-panel-ink`); pemakai pembaca layar mendengar deretan tautan tanpa tanda mana yang sedang aktif. `aria-current="page"` (atau nilai token lain yang sesuai) adalah atribut yang benar untuk tautan yang menandai keadaan saat ini. | Sama seperti rencana 1: lolos lint dan lolos mata sekaligus karena efeknya hanya kelihatan lewat pembaca layar sungguhan. Menutupnya di satu tempat (primitifnya) otomatis menutup ketujuh halaman sekaligus — nilainya besar, tapi tetap di luar cakupan tugas verifikasi ini. |
-| 8 | **Tidak ada uji yang membuktikan kekebalan `max_rows` milik `ambilDaftarMateri()`.** `tests/materi-admin-batas-baris.test.ts` membuktikan HANYA `daftarMateriAdmin()` (fungsi lama, dipakai halaman katalog bersarang) kebal `max_rows` lewat embed agregat `material_pages(count)`. Fungsi BARU `ambilDaftarMateri()`, yang kini menjadi sumber data `/admin/materi` — daftar utama yang dilihat admin sehari-hari — mengulang pola agregat yang sama (`material_pages(count)`, `src/lib/admin/materi-admin.ts:249`) tapi tidak punya uji sendiri yang menegaskannya. Bila suatu saat seseorang menukar embed itu ke `material_pages(*)` biasa (menarik SETIAP baris halaman, bukan hitungannya), seluruh suite yang ada tetap hijau — cacatnya identik dengan yang pernah terjadi di `daftarMateriAdmin()`, hanya kali ini tidak ada pagar yang bisa menangkapnya. | Ditemukan saat menyusun runbook ini, bukan diketahui sejak awal rencana — masuk sebagai temuan baru, bukan utang yang sengaja dicatat penulis rencana. Menutupnya berarti menyalin pola `tests/materi-admin-batas-baris.test.ts` (materi tunggal dengan >1000 halaman) menargetkan `ambilDaftarMateri()`, pekerjaan kecil namun di luar cakupan tugas verifikasi ini. |
-| 9 | **`text-panel-muted` di atas `bg-panel-bg` menghitung sekitar 4,4:1** — sedikit di bawah ambang AA 4,5:1 untuk teks normal 13px. Dipakai luas: `form-sesi.tsx`, `tabel-inbox.tsx` (Skrining), `tabel-bayar.tsx` (Bayar), dan menyebar lebih jauh lewat sapuan enam modul karena token ini bagian dari kombinasi standar panel. | Bukan cacat yang diperkenalkan rencana ini — ini konvensi yang SUDAH ter-merge sejak rencana 1 dan diikuti apa adanya di sini, bukan diciptakan di sini. Memperbaikinya berarti mengubah nilai token `--color-panel-muted`, yang menyentuh SETIAP halaman panel sekaligus — perubahan sistem warna, bukan tambalan lokal. |
-| 10 | **Saringan tanggal Sesi menyimpang dari spec K3.** Spec menyebut "status · jenjang kosong · rentang tanggal"; rencana ini mengirim tiga chip preset (`waktu=mendatang|pekan_ini|lampau`) alih-alih sepasang `<input type="date">` bebas. Rentang bebas butuh parameter di luar model daftar-putih `uraikanParamDaftar()`, validasi tanggal sendiri, dan satu primitif bilah baru. | Dicatat di rencana sendiri sebagai "Penyimpangan dari spec — dicatat, bukan disembunyikan" sebelum satu baris kode pun ditulis. Rentang bebas tetap bisa ditambahkan kapan saja sebagai parameter TAMBAHAN tanpa membongkar tiga preset yang sudah ada. |
+| 5 | **`KelompokSaring.label` wajib diisi tapi tidak pernah dirender.** Inherited dari utang #6 rencana 1, sekarang lebih parah: tujuh halaman (`bayar`, `klien`, `layanan`, `materi`, `mitra`, `sesi`, `skrining`) memakai `<BilahDaftar kelompok={[…]}>` dengan lebih dari satu kelompok chip berdampingan tanpa penanda di mana satu kelompok berakhir dan yang lain mulai. `/admin/sesi` adalah kasus terburuk: TIGA kelompok (status · jenjang · waktu) tampil sebagai satu baris chip tanpa jeda visual. | Sama seperti rencana 1: menampilkannya mengubah tata letak bilah di tujuh halaman sekaligus — keputusan visual yang butuh persetujuan sebelum disentuh, bukan cacat yang bisa diperbaiki sepintas. |
+| 6 | **`aria-pressed` pada `<Link>` bukan ARIA yang sah** — atribut itu hanya berlaku pada elemen `role="button"`/`switch`, bukan tautan navigasi. Didefinisikan sekali di primitif `src/app/_shell/panel/bilah-daftar.tsx:78` dan karena itu otomatis menyala di ketujuh halaman yang memakainya (lihat utang #5) — naik dari dua halaman (Mitra, Klien) di rencana 1. Keadaan "chip ini aktif" karena itu hanya tersampaikan lewat warna (`bg-panel-ink`); pemakai pembaca layar mendengar deretan tautan tanpa tanda mana yang sedang aktif. `aria-current="page"` (atau nilai token lain yang sesuai) adalah atribut yang benar untuk tautan yang menandai keadaan saat ini. | Sama seperti rencana 1: lolos lint dan lolos mata sekaligus karena efeknya hanya kelihatan lewat pembaca layar sungguhan. Menutupnya di satu tempat (primitifnya) otomatis menutup ketujuh halaman sekaligus — nilainya besar, tapi tetap di luar cakupan tugas verifikasi ini. |
+| 7 | **Tidak ada uji yang membuktikan kekebalan `max_rows` milik `ambilDaftarMateri()`.** `tests/materi-admin-batas-baris.test.ts` membuktikan HANYA `daftarMateriAdmin()` (fungsi lama, dipakai halaman katalog bersarang) kebal `max_rows` lewat embed agregat `material_pages(count)`. Fungsi BARU `ambilDaftarMateri()`, yang kini menjadi sumber data `/admin/materi` — daftar utama yang dilihat admin sehari-hari — mengulang pola agregat yang sama (`material_pages(count)`, `src/lib/admin/materi-admin.ts:249`) tapi tidak punya uji sendiri yang menegaskannya. Bila suatu saat seseorang menukar embed itu ke `material_pages(*)` biasa (menarik SETIAP baris halaman, bukan hitungannya), seluruh suite yang ada tetap hijau — cacatnya identik dengan yang pernah terjadi di `daftarMateriAdmin()`, hanya kali ini tidak ada pagar yang bisa menangkapnya. | Ditemukan saat menyusun runbook ini, bukan diketahui sejak awal rencana — masuk sebagai temuan baru, bukan utang yang sengaja dicatat penulis rencana. Menutupnya berarti menyalin pola `tests/materi-admin-batas-baris.test.ts` (materi tunggal dengan >1000 halaman) menargetkan `ambilDaftarMateri()`, pekerjaan kecil namun di luar cakupan tugas verifikasi ini. |
+| 8 | **`text-panel-muted` di atas `bg-panel-bg` menghitung sekitar 4,4:1** — sedikit di bawah ambang AA 4,5:1 untuk teks normal 13px. Dipakai luas: `form-sesi.tsx`, `tabel-inbox.tsx` (Skrining), `tabel-bayar.tsx` (Bayar), dan menyebar lebih jauh lewat sapuan enam modul karena token ini bagian dari kombinasi standar panel. | Bukan cacat yang diperkenalkan rencana ini — ini konvensi yang SUDAH ter-merge sejak rencana 1 dan diikuti apa adanya di sini, bukan diciptakan di sini. Memperbaikinya berarti mengubah nilai token `--color-panel-muted`, yang menyentuh SETIAP halaman panel sekaligus — perubahan sistem warna, bukan tambalan lokal. |
+| 9 | **Saringan tanggal Sesi menyimpang dari spec K3.** Spec menyebut "status · jenjang kosong · rentang tanggal"; rencana ini mengirim tiga chip preset (`waktu=mendatang|pekan_ini|lampau`) alih-alih sepasang `<input type="date">` bebas. Rentang bebas butuh parameter di luar model daftar-putih `uraikanParamDaftar()`, validasi tanggal sendiri, dan satu primitif bilah baru. | Dicatat di rencana sendiri sebagai "Penyimpangan dari spec — dicatat, bukan disembunyikan" sebelum satu baris kode pun ditulis. Rentang bebas tetap bisa ditambahkan kapan saja sebagai parameter TAMBAHAN tanpa membongkar tiga preset yang sudah ada. |
+
+**Catatan penomoran:** utang "dua entri crawl money-firewall belum dieksekusi" yang tadinya berdiri
+di posisi #5 di draf pertama runbook ini DIHAPUS dari tabel, bukan diberi nomor baru — item itu
+sudah tuntas (lihat "Apa yang berubah" di atas), dan tabel utang seharusnya hanya berisi hal yang
+benar-benar belum selesai. Nomor #5-#9 di atas adalah penomoran ulang dari #6-#10 draf pertama;
+tidak ada rujukan eksternal ke nomor lama yang perlu disesuaikan (belum ada dokumen lain yang
+mengutip nomor utang ini).
 
 ### Warisan dari rencana 1 yang masih terbuka
 
