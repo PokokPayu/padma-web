@@ -29,7 +29,9 @@ function PillAktif({ aktif }: { aktif: boolean }) {
 export default async function DaftarMitraPage() {
   await requireRole(["admin", "owner"]);
 
-  const mitra = await ambilDaftarMitra();
+  // Halaman ini belum punya UI cari/saring/halaman (Task 7) — hal 1 tanpa
+  // saringan mempertahankan perilaku lama: seluruh mitra di satu halaman.
+  const { baris: mitra } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
 
   return (
     <main>

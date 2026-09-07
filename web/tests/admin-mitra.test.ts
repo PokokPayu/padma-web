@@ -38,6 +38,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { PER_HAL } from "@/app/_shell/panel/daftar";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -496,7 +497,7 @@ describe("ambilDaftarMitra — sumber baris tabel kelola", () => {
     ref.sesi = sesiAdmin;
     await admin.from("partners").update({ aktif: false }).eq("id", MITRA_STATUS);
 
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     const nonaktif = daftar.find((m) => m.id === MITRA_STATUS);
     expect(nonaktif, "mitra nonaktif hilang dari halaman kelola").toBeDefined();
     expect(nonaktif!.aktif).toBe(false);
@@ -522,13 +523,13 @@ describe("ambilDaftarMitra — sumber baris tabel kelola", () => {
     ]);
     expect(semua).toBeGreaterThan(selesai ?? 0);
 
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     expect(daftar.find((m) => m.id === DEWI)!.sesiSelesai).toBe(selesai);
   });
 
   it("mitra tanpa sesi apa pun tercatat nol, bukan hilang dari daftar", async () => {
     ref.sesi = sesiAdmin;
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     expect(daftar.find((m) => m.id === MITRA_EDIT)!.sesiSelesai).toBe(0);
   });
 });
@@ -736,7 +737,11 @@ describe("berkas server action mitra", () => {
   });
 
   it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberLib]) {
+    // `sumberLib` DIKECUALIKAN sejak Task 6: `ambilDaftarMitra` memakai
+    // `.ilike()` untuk PENCARIAN NAMA (bukan identitas) — sama seperti
+    // modul klien (lihat `tests/admin-klien.test.ts`), pagar ini menjaga
+    // action & halaman, bukan melarang pencarian teks di lapisan data.
+    for (const sumber of [sumberAksi, sumberHalaman]) {
       expect(sumber).not.toContain(".ilike(");
       expect(sumber).not.toContain(".like(");
     }
@@ -752,5 +757,88 @@ describe("berkas server action mitra", () => {
     const layout = baca("src/app/admin/layout.tsx");
     expect([...layout.matchAll(/requireRole\(/g)]).toHaveLength(1);
     expect(baca("src/app/admin/page.tsx")).toContain('href="/admin/skrining"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6: ambilDaftarMitra menerima cari, saring, halaman
+// ---------------------------------------------------------------------------
+
+const UJI_AKTIF = Array.from({ length: 25 }, (_, i) =>
+  `33333333-3333-3333-3333-3333330000${String(i).padStart(2, "0")}`);
+const UJI_NONAKTIF = "33333333-3333-3333-3333-333333000099";
+const UJI_SEMUA = [...UJI_AKTIF, UJI_NONAKTIF];
+
+describe("daftar mitra — cari, saring, halaman", () => {
+  // beforeAll/afterAll DITARUH DI DALAM describe ini, bukan di puncak berkas
+  // seperti draf briefnya: keduanya jadi hook AKAR bila diletakkan di puncak,
+  // dan hook akar berjalan sebelum/sesudah SELURUH berkas — termasuk describe
+  // "ambilDaftarMitra — sumber baris tabel kelola" dan "halaman daftar mitra"
+  // di atas, yang mengasumsikan tidak lebih dari satu halaman mitra sehingga
+  // baris nonaktif satu-satunya (MITRA_STATUS) selalu ikut tampil. 25 mitra
+  // aktif tambahan akan mendorongnya ke halaman kedua dan memerahkan uji itu
+  // tanpa hubungan sama sekali dengan Task 6. Dilingkupi ke describe ini,
+  // fixture hanya hidup selama uji-uji di bawah ini berjalan.
+  beforeAll(async () => {
+    ref.sesi = sesiAdmin;
+    await admin.from("partners").delete().in("id", UJI_SEMUA);
+    await admin.from("partners").insert([
+      ...UJI_AKTIF.map((id, i) => ({
+        id, nama: `ZZUji Mitra ${String(i).padStart(2, "0")}`, no_hp: "", aktif: true,
+      })),
+      { id: UJI_NONAKTIF, nama: "ZZUji Mitra Nonaktif", no_hp: "", aktif: false },
+    ]);
+  });
+
+  // Mitra fixture sengaja TANPA sesi, jadi menghapusnya tidak pernah memutus
+  // `sessions.partner_id` milik baris lain.
+  afterAll(async () => {
+    await admin.from("partners").delete().in("id", UJI_SEMUA);
+  });
+
+  it("menyaring menurut ketersediaan", async () => {
+    const { baris } = await ambilDaftarMitra({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => !m.aktif)).toBe(true);
+  });
+
+  it("mencari menurut nama, tidak peduli besar kecil huruf", async () => {
+    const { baris } = await ambilDaftarMitra({ cari: "sri", saring: {}, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => m.nama.toLowerCase().includes("sri"))).toBe(true);
+  });
+
+  it("total menghitung SELURUH baris yang cocok, bukan hanya yang tampil", async () => {
+    // Ini yang membuat "25 dari 40" mungkin. Total yang ikut terpotong halaman
+    // membuat paginasi berhenti di halaman 2 selamanya.
+    const { baris, total } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
+    expect(total).toBeGreaterThanOrEqual(baris.length);
+  });
+
+  it("halaman kedua BERISI, dan TIDAK mengulang baris halaman pertama", async () => {
+    const a = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
+    const b = await ambilDaftarMitra({ cari: "", saring: {}, hal: 2 });
+    // Halaman 2 HARUS berisi. Tanpa asersi ini, seluruh uji lulus hampa pada
+    // basis data yang isinya kurang dari satu halaman: `[].some(...)` selalu
+    // `false`, dan hijaunya terbaca seperti bukti.
+    expect(b.baris.length).toBeGreaterThan(0);
+    expect(a.baris.length).toBe(PER_HAL);
+    const idA = new Set(a.baris.map((m) => m.id));
+    expect(b.baris.some((m) => idA.has(m.id))).toBe(false);
+  });
+
+  it("jumlah sesi selesai TETAP benar saat daftarnya dipaginasi", async () => {
+    // Jebakannya: query sesi dulu menarik SEMUA sesi lalu menghitungnya di JS.
+    // Bila paginasi diterapkan pada query mitra saja, angka kinerja tetap
+    // benar — tetapi bila seseorang kelak ikut memaginasi query sesi, angka
+    // itu mengecil diam-diam tanpa satu pun uji merah. Uji ini yang merah.
+    const { baris } = await ambilDaftarMitra({ cari: "sri", saring: {}, hal: 1 });
+    const target = baris[0];
+    const { count } = await admin
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("partner_id", target.id)
+      .eq("status", "selesai");
+    expect(target.sesiSelesai).toBe(count);
   });
 });
