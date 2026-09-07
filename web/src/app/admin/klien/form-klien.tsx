@@ -104,6 +104,12 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         <label className="sm:col-span-2">
           <span className={KELAS_LABEL}>Alamat (opsional, bisa diisi menyusul)</span>
           <textarea name="alamat" rows={2} placeholder="Alamat rumah klien" className={KELAS_MEDAN} />
+          {/* Alamat ini digeocoding lewat Nominatim (OSM) untuk saran jenjang
+              transport — lisensi ODbL mewajibkan atribusi tampak di layar yang
+              memakai hasilnya, bukan cukup tertulis di komentar kode. */}
+          <span className="mt-1 block text-[11px] text-ink-soft/70">
+            Lokasi diperkirakan lewat data © OpenStreetMap contributors.
+          </span>
         </label>
       </div>
 
@@ -206,6 +212,12 @@ export function FormEditKlien({
             placeholder="Alamat rumah klien"
             className={KELAS_MEDAN}
           />
+          {/* Sama seperti FormKlienBaru: alamat ini digeocoding lewat
+              Nominatim (OSM) setiap kali disimpan ulang, jadi atribusinya
+              wajib tetap tampak di sini juga. */}
+          <span className="mt-1 block text-[11px] text-ink-soft/70">
+            Lokasi diperkirakan lewat data © OpenStreetMap contributors.
+          </span>
         </label>
       </div>
 

@@ -249,6 +249,12 @@ export function FormJadwalSesi({
           Nol rupiah di blok ini: admin melihat "5–10 km", tidak pernah harga. */}
       <div className="mt-3 rounded-xl border border-black/10 bg-paper px-3 py-2.5 text-[12.5px] text-ink-soft">
         <span className="block font-bold text-ink">Perkiraan jarak ke mitra</span>
+        {/* Jarak di atas dihitung dari koordinat hasil geocoding Nominatim
+            (OSM) — lisensi ODbL mewajibkan atribusi tampak persis di layar
+            yang menampilkan hasilnya, bukan cukup di komentar kode. */}
+        <span className="block text-[10.5px] text-ink-soft/70">
+          Jarak dihitung dari data lokasi © OpenStreetMap contributors.
+        </span>
         {saran ? (
           <span className="mt-0.5 block">
             Jarak garis lurus dari alamat klien ke mitra: <b>{saran.jarakKm.toFixed(1)} km</b> —

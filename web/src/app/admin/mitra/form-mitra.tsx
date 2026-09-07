@@ -85,6 +85,12 @@ export function FormMitraBaru() {
             placeholder="Alamat domisili mitra"
             className={KELAS_MEDAN}
           />
+          {/* Domisili ini digeocoding lewat Nominatim (OSM) untuk jarak
+              garis lurus ke klien — lisensi ODbL mewajibkan atribusi tampak
+              di layar yang memakai hasilnya, bukan cukup di komentar kode. */}
+          <span className="mt-1 block text-[11px] text-ink-soft/70">
+            Lokasi diperkirakan lewat data © OpenStreetMap contributors.
+          </span>
         </label>
       </div>
 
@@ -178,6 +184,12 @@ export function AksiMitra({
           placeholder="Domisili mitra"
           className={KELAS_MEDAN}
         />
+        {/* Sama seperti FormMitraBaru: domisili ini digeocoding ulang lewat
+            Nominatim (OSM) setiap kali diubah, jadi atribusinya wajib tetap
+            tampak di sini juga. */}
+        <span className="text-[11px] text-ink-soft/70">
+          Lokasi diperkirakan lewat data © OpenStreetMap contributors.
+        </span>
         {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
         <span className="flex gap-2">
           <button
