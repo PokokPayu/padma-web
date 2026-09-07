@@ -1,19 +1,26 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { ambilDaftarLayanan, SARING_LAYANAN } from "@/lib/admin/layanan";
 import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
-import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
-import { AksiLayanan, AksiPaket, FormLayananBaru, type PilihanFase } from "./form-layanan";
-import { BlokVarian } from "./form-varian";
+import { uraikanParamDaftar, bangunQuery, type ParamMentah } from "@/app/_shell/panel/daftar";
+import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
+import { Paginasi } from "@/app/_shell/panel/paginasi";
+import { PanelGeser } from "@/app/_shell/panel/panel-geser";
+import { Bantuan } from "@/app/_shell/panel/bantuan";
+import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
+import { FormLayananBaru, type PilihanFase } from "./form-layanan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Layanan & Paket" };
+
+const BASIS = "/admin/layanan";
 
 /**
  * Pill ketersediaan.
  *
  * "Nonaktif" berarti dua hal saja: layanan berhenti muncul di katalog beranda,
- * dan berhenti ditawarkan saat menjadwalkan sesi baru. Ia TIDAK berarti namanya
- * hilang — riwayat sesi klien tetap menyebutnya, karena policy baca untuk
- * pengguna login sengaja tidak menyaring ketersediaan. Perbedaan itu pernah
+ * dan berhenti ditawarkan saat menjadwalkan sesi baru. Ia TIDAK berarti
+ * namanya hilang — riwayat sesi klien tetap menyebutnya. Perbedaan itu pernah
  * hilang pada data mitra, dan akibatnya seluruh riwayat lama berganti menjadi
  * teks cadangan tanpa satu pun error.
  */
@@ -29,160 +36,118 @@ function PillAktif({ aktif }: { aktif: boolean }) {
   );
 }
 
-export default async function LayananPage() {
+export default async function LayananPage({
+  searchParams,
+}: {
+  searchParams: Promise<ParamMentah>;
+}) {
   await requireRole(["admin", "owner"]);
 
-  const [katalog, materiPerLayanan] = await Promise.all([
-    daftarKatalogAdmin(),
-    daftarMateriAdmin(),
-  ]);
-  const pilihanFase: PilihanFase[] = katalog.map((f) => ({ id: f.id, nama: f.nama }));
-  const materiPerId = new Map(materiPerLayanan.map((l) => [l.id, l.materi]));
+  const sp = await searchParams;
+  const param = uraikanParamDaftar(sp, SARING_LAYANAN);
+  const { baris, total } = await ambilDaftarLayanan(param);
+
+  const ubah = typeof sp.ubah === "string" ? sp.ubah : "";
+  // HANYA "baru" yang membuka panel di sini. Mengubah sebuah layanan berarti
+  // membuka HALAMAN detailnya (pola B) — layanan memiliki daftar anak, dan
+  // daftar di dalam panel selebar setengah layar mengulangi kesalahan yang
+  // sama seperti formulir di dalam sel tabel.
+  const panelTerbuka = ubah === "baru";
+  const hrefTutup = `${BASIS}${bangunQuery(param, { ubah: null })}`;
+
+  // Daftar fase hanya dibutuhkan formulir "layanan baru".
+  const fase: PilihanFase[] = panelTerbuka
+    ? (await daftarKatalogAdmin()).map((f) => ({ id: f.id, nama: f.nama }))
+    : [];
 
   return (
     <main>
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-serif text-2xl text-night">Layanan &amp; Paket</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-ink-soft">
-            Katalog yang dibaca beranda dan wizard pengajuan jadwal klien.
-            Tidak ada satu pun angka harga di sini — tarif adalah wilayah Owner.
-          </p>
-        </div>
-        <FormLayananBaru fase={pilihanFase} />
+      <header className="mb-4">
+        <h1 className="text-[18px] font-bold text-panel-ink">Layanan &amp; Paket</h1>
+        <Bantuan judul="Tentang halaman ini">
+          Katalog yang dibaca beranda dan wizard pengajuan jadwal klien. Tidak ada satu pun angka
+          harga di sini — tarif adalah wilayah Owner. Layanan, paket, dan varian tidak pernah
+          dihapus, hanya <b>dinonaktifkan</b>: yang nonaktif berhenti muncul di beranda dan berhenti
+          ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b> menempel pada riwayat sesi klien
+          yang sudah berjalan. Satu layanan tidak bisa kehilangan varian aktif terakhirnya —
+          aktifkan varian lain dulu sebelum menonaktifkan yang sedang dipakai.
+        </Bantuan>
       </header>
 
-      <p className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] text-ink">
-        ✦ Layanan, paket, dan varian tidak pernah dihapus, hanya{" "}
-        <b>dinonaktifkan</b>. Yang nonaktif berhenti muncul di beranda dan
-        berhenti ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b>{" "}
-        menempel pada riwayat sesi klien yang sudah berjalan. Menghapusnya
-        justru akan memutus riwayat itu. Satu layanan tidak bisa kehilangan
-        varian aktif terakhirnya — aktifkan varian lain dulu sebelum
-        menonaktifkan yang sedang dipakai.
-      </p>
+      <BilahDaftar
+        basis={BASIS}
+        param={param}
+        kelompok={[
+          {
+            nama: "aktif",
+            label: "Ketersediaan",
+            pilihan: [
+              { nilai: "ya", label: "Aktif" },
+              { nilai: "tidak", label: "Nonaktif" },
+            ],
+          },
+        ]}
+        jumlah={baris.length}
+        total={total}
+        aksi={
+          <Link
+            href={`${BASIS}?ubah=baru`}
+            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-surface"
+          >
+            + Layanan baru
+          </Link>
+        }
+      />
 
-      {katalog.map((f) => (
-        <section
-          key={f.id}
-          aria-label={`Layanan fase ${f.nama}`}
-          className="mb-4 rounded-2xl border border-black/10 bg-white p-4"
-        >
-          <h2 className="mb-3 font-serif text-lg text-night">
-            {f.nama}{" "}
-            <span className="font-sans text-[12px] uppercase tracking-wider text-ink-soft">
-              {f.namaSanskrit}
-            </span>
-          </h2>
-
-          {f.layanan.length === 0 ? (
-            <p className="text-[13px] italic text-ink-soft">
-              Belum ada layanan pada fase ini.
-            </p>
-          ) : (
-            <ul className="grid gap-3">
-              {f.layanan.map((l) => (
-                <li key={l.id} className="rounded-xl border border-black/10 p-3.5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-[200px] flex-1">
-                      <b className="text-[14px] text-night">{l.nama}</b>
-                      <p className="mt-0.5 text-[12.5px] text-ink-soft">
-                        {l.deskripsi || "Belum ada deskripsi."}
-                      </p>
-                      {/* Angka ini menjelaskan mengapa baris tidak boleh
-                          dihapus: setiap sesi menunjuk layanan ini. */}
-                      <p className="mt-1 font-mono text-[11.5px] text-ink-soft">
-                        {l.sesiTercatat} sesi tercatat
-                      </p>
-                    </div>
-                    <PillAktif aktif={l.aktif} />
-                  </div>
-
-                  <div className="mt-2.5">
-                    <AksiLayanan
-                      id={l.id}
-                      nama={l.nama}
-                      deskripsi={l.deskripsi}
-                      faseId={f.id}
-                      aktif={l.aktif}
-                      fase={pilihanFase}
-                    />
-                  </div>
-
-                  <BlokVarian serviceId={l.id} namaLayanan={l.nama} varian={l.varian} />
-
-                  {l.paket.length > 0 && (
-                    <ul className="mt-3 grid gap-2 border-t border-black/5 pt-3">
-                      {l.paket.map((p) => (
-                        <li
-                          key={p.id}
-                          className="flex flex-wrap items-center justify-between gap-2.5"
-                        >
-                          <span className="min-w-[180px] flex-1">
-                            <b className="text-[13px] text-ink">{p.nama}</b>
-                            <span className="ml-2 font-mono text-[12px] text-ink-soft">
-                              {p.jumlahSesi} sesi
-                            </span>
-                            <span className="block text-[11.5px] text-ink-soft">
-                              {p.dipakai > 0
-                                ? `${p.dipakai} klien sedang menjalani paket ini — mengubah jumlah sesi menggeser progres passport mereka.`
-                                : "Belum dipakai klien mana pun."}
-                            </span>
-                          </span>
-                          <PillAktif aktif={p.aktif} />
-                          <AksiPaket
-                            id={p.id}
-                            nama={p.nama}
-                            jumlahSesi={p.jumlahSesi}
-                            aktif={p.aktif}
-                            dipakai={p.dipakai}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {/*
-                    Bacaan saja, sengaja. Keterkaitan materi<->layanan
-                    (`material_services`) dikelola dari modul Materi — bukan
-                    di sini — supaya tidak ada dua tempat yang bisa menulis
-                    satu relasi. Tapi admin yang membuka layar layanan wajib
-                    bisa MELIHAT "layanan ini include materi apa saja" tanpa
-                    berpindah modul; tanpa daftar ini, tidak ada satu pun
-                    layar yang menjawab pertanyaan itu dari sisi layanan.
-                  */}
-                  <div className="mt-3 border-t border-black/5 pt-3">
-                    <p className="text-[11.5px] font-bold uppercase tracking-wide text-ink-soft">
-                      Materi yang termasuk layanan ini
-                    </p>
-                    {(materiPerId.get(l.id) ?? []).length === 0 ? (
-                      <p className="mt-1 text-[12.5px] italic text-ink-soft">
-                        Belum ada materi yang menautkan layanan ini.
-                      </p>
-                    ) : (
-                      <ul className="mt-1 grid gap-1">
-                        {(materiPerId.get(l.id) ?? []).map((m) => (
-                          <li key={m.id} className="text-[12.5px] text-ink">
-                            {m.judul}{" "}
-                            {!m.aktif && (
-                              <span className="text-[11px] font-bold text-clay">(nonaktif)</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </li>
+      {baris.length === 0 ? (
+        <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
+          Tidak ada layanan yang cocok dengan pencarian ini.
+        </p>
+      ) : (
+        <div className="rounded-lg border border-panel-border bg-panel-surface">
+          <Tabel label="Daftar layanan">
+            <thead>
+              <tr>
+                <Th>Nama</Th><Th>Fase</Th><Th>Varian</Th><Th>Paket</Th>
+                <Th>Sesi tercatat</Th><Th>Status</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {baris.map((l) => (
+                <tr key={l.id}>
+                  <Td>
+                    {/* Barisnya sendiri yang menaut — pola B. Tidak ada kolom
+                        "Aksi" berisi tombol Ubah: yang dibuka adalah halaman
+                        layanan itu beserta varian dan paketnya, bukan
+                        formulirnya saja. */}
+                    <Link href={`${BASIS}/${l.id}`} className="font-bold text-panel-ink underline">
+                      {l.nama}
+                    </Link>
+                    <span className="mt-0.5 block text-[11.5px] text-panel-muted">
+                      {l.deskripsi || "Belum ada deskripsi."}
+                    </span>
+                  </Td>
+                  <Td>{l.namaFase}</Td>
+                  <Td className="font-mono text-[12.5px]">{l.jumlahVarian}</Td>
+                  <Td className="font-mono text-[12.5px]">{l.jumlahPaket}</Td>
+                  {/* Angka ini menjelaskan mengapa baris tidak boleh dihapus:
+                      setiap sesi menunjuk layanan ini. */}
+                  <Td className="font-mono text-[12.5px]">{l.sesiTercatat}</Td>
+                  <Td><PillAktif aktif={l.aktif} /></Td>
+                </tr>
               ))}
-            </ul>
-          )}
-        </section>
-      ))}
+            </tbody>
+          </Tabel>
+        </div>
+      )}
 
-      <p className="mt-2 text-[12px] text-ink-soft">
-        Materi pembelajaran menempel pada layanan dan dikelola di modulnya
-        sendiri. Menonaktifkan layanan di sini tidak menghapus materi apa pun.
-      </p>
+      <Paginasi basis={BASIS} param={param} total={total} />
+
+      {panelTerbuka && (
+        <PanelGeser judul="Layanan baru" hrefTutup={hrefTutup}>
+          <FormLayananBaru fase={fase} />
+        </PanelGeser>
+      )}
     </main>
   );
 }

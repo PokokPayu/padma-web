@@ -41,6 +41,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
@@ -127,6 +128,7 @@ const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
 const { progresPaket } = await import("@/lib/passport/turunan");
 const { bacaKatalog } = await import("@/lib/katalog");
 const { default: LayananPage } = await import("@/app/admin/layanan/page");
+const { ambilDaftarLayanan, ambilLayanan } = await import("@/lib/admin/layanan");
 
 const sumberAksi = baca("src/app/admin/layanan/aksi.ts");
 const sumberHalaman = baca("src/app/admin/layanan/page.tsx");
@@ -1197,18 +1199,28 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   beforeAll(async () => {
     ref.sesi = sesiAdmin;
     await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
-    markup = renderToStaticMarkup(await LayananPage());
+    // Next 16: `searchParams` adalah Promise. Dipanggil langsung (bukan lewat
+    // `createElement`) dan di-`await` di sini karena komponen halaman ini
+    // ASYNC — `renderToStaticMarkup` sendiri tidak bisa menunggu Promise
+    // sebuah komponen, ia hanya bisa merender pohon elemen yang sudah selesai.
+    markup = renderToStaticMarkup(
+      await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+        searchParams: Promise.resolve({}),
+      }),
+    );
   });
 
   afterAll(async () => {
     await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
   });
 
-  it("mengelompokkan layanan di bawah judul fasenya (seperti prototipe)", () => {
-    for (const fase of ["Prekonsepsi", "Kehamilan", "Nifas", "Menopause", "Newborn"]) {
-      expect(markup).toContain(fase);
-    }
-  });
+  // "mengelompokkan layanan di bawah judul fasenya" DIHAPUS, bukan dipindah:
+  // pengelompokan per-fase adalah bentuk KATALOG BERSARANG yang Tugas 7 bongkar
+  // sengaja (spec K1). Daftar datar tidak lagi punya header fase — `namaFase`
+  // sekarang sekadar satu kolom tabel per baris, dan itu sudah dibuktikan oleh
+  // `ambilDaftarLayanan` di lapisan data (`membawa jumlah varian, paket, dan
+  // sesi tercatat` & seluruh describe di bawah). Tidak ada guarantee yang
+  // hilang di sini — hanya bentuk render yang berubah.
 
   it("menampilkan layanan aktif maupun nonaktif", () => {
     expect(markup).toContain("PAD-UJI Layanan Edit Baru");
@@ -1217,29 +1229,18 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
     expect(markup).toMatch(/>Nonaktif</);
   });
 
-  it("menawarkan jalan MENGAKTIFKAN kembali layanan yang nonaktif", () => {
-    expect(markup).toContain("Aktifkan");
-  });
-
-  it("menampilkan paket di bawah layanannya beserta jumlah sesinya", () => {
-    expect(markup).toContain("PAD-UJI Paket Edit Baru");
-    expect(markup).toMatch(/10 sesi/);
-  });
-
-  it("menampilkan varian di bawah layanannya, termasuk yang nonaktif", () => {
-    expect(markup).toContain("PAD-UJI Varian Kedua");
-    // Varian baku (label kosong) jatuh ke teks penjelas, bukan string kosong
-    // yang membuat baris terlihat rusak.
-    expect(markup).toMatch(/Varian baku/i);
-  });
-
-  it("menawarkan jalan menambah varian baru per layanan", () => {
-    expect(markup).toContain("+ Varian");
-    expect(sumberFormVarian).toContain('name="label"');
-    expect(sumberFormVarian).toContain('name="durasi_menit"');
-    expect(sumberFormVarian).toContain('name="format"');
-    expect(sumberFormVarian).toContain('name="urutan"');
-  });
+  // Empat pemeriksaan berikut PINDAH ke tests/admin-layanan-detail.test.tsx
+  // (Tugas 8), bukan dihapus — lihat describe "guarantee yang pindah dari
+  // Tugas 7" di berkas itu:
+  //   • "menawarkan jalan MENGAKTIFKAN kembali layanan yang nonaktif" — tombol
+  //     Aktifkan/Nonaktifkan (AksiLayanan) sekarang hidup di halaman DETAIL,
+  //     bukan di baris daftar (pola B: baris menaut, tidak membawa aksi).
+  //   • "menampilkan paket ... beserta jumlah sesinya" — paket adalah anak
+  //     layanan, dan anak pindah ke halaman detail bersama layanannya.
+  //   • "menampilkan varian ... termasuk yang nonaktif" — alasan yang sama.
+  //   • "menawarkan jalan menambah varian baru" — tombol "+ Varian baru"
+  //     sekarang menaut ke `?ubah=baru` di halaman detail (Ruling A Tugas 8),
+  //     bukan formulir inline di daftar.
 
   it("memperingatkan bahwa mengubah jumlah sesi menggeser progres berjalan", () => {
     const teks = markup + sumberForm;
@@ -1347,5 +1348,74 @@ describe("berkas server action layanan", () => {
 
   it("navigasi admin menautkan modul ini", () => {
     expect(baca("src/app/admin/_shell/nav-admin.tsx")).toContain('href: "/admin/layanan"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tugas 7: lapisan data DAFTAR datar (@/lib/admin/layanan)
+// ---------------------------------------------------------------------------
+
+describe("ambilDaftarLayanan", () => {
+  it("menyaring menurut ketersediaan", async () => {
+    const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "ya" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((l) => l.aktif)).toBe(true);
+  });
+
+  it("membawa jumlah varian, paket, dan sesi tercatat", async () => {
+    const { baris } = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const l = baris.find((x) => x.jumlahVarian > 0);
+    // Angka-angka inilah yang menjelaskan mengapa baris tidak boleh dihapus.
+    expect(l).toBeDefined();
+    expect(l!.jumlahPaket).toBeGreaterThanOrEqual(0);
+    expect(l!.sesiTercatat).toBeGreaterThanOrEqual(0);
+  });
+
+  it("mencari menurut nama", async () => {
+    const semua = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const sasaran = semua.baris[0];
+    const { baris } = await ambilDaftarLayanan({
+      cari: sasaran.nama.slice(0, 5), saring: {}, hal: 1,
+    });
+    expect(baris.some((l) => l.id === sasaran.id)).toBe(true);
+  });
+
+  it("memuat layanan NONAKTIF juga — kelola bukan pilih", async () => {
+    // Tanpa ini, layanan yang dinonaktifkan karena salah klik tidak punya
+    // jalan kembali dari panel mana pun.
+    //
+    // BRIEF ASLINYA memeriksa `baris.every((l) => !l.aktif)` TANPA memaksa
+    // ada satu baris nonaktif lebih dulu — persis pola ".every() atas larik
+    // kosong selalu true" yang sudah tertangkap dua kali di rencana ini
+    // (lihat catatan pengarah tugas). Pada saat describe ini berjalan, SETIAP
+    // fixture nonaktif di berkas ini sudah dikembalikan `aktif = true` oleh
+    // try/finally masing-masing, sehingga tanpa baris di bawah filter
+    // `aktif: "tidak"` kemungkinan besar memulangkan larik KOSONG dan test
+    // ini lulus tanpa membuktikan apa pun. SVC_STATUS dinonaktifkan sendiri
+    // di sini, sementara — bukan meminjam keadaan test lain — supaya lulus
+    // atau gagalnya test ini sungguh bergantung pada perilaku `ambilDaftarLayanan`.
+    await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
+    try {
+      const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
+      expect(baris.length).toBeGreaterThan(0);
+      expect(baris.every((l) => !l.aktif)).toBe(true);
+      expect(baris.map((l) => l.id)).toContain(SVC_STATUS);
+    } finally {
+      await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
+    }
+  });
+});
+
+describe("ambilLayanan — satu layanan beserta anaknya", () => {
+  it("memulangkan null untuk id yang tidak ada, bukan melempar", async () => {
+    expect(await ambilLayanan("00000000-0000-0000-0000-000000000000")).toBeNull();
+  });
+
+  it("membawa varian dan paket lengkap dengan angka pemakaian", async () => {
+    const { baris } = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const l = await ambilLayanan(baris[0].id);
+    expect(l).not.toBeNull();
+    expect(Array.isArray(l!.varian)).toBe(true);
+    expect(Array.isArray(l!.paket)).toBe(true);
   });
 });
