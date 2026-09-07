@@ -61,6 +61,17 @@ Untuk berkas uji yang menghitung panggilan:
 | (b) baru ketemu sesudah dikupas | 2 atau 3, tergantung tingkat keberapa |
 | (c) gagal di seluruh tingkat | 3 |
 
+**Diperiksa sesudah rencana pemilih-lokasi selesai (commit `96ea4cf`): tidak ada satu pun
+assertion di sana yang perlu disesuaikan.** Seluruh stub di `tests/geocode-route.test.ts`,
+`transport-pin-menang`, dan `transport-warisan-koordinat` menjawab ketemu pada panggilan pertama —
+skenario (a), yang bernilai 1 di bawah ladder mana pun. Dua assertion sisanya
+`not.toHaveBeenCalled()`, yang justru MENGUAT bila ladder ada. Skenario (b) dan (c) tidak pernah
+tersentuh uji-uji itu.
+
+Artinya kekhawatiran "ladder akan memerahkan berkas uji rencana pemilih-lokasi" — yang menjadi
+alasan awal mendahulukan ladder — ternyata tidak berdasar sejak awal. Dicatat di sini supaya orang
+berikutnya tidak mengulang penjadwalan yang sama demi menghindari masalah yang tidak ada.
+
 ## Pengukuran (7 September 2026)
 
 Alat: `web/scripts/probe-geocode.ts` — tidak menyentuh `geocode_cache`, aman diulang.
@@ -127,5 +138,5 @@ Teks di bawah sudah ditinjau dan disetujui pemilik spec pemilih-lokasi tanpa ban
    berlaku dan pekerjaan ini belum boleh diambil.
 3. Kerjakan ladder + utang #2 sebagai SATU pekerjaan.
 4. Masukkan teks §1.2 di atas ke spec pemilih-lokasi pada commit yang sama.
-5. Kabari pemilik rencana pemilih-lokasi dengan tabel jumlah tembakan di atas — tiga berkas ujinya
-   menghitung panggilan Nominatim dan angkanya akan berubah.
+5. Berkas uji rencana pemilih-lokasi TIDAK perlu disesuaikan — sudah diperiksa terhadap commit
+   `96ea4cf`; lihat catatan di bawah tabel tembakan. Tetap jalankan suite penuh, tentu saja.
