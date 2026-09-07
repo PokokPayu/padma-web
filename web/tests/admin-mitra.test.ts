@@ -76,6 +76,10 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/mitra",
+  // `PanelGeser` (Task 7) memakai `useRouter` untuk tombol Escape/overlay —
+  // `renderToStaticMarkup` tidak menjalankan efeknya, tapi pemanggilan
+  // `useRouter()` sendiri di badan komponen tetap butuh mock ini.
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const { simpanMitra, perbaruiMitra, aktifkanMitra, nonaktifkanMitra } =
@@ -621,6 +625,9 @@ describe("pagar basis data yang menopang modul ini", () => {
 
 describe("halaman daftar mitra (/admin/mitra)", () => {
   let markup = "";
+  // Panel dibuka lewat `?ubah=<id>` (Task 7) — dipakai HANYA oleh test
+  // "MENGAKTIFKAN" di bawah, yang butuh melihat isi formulir mitra nonaktif.
+  let markupPanelStatus = "";
   let sesiSelesaiSri = 0;
 
   beforeAll(async () => {
@@ -634,7 +641,12 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
       .eq("status", "selesai");
     sesiSelesaiSri = count ?? 0;
 
-    markup = renderToStaticMarkup(await MitraPage());
+    // Halaman kini menerima `searchParams` (Task 7) — `{}` mereproduksi
+    // perilaku lama "hal 1 tanpa saringan, panel tertutup".
+    markup = renderToStaticMarkup(await MitraPage({ searchParams: Promise.resolve({}) }));
+    markupPanelStatus = renderToStaticMarkup(
+      await MitraPage({ searchParams: Promise.resolve({ ubah: MITRA_STATUS }) }),
+    );
   });
 
   afterAll(async () => {
@@ -661,13 +673,14 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
 
   it("menawarkan jalan MENGAKTIFKAN kembali mitra yang nonaktif", () => {
     // Tanpa ini, satu klik salah menonaktifkan bidan selamanya dari panel.
-    expect(markup).toContain("Aktifkan");
+    // Sejak Task 7 tombol ini hidup DI DALAM panel geser (`?ubah=<id>`),
+    // bukan lagi di baris tabel — dibuka di sini lewat mitra yang sengaja
+    // dinonaktifkan (`MITRA_STATUS`) di `beforeAll`.
+    expect(markupPanelStatus).toContain("Aktifkan");
   });
 
   it("menyediakan jalan menambah mitra baru", () => {
     expect(markup).toContain("Mitra baru");
-    // Formulirnya dimulai tertutup (sama seperti modul klien), jadi medannya
-    // dijaga di sumber — bukan di markup keadaan awal.
     expect(sumberForm).toContain('name="nama"');
     expect(sumberForm).toContain('name="no_hp"');
   });
