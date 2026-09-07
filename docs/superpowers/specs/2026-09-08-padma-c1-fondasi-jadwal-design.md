@@ -282,6 +282,47 @@ ditampilkan di sebelah kodenya — klien perlu melihat bahwa yang ia pindai mema
 Karena QRIS ini **statis**, nominalnya tidak menempel di kode: klien mengetik sendiri jumlahnya.
 Konsekuensinya — bagaimana uang masuk dicocokkan dengan tagihan mana — milik C2.
 
+### J13 — Circle bukan sesi rombongan, dan tidak akan menjadi kasus khusus
+
+Ditunda dua kali sebelumnya (spec varian §9 dan spec transport), dengan kalimat "hari ini Circle
+baru berarti harga". **Klien menutupnya 8 September 2026: tidak ada pembeda antara Private dan
+Circle selain harga.** Pemesan Circle tetap satu orang, satu akun, satu sesi.
+
+Ditulis di sini supaya tidak dibuka lagi sebagai "yang belum dikerjakan": tidak ada yang perlu
+dikerjakan. Circle adalah varian berformat lain dengan harga lebih murah, dan formulir pemesanan
+memperlakukannya persis seperti varian mana pun. Tidak ada peserta jamak, tidak ada transport
+patungan, tidak ada honor yang dibagi.
+
+## Utang terbuka yang menunggu jawaban klien
+
+Bukan bagian C1, tetapi ditulis di sini supaya tidak hilang lagi — semuanya sempat terparkir di
+spec lama dan baru terangkat kembali lewat penyisiran 8 September.
+
+**1. Paket bundling RS.** Catatan klien 6 September yang belum terjawab: *"Paket bundling dengan
+RS, misal beli 1 paket isinya beberapa layanan, tapi yang beli 1 orang — penjadwalan di web
+bagaimana? Karena layanan tidak selesai 1 waktu tapi beberapa waktu."* Yang harus diputuskan
+sebelum paket dibuka kembali:
+
+- apakah pembeli dan penerima layanan boleh orang yang berbeda (RS membeli untuk pasiennya);
+- apakah tiap layanan di dalam paket dijadwalkan terpisah — dan bila ya, apakah masing-masing
+  butuh skriningnya sendiri, mengingat J3 mengikat skrining ke tiap pengajuan;
+- kapan paket dianggap lunas bila jadwalnya tersebar berminggu-minggu;
+- bagaimana paket masuk ke rantai status C1 yang dirancang tanpa memikirkannya.
+
+Peta jalan 6 September menaruh paket sebagai spec ke-3 dan rangkaian status ke-4; urutan itu
+sekarang terbalik atas keputusan klien. Konsekuensinya diterima sadar: paket akan dipasang ke
+rantai yang sudah jadi, bukan sebaliknya.
+
+**2. Katalog produksi masih dummy.** Gambar alur klien menyebut "Garbha Relief · 90 menit ·
+Rp179.000"; angka itu tidak ada di repo. Katalog di `seed.sql` adalah data karangan (keputusan #12)
+dan pricelist asli harus diisi klien lewat panel sebelum live. Menyertainya: ~25 berkas uji yang
+terikat UUID seed dan harus dilepaskan (butir V10 spec varian).
+
+**3. Honor mitra untuk jenjang transport selain 0–5 km belum pernah diisi.** Sisi tarif klien sudah
+ada; sisi honornya kosong, dan tanpa itu rekap owner tidak bisa menghitung pengeluaran transport.
+
+**4. Logo versi vektor untuk cetak.** Versi transparan sudah diterima dan cukup untuk web.
+
 ## Di luar ruang lingkup C1
 
 Disebut eksplisit supaya tidak dikira sudah beres:
@@ -301,6 +342,7 @@ Disebut eksplisit supaya tidak dikira sudah beres:
   paket.
 - **Akun dan panel mitra** — belum ada. Karena itu `berjalan` → `selesai` ditandai admin, dan bidan
   tidak melihat penilaian dirinya.
+- **Sesi rombongan** — bukan sekadar ditunda: J13 menyatakan ia tidak ada.
 
 ## Konsekuensi yang sudah diketahui
 
