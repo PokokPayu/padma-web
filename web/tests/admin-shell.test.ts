@@ -624,14 +624,14 @@ describe("dashboard admin", () => {
     }
   });
 
-  // Ruling 13 (coordinator, Task 8 fix round 2): StatTile "Sesi >20 km
+  // StatTile "Sesi >20 km
   // menunggu tarif" adalah SATU-SATUNYA yang tautannya bergantung peran —
   // owner bisa menuntaskannya di /owner/transport, admin biasa tidak berhak
   // sama sekali (tetapkanTarifKhusus menuntut requireRole(["owner"])), jadi
   // memberinya href yang sama untuk admin hanya memantulkannya keluar tanpa
   // penjelasan. Dua uji terpisah membuktikan KEDUA sisi perilaku ini —
   // bukan hanya "href ada", karena "href ada" untuk admin justru salah.
-  it("StatTile transport TIDAK bertaut untuk admin biasa (Ruling 13)", async () => {
+  it("StatTile transport TIDAK bertaut untuk admin biasa", async () => {
     const m = await markupDashboard(); // ref.sesi default: admin@padma.test
     expect(m).not.toContain('href="/owner/transport"');
     // Angkanya tetap tampil — hanya tautannya yang hilang.
