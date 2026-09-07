@@ -97,7 +97,14 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     const markup = renderToStaticMarkup(
       createElement(FormEditKlien, {
         id: "id-uji",
-        awal: { nama: "Ananda Uji", noHp: "0812", faseId: "prekonsepsi", alamat: "Jl. Uji" },
+        awal: {
+          nama: "Ananda Uji",
+          noHp: "0812",
+          faseId: "prekonsepsi",
+          alamat: "Jl. Uji",
+          lat: null,
+          lon: null,
+        },
         fase: [{ id: "prekonsepsi", nama: "Prekonsepsi" }],
       }),
     );

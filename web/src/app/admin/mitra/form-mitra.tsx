@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { aktifkanMitra, nonaktifkanMitra, perbaruiMitra, simpanMitra } from "./aksi";
+import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 
 const KELAS_MEDAN =
   "mt-1 min-h-[38px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px]";
@@ -13,6 +14,8 @@ export type MitraForm = {
   nama: string;
   noHp: string;
   alamat: string;
+  lat: number | null;
+  lon: number | null;
   aktif: boolean;
 };
 
@@ -93,6 +96,13 @@ export function FormMitra({
         <span className="mt-1 block text-[11px] text-panel-muted">
           Lokasi diperkirakan lewat data © OpenStreetMap contributors.
         </span>
+        <PemilihLokasi
+          awal={
+            mitra && mitra.lat !== null && mitra.lon !== null
+              ? { lat: mitra.lat, lon: mitra.lon }
+              : null
+          }
+        />
       </label>
 
       {pesan && <p className="text-[12.5px] font-semibold text-clay">{pesan}</p>}

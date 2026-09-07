@@ -30,6 +30,11 @@ export type BarisMitra = {
   nama: string;
   noHp: string;
   alamat: string;
+  // Koordinat domisili, untuk memuat ulang pin di formulir ubah. Nullable
+  // persis kolom aslinya: domisili yang belum berkoordinat bukan galat, ia
+  // berarti petanya terbuka tanpa pin.
+  lat: number | null;
+  lon: number | null;
   aktif: boolean;
   sesiSelesai: number;
 };
@@ -45,6 +50,8 @@ type BarisPartner = {
   nama: string;
   no_hp: string;
   alamat: string;
+  lat: number | null;
+  lon: number | null;
   aktif: boolean;
 };
 
@@ -66,7 +73,7 @@ export async function ambilDaftarMitra(
 
   let q = supabase
     .from("partners")
-    .select("id, nama, no_hp, alamat, aktif", { count: "exact" })
+    .select("id, nama, no_hp, alamat, lat, lon, aktif", { count: "exact" })
     .order("aktif", { ascending: false })
     .order("nama");
 
@@ -117,6 +124,8 @@ export async function ambilDaftarMitra(
       nama: m.nama,
       noHp: m.no_hp,
       alamat: m.alamat,
+      lat: m.lat,
+      lon: m.lon,
       aktif: m.aktif,
       sesiSelesai: selesaiPer.get(m.id) ?? 0,
     })),
