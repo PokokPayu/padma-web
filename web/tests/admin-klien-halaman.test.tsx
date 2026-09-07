@@ -26,6 +26,7 @@ beforeAll(async () => {
   ref.sesi = await signInAs("admin@padma.test");
 });
 
+const klienMod = await import("@/lib/admin/klien");
 const { default: HalamanKlien } = await import("@/app/admin/klien/page");
 
 const render = async (sp: Record<string, string> = {}) =>
@@ -73,6 +74,24 @@ describe("halaman /admin/klien", () => {
     const m = await render({ cari: "zzznotfoundzzz" });
     expect(m).toContain("Tidak ada klien yang cocok dengan pencarian ini.");
     expect(m).not.toMatch(/href="\/admin\/klien\/[0-9a-f-]{36}"/);
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // hanya benar bila ADA pencarian/saringan yang gagal — klinik yang baru
+    // dipasang dan belum punya satu klien pun bukan itu. `ambilDaftarKlien`
+    // di-spy supaya baris kosong bisa diuji tanpa mengosongkan tabel `clients`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(klienMod, "ambilDaftarKlien")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await render();
+      expect(m).toContain("Belum ada klien terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("berkas rute /admin/klien/baru berisi formulir klien baru, bukan markup halaman detail", async () => {

@@ -20,6 +20,7 @@ beforeAll(async () => {
   ref.sesi = await signInAs("admin@padma.test");
 });
 
+const mitraMod = await import("@/lib/admin/mitra");
 const { default: HalamanMitra } = await import("@/app/admin/mitra/page");
 
 const render = async (sp: Record<string, string>) =>
@@ -103,5 +104,28 @@ describe("halaman /admin/mitra", () => {
     const m = await render({});
     expect(m).toContain("Mitra adalah data, bukan pengguna aplikasi");
     expect(m).toContain("<details");
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = await render({ cari: "zzz-tidak-ada-mitra-bernama-ini" });
+    expect(m).toContain("Tidak ada mitra yang cocok dengan pencarian ini.");
+    expect(m).not.toContain("<table");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): kedua kalimat kosong ini punya sebab
+    // berbeda — page.tsx yang harus membedakannya, bukan menjawab keduanya
+    // dengan kalimat pencarian. `ambilDaftarMitra` di-spy supaya baris kosong
+    // bisa diuji tanpa mengosongkan tabel `partners` yang dipakai bersama.
+    const spy = vi
+      .spyOn(mitraMod, "ambilDaftarMitra")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await render({});
+      expect(m).toContain("Belum ada mitra terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

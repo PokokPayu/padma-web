@@ -107,8 +107,9 @@ const {
   nonaktifkanMateri,
   lepasVideo,
 } = await import("@/app/admin/materi/aksi");
+const materiAdminMod = await import("@/lib/admin/materi-admin");
 const { daftarMateriAdmin, TANPA_LAYANAN_ID, SARING_MATERI, ambilDaftarMateri, ambilMateri } =
-  await import("@/lib/admin/materi-admin");
+  materiAdminMod;
 const { default: MateriPage } = await import("@/app/admin/materi/page");
 
 /** Next 16: `searchParams` adalah Promise — dipanggil langsung, bukan lewat `createElement`. */
@@ -1072,6 +1073,29 @@ describe("halaman materi (/admin/materi)", () => {
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
+    }
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = await markupDaftar({ cari: "zzz-tidak-ada-materi-bernama-ini" });
+    expect(m).toContain("Tidak ada materi yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // dulu dirender untuk SETIAP daftar materi kosong, walau tidak ada
+    // pencarian maupun saringan yang gagal. `ambilDaftarMateri` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan tabel `materials`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(materiAdminMod, "ambilDaftarMateri")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await markupDaftar();
+      expect(m).toContain("Belum ada materi yang terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
     }
   });
 });

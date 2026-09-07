@@ -107,7 +107,8 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/bayar",
 }));
 
-const { daftarTagihanAdmin, SARING_BAYAR } = await import("@/lib/admin/tagihan");
+const tagihanMod = await import("@/lib/admin/tagihan");
+const { daftarTagihanAdmin, SARING_BAYAR } = tagihanMod;
 const { hitungKlaimMenunggu } = await import("@/lib/admin/antrean");
 const { tandaiLunas, tolakKlaim } = await import("@/app/admin/bayar/aksi");
 const { TabelBayar } = await import("@/app/admin/bayar/tabel-bayar");
@@ -859,6 +860,29 @@ describe("halaman /admin/bayar", () => {
     );
     expect(markup).toContain("Tidak ada tagihan yang cocok dengan pencarian ini");
     expect(markup).not.toContain("<table");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): sebelum perbaikan ini, page.tsx
+    // merender "tidak cocok dengan pencarian ini" UNTUK SEMUA kekosongan,
+    // termasuk klinik yang baru dipasang dan belum pernah menerima satu
+    // tagihan pun — mengeklaim ada pencarian yang gagal padahal tidak ada
+    // satu pun yang dicari. `daftarTagihanAdmin` di-spy supaya baris kosong
+    // bisa diuji tanpa mengosongkan basis data lokal yang dipakai bersama.
+    const spy = vi
+      .spyOn(tagihanMod, "daftarTagihanAdmin")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const markup = renderToStaticMarkup(
+        await BayarPage({ searchParams: Promise.resolve({}) }),
+      );
+      expect(markup).toContain(
+        "Belum ada tagihan yang perlu diverifikasi",
+      );
+      expect(markup).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

@@ -96,13 +96,10 @@ export default async function MateriPage({
     <main>
       <header className="mb-4">
         <h1 className="text-[18px] font-bold text-panel-ink">Materi Panduan</h1>
-        <p className="mt-0.5 max-w-2xl text-[12.5px] text-panel-muted">
-          Isi yang terbuka untuk klien setelah layanan terkaitnya selesai dijalani, atau lewat
-          penugasan manual.
-        </p>
         <Bantuan judul="Tentang halaman ini">
-          Satu materi boleh menempel ke lebih dari satu layanan — atau tidak satu pun. Materi
-          tidak pernah dihapus, hanya <b>dinonaktifkan</b> — dan menonaktifkannya benar-benar
+          Isi yang terbuka untuk klien setelah layanan terkaitnya selesai dijalani, atau lewat
+          penugasan manual. Satu materi boleh menempel ke lebih dari satu layanan — atau tidak
+          satu pun. Materi tidak pernah dihapus, hanya <b>dinonaktifkan</b> — dan menonaktifkannya benar-benar
           menutup isinya: halaman e-book dan isi videonya berhenti dijawab basis data untuk klien,
           bukan sekadar hilang dari layarnya. Materi juga tidak pernah bisa terbit tanpa isi:
           e-book wajib punya satu berkas PDF, video wajib punya satu berkas video. Materi kosong
@@ -150,7 +147,13 @@ export default async function MateriPage({
 
       {baris.length === 0 ? (
         <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
-          Tidak ada materi yang cocok dengan pencarian ini.
+          {/* Dua sebab, dua kalimat — hanya `page.tsx` tahu bedanya karena
+              hanya di sini `param` (cari + saring) terlihat sekaligus. */}
+          {param.cari === "" && Object.keys(param.saring).length === 0 ? (
+            <>Belum ada materi yang terdaftar. Mulai dari tombol &ldquo;+ Materi baru&rdquo;.</>
+          ) : (
+            "Tidak ada materi yang cocok dengan pencarian ini."
+          )}
         </p>
       ) : (
         <div className="rounded-lg border border-panel-border bg-panel-surface">

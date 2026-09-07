@@ -25,6 +25,11 @@ import { STATUS_SAH } from "@/app/admin/skrining/status";
 const admin = createAdminSupabase();
 const KODE = "PDM-260828-0000-TEST";
 
+// Pegangan modul (bukan hanya nama yang didestrukturisasi) supaya
+// `ambilDaftarSkrining` bisa di-spy di satu uji tanpa mengosongkan basis data
+// lokal yang dipakai bersama — lihat uji "kalimat hari-pertama" di bawah.
+const skriningMod = await import("@/lib/admin/skrining");
+
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
@@ -294,7 +299,16 @@ describe("inbox admin — halaman & data", () => {
     // spec K2, pola yang sama dengan /admin/bayar & /admin/sesi), tanda
     // tangan `page.tsx` WAJIB menerima `searchParams` dan meneruskan
     // `cari`/`tindak`/`hasil` — tiga parameter NAVIGASI, bukan jawaban
-    // kuesioner.
+    // kuesioner. Tapi `hasil` bukan navigasi netral seperti dua yang lain:
+    // nilainya (`merah`/`hijau`) adalah KLASIFIKASI KLINIS, bukan sekadar id
+    // atau status alur kerja — `?cari=<nama>&hasil=merah` menaruh nama
+    // seseorang bersebelahan dengan hasil skrining merahnya di riwayat
+    // peramban dan access log. Ini melebihi spec K3 (Skrining seharusnya
+    // hanya punya satu saringan: sudah/belum ditindaklanjuti) — rencana
+    // menyetujuinya secara eksplisit (lihat deviasi di runbook), dan
+    // halamannya sudah di belakang `requireRole`, jadi ini keputusan yang
+    // disadari, bukan pelanggaran. Dicatat di sini supaya pembaca berikutnya
+    // tidak salah baca `hasil` sebagai parameter navigasi biasa.
     //
     // `sumberAksi` (`"use server"`, endpoint POST tersendiri) dan
     // `sumberTabel` (komponen murni props-masuk) TIDAK PERNAH punya alasan
@@ -354,6 +368,25 @@ describe("inbox admin — halaman & data", () => {
     );
     expect(halaman).toContain("Tidak ada hasil skrining yang cocok dengan pencarian ini");
     expect(halaman).not.toContain("<table");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): page.tsx sebelumnya merender "tidak
+    // cocok dengan pencarian ini" untuk SEMUA kekosongan, termasuk klinik
+    // yang belum pernah menerima satu pengisi skrining pun. `ambilDaftarSkrining`
+    // di-spy supaya baris kosong bisa diuji tanpa mengosongkan basis data.
+    const spy = vi
+      .spyOn(skriningMod, "ambilDaftarSkrining")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const halaman = renderToStaticMarkup(
+        await InboxSkriningPage({ searchParams: Promise.resolve({}) }),
+      );
+      expect(halaman).toContain("Belum ada hasil skrining masuk");
+      expect(halaman).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

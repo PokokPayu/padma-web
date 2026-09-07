@@ -103,6 +103,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const { jadwalkanSesi, selesaikanSesi, tetapkanJenjang } = await import("@/app/admin/sesi/aksi");
+const sesiMod = await import("@/lib/admin/sesi");
 const { default: SesiPage } = await import("@/app/admin/sesi/page");
 
 const sumberAksi = baca("src/app/admin/sesi/aksi.ts");
@@ -1033,10 +1034,33 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
     expect(nominalDalam(await markupSesi({ ubah: "baru" }))).toEqual([]);
   });
 
-  // RULING (menggantikan draf Langkah 5 di brief Task 3 — lihat
-  // task-3-report.md): `BlokPermintaan` (antrean permintaan, tampil DI ATAS
-  // bilah daftar) menerima prop `mitra` yang sama dengan panel "Sesi baru",
-  // dan punya cabang sendiri yang menampilkan "Belum ada mitra aktif —
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = await markupSesi({ cari: "zzz-tidak-ada-sesi-bernama-ini" });
+    expect(m).toContain("Tidak ada sesi yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // pernah dirender untuk SETIAP daftar sesi kosong, termasuk klinik yang
+    // belum pernah menjadwalkan satu sesi pun. `ambilDaftarSesi` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan tabel `sessions`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(sesiMod, "ambilDaftarSesi")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await markupSesi();
+      expect(m).toContain("Belum ada sesi.");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // RULING (menggantikan draf Langkah 5 di brief Task 3): `BlokPermintaan`
+  // (antrean permintaan, tampil DI ATAS bilah daftar) menerima prop `mitra`
+  // yang sama dengan panel "Sesi baru", dan punya cabang sendiri yang
+  // menampilkan "Belum ada mitra aktif —
   // daftarkan mitra dulu di menu Mitra" bila `mitra.length === 0`. Draf awal
   // brief menarik `pilihanMitra()` HANYA saat `ubah === "baru"`, yang berarti
   // kalimat itu muncul setiap kali panel tertutup — walau mitra aktif

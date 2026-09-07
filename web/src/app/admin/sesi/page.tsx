@@ -70,8 +70,9 @@ export default async function SesiPage({
   const panelTerbuka = ubah === "baru" || barisUbah !== undefined;
   const hrefTutup = `${BASIS}${bangunQuery(param, { ubah: null })}`;
 
-  // RULING (menggantikan draf awal rencana Task 3, lihat task-3-report.md):
-  // `mitra` TIDAK BOLEH ditarik hanya saat `ubah === "baru"`. `BlokPermintaan`
+  // RULING (menggantikan draf awal rencana Task 3 yang mengambilnya bersyarat
+  // `ubah === "baru"` saja): `mitra` TIDAK BOLEH ditarik hanya saat
+  // `ubah === "baru"`. `BlokPermintaan`
   // di bawah — antrean permintaan, tampil di ATAS bilah daftar — juga
   // menerima prop `mitra` yang sama, dan punya cabang sendiri yang
   // menampilkan "Belum ada mitra aktif" bila `mitra.length === 0`. Menariknya
@@ -197,7 +198,13 @@ export default async function SesiPage({
 
       {baris.length === 0 ? (
         <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
-          Tidak ada sesi yang cocok dengan pencarian ini.
+          {/* Dua sebab, dua kalimat — hanya `page.tsx` tahu bedanya karena
+              hanya di sini `param` (cari + saring) terlihat sekaligus. */}
+          {param.cari === "" && Object.keys(param.saring).length === 0 ? (
+            <>Belum ada sesi. Mulai dari tombol &ldquo;+ Sesi baru&rdquo;.</>
+          ) : (
+            "Tidak ada sesi yang cocok dengan pencarian ini."
+          )}
         </p>
       ) : (
         <div className="rounded-lg border border-panel-border bg-panel-surface">

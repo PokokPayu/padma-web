@@ -62,7 +62,16 @@ export default async function BayarPage({
 
       {baris.length === 0 ? (
         <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
-          Tidak ada tagihan yang cocok dengan pencarian ini.
+          {/* Dua sebab, dua kalimat — hanya `page.tsx` tahu bedanya karena
+              hanya di sini `param` (cari + saring) terlihat sekaligus. */}
+          {param.cari === "" && Object.keys(param.saring).length === 0 ? (
+            <>
+              Belum ada tagihan yang perlu diverifikasi. Begitu klien menekan &ldquo;Saya sudah
+              bayar&rdquo; di Passport-nya, itemnya muncul di sini.
+            </>
+          ) : (
+            "Tidak ada tagihan yang cocok dengan pencarian ini."
+          )}
         </p>
       ) : (
         <TabelBayar item={baris} />
