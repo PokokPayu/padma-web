@@ -38,9 +38,23 @@ Konsekuensi operasionalnya langsung: **penghitung "Sesi selesai tanpa jenjang" (
 jalur pengecualian, ia jalur utama** — dan setiap sesi di dalamnya adalah honor transport yang
 belum terbayar. Utang #1 dan #2 karena itu jauh lebih mendesak daripada yang tertulis di tabelnya.
 
-Alatnya ada di `web/scripts/probe-geocode.ts` bila perlu diukur ulang untuk kota lain. Jalan
-keluarnya dirancang di `docs/superpowers/specs/2026-09-07-padma-pemilih-lokasi-design.md`, yang
-belum diimplementasikan saat baris ini ditulis.
+Alatnya ada di `web/scripts/probe-geocode.ts` bila perlu diukur ulang untuk kota lain.
+
+**SUDAH DITANGANI (7 Sep 2026).** Formulir klien dan mitra di panel staf kini memuat PEMILIH
+LOKASI DI PETA: admin menjatuhkan pin, dan koordinat itu MENGALAHKAN geocoding — Nominatim tidak
+ditanyai sama sekali ketika pin ada. Geocoding turun pangkat menjadi penggeser peta; gagal pun
+tidak menghentikan apa pun karena petanya tetap bisa diklik. Pengajuan klien yang alamatnya tidak
+diubah mewarisi koordinat profil yang sudah dipin admin, sehingga jalur pengajuan — yang paling
+ramai — ikut tertolong tanpa satu pun perubahan di layar klien. Rancangan dan alasannya:
+`docs/superpowers/specs/2026-09-07-padma-pemilih-lokasi-design.md`.
+
+Yang TIDAK berubah: bila admin tidak menjatuhkan pin, jalur geocoding lama berlaku utuh, dengan
+angka kegagalan di atas. Penghitung "Sesi selesai tanpa jenjang" (runbook #4) karena itu tetap
+perlu dibaca — ia kembali menjadi jalur pengecualian, bukan jalur utama.
+
+Geocoding bertingkat (mengupas alamat sampai "jalan + kota", yang menaikkan keberhasilan 19% ->
+72%) DITUNDA, bukan dibatalkan — lihat `docs/superpowers/2026-09-07-ladder-geocoding-ditunda.md`
+beserta seluruh pengukuran dan prasyaratnya.
 
 **3b. Nominatim juga punya batas 1 permintaan per detik.** Konsekuensi yang harus diketahui sebelum
 trafik naik:
@@ -76,8 +90,8 @@ Semua sudah ditriase review menyeluruh sebagai "boleh menyusul". Diurutkan menur
 
 | # | Utang | Kenapa ditunda |
 |---|---|---|
-| 1 | **Daftar tersendiri untuk antrean "sesi tanpa jenjang".** Hari ini hanya ADA ANGKA di `/admin` plus tautan ke `/admin/sesi`; admin masih harus memindai daftar untuk menemukan barisnya. Bandingkan `>20 km` yang punya halaman berisi daftarnya. | Angkanya sudah menghentikan kelas kegagalan yang sesungguhnya — honor yang hilang **senyap**. Menemukan barisnya kini merepotkan, bukan mustahil. |
-| 2 | **Coba-ulang geocoding yang gagal.** `geocode_cache.dicoba_pada` sudah ditulis tetapi tidak pernah dibaca siapa pun. Butuh TTL, atau tombol "coba lagi", atau minimal memisahkan "alamat tidak ditemukan" dari "gagal menghubungi Nominatim" — keduanya kini diperlakukan sama dan sama-sama permanen. | Alamat tetap tersimpan dan jenjangnya bisa ditetapkan manual, jadi tidak ada yang buntu total. |
+| 1 | **Daftar tersendiri untuk antrean "sesi tanpa jenjang".** Hari ini hanya ADA ANGKA di `/admin` plus tautan ke `/admin/sesi`; admin masih harus memindai daftar untuk menemukan barisnya. Bandingkan `>20 km` yang punya halaman berisi daftarnya. **TURUN PRIORITAS (7 Sep 2026):** dengan pemilih lokasi, jenjang kosong kembali menjadi pengecualian, bukan jalur utama. | Angkanya sudah menghentikan kelas kegagalan yang sesungguhnya — honor yang hilang **senyap**. Menemukan barisnya kini merepotkan, bukan mustahil. |
+| 2 | **Coba-ulang geocoding yang gagal.** `geocode_cache.dicoba_pada` sudah ditulis tetapi tidak pernah dibaca siapa pun. Butuh TTL, atau tombol "coba lagi", atau minimal memisahkan "alamat tidak ditemukan" dari "gagal menghubungi Nominatim" — keduanya kini diperlakukan sama dan sama-sama permanen. **TURUN PRIORITAS (7 Sep 2026):** kegagalan geocoding tidak lagi menentukan koordinat ketika admin menjatuhkan pin. | Alamat tetap tersimpan dan jenjangnya bisa ditetapkan manual, jadi tidak ada yang buntu total. |
 | 3 | **Klien tidak pernah melihat rincian transport `>20 km`**, bahkan sesudah owner menetapkan nominalnya. Sisi admin sudah menampilkannya. Menutupnya butuh view sempit ber-RLS "sesi milik sendiri" yang memulangkan KEBERADAAN baris, bukan nominal. | Halaman tagihan klien memang tidak menampilkan nominal apa pun (nominal via WhatsApp), jadi yang hilang adalah satu baris keterangan, bukan angka. |
 | 4 | **Jalur koreksi `transport_khusus` yang sah.** Hari ini hanya service role: UPDATE ditolak trigger, DELETE dicabut. Bila jenjang sesi dikoreksi keluar dari `>20 km`, baris tarif khususnya menjadi YATIM — lenyap dari antrean, diabaikan rekap, dan berlaku lagi diam-diam bila jenjangnya dikembalikan. | Koreksi jenjang keluar dari `>20 km` adalah kejadian langka; belum ada keputusan antara pola "fakta baru" (ala `honor_marks`) vs penulisan ulang. |
 | 5 | **Transport untuk sesi BERPAKET tidak ditagihkan ke siapa pun.** Honornya tetap dibayarkan kepada mitra, tarif kliennya sengaja TIDAK menambah `totalHarga` supaya margin tidak memuat pendapatan hantu. PADMA menanggungnya. | Menunggu spec paket bundling; menagihnya sekarang berarti menebak bentuk tagihan paket. |
@@ -96,6 +110,9 @@ Dua butir menuntut mata manusia di browser dan **belum pernah diperiksa**:
 
 - Buka `/admin` sebagai admin biasa: jenjang terlihat, dan **nol nominal transport** di mana pun.
 - Buka `/owner`: rate card terisi, dan subsidi 0–5 km tampil sebagai selisih Rp10.000.
+- **SUDAH DIPERIKSA (7 Sep 2026):** pemilih lokasi di `/admin/mitra` dan `/admin/klien` — peta
+  tergambar, atribusi Leaflet terbaca, pin bisa dijatuhkan & digeser, dan koordinat yang tersimpan
+  adalah angka pin, bukan hasil geocoding.
 
 Ditambah `npm run test:e2e:video`, yang tidak dijalankan karena menyentuh bucket R2 produksi.
 
