@@ -25,6 +25,22 @@ const { default: HalamanMitra } = await import("@/app/admin/mitra/page");
 const render = async (sp: Record<string, string>) =>
   renderToStaticMarkup(await HalamanMitra({ searchParams: Promise.resolve(sp) }));
 
+/**
+ * Nama mitra pada baris yang menaut ke `?ubah=<id>` di markup DAFTAR
+ * (dirender TANPA panel terbuka).
+ *
+ * Diambil dari markup, bukan di-hardcode: `<b>{nama}</b>` dan tautan "Ubah"
+ * duduk berurutan di dalam `<tr>` yang sama (lihat page.tsx), jadi `<b>`
+ * TERAKHIR sebelum posisi href adalah nama baris itu sendiri.
+ */
+function namaBarisId(daftar: string, id: string): string {
+  const posHref = daftar.search(new RegExp(`href="[^"]*ubah=${id}"`));
+  expect(posHref, `href ubah=${id} tidak ditemukan di markup daftar`).toBeGreaterThanOrEqual(0);
+  const semuaNama = [...daftar.slice(0, posHref).matchAll(/<b>([^<]*)<\/b>/g)];
+  expect(semuaNama.length, "tidak ada <b>nama</b> sebelum tautan ubah").toBeGreaterThan(0);
+  return semuaNama[semuaNama.length - 1][1];
+}
+
 describe("halaman /admin/mitra", () => {
   it("TIDAK ada formulir di dalam sel tabel lagi", async () => {
     // Inti keluhan klien. Formulir di dalam <td> membuat baris memuai dan
@@ -47,12 +63,20 @@ describe("halaman /admin/mitra", () => {
     const daftar = await render({});
     const id = /href="\/admin\/mitra\?ubah=([0-9a-f-]{36})"/.exec(daftar)?.[1];
     expect(id).toBeDefined();
+    // Nama SESUNGGUHNYA baris ini, dibaca dari markup daftar — bukan
+    // di-hardcode. Memeriksa hanya `value="` ada (tanpa isinya) tidak
+    // membuktikan apa pun: `defaultValue={mitra?.nama ?? ""}` merender
+    // `value=""` sama saja ketika `mitra` sengaja diganti `null` walau
+    // `panelTerbuka` tetap true — persis jebakan yang brief tandai.
+    const nama = namaBarisId(daftar, id!);
 
     const m = await render({ ubah: id! });
     expect(m).toContain('role="dialog"');
-    // Nilai baris ikut masuk — inilah bukti panelnya dirender di SERVER
-    // dengan datanya sudah lengkap, bukan mengambil ulang setelah terbuka.
-    expect(m).toMatch(/name="nama"[^>]*value="/);
+    // Nama baris yang sama harus ikut sampai ke ATRIBUT `value` medan
+    // "nama" — bukti panelnya dirender di SERVER dengan datanya sudah
+    // lengkap, bukan panel kosong yang formulirnya tidak menunjuk apa pun.
+    const namaAman = nama.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    expect(m).toMatch(new RegExp(`name="nama"[^>]*value="${namaAman}"`));
   });
 
   it("?ubah dengan id yang tidak ada TIDAK melempar dan TIDAK membuka panel", async () => {
