@@ -128,7 +128,8 @@ const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
 const { progresPaket } = await import("@/lib/passport/turunan");
 const { bacaKatalog } = await import("@/lib/katalog");
 const { default: LayananPage } = await import("@/app/admin/layanan/page");
-const { ambilDaftarLayanan, ambilLayanan } = await import("@/lib/admin/layanan");
+const layananLibMod = await import("@/lib/admin/layanan");
+const { ambilDaftarLayanan, ambilLayanan } = layananLibMod;
 
 const sumberAksi = baca("src/app/admin/layanan/aksi.ts");
 const sumberHalaman = baca("src/app/admin/layanan/page.tsx");
@@ -136,7 +137,26 @@ const sumberForm = baca("src/app/admin/layanan/form-layanan.tsx");
 const sumberFormVarian = baca("src/app/admin/layanan/form-varian.tsx");
 const sumberStatus = baca("src/app/admin/layanan/status.ts");
 const sumberLib = baca("src/lib/admin/katalog-admin.ts");
-const SEMUA_SUMBER = [sumberAksi, sumberHalaman, sumberForm, sumberFormVarian, sumberStatus, sumberLib];
+// BLOCKING 1 (review sapuan panel): logika modul ini PINDAH sebagian ke dua
+// berkas yang sebelumnya tidak pernah dibaca sebagai sumber di sini —
+// `src/lib/admin/layanan.ts` (daftar berpaginasi + `ambilLayanan`) dan
+// halaman DETAIL `[id]/page.tsx`. Selama keduanya absen dari `SEMUA_SUMBER`,
+// tiga pagar yang tampak modul-lebar (money firewall, "sesi pengguna bukan
+// service role", pencocokan identitas) sebenarnya melindungi LEBIH SEDIKIT
+// daripada sebelum sapuan — dan pagar identitas bahkan sudah dilewati diam-
+// diam: `.ilike("nama", ...)` di `layanan.ts:58` tidak pernah tertangkap.
+const sumberLibLayanan = baca("src/lib/admin/layanan.ts");
+const sumberDetail = baca("src/app/admin/layanan/[id]/page.tsx");
+const SEMUA_SUMBER = [
+  sumberAksi,
+  sumberHalaman,
+  sumberForm,
+  sumberFormVarian,
+  sumberStatus,
+  sumberLib,
+  sumberLibLayanan,
+  sumberDetail,
+];
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
@@ -1283,6 +1303,37 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
       expect(sumber).not.toContain("honor_mitra");
     }
   });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = renderToStaticMarkup(
+      await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+        searchParams: Promise.resolve({ cari: "zzz-tidak-ada-layanan-bernama-ini" }),
+      }),
+    );
+    expect(m).toContain("Tidak ada layanan yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // dulu dirender untuk SETIAP daftar layanan kosong, walau tidak ada
+    // pencarian maupun saringan yang gagal. `ambilDaftarLayanan` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan katalog `services`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(layananLibMod, "ambilDaftarLayanan")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = renderToStaticMarkup(
+        await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+          searchParams: Promise.resolve({}),
+        }),
+      );
+      expect(m).toContain("Belum ada layanan yang terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1320,13 +1371,29 @@ describe("berkas server action layanan", () => {
     }
     expect(sumberAksi).toContain("createServerSupabase");
     expect(sumberLib).toContain("createServerSupabase");
+    expect(sumberLibLayanan).toContain("createServerSupabase");
   });
 
-  it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberLib]) {
-      expect(sumber).not.toContain(".ilike(");
-      expect(sumber).not.toContain(".like(");
-    }
+  it("pencocokan identitas memakai operator setara — .ilike/.like boleh pada kolom pencarian bebas, tidak pernah pada kolom identitas", () => {
+    // BLOCKING 1 (review sapuan panel): larangan BLANKET ".ilike(" yang
+    // pernah berdiri di sini lolos buta terhadap `src/lib/admin/layanan.ts:58`
+    // (`q.ilike("nama", ...)`) karena berkas itu tidak pernah masuk daftar
+    // yang diperiksa. Nilainya sendiri sah — `nama` bukan kolom identitas —
+    // tapi ketiadaannya dari daftar berarti `.ilike("id", ...)` atau
+    // `.ilike("*_id", ...)` yang menyelinap di berkas yang sama tidak akan
+    // membuat satu pun pagar menyala. Bentuk sadar-kolom ini (pola yang sama
+    // dengan tests/admin-sesi-daftar.test.ts:238-244) membedakan KOLOM, bukan
+    // METODE.
+    const kolomPerSumber = SEMUA_SUMBER.map(
+      (sumber) => [...sumber.matchAll(/\.(?:ilike|like)\(\s*["'`](\w+)["'`]/g)].map((m) => m[1]),
+    );
+    const semuaKolom = kolomPerSumber.flat();
+    // Gigi: pagar ini harus benar-benar menemukan sesuatu untuk diperiksa —
+    // `layanan.ts` memakai `.ilike("nama", ...)` untuk pencarian bebas, jadi
+    // panjang nol berarti regex-nya sendiri yang rusak, bukan modulnya bersih.
+    expect(semuaKolom.length).toBeGreaterThan(0);
+    const identitas = semuaKolom.filter((k) => k === "id" || /_id$/.test(k));
+    expect(identitas, `.ilike/.like pada kolom identitas: ${identitas.join(", ")}`).toEqual([]);
   });
 
   it("tidak menuliskan data katalog ke log", () => {

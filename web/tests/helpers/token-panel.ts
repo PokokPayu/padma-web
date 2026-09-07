@@ -32,7 +32,21 @@ export function kelasPanelDi(isi: string): string[] {
   return [...new Set(isi.match(POLA_KELAS) ?? [])];
 }
 
-/** Kelas yang token `--color-panel-*`-nya TIDAK ada di `css`. */
+/**
+ * Kelas yang token `--color-panel-*`-nya TIDAK ada di `css`.
+ *
+ * Batas deklarasi (`\s*:`), bukan `.includes()` telanjang: `.includes()`
+ * lolos untuk suffix yang kebetulan menjadi AWALAN token sungguhan —
+ * `"--color-panel-in"` adalah substring dari `"--color-panel-ink: ..."`, jadi
+ * `bg-panel-rail-akt` (awalan `panel-rail-aktif`) dan `text-panel-b` (awalan
+ * `panel-bg`) keduanya lolos sebagai "terdefinisi" walau keduanya bukan token
+ * yang sungguh ada — celah yang ditemukan reviewer sapuan panel lewat
+ * eksekusi nyata. Diikat ke titik dua deklarasi (dengan spasi opsional)
+ * supaya hanya kecocokan UTUH nama token yang dianggap terdefinisi.
+ */
 export function tokenHantu(kelas: string[], css: string): string[] {
-  return kelas.filter((k) => !css.includes(`--color-panel-${k.split("panel-")[1]}`));
+  return kelas.filter((k) => {
+    const suffix = k.split("panel-")[1];
+    return !new RegExp(`--color-panel-${suffix}\\s*:`).test(css);
+  });
 }

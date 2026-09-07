@@ -92,4 +92,26 @@ describe("pagar token panel", () => {
   it("token yang terdefinisi TIDAK dilaporkan", () => {
     expect(tokenHantu(["text-panel-ink", "bg-panel-surface"], CSS_UJI)).toEqual([]);
   });
+
+  it("BERGIGI: nama token yang DIPENGGAL tetap dilaporkan, bukan lolos sebagai awalan token sungguhan", () => {
+    // Temuan 5 review sapuan panel: `css.includes("--color-panel-" + suffix)`
+    // menganggap "text-panel-in" terdefinisi hanya karena "--color-panel-in"
+    // adalah SUBSTRING dari "--color-panel-ink: ...". Reviewer membuktikannya
+    // lewat eksekusi nyata dengan token panel/CSS SUNGGUHAN yang hidup di
+    // proyek ini: `bg-panel-rail-akt` (dipenggal dari `panel-rail-aktif`) dan
+    // `text-panel-b` (dipenggal dari `panel-bg`) sama-sama dilaporkan
+    // "terdefinisi" oleh versi lama — keduanya WAJIB dilaporkan sebagai hantu.
+    const CSS_RAIL = `@theme {
+      --color-panel-rail: #111111;
+      --color-panel-rail-ink: #222222;
+      --color-panel-rail-aktif: #333333;
+      --color-panel-bg: #444444;
+    }`;
+    expect(tokenHantu(["text-panel-in"], CSS_UJI)).toEqual(["text-panel-in"]);
+    expect(tokenHantu(["bg-panel-rail-akt"], CSS_RAIL)).toEqual(["bg-panel-rail-akt"]);
+    expect(tokenHantu(["text-panel-b"], CSS_RAIL)).toEqual(["text-panel-b"]);
+    // Kontrol positif: nama UTUH pada CSS yang sama tetap lolos sebagai
+    // terdefinisi — pagar tidak menjadi terlalu ketat sebagai efek samping.
+    expect(tokenHantu(["bg-panel-rail-aktif", "text-panel-bg"], CSS_RAIL)).toEqual([]);
+  });
 });
