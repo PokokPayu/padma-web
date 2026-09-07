@@ -282,12 +282,21 @@ describe("daftar tagihan admin", () => {
     }
   });
 
-  it("saringan IDENTIK dengan susunTagihan() yang dilihat klien", async () => {
-    // Bukti terkuat bahwa admin dan klien melihat daftar yang sama: item milik
-    // Ananda di daftar admin harus persis sama dengan tagihan yang tersusun
-    // dari sisi Ananda sendiri.
-    const milikAdmin = (await daftarTagihanAdmin())
-      .filter((t) => t.padmaId === PADMA_ID)
+  it("saringan sesi IDENTIK dengan susunTagihan() yang dilihat klien", async () => {
+    // Bukti terkuat bahwa admin dan klien melihat daftar SESI yang sama: item
+    // milik Ananda di daftar admin harus persis sama dengan tagihan yang
+    // tersusun dari sisi Ananda sendiri.
+    //
+    // Perbandingan ini SENGAJA disempitkan ke jenis "sesi" sejak saklar K11
+    // (Task 1, `PAKET_TAMPIL`): `ambilPaket()` sisi klien sekarang selalu []
+    // (lihat tests/paket-tersembunyi.test.tsx), sementara `daftarTagihanAdmin()`
+    // — jalur staf — belum ikut digerbang tugas ini; itulah sebabnya Task 1
+    // disebut "gerbang PERTAMA di jalur data sisi klien", bukan pembongkaran
+    // paket. Item paket admin diperiksa terpisah di bawah supaya kueri admin
+    // sendiri tetap terbukti utuh, bukan ikut kosong.
+    const daftarAdmin = (await daftarTagihanAdmin()).filter((t) => t.padmaId === PADMA_ID);
+    const milikAdmin = daftarAdmin
+      .filter((t) => t.jenis === "sesi")
       .map((t) => `${t.jenis}:${t.id}`)
       .sort();
 
@@ -295,10 +304,12 @@ describe("daftar tagihan admin", () => {
     const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
     ref.sesi = sesiAdmin;
     const milikKlien = susunTagihan({ paket, sesi })
+      .filter((t) => t.jenis === "sesi")
       .map((t) => `${t.jenis}:${t.id}`)
       .sort();
 
     expect(milikAdmin).toEqual(milikKlien);
+    expect(daftarAdmin.some((t) => t.jenis === "paket")).toBe(true);
   });
 
   it("terurut menurut kemendesakan: menunggu verifikasi, belum, lunas", async () => {
