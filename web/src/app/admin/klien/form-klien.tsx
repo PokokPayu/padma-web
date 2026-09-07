@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { buatKlien, perbaruiKlien } from "./aksi";
-import { PemilihLokasi } from "@/app/_shell/panel/pemilih-lokasi";
 
 export type PilihanFase = { id: string; nama: string };
 
@@ -111,7 +110,6 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           <span className="mt-1 block text-[11px] text-ink-soft/70">
             Lokasi diperkirakan lewat data © OpenStreetMap contributors.
           </span>
-          <PemilihLokasi />
         </label>
       </div>
 
@@ -159,14 +157,7 @@ export function FormEditKlien({
   fase,
 }: {
   id: string;
-  awal: {
-    nama: string;
-    noHp: string;
-    faseId: string;
-    alamat: string;
-    lat: number | null;
-    lon: number | null;
-  };
+  awal: { nama: string; noHp: string; faseId: string; alamat: string };
   fase: PilihanFase[];
 }) {
   const [pending, mulai] = useTransition();
@@ -227,9 +218,6 @@ export function FormEditKlien({
           <span className="mt-1 block text-[11px] text-ink-soft/70">
             Lokasi diperkirakan lewat data © OpenStreetMap contributors.
           </span>
-          <PemilihLokasi
-            awal={awal.lat !== null && awal.lon !== null ? { lat: awal.lat, lon: awal.lon } : null}
-          />
         </label>
       </div>
 

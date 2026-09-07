@@ -88,14 +88,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     const markup = renderToStaticMarkup(
       createElement(FormEditKlien, {
         id: "id-uji",
-        awal: {
-          nama: "Ananda Uji",
-          noHp: "0812",
-          faseId: "prekonsepsi",
-          alamat: "Jl. Uji",
-          lat: null,
-          lon: null,
-        },
+        awal: { nama: "Ananda Uji", noHp: "0812", faseId: "prekonsepsi", alamat: "Jl. Uji" },
         fase: [{ id: "prekonsepsi", nama: "Prekonsepsi" }],
       }),
     );
@@ -122,7 +115,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     "src/app/admin/sesi/form-sesi.tsx",
     "src/app/admin/mitra/form-mitra.tsx",
     "src/app/admin/sesi/page.tsx",
-    "src/app/_shell/panel/pemilih-lokasi.tsx",
+    "src/app/_shell/pemilih-lokasi.tsx",
   ])("%s — atribusi duduk di dalam TEKS JSX, bukan komentar", (berkas) => {
     const sumber = baca(berkas);
     expect(atribusiDalamJsx(sumber)).toBe(true);
@@ -145,7 +138,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
   // KEDUA yang independen dari yang pertama.
 
   it("pemilih-lokasi.tsx — atribusi JUGA diteruskan ke lapisan ubin Leaflet", () => {
-    const bersih = tanpaKomentar(baca("src/app/_shell/panel/pemilih-lokasi.tsx"));
+    const bersih = tanpaKomentar(baca("src/app/_shell/pemilih-lokasi.tsx"));
     expect(bersih).toMatch(/const ATRIBUSI_OSM = "© OpenStreetMap contributors"/);
     expect(bersih).toMatch(/attribution:\s*ATRIBUSI_OSM/);
   });
@@ -158,7 +151,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     // ini menghapus dari "//" sampai akhir baris, dan itu ikut memakan "//" di
     // dalam "https://" — URL-nya lenyap sebelum sempat dihitung. Di sini yang
     // dicari memang literal URL-nya, jadi sumber mentah adalah bentuk yang benar.
-    const sumber = baca("src/app/_shell/panel/pemilih-lokasi.tsx");
+    const sumber = baca("src/app/_shell/pemilih-lokasi.tsx");
     const kemunculan = sumber.match(/tile\.openstreetmap\.org/g) ?? [];
     expect(kemunculan).toHaveLength(1);
     expect(sumber).toMatch(/const URL_UBIN = "https:\/\/\{s\}\.tile\.openstreetmap\.org/);
@@ -172,7 +165,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
       "src/app/admin/klien/form-klien.tsx",
       "src/app/admin/mitra/form-mitra.tsx",
       "src/app/admin/sesi/page.tsx",
-      "src/app/_shell/panel/pemilih-lokasi.tsx",
+      "src/app/_shell/pemilih-lokasi.tsx",
     ]) {
       const sumber = tanpaKomentar(baca(berkas));
       const i = sumber.indexOf(TEKS_ATRIBUSI);

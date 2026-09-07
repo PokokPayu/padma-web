@@ -85,8 +85,6 @@ export default async function DaftarMitraPage() {
                         nama={m.nama}
                         noHp={m.noHp}
                         alamat={m.alamat}
-                        lat={m.lat}
-                        lon={m.lon}
                         aktif={m.aktif}
                       />
                     </td>

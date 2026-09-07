@@ -18,8 +18,6 @@ type Klien = {
   phase_id: string;
   user_id: string | null;
   alamat: string;
-  alamat_lat: number | null;
-  alamat_lon: number | null;
 };
 
 type Sesi = {
@@ -43,7 +41,7 @@ export default async function DetailKlienPage({
   // `%` cocok dengan baris klien mana pun.
   const { data: klien } = await supabase
     .from("clients")
-    .select("id, padma_id, nama, email, no_hp, phase_id, user_id, alamat, alamat_lat, alamat_lon")
+    .select("id, padma_id, nama, email, no_hp, phase_id, user_id, alamat")
     .eq("id", id)
     .maybeSingle<Klien>();
 
@@ -139,8 +137,6 @@ export default async function DetailKlienPage({
             noHp: klien.no_hp,
             faseId: klien.phase_id,
             alamat: klien.alamat,
-            lat: klien.alamat_lat,
-            lon: klien.alamat_lon,
           }}
           fase={fase ?? []}
         />
