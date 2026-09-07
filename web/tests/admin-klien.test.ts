@@ -539,24 +539,31 @@ describe("halaman daftar klien (/admin/klien)", () => {
 
   beforeAll(async () => {
     ref.sesi = sesiAdmin;
-    markup = renderToStaticMarkup(await DaftarKlienPage());
+    // Halaman kini menerima `searchParams` (Task 9) — `{}` mereproduksi
+    // perilaku lama "hal 1 tanpa saringan".
+    markup = renderToStaticMarkup(await DaftarKlienPage({ searchParams: Promise.resolve({}) }));
   });
 
-  it("menampilkan PADMA ID, nama, dan email tiap klien", () => {
+  it("menampilkan PADMA ID dan nama tiap klien", () => {
+    // Sejak Task 9 (pola B) email TIDAK lagi duplikat di daftar — ia hanya
+    // hidup di halaman detail (`/admin/klien/<id>`) yang kini ditaut
+    // langsung dari baris nama, jadi tidak ada lagi alasan menampilkannya
+    // dua kali.
     expect(markup).toContain("PAD-UJI-0005");
     expect(markup).toContain("Uji Klien Fixture");
-    expect(markup).toContain(EMAIL_FIXTURE);
   });
 
   it("menampilkan label fase yang bisa dibaca manusia, bukan id mentah", () => {
     expect(markup).toContain("Prekonsepsi / Promil");
   });
 
-  it("menampilkan paket aktif sebagai 'nama · N sesi', dan 'Sesi lepas' bila tidak ada", () => {
+  it("menampilkan paket aktif sebagai 'nama · N sesi', dan '—' bila tidak ada", () => {
     // Ananda memegang paket Sankalpa Prima 8 sesi di seed.
     expect(markup).toContain("Sankalpa Prima · 8 sesi");
-    // Klien fixture tidak punya paket sama sekali.
-    expect(markup).toContain("Sesi lepas");
+    // Klien fixture tidak punya paket sama sekali — placeholder daftar
+    // (Task 9) memakai em dash yang sama dengan kolom Fase, bukan lagi
+    // "Sesi lepas".
+    expect(markup).toMatch(/>—<\/td>/);
   });
 
   it("menampilkan jumlah sesi selesai apa adanya dari basis data", async () => {
@@ -755,7 +762,11 @@ describe("berkas server action klien", () => {
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
     expect(sumberAksi).toContain("createServerSupabase");
-    expect(sumberDaftar).toContain("createServerSupabase");
+    // `sumberDaftar` (page.tsx) TIDAK lagi menyentuh Supabase secara langsung
+    // sejak Task 9 — pembacaannya dipusatkan di `ambilDaftarKlien` (`sumberLib`,
+    // diperiksa di bawah), jadi guard "sesi pengguna" untuk halaman ini
+    // ditegakkan secara transitif, bukan lewat string literal di berkasnya
+    // sendiri.
     expect(sumberDetail).toContain("createServerSupabase");
     expect(sumberLib).toContain("createServerSupabase");
   });

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
-import { createServerSupabase } from "@/lib/supabase/server";
-import { ambilDaftarKlien } from "@/lib/admin/klien";
-import { FormKlienBaru } from "./form-klien";
+import { ambilDaftarKlien, SARING_KLIEN } from "@/lib/admin/klien";
+import { uraikanParamDaftar, type ParamMentah } from "@/app/_shell/panel/daftar";
+import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
+import { Paginasi } from "@/app/_shell/panel/paginasi";
+import { Bantuan } from "@/app/_shell/panel/bantuan";
+import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Klien" };
@@ -27,92 +30,89 @@ function PillAktivasi({ aktif }: { aktif: boolean }) {
   );
 }
 
-export default async function DaftarKlienPage() {
+export default async function DaftarKlienPage({
+  searchParams,
+}: {
+  searchParams: Promise<ParamMentah>;
+}) {
   await requireRole(["admin", "owner"]);
 
-  // Sesi pengguna, bukan service role: policy `clients: staf` yang mengizinkan
-  // daftar ini terbaca, dan itulah yang ingin diuji ikut berjalan.
-  const supabase = await createServerSupabase();
-
-  // Cari, saring, dan paginasi belum disambungkan ke `searchParams` halaman
-  // ini — itu pekerjaan rencana berikutnya (bandingkan Mitra: Task 6
-  // memindahkan lapisan data, Task 7 baru menyambungkannya ke URL). Param
-  // tetap dikirim eksplisit supaya bentuknya sudah sesuai `ParamDaftar` sejak
-  // sekarang.
-  const [{ baris }, { data: fase }] = await Promise.all([
-    ambilDaftarKlien({ cari: "", saring: {}, hal: 1 }),
-    supabase
-      .from("phases")
-      .select("id, nama, urutan")
-      .order("urutan")
-      .returns<{ id: string; nama: string; urutan: number }[]>(),
-  ]);
+  const param = uraikanParamDaftar(await searchParams, SARING_KLIEN);
+  const { baris, total } = await ambilDaftarKlien(param);
 
   return (
     <main>
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="font-serif text-2xl text-night">Klien</h1>
-          <p className="mt-1 max-w-xl text-[13px] text-ink-soft">
-            Data klien dibuat di sini. Akunnya baru hidup setelah klien membuka
-            tautan aktivasi yang Anda kirim — sampai saat itu statusnya
-            &ldquo;Belum aktif&rdquo;.
-          </p>
-        </div>
-        <FormKlienBaru fase={fase ?? []} />
+      <header className="mb-4">
+        <h1 className="text-[18px] font-bold text-panel-ink">Klien</h1>
+        <Bantuan judul="Tentang halaman ini">
+          &ldquo;Belum aktif&rdquo; berarti tautan aktivasi belum ditukarkan: passport-nya
+          belum bisa dibuka siapa pun, termasuk oleh klien yang sudah dikirimi pesan
+          sambutan.
+        </Bantuan>
       </header>
 
-      {baris.length === 0 ? (
-        <p className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm italic text-ink-soft">
-          Belum ada klien terdaftar. Mulai dari tombol &ldquo;+ Klien
-          baru&rdquo;.
-        </p>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-black/10 bg-white">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-[13.5px]">
-              <thead>
-                <tr className="border-b-[1.5px] border-black/10 bg-paper text-[11px] uppercase tracking-wider text-ink-soft">
-                  <th className="p-4 text-left font-extrabold">PADMA ID</th>
-                  <th className="p-4 text-left font-extrabold">Nama</th>
-                  <th className="p-4 text-left font-extrabold">Fase</th>
-                  <th className="p-4 text-left font-extrabold">Paket</th>
-                  <th className="p-4 text-left font-extrabold">Sesi selesai</th>
-                  <th className="p-4 text-left font-extrabold">Aktivasi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {baris.map((k) => (
-                  <tr key={k.id} className="border-b border-black/5">
-                    <td className="p-4">
-                      <Link
-                        href={`/admin/klien/${k.id}`}
-                        className="font-mono text-xs font-bold text-leaf underline underline-offset-4"
-                      >
-                        {k.padmaId}
-                      </Link>
-                    </td>
-                    <td className="p-4">
-                      <b>{k.nama}</b>
-                      <span className="mt-0.5 block text-[11.5px] text-ink-soft">
-                        {k.email}
-                      </span>
-                    </td>
-                    <td className="p-4">{k.namaFase}</td>
-                    <td className="p-4">
-                      {k.paketAktif ?? <span className="text-ink-soft">Sesi lepas</span>}
-                    </td>
-                    <td className="p-4 font-mono">{k.sesiSelesai}</td>
-                    <td className="p-4">
-                      <PillAktivasi aktif={k.aktif} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <BilahDaftar
+        basis="/admin/klien"
+        param={param}
+        kelompok={[
+          {
+            nama: "aktivasi",
+            label: "Aktivasi",
+            pilihan: [
+              { nilai: "aktif", label: "Aktif" },
+              { nilai: "belum", label: "Belum aktivasi", menuntut: true },
+            ],
+          },
+          { nama: "paket", label: "Paket", pilihan: [{ nilai: "ada", label: "Punya paket" }] },
+        ]}
+        jumlah={baris.length}
+        total={total}
+        aksi={
+          <Link
+            href="/admin/klien/baru"
+            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-surface"
+          >
+            + Klien baru
+          </Link>
+        }
+      />
+      <div className="rounded-lg border border-panel-border bg-panel-surface">
+        <Tabel label="Daftar klien">
+          <thead>
+            <tr>
+              <Th>Nama</Th>
+              <Th>PADMA ID</Th>
+              <Th>Fase</Th>
+              <Th>Paket</Th>
+              <Th>Sesi</Th>
+              <Th>Aktivasi</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {baris.map((k) => (
+              <tr key={k.id}>
+                <Td>
+                  {/* Barisnya sendiri yang menaut — pola B. Tidak ada kolom
+                      "Aksi" berisi tombol Ubah, karena yang dibuka adalah
+                      halaman klien itu, bukan formulirnya saja. */}
+                  <Link href={`/admin/klien/${k.id}`} className="font-bold text-panel-ink underline">
+                    {k.nama}
+                  </Link>
+                </Td>
+                <Td className="font-mono text-[12.5px]">{k.padmaId}</Td>
+                <Td>{k.namaFase}</Td>
+                <Td>{k.paketAktif ?? "—"}</Td>
+                <Td className="font-mono text-[12.5px]">{k.sesiSelesai}</Td>
+                <Td>
+                  <PillAktivasi aktif={k.aktif} />
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabel>
+      </div>
+
+      <Paginasi basis="/admin/klien" param={param} total={total} />
     </main>
   );
 }

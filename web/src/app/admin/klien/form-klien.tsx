@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { buatKlien, perbaruiKlien } from "./aksi";
 
 export type PilihanFase = { id: string; nama: string };
@@ -12,36 +12,30 @@ const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
 /**
  * Formulir "Klien baru".
  *
- * Sengaja dimulai TERTUTUP: layar pertama modul ini adalah DAFTAR klien, dan
- * formulir yang selalu terbuka mendorong admin membuat baris ganda untuk klien
- * yang sebenarnya sudah ada. Pilihan fase datang dari tabel `phases` lewat
- * prop — tidak pernah disalin ulang sebagai literal di komponen ini, supaya
- * fase yang ditambah klinik tidak perlu menunggu rilis kode.
+ * Dulu komponen ini menyimpan gerbang buka/tutup sendiri (mulai TERTUTUP),
+ * karena ia dulu duduk di HEADER daftar klien — formulir yang selalu terbuka
+ * di sana mendorong admin membuat baris ganda untuk klien yang sebenarnya
+ * sudah ada. Sejak modul ini pindah ke pola B (halaman detail berdiri
+ * sendiri), satu-satunya pemanggil komponen ini adalah rute berdiri sendiri
+ * `/admin/klien/baru` — mendarat di rute itu SUDAH berarti admin bermaksud
+ * membuat klien baru, jadi gerbang kedua di dalam komponen ini hanya
+ * mengulang klik yang sama tanpa mencegah apa pun. "Terbuka atau tidak"
+ * sekarang keputusan URL (lewat tombol tautan di `page.tsx`), bukan lagi
+ * state komponen — sejalan dengan aturan yang sama untuk `FormMitra`.
+ *
+ * Pilihan fase datang dari tabel `phases` lewat prop — tidak pernah disalin
+ * ulang sebagai literal di komponen ini, supaya fase yang ditambah klinik
+ * tidak perlu menunggu rilis kode.
  */
 export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
-  const [terbuka, setTerbuka] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState<string | null>(null);
 
-  if (!terbuka) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setPesan(null);
-          setBerhasil(null);
-          setTerbuka(true);
-        }}
-        className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
-      >
-        + Klien baru
-      </button>
-    );
-  }
-
   return (
     <form
+      ref={formRef}
       // Nilai formulir dikirim apa adanya; PADMA ID dan status penautan
       // ditetapkan server — keduanya tidak pernah menjadi medan di sini.
       action={(fd) =>
@@ -50,7 +44,11 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           if (r.ok) {
             setBerhasil(r.padmaId);
             setPesan(null);
-            setTerbuka(false);
+            // Formulir tetap TERBUKA (tidak ada lagi state "tertutup" untuk
+            // kembali ke sana) — medannya dikosongkan lewat reset native
+            // supaya admin tidak keliru mengira submit kedua akan membuat
+            // baris duplikat dari data yang masih tersisa di layar.
+            formRef.current?.reset();
           } else {
             setPesan(r.pesan);
           }
@@ -123,12 +121,11 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         >
           {pending ? "Menyimpan…" : "Simpan klien"}
         </button>
+        {/* `type="reset"` bukan tombol JS: mengosongkan medan lewat mekanisme
+            form native, bukan lewat state "tertutup" yang sudah tidak ada. */}
         <button
-          type="button"
-          onClick={() => {
-            setTerbuka(false);
-            setPesan(null);
-          }}
+          type="reset"
+          onClick={() => setPesan(null)}
           className="rounded-xl border border-black/15 px-4 py-2.5 text-[13px] font-bold text-ink-soft"
         >
           Batal
