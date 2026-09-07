@@ -182,11 +182,10 @@ export default async function DetailLayananPage({
           yang membuka layar layanan wajib bisa MELIHAT "layanan ini include
           materi apa saja" tanpa berpindah modul.
 
-          Judul materi TIDAK ditaut ke rute detail materi di sini — rute itu
-          baru lahir di Tugas 11 (gelombang ini). Menaut ke rute yang belum
-          ada adalah 404 yang bisa lolos merge kalau gelombang 2 terpotong;
-          teks polos aman untuk keduanya dan Tugas 11 yang mengubahnya jadi
-          tautan begitu rutenya nyata.
+          RULING B (Tugas 11): judul materi kini menaut ke `/admin/materi/[id]`
+          — rute itu tidak ada sampai Tugas 11 lahir (lihat catatan yang sama
+          di task-7-8-report.md), jadi Tugas 7/8 sengaja merender teks polos.
+          Sekarang rutenya nyata, jadi tautannya dipasang di sini.
         */}
         <Kartu judul="Materi yang termasuk layanan ini">
           {materi.length === 0 ? (
@@ -197,7 +196,9 @@ export default async function DetailLayananPage({
             <ul className="grid gap-1">
               {materi.map((m) => (
                 <li key={m.id} className="text-[12.5px] text-panel-ink">
-                  {m.judul}
+                  <Link href={`/admin/materi/${m.id}`} className="underline">
+                    {m.judul}
+                  </Link>
                   {!m.aktif && (
                     <span className="ml-1 text-[11px] font-bold text-clay">(nonaktif)</span>
                   )}

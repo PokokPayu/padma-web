@@ -121,12 +121,23 @@ describe("halaman detail layanan", () => {
     expect(nominalDalam(await markup(LAYANAN.id))).toEqual([]);
   });
 
-  it("RULING B: judul materi adalah TEKS POLOS, bukan tautan ke rute Tugas 11", () => {
-    // `/admin/materi/[id]` belum ada sampai Tugas 11 lahir (gelombang ini).
-    // Brief asli Tugas 8 menaut ke sana; menaut ke rute yang belum ada adalah
-    // 404 yang bisa lolos merge kalau gelombang 2 terpotong sebelum Tugas 11.
-    expect(sumberHalamanDetail).not.toMatch(/href=\{`\/admin\/materi\//);
-    expect(sumberHalamanDetail).not.toContain("/admin/materi/${m.id}");
+  it("RULING B (Tugas 11): judul materi kini menaut ke /admin/materi/[id]", async () => {
+    // Tugas 8 sengaja merender TEKS POLOS di sini karena `/admin/materi/[id]`
+    // belum ada saat itu (lihat task-7-8-report.md) — menaut ke rute yang
+    // belum ada adalah 404 yang bisa lolos merge kalau gelombang 2 terpotong.
+    // Tugas 11 (gelombang ini) menciptakan rutenya, jadi teks polos tadi kini
+    // WAJIB jadi tautan sungguhan — kontradiksi dengan pagar lama diselesaikan
+    // dengan mengganti pagarnya, bukan membiarkan keduanya hidup berdampingan.
+    expect(sumberHalamanDetail).toContain("/admin/materi/${m.id}");
+
+    // `LAYANAN` (baris[0] alfabetis) sering kebetulan tidak punya materi
+    // tertaut sama sekali — layanan seed permanen di bawah ("Sankalpa
+    // Fertility Massage") PASTI punya dua (materi demo 701 & 702, lihat
+    // supabase/seed.sql), jadi tautannya sungguh dirender, bukan hanya
+    // "seharusnya dirender kalau ada baris".
+    const SVC_PUNYA_MATERI = "11111111-1111-1111-1111-111111111101";
+    const m = await markup(SVC_PUNYA_MATERI);
+    expect(m).toMatch(/href="\/admin\/materi\/[0-9a-f-]+"/);
   });
 });
 
