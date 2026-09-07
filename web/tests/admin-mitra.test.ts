@@ -737,14 +737,32 @@ describe("berkas server action mitra", () => {
   });
 
   it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    // `sumberLib` DIKECUALIKAN sejak Task 6: `ambilDaftarMitra` memakai
-    // `.ilike()` untuk PENCARIAN NAMA (bukan identitas) — sama seperti
-    // modul klien (lihat `tests/admin-klien.test.ts`), pagar ini menjaga
-    // action & halaman, bukan melarang pencarian teks di lapisan data.
+    // `sumberAksi` dan `sumberHalaman` TIDAK punya pencarian teks sama
+    // sekali, jadi larangan totalnya tetap tepat: `.ilike`/`.like` di sana
+    // hanya bisa berarti satu hal — identitas dicocokkan lewat pola.
     for (const sumber of [sumberAksi, sumberHalaman]) {
       expect(sumber).not.toContain(".ilike(");
       expect(sumber).not.toContain(".like(");
     }
+
+    // `sumberLib` TIDAK dikecualikan total (Fix Round 1): yang berbahaya
+    // bukan `.ilike()` itu sendiri — `ambilDaftarMitra` sah memakainya untuk
+    // PENCARIAN NAMA — bahayanya adalah `.ilike()`/`.like()` dipakai pada
+    // kolom IDENTITAS (`id`, `*_id`). Bila `.eq("id", x)` suatu hari berubah
+    // jadi `.ilike("id", x)`, sebuah AWALAN bisa mencocokkan baris milik
+    // orang lain, dan tidak ada galat apa pun yang muncul.
+    //
+    // Dua bentuk penulisan ditangkap:
+    //  1. Bentuk metode — `.ilike("id", ...)` / `.like('partner_id', ...)`.
+    //  2. Bentuk string di dalam `.or(...)` — `"id.ilike.%x%"`. Bentuk ini
+    //     TIDAK memakai tanda kurung `(` dan lolos dari pemeriksaan naif
+    //     yang hanya mencari substring `.ilike(`. Modul KLIEN akan memakai
+    //     `.or()` semacam ini untuk mencari lewat nama DAN PADMA ID
+    //     sekaligus, jadi pagarnya harus sudah benar sebelum kode itu ada.
+    const polaMetodeIdentitas = /\.(?:ilike|like)\(\s*['"`](?:id|\w*_id)['"`]/;
+    const polaOrIdentitas = /['"`](?:id|\w*_id)\.(?:ilike|like)\./;
+    expect(sumberLib).not.toMatch(polaMetodeIdentitas);
+    expect(sumberLib).not.toMatch(polaOrIdentitas);
   });
 
   it("tidak menuliskan data mitra ke log", () => {
