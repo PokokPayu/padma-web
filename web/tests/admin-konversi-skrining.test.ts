@@ -43,6 +43,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { TabelInbox, type BarisSkrining } from "@/app/admin/skrining/tabel-inbox";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -455,9 +456,9 @@ describe("inbox menampilkan jembatan ke modul klien", () => {
   });
 
   it("tidak ada nominal uang di jalur konversi (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberTabel, sumberDialog, sumberAksi, sumberHalaman]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
     }

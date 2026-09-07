@@ -17,6 +17,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { nominalDalam } from "./helpers/nominal";
+import { kelasPanelDi, tokenHantu } from "./helpers/token-panel";
 
 // usePathname hanya hidup di dalam App Router. `vi.mock` diangkat ke atas
 // berkas oleh Vitest, jadi letaknya di sini tetap berlaku untuk seluruh
@@ -29,19 +31,21 @@ vi.mock("next/navigation", () => ({
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
-/** Semua berkas .ts/.tsx di bawah src/app/_shell/panel, rekursif — house idiom
- *  yang sama dengan `berkasAdmin()` di tests/admin-shell.test.ts. Primitif
- *  yang lahir belakangan otomatis ikut terjaga, tanpa perlu menambahkannya
- *  dengan tangan ke daftar test di sini. */
-function berkasPanel(rel = "src/app/_shell/panel"): string[] {
+/** Semua berkas .ts/.tsx di bawah sebuah direktori `src`, rekursif. */
+function berkasSumber(rel: string): string[] {
   const hasil: string[] = [];
   for (const entri of readdirSync(path.join(AKAR, rel), { withFileTypes: true })) {
     const anak = `${rel}/${entri.name}`;
-    if (entri.isDirectory()) hasil.push(...berkasPanel(anak));
+    if (entri.isDirectory()) hasil.push(...berkasSumber(anak));
     else if (/\.tsx?$/.test(entri.name)) hasil.push(anak);
   }
   return hasil;
 }
+
+/** Primitif panel saja — dipakai uji BUTA PERAN, yang TIDAK boleh memindai
+ *  `src/app/admin` maupun `src/app/owner`: keduanya memang tahu peran, dan
+ *  memindainya di sana akan melahirkan puluhan kegagalan palsu. */
+const berkasPanel = () => berkasSumber("src/app/_shell/panel");
 
 describe("token visual panel", () => {
   const css = baca("src/app/globals.css");
@@ -91,47 +95,37 @@ describe("token visual panel", () => {
   });
 
   it("kelas Tailwind yang memakai token panel harus punya token yang didefinisikan", () => {
-    // Kelas Tailwind yang menunjuk token hantu gagal SENYAP — tidak ada galat
-    // build, tidak ada peringatan, hanya teks yang tidak terbaca di layar.
-    // Catat semua kelas berpola (text|bg|border)-panel-* di primitif panel,
-    // pastikan setiap satu punya token --color-panel-* yang cocok.
-    //
-    // Himpunan kelas seharusnya TIDAK KOSONG — kalau regex sesuatu saat
-    // berhenti cocok, uji ini akan lulus diam-diam. Penjagaan ini lolos jika
-    // himpunan kosong (validasi di akhir), jadi regex yang berhenti mencocok
-    // akan tampak sebagai regresi.
-    const kelasSemuanya = new Map<string, string[]>();
-    const tokenSemuanya = new Set<string>();
+    // Rencana 1 hanya memindai `src/app/_shell/panel/`. Rencana 2 & 3 menulis
+    // kelas panel ke lima belas halaman DI LUAR jangkauan itu, dan halaman
+    // Mitra & Klien yang sudah disapu pun tidak pernah terjaga sama sekali —
+    // bersihnya hari ini karena diperiksa dengan mata satu kali, bukan karena
+    // dijaga.
+    const AKAR_PINDAI = ["src/app/_shell", "src/app/admin", "src/app/owner"];
 
-    for (const berkas of berkasPanel()) {
-      const isi = baca(berkas);
-      // Pola kelas: text-panel-*, bg-panel-*, border-panel-*
-      const keluarKelas = isi.matchAll(/(text|bg|border)-panel-([a-z\-]+)/g);
-      for (const cocok of keluarKelas) {
-        const namaPenggunaan = `${cocok[1]}-panel-${cocok[2]}`;
-        const namaToken = `--color-panel-${cocok[2]}`;
-        tokenSemuanya.add(namaToken);
-
-        if (!kelasSemuanya.has(namaPenggunaan)) {
-          kelasSemuanya.set(namaPenggunaan, []);
-        }
-        kelasSemuanya.get(namaPenggunaan)!.push(berkas);
+    const kelasPerBerkas = new Map<string, string[]>();
+    for (const akar of AKAR_PINDAI) {
+      const berkas = berkasSumber(akar);
+      // Anti-hampa PER AKAR, bukan hanya untuk gabungannya: satu direktori
+      // yang dipindah atau salah tulis akan berhenti dipindai diam-diam
+      // sementara dua yang lain menjaga total tetap tidak kosong.
+      expect(berkas.length, `tidak ada berkas di ${akar}`).toBeGreaterThan(0);
+      for (const b of berkas) {
+        const kelas = kelasPanelDi(baca(b));
+        if (kelas.length > 0) kelasPerBerkas.set(b, kelas);
       }
     }
 
-    // Penjagaan anti-hampa: himpunan kelas yang dikumpulkan TIDAK boleh kosong.
-    expect(kelasSemuanya.size, "tidak ditemukan satu pun kelas panel di primitif").toBeGreaterThan(0);
+    // Anti-hampa kedua: bila POLA_KELAS suatu saat berhenti cocok, seluruh
+    // badan uji ini lolos tanpa satu asersi pun berjalan.
+    expect(kelasPerBerkas.size, "tidak ditemukan satu pun kelas panel").toBeGreaterThan(0);
 
-    // Untuk setiap kelas, pastikan token-nya ada di globals.css
-    const galatGabung: string[] = [];
-    for (const [kelas, berkasList] of kelasSemuanya) {
-      const namaToken = `--color-panel-${kelas.split("panel-")[1]}`;
-      if (!css.includes(namaToken)) {
-        galatGabung.push(`${kelas} (di ${berkasList[0]}) — token ${namaToken} tidak terdefinisi`);
+    const galat: string[] = [];
+    for (const [berkas, kelas] of kelasPerBerkas) {
+      for (const hantu of tokenHantu(kelas, css)) {
+        galat.push(`${hantu} (di ${berkas}) — token --color-panel-* tidak terdefinisi`);
       }
     }
-
-    expect(galatGabung, "kelas Tailwind menunjuk token hantu").toEqual([]);
+    expect(galat, "kelas Tailwind menunjuk token hantu").toEqual([]);
   });
 });
 
@@ -517,7 +511,8 @@ describe("KerangkaPanel", () => {
       expect(isi, `${berkas} menyebut peran`).not.toMatch(/"(admin|owner)"/i);
       expect(isi, `${berkas} mengimpor penjaga peran`).not.toContain("requireRole");
       expect(isi, `${berkas} memakai service role`).not.toContain("createAdminSupabase");
-      expect(isi, `${berkas} menyebut nominal`).not.toMatch(/Rp\s?\d|formatRupiah/);
+      expect(nominalDalam(isi), `${berkas} menyebut nominal`).toEqual([]);
+      expect(isi, `${berkas} menyebut nominal`).not.toContain("formatRupiah");
     }
   });
 });

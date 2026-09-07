@@ -30,6 +30,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -488,8 +489,8 @@ describe("navigasi admin", () => {
       menungguTarifTransport: 1,
       menungguJenjangTransport: 1,
     });
-    expect(m).not.toMatch(/Rp\s?\d/);
-    expect(sumberNav).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
+    expect(nominalDalam(sumberNav), "nominal bocor").toEqual([]);
   });
 });
 
@@ -679,8 +680,8 @@ describe("dashboard admin", () => {
 
   it("TIDAK ada nominal uang di dashboard (money firewall)", async () => {
     const m = await markupDashboard();
-    expect(m).not.toMatch(/Rp\s?\d/);
-    expect(sumberDashboard).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
+    expect(nominalDalam(sumberDashboard), "nominal bocor").toEqual([]);
     expect(sumberDashboard).not.toContain("formatRupiah");
     expect(sumberDashboard).not.toContain("@/lib/owner/rupiah");
   });

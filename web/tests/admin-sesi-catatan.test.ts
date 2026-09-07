@@ -41,6 +41,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { badgeDari, progresPaket, type SesiRingkas } from "@/lib/passport/turunan";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 // Alias mengikuti pola singkat yang dipakai berkas uji lain (mis.
@@ -881,9 +882,9 @@ describe("daftar sesi di halaman /admin/sesi", () => {
   it("TIDAK ada nominal uang di seluruh modul sesi (money firewall)", async () => {
     await buatSesi("selesai", { denganPaket: true, catatan: "Catatan." });
     const markup = renderToStaticMarkup(await SesiPage());
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberFormSesi, sumberFormSelesai, sumberAksi]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

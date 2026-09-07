@@ -45,6 +45,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -1272,9 +1273,9 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   it("TIDAK ada nominal uang di modul layanan (money firewall)", () => {
     // Harga layanan hidup di `variant_rates` (dulu `service_rates`, dijatuhkan
     // Task 5), wilayah owner. Modul ini mengelola katalognya, bukan angkanya.
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of SEMUA_SUMBER) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

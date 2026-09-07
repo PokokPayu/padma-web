@@ -62,6 +62,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { nominalDalam } from "./helpers/nominal";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -191,7 +192,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
       const i = sumber.indexOf(TEKS_ATRIBUSI);
       expect(i, `${berkas} tidak memuat atribusi`).toBeGreaterThanOrEqual(0);
       const sekitar = sumber.slice(Math.max(0, i - 200), i + 200);
-      expect(sekitar).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sekitar), "nominal bocor").toEqual([]);
     }
   });
 });

@@ -34,6 +34,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -614,7 +615,7 @@ describe("halaman bayar — status tanpa nominal", () => {
 
   it("TIDAK ada nominal uang di halaman klien (money firewall)", async () => {
     const m = await markup();
-    expect(m).not.toMatch(/Rp\s*\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
     expect(m).not.toContain("harga");
     expect(m).not.toContain("Harga");
   });

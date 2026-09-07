@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 import { pesanBerikutnya } from "@/app/admin/klien/form-klien";
+import { nominalDalam } from "./helpers/nominal";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: async () => "admin" }));
 
@@ -56,7 +57,7 @@ describe("halaman /admin/klien", () => {
   });
 
   it("TIDAK menampilkan satu nominal rupiah pun", async () => {
-    expect(await render()).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(await render()), "nominal bocor").toEqual([]);
   });
 
   it("pencarian tanpa hasil menampilkan kalimat keadaan kosong, bukan tabel kosong senyap", async () => {

@@ -43,6 +43,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { nominalDalam } from "./helpers/nominal";
 
 const svc = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -490,9 +491,9 @@ describe("halaman /admin/pengaturan", () => {
 
   it("TIDAK ada nominal uang di seluruh modul (money firewall lewat baris)", async () => {
     const m = renderToStaticMarkup(await PengaturanPage());
-    expect(m).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberForm, sumberAksi]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

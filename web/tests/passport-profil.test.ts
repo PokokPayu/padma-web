@@ -34,6 +34,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { nominalDalam } from "./helpers/nominal";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -97,7 +98,7 @@ describe("profil passport — isi", () => {
 
   it("tidak pernah menampilkan nominal uang (money firewall di layar klien)", async () => {
     const m = await markupProfil();
-    expect(m).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
   });
 });
 

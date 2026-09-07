@@ -17,6 +17,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { TabelInbox, type BarisSkrining } from "@/app/admin/skrining/tabel-inbox";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const KODE = "PDM-260828-0000-TEST";
@@ -201,8 +202,8 @@ describe("inbox admin — halaman & data", () => {
   });
 
   it("tidak ada nominal uang di inbox (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
-    expect(sumberTabel).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
+    expect(nominalDalam(sumberTabel), "nominal bocor").toEqual([]);
   });
 
   it("judul mengandalkan template layout (tanpa menempel PADMA sendiri)", () => {

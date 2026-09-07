@@ -54,6 +54,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -512,7 +513,7 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   it("sesi di_atas_20 SUDAH punya transport_khusus: rincianTransport terisi, TETAP tanpa nominal", async () => {
     const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_JAUH_SUDAH)!;
     expect(item.rincianTransport).toContain(">20 km");
-    expect(item.rincianTransport).not.toMatch(/Rp/);
+    expect(nominalDalam(item.rincianTransport ?? ""), "nominal bocor").toEqual([]);
   });
 
   // --- Ruling 25 (gelombang perbaikan akhir): gagal TERTUTUP, bukan lempar ---
@@ -782,9 +783,9 @@ describe("halaman /admin/bayar", () => {
 
   it("TIDAK ada nominal uang di seluruh modul (money firewall)", async () => {
     const markup = renderToStaticMarkup(await BayarPage());
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberTabel, sumberAksi, sumberStatus, sumberData]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

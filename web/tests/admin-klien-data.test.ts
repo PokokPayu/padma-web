@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { jumlahHalaman } from "@/app/_shell/panel/daftar";
 import { signInAs } from "./helpers/as-user";
+import { nominalDalam } from "./helpers/nominal";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ref.sesi! }));
@@ -76,7 +77,7 @@ describe("ambilDaftarKlien", () => {
     // ANGKA RUPIAH (samakan dengan `admin-klien-halaman.test.tsx`) menjaga
     // NILAI yang dilarang, bukan ejaan namanya.
     const { baris } = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
-    expect(JSON.stringify(baris)).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(JSON.stringify(baris)), "nominal bocor").toEqual([]);
   });
 });
 

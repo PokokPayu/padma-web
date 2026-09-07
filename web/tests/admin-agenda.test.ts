@@ -18,6 +18,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -172,7 +173,8 @@ describe("pagar lapisan agenda", () => {
     expect(sumber).not.toContain("service_rates");
     expect(sumber).not.toContain("variant_rates");
     expect(sumber).not.toContain("honor_marks");
-    expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
+    expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
+    expect(sumber).not.toContain("formatRupiah");
   });
 
   it("klien tidak melihat agenda klinik", async () => {

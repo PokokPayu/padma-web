@@ -38,6 +38,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { buatPrefix } from "@/lib/admin/padma-id";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -613,9 +614,9 @@ describe("halaman daftar klien (/admin/klien)", () => {
   });
 
   it("tidak ada nominal uang di daftar klien (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi, sumberLib, sumberBaru]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
     }
@@ -637,7 +638,7 @@ describe("halaman detail klien (/admin/klien/[id])", () => {
     expect(m).toContain("PAD-UJI-0005");
     expect(m).toContain(EMAIL_FIXTURE);
     expect(m).toContain("Belum aktif");
-    expect(m).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
   });
 
   it("menyediakan form ubah data operasional (tanpa medan email)", async () => {
