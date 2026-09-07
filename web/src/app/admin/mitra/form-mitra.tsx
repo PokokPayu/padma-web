@@ -7,6 +7,7 @@ import {
   perbaruiMitra,
   simpanMitra,
 } from "./aksi";
+import { PemilihLokasi } from "@/app/_shell/panel/pemilih-lokasi";
 
 const KELAS_MEDAN =
   "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
@@ -91,6 +92,7 @@ export function FormMitraBaru() {
           <span className="mt-1 block text-[11px] text-ink-soft/70">
             Lokasi diperkirakan lewat data © OpenStreetMap contributors.
           </span>
+          <PemilihLokasi />
         </label>
       </div>
 
@@ -132,12 +134,16 @@ export function AksiMitra({
   nama,
   noHp,
   alamat,
+  lat,
+  lon,
   aktif,
 }: {
   id: string;
   nama: string;
   noHp: string;
   alamat: string;
+  lat: number | null;
+  lon: number | null;
   aktif: boolean;
 }) {
   const [ubah, setUbah] = useState(false);
@@ -190,6 +196,7 @@ export function AksiMitra({
         <span className="text-[11px] text-ink-soft/70">
           Lokasi diperkirakan lewat data © OpenStreetMap contributors.
         </span>
+        <PemilihLokasi awal={lat !== null && lon !== null ? { lat, lon } : null} />
         {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
         <span className="flex gap-2">
           <button

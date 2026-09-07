@@ -88,7 +88,14 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     const markup = renderToStaticMarkup(
       createElement(FormEditKlien, {
         id: "id-uji",
-        awal: { nama: "Ananda Uji", noHp: "0812", faseId: "prekonsepsi", alamat: "Jl. Uji" },
+        awal: {
+          nama: "Ananda Uji",
+          noHp: "0812",
+          faseId: "prekonsepsi",
+          alamat: "Jl. Uji",
+          lat: null,
+          lon: null,
+        },
         fase: [{ id: "prekonsepsi", nama: "Prekonsepsi" }],
       }),
     );
@@ -115,6 +122,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     "src/app/admin/sesi/form-sesi.tsx",
     "src/app/admin/mitra/form-mitra.tsx",
     "src/app/admin/sesi/page.tsx",
+    "src/app/_shell/panel/pemilih-lokasi.tsx",
   ])("%s — atribusi duduk di dalam TEKS JSX, bukan komentar", (berkas) => {
     const sumber = baca(berkas);
     expect(atribusiDalamJsx(sumber)).toBe(true);
@@ -127,6 +135,35 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
     expect(atribusiDalamJsx(baca("src/app/admin/klien/form-klien.tsx"))).toBe(true);
   });
 
+  // --- Kelas 3: peta Leaflet, tempat atribusi TIDAK datang dari JSX ---------
+  //
+  // Kontrol atribusi Leaflet lahir dari OPSI JAVASCRIPT (`attribution:`), bukan
+  // teks JSX. `atribusiDalamJsx` di atas karena itu bisa HIJAU untuk sebuah peta
+  // yang atribusinya tidak pernah sampai ke kontrolnya — jaminan hilang tanpa
+  // satu pun asersi berubah merah, persis kelas kegagalan yang dicatat runbook
+  // transport. Jawabannya bukan melemahkan pemindainya, melainkan menuntut BUKTI
+  // KEDUA yang independen dari yang pertama.
+
+  it("pemilih-lokasi.tsx — atribusi JUGA diteruskan ke lapisan ubin Leaflet", () => {
+    const bersih = tanpaKomentar(baca("src/app/_shell/panel/pemilih-lokasi.tsx"));
+    expect(bersih).toMatch(/const ATRIBUSI_OSM = "© OpenStreetMap contributors"/);
+    expect(bersih).toMatch(/attribution:\s*ATRIBUSI_OSM/);
+  });
+
+  it("pemilih-lokasi.tsx — URL ubin hidup sebagai SATU konstanta", () => {
+    // Spec Keputusan 4: sumber ubin harus bisa dipindahkan ke penyedia lain
+    // dengan mengubah satu baris. URL yang ditulis harfiah di tengah pemanggilan
+    // membuat "pindah penyedia" menjadi perburuan teks.
+    // SUMBER MENTAH, bukan `tanpaKomentar`: pemindai komentar baris di berkas
+    // ini menghapus dari "//" sampai akhir baris, dan itu ikut memakan "//" di
+    // dalam "https://" — URL-nya lenyap sebelum sempat dihitung. Di sini yang
+    // dicari memang literal URL-nya, jadi sumber mentah adalah bentuk yang benar.
+    const sumber = baca("src/app/_shell/panel/pemilih-lokasi.tsx");
+    const kemunculan = sumber.match(/tile\.openstreetmap\.org/g) ?? [];
+    expect(kemunculan).toHaveLength(1);
+    expect(sumber).toMatch(/const URL_UBIN = "https:\/\/\{s\}\.tile\.openstreetmap\.org/);
+  });
+
   it("TIDAK ada nominal uang menempel pada blok atribusi (money firewall)", () => {
     // Atribusi berdampingan dengan alamat/jarak, TIDAK PERNAH dengan rupiah —
     // /admin tidak menampilkan satu nominal transport pun.
@@ -135,6 +172,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
       "src/app/admin/klien/form-klien.tsx",
       "src/app/admin/mitra/form-mitra.tsx",
       "src/app/admin/sesi/page.tsx",
+      "src/app/_shell/panel/pemilih-lokasi.tsx",
     ]) {
       const sumber = tanpaKomentar(baca(berkas));
       const i = sumber.indexOf(TEKS_ATRIBUSI);
