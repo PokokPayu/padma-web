@@ -13,10 +13,19 @@
  *     klien menulis barisnya sendiri — diuji di bawah lewat UPDATE sungguhan.
  *     Ingat: PostgREST menjawab 200 + [] untuk update yang tertahan RLS, jadi
  *     nilainya wajib dibaca ulang dengan service role.
- *  3. Formulir ubah data yang "sementara". Begitu ada satu input di halaman
- *     ini, klien memegang jalur tulis ke `clients` — tabel yang menyimpan
- *     penautan akun. Halaman ini harus tetap read-only, dan satu-satunya form
- *     yang boleh ada adalah logout.
+ *  3. Formulir yang melebar diam-diam. Halaman ini kini MEMANG punya jalur
+ *     tulis — klien boleh memperbaiki nama, nomor WhatsApp, dan alamatnya
+ *     sendiri lewat RPC `perbarui_profil_klien`. Yang berbahaya bukan adanya
+ *     formulir, melainkan formulir yang suatu hari ikut memuat email, PADMA
+ *     ID, atau fase: ketiganya keputusan identitas (email adalah dasar
+ *     penautan akun, fase menentukan materi yang terbuka), bukan data
+ *     operasional. Karena itu di bawah diuji dua arah — medan yang HARUS ada,
+ *     dan medan yang TIDAK BOLEH ada.
+ *
+ * Perhatikan juga apa yang TIDAK berubah: policy `clients: milik sendiri`
+ * tetap `for select` saja, sehingga UPDATE langsung lewat PostgREST tetap
+ * ditolak. Pembuktiannya ada di describe terakhir berkas ini, dan itu yang
+ * membedakan "satu pintu sempit bernama" dari "pintu dibuka".
  */
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -92,19 +101,54 @@ describe("profil passport — isi", () => {
   });
 });
 
-describe("profil passport — read-only", () => {
+describe("profil passport — apa yang boleh disunting sendiri", () => {
   const sumber = baca("src/app/passport/profil/page.tsx");
 
-  it("tidak menyediakan formulir ubah data", async () => {
+  it("menyediakan medan untuk nama, no. WhatsApp, dan alamat", async () => {
     const m = await markupProfil();
-    expect(m).not.toContain("<input");
-    expect(m).not.toContain("<textarea");
-    expect(m).not.toContain("<select");
+    expect(m).toMatch(/<input[^>]*name="nama"/);
+    expect(m).toMatch(/<input[^>]*name="no_hp"/);
+    expect(m).toMatch(/<textarea[^>]*name="alamat"/);
   });
 
-  it("satu-satunya form adalah logout, tetap <form method=\"post\">", async () => {
+  it("mengisi medan dengan nilai klien yang sedang masuk", async () => {
     const m = await markupProfil();
-    expect([...m.matchAll(/<form\b/g)]).toHaveLength(1);
+    expect(m).toMatch(/<input[^>]*name="nama"[^>]*value="Ananda Putri"/);
+    expect(m).toMatch(/<input[^>]*name="no_hp"[^>]*value="0812-3456-7890"/);
+  });
+
+  it("mengisi medan alamat dari baris klien, bukan dari string kosong tetap", async () => {
+    // Alamat Ananda kosong di seed, jadi medan yang kebetulan selalu kosong
+    // akan lolos tanpa membuktikan apa pun. Nilainya diisi lebih dulu, lalu
+    // modul di-reset supaya `cache()` di `ambilKlien` tidak menyodorkan hasil
+    // render sebelumnya.
+    const admin = createAdminSupabase();
+    const alamat = "Jl. Bukti Nyata No. 12, Kota Malang";
+    await admin.from("clients").update({ alamat }).eq("id", ANANDA);
+    try {
+      vi.resetModules();
+      const m = await markupProfil();
+      expect(m).toContain(alamat);
+    } finally {
+      await admin.from("clients").update({ alamat: "" }).eq("id", ANANDA);
+      vi.resetModules();
+    }
+  });
+
+  it("TIDAK menyediakan medan untuk email, PADMA ID, maupun fase", async () => {
+    const m = await markupProfil();
+    // Ketiganya keputusan identitas, bukan data operasional. Kalau suatu hari
+    // salah satunya muncul sebagai input, uji ini yang menahannya.
+    for (const nama of ["email", "padma_id", "fase", "phase_id"]) {
+      expect(m).not.toMatch(new RegExp(`<(input|select|textarea)[^>]*name="${nama}"`));
+    }
+    // Nilainya tetap TAMPIL sebagai bacaan — klien berhak melihatnya.
+    expect(m).toContain("ananda@padma.test");
+    expect(m).toContain("PAD-2607-0012");
+  });
+
+  it("form logout tetap <form method=\"post\"> yang terpisah", async () => {
+    const m = await markupProfil();
     // Navigasi dokumen penuh yang menghapus Client Cache — jangan diganti
     // navigasi sisi klien, sisa data passport pemakai sebelumnya bisa tertinggal.
     expect(m).toMatch(/<form[^>]*action="\/auth\/keluar"[^>]*method="post"/);

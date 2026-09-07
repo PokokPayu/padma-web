@@ -12,6 +12,11 @@ export type KlienPassport = {
   nama: string;
   email: string;
   noHp: string;
+  // Alamat rumah: bahan pengisi otomatis formulir pengajuan jadwal DAN medan
+  // yang boleh disunting klien sendiri di /passport/profil. Koordinatnya
+  // sengaja TIDAK ikut — layar klien tidak pernah memerlukannya, dan yang
+  // tidak dikirim tidak bisa bocor.
+  alamat: string;
   faseId: string;
   faseNama: string;
   faseSanskrit: string;
@@ -23,6 +28,7 @@ type BarisKlien = {
   nama: string;
   email: string;
   no_hp: string;
+  alamat: string;
   phase_id: string;
   // Embed many-to-one PostgREST = OBJEK (atau null), bukan array.
   phases: { nama: string; nama_sanskrit: string } | null;
@@ -44,7 +50,7 @@ export const ambilKlien = cache(async (): Promise<KlienPassport | null> => {
 
   const { data } = await supabase
     .from("clients")
-    .select("id, padma_id, nama, email, no_hp, phase_id, phases(nama, nama_sanskrit)")
+    .select("id, padma_id, nama, email, no_hp, alamat, phase_id, phases(nama, nama_sanskrit)")
     .eq("user_id", user.id) // operator setara, tidak pernah pola
     .returns<BarisKlien[]>()
     .maybeSingle(); // maybeSingle: klien belum tertaut bukan error (PGRST116)
@@ -56,6 +62,7 @@ export const ambilKlien = cache(async (): Promise<KlienPassport | null> => {
     nama: data.nama,
     email: data.email,
     noHp: data.no_hp,
+    alamat: data.alamat,
     faseId: data.phase_id,
     faseNama: data.phases?.nama ?? "",
     faseSanskrit: data.phases?.nama_sanskrit ?? "",
