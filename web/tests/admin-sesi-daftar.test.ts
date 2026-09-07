@@ -48,7 +48,15 @@ const UJI_SESI = Array.from({ length: N }, (_, i) =>
 const SESI_LAMPAU = "66666666-6666-6666-6666-666666ffff01";
 const SESI_PEKAN = "66666666-6666-6666-6666-666666ffff02";
 const SESI_DEPAN = "66666666-6666-6666-6666-666666ffff03";
-const SEMUA = [...UJI_SESI, SESI_LAMPAU, SESI_PEKAN, SESI_DEPAN];
+// Umpan untuk uji kombinasi status+jenjang di bawah: SELESAI tapi BERJENJANG.
+// Tanpa baris ini, "status=selesai & jenjang=kosong" lulus sama saja walau
+// saringan `jenjang` diam-diam diabaikan — seluruh UJI_SESI di atas sudah
+// berstatus selesai DAN tanpa jenjang, jadi filter jenjang yang dilepas tidak
+// pernah kelihatan. Baris ini harus MUNCUL di "status=selesai" polos dan
+// HILANG begitu "jenjang=kosong" ditambahkan — itulah yang membuktikan kedua
+// saringan benar-benar bekerja bersama, bukan cuma salah satunya.
+const SESI_SELESAI_BERJENJANG = "66666666-6666-6666-6666-666666ffff04";
+const SEMUA = [...UJI_SESI, SESI_LAMPAU, SESI_PEKAN, SESI_DEPAN, SESI_SELESAI_BERJENJANG];
 
 let partnerId = "";
 let variantId = "";
@@ -90,6 +98,15 @@ beforeAll(async () => {
     { ...dasar, id: SESI_LAMPAU, tanggal: "2026-01-05", status: "batal" },
     { ...dasar, id: SESI_PEKAN, tanggal: HARI_INI, status: "terjadwal" },
     { ...dasar, id: SESI_DEPAN, tanggal: "2026-12-31", status: "terjadwal" },
+    // Selesai DAN berjenjang — lihat komentar pada konstantanya di atas.
+    // Tanggal SENGAJA lebih baru ("2026-08-01") daripada seluruh UJI_SESI
+    // ("2026-07-15"): urutan hasil adalah tanggal TERBARU dulu, jadi baris
+    // ini pasti jatuh di halaman 1 (indeks 0) pada uji "status=selesai" polos
+    // di bawah, terlepas dari penata-dasi `id` — kalau tanggalnya sama dengan
+    // UJI_SESI, id-nya (`...ffff04`) justru tersortir SESUDAH ke-30 baris
+    // UJI_SESI dan terkubur di halaman 2, membuat uji itu merah karena
+    // paginasi, bukan karena saringan.
+    { ...dasar, id: SESI_SELESAI_BERJENJANG, tanggal: "2026-08-01", status: "selesai", jenjang: "5_10" },
   ]);
 });
 
@@ -122,10 +139,24 @@ describe("ambilDaftarSesi — saringan", () => {
     // Tautan yang sintaksnya benar tetapi saringannya meleset tetap
     // meninggalkan admin memindai dengan mata. Yang diuji di sini bukan
     // href-nya (itu di admin-shell), melainkan barisnya.
-    const { baris, total } = await ambilDaftarSesi(
+    const gabungan = await ambilDaftarSesi(
       { cari: "", saring: { status: "selesai", jenjang: "kosong" }, hal: 1 }, HARI_INI);
-    expect(total).toBeGreaterThanOrEqual(N);
-    expect(baris.every((s) => s.status === "selesai" && s.jenjang === null)).toBe(true);
+    expect(gabungan.total).toBeGreaterThanOrEqual(N);
+    expect(gabungan.baris.every((s) => s.status === "selesai" && s.jenjang === null)).toBe(true);
+    // SESI_SELESAI_BERJENJANG adalah SELESAI tapi punya jenjang — ia HARUS
+    // absen di sini. Tanpa baris umpan ini dan tanpa pemeriksaan ini, saringan
+    // `jenjang` bisa diam-diam diabaikan (kode hanya menyaring `status`) dan
+    // test di atas tetap hijau, karena seluruh N baris UJI_SESI kebetulan
+    // sudah tanpa jenjang sejak awal.
+    expect(gabungan.baris.some((s) => s.id === SESI_SELESAI_BERJENJANG)).toBe(false);
+
+    // Sebagai pembanding: TANPA saringan jenjang, baris yang sama ITU HARUS
+    // muncul — membuktikan ketiadaannya di atas memang karena saringan
+    // `jenjang`, bukan karena baris itu tidak pernah lahir atau lolos filter
+    // lain (mis. tanggal, `cari`).
+    const hanyaStatus = await ambilDaftarSesi(
+      { cari: "", saring: { status: "selesai" }, hal: 1 }, HARI_INI);
+    expect(hanyaStatus.baris.some((s) => s.id === SESI_SELESAI_BERJENJANG)).toBe(true);
   });
 
   it("waktu=mendatang membuang yang sudah lewat, waktu=lampau kebalikannya", async () => {
