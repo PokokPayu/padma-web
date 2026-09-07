@@ -188,6 +188,24 @@ describe("pagar nominal — yang TIDAK boleh dituduh", () => {
     ).toEqual([]);
   });
 
+  it("pecahan desimal tiga angka — ada SUNGGUHAN di repo ini", () => {
+    // `opacity-[0.075]` hidup di src/app/passport/_komponen/watermark.tsx dan
+    // ikut terbaca pagar money firewall halaman passport. Pola satu-kelompok
+    // (`{1,}`) menuduhnya sebagai nominal dan memerahkan uji yang benar.
+    expect(nominalDalam('className="opacity-[0.075]"')).toEqual([]);
+    expect(nominalDalam("const ALFA = 0.016;")).toEqual([]);
+    expect(nominalDalam('className="scale-[1.005]"')).toEqual([]);
+  });
+
+  it("gap yang DISENGAJA: satu kelompok tanpa 'Rp' tidak ditangkap", () => {
+    // Didokumentasikan sebagai uji, bukan hanya sebagai komentar: kalau
+    // seseorang kelak memperketat polanya, uji ini yang harus dihapus dengan
+    // sadar — bukan gap yang diam-diam ditemukan lagi dari nol.
+    expect(nominalDalam("20.000")).toEqual([]);
+    // …tetapi bentuk yang benar-benar muncul di layar tetap tertangkap:
+    expect(nominalDalam("Rp 20.000").length).toBeGreaterThan(0);
+  });
+
   it("kata bernuansa uang TANPA angka", () => {
     // Regresi yang pernah terjadi: "Paket Harga Hemat" memerahkan pagar palsu.
     expect(nominalDalam("Paket Harga Hemat · tarif adalah wilayah Owner")).toEqual([]);
@@ -245,22 +263,39 @@ Buat `web/tests/helpers/nominal.ts`:
  * bentuk lolos begitu saja: "3.500.000" (tanpa satuan), "Rp. 500.000" (titik
  * sesudah Rp), dan "rp 500000" (huruf kecil).
  *
- * Yang SENGAJA tidak ditangkap: angka polos tanpa pemisah ribuan ("500000").
- * Menangkapnya menuntut ambang jumlah digit, dan ambang itu akan menuduh
- * timestamp, id numerik, dan ukuran piksel. Tidak ada satu pun jalur di repo
- * ini yang merender rupiah tanpa pemisah — `formatRupiah()` selalu memakai
- * `Intl.NumberFormat('id-ID')`, yang selalu memberi titik ribuan.
+ * Yang SENGAJA tidak ditangkap, dan alasannya masing-masing:
  *
- * Pola ribuan sengaja dibatasi `\b` di kedua ujung supaya KOORDINAT tidak
+ *   • Angka polos tanpa pemisah ribuan ("500000"). Menangkapnya menuntut
+ *     ambang jumlah digit, dan ambang itu akan menuduh timestamp, id numerik,
+ *     dan ukuran piksel. Tidak ada jalur di repo ini yang merender rupiah
+ *     tanpa pemisah — `formatRupiah()` memakai `Intl.NumberFormat('id-ID')`,
+ *     yang selalu memberi titik ribuan.
+ *
+ *   • Nominal berpemisah SATU kelompok saja ("20.000"), bila tidak didahului
+ *     "Rp". Ini gap yang DIPILIH, bukan yang terlewat: "3.500" (tiga ribu
+ *     lima ratus) dan "1.005" (satu koma nol nol lima) tidak bisa dibedakan
+ *     dari bentuknya, dan kelas Tailwind repo ini benar-benar memuat bentuk
+ *     kedua — `opacity-[0.075]` di `src/app/passport/_komponen/watermark.tsx`
+ *     dan `0.016` di `src/lib/materi/watermark.ts`. Menuntut DUA kelompok
+ *     (`{2,}`) membuang seluruh kelas positif-palsu itu sekaligus, dan tetap
+ *     menangkap ketiga bentuk yang menjadi alasan pagar ini ditulis. Nominal
+ *     satu-kelompok yang muncul di layar admin hampir selalu ditemani "Rp",
+ *     dan bentuk itu tertangkap pola pertama.
+ *
+ * Pola ribuan juga dibatasi `\b` di kedua ujung supaya KOORDINAT tidak
  * tertuduh: "112.6304" tidak cocok (ada digit keempat sesudah titik), dan
  * koordinat memang hidup di `src/app/_shell/pemilih-lokasi.tsx` yang ikut
  * dipindai beberapa uji.
+ *
+ * Diverifikasi sebelum ditulis: dengan `{2,}`, satu-satunya kecocokan di
+ * SELURUH `src/` adalah `1.048.576` (2^20) di komentar `src/lib/skrining/
+ * kode.ts` — berkas yang tidak dibaca satu pun pagar money firewall.
  */
 const POLA: RegExp[] = [
   // "Rp 500.000", "Rp. 500.000", "rp500000" — apa pun sesudah satuan.
   /rp\.?\s*\d[\d.,]*/gi,
-  // "3.500.000", "20.000" — nominal telanjang berpemisah ribuan.
-  /\b\d{1,3}(?:\.\d{3})+\b/g,
+  // "3.500.000" — nominal telanjang, DUA kelompok ribuan atau lebih.
+  /\b\d{1,3}(?:\.\d{3}){2,}\b/g,
 ];
 
 /**
