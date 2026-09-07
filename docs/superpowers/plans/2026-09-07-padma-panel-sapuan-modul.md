@@ -360,7 +360,7 @@ export function tokenHantu(kelas: string[], css: string): string[] {
 - [ ] **Langkah 4: Jalankan uji, pastikan HIJAU**
 
 Jalankan: `npx vitest run tests/pagar-cetakan.test.ts`
-Diharapkan: LULUS, 9 uji.
+Diharapkan: LULUS, 12 uji.
 
 - [ ] **Langkah 5: Pakai `nominalDalam` di seluruh suite**
 
