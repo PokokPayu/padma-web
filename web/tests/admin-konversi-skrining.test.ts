@@ -88,6 +88,10 @@ const sumberAksi = baca("src/app/admin/skrining/aksi.ts");
 const sumberHalaman = baca("src/app/admin/skrining/page.tsx");
 const sumberTabel = baca("src/app/admin/skrining/tabel-inbox.tsx");
 const sumberDialog = baca("src/app/admin/skrining/jadikan-klien.tsx");
+// Sejak Task 6, proyeksi kolom `screenings` (termasuk `client_id`) pindah
+// dari `page.tsx` ke lapisan data `ambilDaftarSkrining()` — page.tsx kini
+// hanya memanggilnya, tidak lagi menuliskan daftar kolomnya sendiri.
+const sumberData = baca("src/lib/admin/skrining.ts");
 const sumberStatus = baca("src/app/admin/skrining/status.ts");
 
 let sesiAdmin: SupabaseClient;
@@ -470,8 +474,10 @@ describe("inbox menampilkan jembatan ke modul klien", () => {
 // ---------------------------------------------------------------------------
 
 describe("berkas jalur konversi", () => {
-  it("halaman inbox ikut membaca client_id (tanpa itu jembatannya tak terlihat)", () => {
-    expect(sumberHalaman).toContain("client_id");
+  it("lapisan data inbox ikut membaca client_id (tanpa itu jembatannya tak terlihat)", () => {
+    // Sejak Task 6 proyeksi kolomnya hidup di `ambilDaftarSkrining()`
+    // (`@/lib/admin/skrining`), bukan lagi ditulis langsung di page.tsx.
+    expect(sumberData).toContain("client_id");
   });
 
   it("SETIAP action di modul skrining memanggil requireRole(['admin','owner'])", () => {
@@ -533,11 +539,14 @@ describe("berkas jalur konversi", () => {
     }
   });
 
-  it("data kesehatan tidak bocor ke URL maupun log", () => {
+  it("tidak menulis data ke log", () => {
+    // `searchParams` TIDAK LAGI diperiksa di sini sejak Task 6: halaman inbox
+    // kini punya bilah cari & saring URL-driven, pola yang sama dengan
+    // /admin/bayar & /admin/sesi (Global Constraint 2) — kemunculannya sah,
+    // dan bukan lagi tanda kebocoran. Lihat pagar yang sama di
+    // `tests/admin-inbox.test.ts`.
     for (const sumber of [sumberAksi, sumberHalaman, sumberTabel, sumberDialog]) {
       expect(sumber).not.toContain("console.");
-      expect(sumber).not.toContain("searchParams");
-      expect(sumber).not.toContain("URLSearchParams");
     }
   });
 

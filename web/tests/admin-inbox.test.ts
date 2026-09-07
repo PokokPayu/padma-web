@@ -9,15 +9,18 @@
  *     `hasil` (bukan dari level di `flags`), demam pada ibu hamil tampil sama
  *     seperti benjolan menopause: eskalasi keselamatan hilang tanpa error.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { TabelInbox, type BarisSkrining } from "@/app/admin/skrining/tabel-inbox";
 import { nominalDalam } from "./helpers/nominal";
+import { SARING_SKRINING, ambilDaftarSkrining } from "@/lib/admin/skrining";
+import { STATUS_SAH } from "@/app/admin/skrining/status";
 
 const admin = createAdminSupabase();
 const KODE = "PDM-260828-0000-TEST";
@@ -25,7 +28,17 @@ const KODE = "PDM-260828-0000-TEST";
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
+// `ambilDaftarSkrining()` memakai SESI PENGGUNA (`createServerSupabase`), yang
+// membaca cookies() dan hanya bermakna di dalam request scope. Pola yang sama
+// dengan tests/admin-bayar.test.ts: modulnya diganti klien Supabase ber-SESI
+// NYATA, sehingga RLS "screenings: staf" tetap berjalan apa adanya.
+const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.sesi!,
+}));
+
 beforeAll(async () => {
+  ref.sesi = await signInAs("admin@padma.test");
   await admin.from("screenings").delete().eq("kode", KODE);
   await admin.from("screenings").insert({
     kode: KODE, nama: "Uji Inbox", no_hp: "0812-0000-9999", fase: "kehamilan",
@@ -87,6 +100,79 @@ describe("inbox skrining", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Lapisan data: ambilDaftarSkrining (Task 6)
+// ---------------------------------------------------------------------------
+
+describe("ambilDaftarSkrining", () => {
+  // Fixture SENDIRI, status 'baru' dijamin sendiri — BUKAN mengandalkan
+  // `KODE` di atas: describe "inbox skrining" MENGUBAH status baris itu
+  // menjadi 'dihubungi' di salah satu uji-nya ("admin bisa mengubah status
+  // tindak lanjut"), dan describe itu berjalan LEBIH DULU di berkas yang
+  // sama. Menyaring `tindak: "baru"` tanpa baris sendiri berarti uji ini
+  // bergantung pada basis data lokal yang kebetulan masih punya skrining
+  // 'baru' dari sumber lain — dan itu pernah kosong (0 baris) persis di sini.
+  const KODE_BARU = "PDM-260828-0000-BARU";
+
+  beforeAll(async () => {
+    await admin.from("screenings").delete().eq("kode", KODE_BARU);
+    await admin.from("screenings").insert({
+      kode: KODE_BARU, nama: "Uji Saringan Tindak Lanjut", no_hp: "0812-0000-9998",
+      fase: "kehamilan", jawaban: { cardioresp: false, fever: false },
+      hasil: "hijau", status_tindak_lanjut: "baru", flags: [],
+    });
+  });
+  afterAll(async () => {
+    await admin.from("screenings").delete().eq("kode", KODE_BARU);
+  });
+
+  it("nilai saringan tindak lanjut diturunkan dari STATUS_SAH, tidak ditulis dua kali", () => {
+    expect([...SARING_SKRINING.tindak]).toEqual([...STATUS_SAH]);
+  });
+
+  it("menyaring menurut tindak lanjut", async () => {
+    const { baris } = await ambilDaftarSkrining({
+      cari: "", saring: { tindak: "baru" }, hal: 1,
+    });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((r) => r.status_tindak_lanjut === "baru")).toBe(true);
+  });
+
+  it("menyaring menurut hasil", async () => {
+    const { baris } = await ambilDaftarSkrining({
+      cari: "", saring: { hasil: "merah" }, hal: 1,
+    });
+    expect(baris.every((r) => r.hasil === "merah")).toBe(true);
+  });
+
+  it("mencari menurut kode DAN nama", async () => {
+    const semua = await ambilDaftarSkrining({ cari: "", saring: {}, hal: 1 });
+    expect(semua.baris.length).toBeGreaterThan(0);
+    const sasaran = semua.baris[0];
+
+    const perKode = await ambilDaftarSkrining({ cari: sasaran.kode, saring: {}, hal: 1 });
+    expect(perKode.baris.some((r) => r.id === sasaran.id)).toBe(true);
+
+    const perNama = await ambilDaftarSkrining({
+      cari: sasaran.nama.slice(0, 4), saring: {}, hal: 1,
+    });
+    expect(perNama.baris.some((r) => r.id === sasaran.id)).toBe(true);
+  });
+
+  it("membawa flags — tanpa itu penanda URGENT hilang diam-diam", async () => {
+    // `flags` adalah kolom jsonb; hilangnya tidak melempar galat, penanda
+    // "MERAH · URGENT" hanya berhenti muncul dan setiap baris merah terlihat
+    // sama mendesaknya.
+    const { baris } = await ambilDaftarSkrining({ cari: "", saring: {}, hal: 1 });
+    expect(baris.every((r) => Array.isArray(r.flags))).toBe(true);
+  });
+
+  it("kata cari diperlakukan sebagai HURUF, bukan wildcard SQL", async () => {
+    const { baris } = await ambilDaftarSkrining({ cari: "%", saring: {}, hal: 1 });
+    expect(baris).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Lapis render & sumber
 // ---------------------------------------------------------------------------
 
@@ -94,6 +180,8 @@ const sumberHalaman = baca("src/app/admin/skrining/page.tsx");
 const sumberTabel = baca("src/app/admin/skrining/tabel-inbox.tsx");
 const sumberAksi = baca("src/app/admin/skrining/aksi.ts");
 const sumberDashboard = baca("src/app/admin/page.tsx");
+
+const { default: InboxSkriningPage } = await import("@/app/admin/skrining/page");
 
 const BARIS: BarisSkrining[] = [
   {
@@ -136,7 +224,6 @@ const BARIS: BarisSkrining[] = [
 ];
 
 const markup = renderToStaticMarkup(createElement(TabelInbox, { baris: BARIS }));
-const markupKosong = renderToStaticMarkup(createElement(TabelInbox, { baris: [] }));
 
 describe("PAGAR KESELAMATAN: penanda merah-urgent di inbox", () => {
   it("skrining dengan flag ber-level urgent ditandai MERAH · URGENT", () => {
@@ -193,11 +280,19 @@ describe("inbox admin — halaman & data", () => {
     expect(sumberAksi).toMatch(/\.eq\(\s*"id"\s*,\s*id\s*\)/);
   });
 
-  it("data kesehatan tidak bocor ke URL maupun log", () => {
+  it("tidak menulis data ke log — dan `searchParams` di sini adalah navigasi, bukan data kesehatan", () => {
+    // Pagar ini dulu melarang `searchParams`/`URLSearchParams` sama sekali —
+    // sebelum Task 6, halaman ini tidak punya cari/saring apa pun, jadi
+    // kemunculannya hanya bisa berarti sesuatu bocor ke URL. Sejak bilah
+    // daftar hidup di URL untuk SETIAP daftar panel (Global Constraint 2,
+    // pola yang sama dengan /admin/bayar & /admin/sesi), `searchParams` di
+    // sini SAH: ia membawa `cari`/`tindak`/`hasil`, tiga parameter NAVIGASI,
+    // bukan satu pun jawaban kuesioner. Kolom `jawaban` sendiri tidak pernah
+    // ditarik oleh `ambilDaftarSkrining()` (lihat proyeksi `.select()`-nya) —
+    // itulah yang sebenarnya mencegah kebocorannya, bukan larangan memakai
+    // API `searchParams`.
     for (const sumber of [sumberHalaman, sumberAksi, sumberTabel]) {
       expect(sumber).not.toContain("console.");
-      expect(sumber).not.toContain("searchParams");
-      expect(sumber).not.toContain("URLSearchParams");
     }
   });
 
@@ -211,9 +306,15 @@ describe("inbox admin — halaman & data", () => {
     expect(sumberHalaman).not.toMatch(/title:\s*"[^"]*PADMA/);
   });
 
-  it("inbox kosong menjelaskan keadaannya, bukan tabel hampa", () => {
-    expect(markupKosong).toContain("Belum ada hasil skrining masuk");
-    expect(markupKosong).not.toContain("<table");
+  it("TabelInbox TIDAK LAGI memutuskan kosongnya sendiri (Task 6 — pindah ke page.tsx)", () => {
+    // Sebelumnya komponen ini menjawab `baris: []` dengan pesannya sendiri.
+    // Sejak bilah cari & saring ada, kalimat yang benar berbeda menurut
+    // sebabnya — "belum ada skrining sama sekali" vs "tidak cocok dengan
+    // pencarian ini" — dan hanya `page.tsx` yang tahu bedanya (lihat uji
+    // halaman inbox untuk pencarian yang tidak cocok).
+    const markupKosong = renderToStaticMarkup(createElement(TabelInbox, { baris: [] }));
+    expect(markupKosong).toContain("<table");
+    expect(markupKosong).not.toContain("Belum ada hasil skrining masuk");
   });
 
   it("tiap baris menampilkan kode, calon klien, dan kontrol tindak lanjut", () => {
@@ -226,6 +327,16 @@ describe("inbox admin — halaman & data", () => {
     for (const label of ["Baru", "Dihubungi", "Jadi klien", "Ditolak"]) {
       expect(markup).toContain(label);
     }
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const halaman = renderToStaticMarkup(
+      await InboxSkriningPage({
+        searchParams: Promise.resolve({ cari: "zzz-tidak-ada-skrining-bernama-ini" }),
+      }),
+    );
+    expect(halaman).toContain("Tidak ada hasil skrining yang cocok dengan pencarian ini");
+    expect(halaman).not.toContain("<table");
   });
 });
 
