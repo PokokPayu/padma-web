@@ -6,8 +6,8 @@
  * plus isinya sendiri (halaman e-book atau video). Tugas 10 memecah daftar
  * bersarang lama menjadi daftar datar berpaginasi tanpa aksi per baris;
  * berkas ini menguji separuh lainnya — halaman yang isi & penugasan itu
- * benar-benar mendarat, dan mengambil RULING dari task-7-8-report.md (pola
- * yang sama untuk Layanan) yang belum diketahui brief Tugas 11 saat ditulis:
+ * benar-benar mendarat, dan mengambil RULING yang sama dengan Layanan
+ * (Tugas 7/8) yang belum diketahui brief Tugas 11 saat ditulis:
  * `createServerSupabase` WAJIB disuntik sesi sungguhan, bukan dibiarkan
  * memanggil `cookies()` telanjang di luar request Next.
  */

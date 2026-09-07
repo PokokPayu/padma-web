@@ -6,7 +6,7 @@
  * menjadi daftar datar; berkas ini menguji separuh lainnya — halaman yang
  * anak-anak itu benar-benar mendarat.
  *
- * RULING A (lihat task-7-8-report.md): kolom Aksi varian TIDAK dikirim sebagai
+ * RULING A: kolom Aksi varian TIDAK dikirim sebagai
  * placeholder `{/* diisi Tugas 9 *\/}` — brief Tugas 8 memuatnya begitu, tetapi
  * sel kosong yang dikomentari adalah markup mati yang lolos rubrik review.
  * Tautan "Ubah" (`?ubah=<id varian>`) dan "+ Varian baru" (`?ubah=baru`) sudah
@@ -123,8 +123,8 @@ describe("halaman detail layanan", () => {
 
   it("RULING B (Tugas 11): judul materi kini menaut ke /admin/materi/[id]", async () => {
     // Tugas 8 sengaja merender TEKS POLOS di sini karena `/admin/materi/[id]`
-    // belum ada saat itu (lihat task-7-8-report.md) — menaut ke rute yang
-    // belum ada adalah 404 yang bisa lolos merge kalau gelombang 2 terpotong.
+    // belum ada saat itu — menaut ke rute yang belum ada adalah 404 yang bisa
+    // lolos merge kalau gelombang 2 terpotong.
     // Tugas 11 (gelombang ini) menciptakan rutenya, jadi teks polos tadi kini
     // WAJIB jadi tautan sungguhan — kontradiksi dengan pagar lama diselesaikan
     // dengan mengganti pagarnya, bukan membiarkan keduanya hidup berdampingan.
