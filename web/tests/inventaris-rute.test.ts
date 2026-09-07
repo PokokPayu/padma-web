@@ -89,7 +89,14 @@ describe("inventaris rute: README memetakan seluruh permukaan aplikasi", () => {
   // karena masing-masing test hanya menguji halaman yang memang dipanggilnya.
   it("ketiga panel peran punya rute intinya masing-masing", () => {
     const nyata = new Set(ruteNyata());
-    for (const rute of ["/owner", "/owner/rekap", "/owner/tarif", "/admin", "/passport"]) {
+    for (const rute of [
+      "/owner",
+      "/owner/rekap",
+      "/owner/tarif",
+      "/owner/transport",
+      "/admin",
+      "/passport",
+    ]) {
       expect(nyata.has(rute), `rute inti \`${rute}\` hilang dari src/app`).toBe(true);
     }
   });

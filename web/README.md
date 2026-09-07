@@ -96,6 +96,7 @@ sama-sama membuat `npm test` MERAH.
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
+| `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
 | `/akun-belum-terhubung` | Publik | Halaman ramah bagi akun klien yang belum ditautkan tautan aktivasi |
 
 Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi

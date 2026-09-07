@@ -325,12 +325,13 @@ describe("navigasi owner", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat tiga tujuan berbahasa Indonesia", () => {
+  it("memuat empat tujuan berbahasa Indonesia", () => {
     const m = markupNav("/owner");
     for (const [href, label] of [
       ["/owner", "Beranda"],
       ["/owner/rekap", "Rekap"],
       ["/owner/tarif", "Tarif"],
+      ["/owner/transport", "Transport"],
     ]) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
@@ -358,8 +359,8 @@ describe("navigasi owner", () => {
 
   it("jumlah tautan dikunci persis (tujuan baru tidak boleh lolos diam-diam)", () => {
     const m = markupNav("/owner");
-    // Tiga tujuan × dua nav + dua tautan jalan pulang.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(3 * 2 + 2);
+    // Empat tujuan × dua nav + dua tautan jalan pulang.
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(4 * 2 + 2);
   });
 
   it("hanya SATU tujuan yang aktif per nav di beranda", () => {
@@ -378,7 +379,7 @@ describe("navigasi owner", () => {
   });
 
   it("tautan /admin tidak pernah ditandai sebagai tujuan aktif", () => {
-    for (const p of ["/owner", "/owner/rekap", "/owner/tarif"]) {
+    for (const p of ["/owner", "/owner/rekap", "/owner/tarif", "/owner/transport"]) {
       for (const tag of markupNav(p).match(/<a[^>]*>/g) ?? []) {
         if (tag.includes('href="/admin"')) {
           expect(tag).not.toContain('aria-current="page"');

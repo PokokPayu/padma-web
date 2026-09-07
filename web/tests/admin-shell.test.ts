@@ -111,6 +111,10 @@ const NOL: Antrean = {
   permintaanMenunggu: 0,
   klaimMenunggu: 0,
   klienBelumAktif: 0,
+  // `hitungMenungguTarifTransport()` (Task 8) sengaja 0 untuk admin biasa —
+  // lihat komentarnya di `lib/admin/antrean.ts`. Tidak ada tujuan menu yang
+  // memakainya sebagai badge di sini, jadi NOL sudah cukup untuk fixture ini.
+  menungguTarifTransport: 0,
 };
 
 function markupNav(pathname: string, antrean: Antrean = NOL): string {
@@ -294,6 +298,7 @@ describe("navigasi admin", () => {
       permintaanMenunggu: 5,
       klaimMenunggu: 9,
       klienBelumAktif: 7,
+      menungguTarifTransport: 0,
     });
     // Keempat tujuan berbadge ada di sidebar DAN bar bawah -> dua kali.
     expect([...m.matchAll(/aria-label="3 menunggu"/g)]).toHaveLength(2); // Inbox
@@ -352,6 +357,7 @@ describe("navigasi admin", () => {
       permintaanMenunggu: 1,
       klaimMenunggu: 1,
       klienBelumAktif: 1,
+      menungguTarifTransport: 1,
     });
     expect(m).not.toMatch(/Rp\s?\d/);
     expect(sumberNav).not.toMatch(/Rp\s?\d/);

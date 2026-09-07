@@ -24,6 +24,7 @@ export const NAMA_IKON = [
   "setelan",
   "rekap",
   "tarif",
+  "transport",
   "keluar",
   "menu",
 ] as const;
@@ -112,6 +113,22 @@ const PATH: Record<Exclude<NamaIkon, "lotus">, ReactElement> = {
     <>
       <rect x="3.2" y="5.4" width="17.6" height="13.2" rx="2.4" />
       <path d="M3.2 10.2h17.6M7 14.4h5.4M15.4 14.4h2.2" strokeLinecap="round" />
+    </>
+  ),
+  // Van sederhana: tautan ini soal PERJALANAN mitra ke alamat klien
+  // (jenjang jarak + tarif transport), bukan soal uang layanan itu sendiri —
+  // itu sebabnya bukan lambang mata uang, sama seperti alasan `bayar`.
+  transport: (
+    <>
+      <path
+        d="M3.4 15.6V8.2a1.6 1.6 0 0 1 1.6-1.6h8.4l4.2 4.2v4.8"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <path d="M3.4 15.6h1.4M17.6 15.6h1.4" strokeLinecap="round" />
+      <circle cx="8" cy="16.2" r="1.9" />
+      <circle cx="16" cy="16.2" r="1.9" />
+      <path d="M9.9 16.2h4.2" strokeLinecap="round" />
     </>
   ),
   // Panah keluar dari kotak: menegaskan tautannya MENINGGALKAN panel ini.

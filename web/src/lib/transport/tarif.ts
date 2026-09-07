@@ -1,0 +1,84 @@
+import type { JenjangTransport } from "./jarak";
+
+// ============================================================================
+// TARIF TRANSPORT — "berlaku pada tanggal X", dihitung SEKALI untuk seluruh
+// aplikasi
+// ============================================================================
+// Fungsi murni di berkas ini lahir di Task 8 (rate card transport owner),
+// BUKAN di Task 9 (honor sesi) walau Task 9-lah yang membayarkan honornya.
+// Alasannya: rate card owner (`ambilTarifTransport()` di `lib/owner/data.ts`)
+// sudah lebih dulu perlu tahu "tarif jenjang mana yang SEDANG berlaku" untuk
+// menandainya di layar — persis kebutuhan yang sama yang nanti dipakai
+// honor sesi. Menuliskan aturan "berlaku_sejak terbesar yang ≤ tanggal" dua
+// kali di dua berkas berbeda (satu di sini, satu lagi ditulis ulang dari nol
+// oleh Task 9) akan melahirkan DUA DEFINISI yang berpisah diam-diam pada
+// perubahan berikutnya — dan perpisahan itu berbentuk rate card yang
+// menampilkan satu angka sementara honor mitra dibayarkan dengan angka lain.
+// Task 9 karena itu WAJIB mengimpor fungsi ini, bukan menulis ulang.
+
+export type TarifTransportRingkas = {
+  id: string;
+  jenjang: JenjangTransport;
+  tarifKlien: number;
+  honorMitra: number;
+  berlakuSejak: string; // YYYY-MM-DD
+};
+
+/**
+ * Jenjang yang BOLEH punya baris `transport_rates` — persis daftar yang
+ * diloloskan CHECK `transport_rates_bukan_per_kasus` di basis data.
+ *
+ * `di_atas_20` sengaja TIDAK ada di sini: materi klien menulis ">20 km:
+ * konfirmasi admin", yang berarti KETIADAAN tarif, bukan tarif. Nominalnya
+ * ditetapkan owner PER KASUS di `transport_khusus` — lihat
+ * `ambilSesiMenungguTarif()` di `lib/owner/data.ts`.
+ */
+export const JENJANG_TARIF_RATE_CARD: readonly JenjangTransport[] = [
+  "0_5",
+  "5_10",
+  "10_15",
+  "15_20",
+];
+
+/**
+ * Tarif transport yang BERLAKU pada `tgl` untuk satu JENJANG: `berlaku_sejak`
+ * terbesar yang masih ≤ `tgl`. Memulangkan `null` bila jenjang itu lebih tua
+ * dari tarif paling awalnya — dan `null` itu WAJIB dilaporkan pemanggilnya,
+ * bukan dijadikan 0.
+ *
+ * SEJAJAR PERSIS dengan `tarifPadaTanggal()` di `lib/owner/rekap.ts` (aturan
+ * yang sama untuk tarif VARIAN) — pola perbandingannya sengaja ditulis ulang
+ * di sini, bukan digeneralisasi jadi satu fungsi generik: tabel sumbernya
+ * berbeda (`variant_rates` dikunci per `variantId`, `transport_rates` dikunci
+ * per `jenjang`), dan memaksakan satu fungsi generik untuk keduanya hanya
+ * memindahkan kerumitan ke pemanggil tanpa mengurangi risiko drift — risiko
+ * driftnya justru sudah ditutup dengan cara lain: kedua fungsi ini SAMA-SAMA
+ * jadi satu-satunya sumber kebenaran bagi domainnya masing-masing.
+ *
+ * Perbandingan tanggal = perbandingan string; keduanya YYYY-MM-DD sehingga
+ * urutan leksikografis = urutan kronologis.
+ */
+export function tarifTransportPadaTanggal(
+  tarif: readonly TarifTransportRingkas[],
+  jenjang: JenjangTransport,
+  tgl: string,
+): TarifTransportRingkas | null {
+  let terpilih: TarifTransportRingkas | null = null;
+  for (const t of tarif) {
+    if (t.jenjang !== jenjang) continue;
+    if (t.berlakuSejak > tgl) continue;
+    if (terpilih === null || t.berlakuSejak > terpilih.berlakuSejak) {
+      terpilih = t;
+      continue;
+    }
+    // Seri. UNIQUE (jenjang, berlaku_sejak) — `transport_rates_unik_per_tanggal`
+    // — menolaknya di basis data untuk data yang lahir lewat peran API, tetapi
+    // fungsi MURNI ini tidak boleh diam-diam bergantung pada urutan baris yang
+    // dipulangkan pemanggilnya (fixture uji/service role tidak tunduk pada
+    // constraint itu). Dipecah dengan `id` supaya hasilnya deterministik.
+    if (t.berlakuSejak === terpilih.berlakuSejak && t.id < terpilih.id) {
+      terpilih = t;
+    }
+  }
+  return terpilih;
+}

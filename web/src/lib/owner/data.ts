@@ -1,5 +1,11 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
+import type { JenjangTransport } from "@/lib/transport/jarak";
+import {
+  tarifTransportPadaTanggal,
+  JENJANG_TARIF_RATE_CARD,
+  type TarifTransportRingkas,
+} from "@/lib/transport/tarif";
 import { awalPekan, rentangPekan } from "./pekan";
 import {
   hitungRekap,
@@ -438,4 +444,166 @@ export async function ringkasanPekanIni(hariIni: string): Promise<RingkasanPekan
     margin: pekan.margin,
     jumlahTakBertarif: pekan.sesiTakBertarif.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// RATE CARD TRANSPORT — tarif per JENJANG jarak (Task 8)
+// ---------------------------------------------------------------------------
+
+export type BarisTarifTransport = {
+  jenjang: JenjangTransport;
+  tarifKlien: number;
+  honorMitra: number;
+  /**
+   * Angka SUBSIDI PADMA (honor mitra − tarif klien). DIHITUNG di sini, TIDAK
+   * pernah disimpan sebagai kolom: kolom ketiga berarti tiga angka yang bisa
+   * berselisih diam-diam, dan yang ketiga tidak punya cara diketahui salah.
+   * Subsidi POSITIF adalah keadaan NORMAL di sini (0–5 km: klien Rp0, mitra
+   * Rp10.000) — berbeda dari rate card varian, yang justru menolak honor
+   * melebihi harga.
+   */
+  subsidi: number;
+  berlakuSejak: string;
+};
+
+type BarisTransportRateDb = {
+  id: string;
+  jenjang: JenjangTransport;
+  tarif_klien: number;
+  honor_mitra: number;
+  berlaku_sejak: string;
+};
+
+/**
+ * Rate card transport yang berlaku pada `hariIni`, satu baris per jenjang
+ * yang SUDAH punya tarif. Jenjang `di_atas_20` tidak pernah muncul di sini —
+ * CHECK `transport_rates_bukan_per_kasus` menolaknya di basis data karena
+ * nominalnya ditetapkan owner PER KASUS (`ambilSesiMenungguTarif()` di bawah).
+ *
+ * `hariIni` WAJIB diberikan pemanggil (halaman meneruskan `hariIniJakarta()`),
+ * alasan yang SAMA dengan `ambilRateCard()`: fungsi yang membaca jam sistem
+ * sendiri mustahil diuji pada tanggal tertentu, dan "tarif mana yang berlaku"
+ * justru pertanyaan yang paling perlu diuji lintas tanggal.
+ *
+ * Jenjang yang belum pernah ditetapkan tarifnya sama sekali TIDAK muncul di
+ * array hasil — pemanggil (halaman) yang membedakan "sudah bertarif" dari
+ * "belum" dengan `.find()` atas `JENJANG_TARIF_RATE_CARD`, persis pola yang
+ * dipakai suite ujinya.
+ *
+ * Admin & klien yang memanggil fungsi ini memperoleh array kosong — itu RLS
+ * "transport_rates: hanya owner" yang menjawab, bukan penyaringan di sini.
+ */
+export async function ambilTarifTransport(hariIni: string): Promise<BarisTarifTransport[]> {
+  const supabase = await createServerSupabase();
+
+  // Paginasi seperti `ambilTarif()`: `transport_rates` APPEND-ONLY SELAMANYA
+  // membuat riwayatnya tumbuh tanpa batas atas, dan `max_rows = 1000` di
+  // `supabase/config.toml` memotong bacaan tanpa `.range()` SENYAP.
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisTransportRateDb[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman } = await supabase
+      .from("transport_rates")
+      .select("id, jenjang, tarif_klien, honor_mitra, berlaku_sejak")
+      .order("berlaku_sejak", { ascending: false })
+      .order("id", { ascending: false })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisTransportRateDb[]>();
+
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
+
+  const ringkas: TarifTransportRingkas[] = baris.map((r) => ({
+    id: r.id,
+    jenjang: r.jenjang,
+    tarifKlien: r.tarif_klien,
+    honorMitra: r.honor_mitra,
+    berlakuSejak: r.berlaku_sejak,
+  }));
+
+  return JENJANG_TARIF_RATE_CARD.flatMap((jenjang) => {
+    const berlaku = tarifTransportPadaTanggal(ringkas, jenjang, hariIni);
+    if (berlaku === null) return [];
+    return [
+      {
+        jenjang,
+        tarifKlien: berlaku.tarifKlien,
+        honorMitra: berlaku.honorMitra,
+        subsidi: berlaku.honorMitra - berlaku.tarifKlien,
+        berlakuSejak: berlaku.berlakuSejak,
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TARIF KHUSUS — sesi >20 km, nominal per kasus (Task 8)
+// ---------------------------------------------------------------------------
+
+export type SesiMenungguTarif = {
+  id: string;
+  namaKlien: string;
+  tanggal: string;
+};
+
+type BarisSesiJauh = { id: string; tanggal: string; clients: { nama: string } | null };
+type BarisTransportKhususId = { session_id: string };
+
+/**
+ * Sesi berjenjang `di_atas_20` yang BELUM punya baris `transport_khusus` —
+ * pekerjaan yang menunggu OWNER menetapkan nominalnya per kasus.
+ *
+ * TANPA SATU PUN NOMINAL, SENGAJA (spec money firewall): tipe `SesiMenungguTarif`
+ * hanya membawa `id`, `namaKlien`, `tanggal`. Alasannya bukan cuma soal panel
+ * ini — `hitungMenungguTarifTransport()` di `lib/admin/antrean.ts` memanggil
+ * fungsi PERSIS INI untuk menghitung badge antreannya, supaya saringan badge
+ * dan saringan daftar TIDAK PERNAH berbeda (lihat komentar di berkas itu).
+ * Bila fungsi ini pernah membawa nominal, badge admin akan ikut membawanya.
+ *
+ * Sesi `batal` disingkirkan, sama seperti `hitungKlaimMenunggu()`: sesi yang
+ * dibatalkan tidak akan pernah ditagih, jadi tidak pernah benar-benar
+ * "menunggu" apa pun.
+ *
+ * Admin & klien yang memanggil fungsi ini tetap membaca baris `sessions`-nya
+ * (staf boleh baca tabel itu), tetapi TIDAK PERNAH melihat baris
+ * `transport_khusus` yang sudah ada — RLS "transport_khusus: hanya owner"
+ * menyembunyikannya seutuhnya, bukan hanya nominalnya. Efeknya: dipanggil
+ * sebagai admin, fungsi ini akan salah menganggap SETIAP sesi di_atas_20
+ * sebagai "menunggu", termasuk yang sudah ditetapkan tarifnya. Itu sebabnya
+ * `hitungMenungguTarifTransport()` hanya memercayai hasil fungsi ini ketika
+ * pemanggilnya sungguhan OWNER — lihat komentarnya untuk alasan lengkap.
+ */
+export async function ambilSesiMenungguTarif(): Promise<SesiMenungguTarif[]> {
+  const supabase = await createServerSupabase();
+
+  const { data: sesiJauh } = await supabase
+    .from("sessions")
+    .select("id, tanggal, clients(nama)")
+    .eq("jenjang", "di_atas_20")
+    .neq("status", "batal")
+    .order("tanggal", { ascending: true })
+    .returns<BarisSesiJauh[]>();
+
+  if (!sesiJauh || sesiJauh.length === 0) return [];
+
+  const { data: sudahDitetapkan } = await supabase
+    .from("transport_khusus")
+    .select("session_id")
+    .in(
+      "session_id",
+      sesiJauh.map((s) => s.id),
+    )
+    .returns<BarisTransportKhususId[]>();
+
+  const sudahSet = new Set((sudahDitetapkan ?? []).map((r) => r.session_id));
+
+  return sesiJauh
+    .filter((s) => !sudahSet.has(s.id))
+    .map((s) => ({
+      id: s.id,
+      namaKlien: s.clients?.nama ?? "Klien PADMA",
+      tanggal: s.tanggal,
+    }));
 }
