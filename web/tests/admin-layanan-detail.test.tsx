@@ -38,7 +38,15 @@ vi.mock("@/lib/auth/require-role", () => ({
 const notFound = vi.fn(() => {
   throw new Error("NEXT_NOT_FOUND");
 });
-vi.mock("next/navigation", () => ({ notFound }));
+vi.mock("next/navigation", () => ({
+  notFound,
+  // `PanelGeser` dan `FormVarian` (Tugas 9) memakai `useRouter` untuk tombol
+  // Escape/overlay dan navigasi tutup-setelah-simpan — `renderToStaticMarkup`
+  // tidak menjalankan efeknya, tapi pemanggilan `useRouter()` sendiri di
+  // badan komponen tetap butuh mock ini, pola yang sama dengan
+  // tests/admin-mitra.test.ts.
+  useRouter: () => ({ push: () => {} }),
+}));
 
 // `ambilLayanan`/`daftarKatalogAdmin`/`daftarMateriAdmin` memakai SESI PENGGUNA
 // (`createServerSupabase`), bukan service role — sama seperti seluruh lapisan
@@ -135,6 +143,40 @@ describe("RULING A — Aksi varian & paket sudah final, tanpa sel kosong Tugas 9
     const m = await markup(LAYANAN.id);
     expect(m).toContain("+ Varian baru");
     expect(m).toMatch(new RegExp(`href="/admin/layanan/${LAYANAN.id}\\?ubah=baru"`));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tugas 9: panel geser varian
+// ---------------------------------------------------------------------------
+//
+// Brief asli Tugas 9 meminta LIMA uji di sini, termasuk "setiap baris varian
+// menaut ke ?ubah=<id>" dan "tombol '+ Varian baru' menaut ke ?ubah=baru" —
+// tetapi keduanya SUDAH ada di atas (RULING A) dan di
+// "detail layanan — guarantee yang pindah dari Tugas 7" di bawah, ditulis
+// Tugas 8. Mengulanginya di sini akan menguji markup yang sama dua kali dengan
+// nama berbeda, bukan menambah jaminan baru — defect brief, dicatat di laporan
+// Tugas 9, bukan diperbaiki diam-diam. Hanya TIGA uji baru yang benar-benar
+// menambah cakupan (isi panel, pagar layanan lain, jalan menutup) yang tersisa
+// di sini.
+describe("panel geser varian di dalam halaman detail layanan", () => {
+  it("?ubah=baru membuka panel geser berisi formulir varian", async () => {
+    const m = await markup(LAYANAN.id, { ubah: "baru" });
+    expect(m).toContain('role="dialog"');
+    expect(m).toContain('name="label"');
+    expect(m).toContain('name="durasi_menit"');
+  });
+
+  it("id varian milik layanan LAIN tidak membuka panel", async () => {
+    // Pagar nyata, bukan kosmetik: panel yang terbuka untuk varian layanan
+    // lain akan menyimpan perubahan ke baris yang tidak sedang dilihat admin.
+    const m = await markup(LAYANAN.id, { ubah: "00000000-0000-0000-0000-000000000000" });
+    expect(m).not.toContain('role="dialog"');
+  });
+
+  it("menutup panel kembali ke halaman detail tanpa ?ubah", async () => {
+    const m = await markup(LAYANAN.id, { ubah: "baru" });
+    expect(m).toContain(`href="/admin/layanan/${LAYANAN.id}"`);
   });
 });
 

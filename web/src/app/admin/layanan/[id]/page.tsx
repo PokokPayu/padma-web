@@ -7,7 +7,9 @@ import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
 import type { ParamMentah } from "@/app/_shell/panel/daftar";
 import { Kartu } from "@/app/_shell/panel/kartu";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
+import { PanelGeser } from "@/app/_shell/panel/panel-geser";
 import { AksiLayanan, AksiPaket, type PilihanFase } from "../form-layanan";
+import { FormVarian } from "../form-varian";
 import { labelVarian } from "@/lib/varian";
 
 export const metadata = { title: "Detail layanan" };
@@ -44,12 +46,20 @@ export default async function DetailLayananPage({
   await requireRole(["admin", "owner"]);
 
   const { id } = await params;
-  await searchParams; // Tugas 9 memakai `?ubah=` di sini.
 
   const layanan = await ambilLayanan(id);
   // `notFound()`, bukan halaman kosong: URL yang salah ketik harus menjawab
   // 404, bukan 200 berisi kerangka tanpa isi.
   if (!layanan) notFound();
+
+  const sp = await searchParams;
+  const ubah = typeof sp.ubah === "string" ? sp.ubah : "";
+  // Varian dicari DI DALAM layanan ini, bukan di seluruh katalog: panel yang
+  // terbuka untuk varian layanan lain akan menyimpan perubahan ke baris yang
+  // tidak sedang dilihat admin.
+  const varianUbah = ubah === "baru" ? null : layanan.varian.find((v) => v.id === ubah) ?? null;
+  const panelTerbuka = ubah === "baru" || varianUbah !== null;
+  const hrefTutup = `${BASIS}/${id}`;
 
   const [katalog, materiPerLayanan] = await Promise.all([
     daftarKatalogAdmin(),
@@ -89,12 +99,9 @@ export default async function DetailLayananPage({
         <Kartu
           judul="Varian"
           aksi={
-            // Tautan, bukan tombol yang membuka formulir di tempat: Tugas 9
-            // menambahkan `PanelGeser` + `FormVarian` yang membaca `?ubah=`
-            // ini. Tautannya sendiri sudah final di sini (Ruling A) —
-            // menambah query param yang belum punya panel di baliknya adalah
-            // tautan LENGANG, bukan tautan RUSAK, selama Tugas 9 menutupnya
-            // sebelum gelombang ini di-merge.
+            // Tautan, bukan tombol yang membuka formulir di tempat: `?ubah=`
+            // dibaca di bawah untuk memutuskan kapan `PanelGeser` +
+            // `FormVarian` dirender (lihat `panelTerbuka` di atas).
             <Link
               href={`${BASIS}/${layanan.id}?ubah=baru`}
               className="text-[12px] font-bold text-panel-ink underline"
@@ -200,6 +207,20 @@ export default async function DetailLayananPage({
           )}
         </Kartu>
       </div>
+
+      {panelTerbuka && (
+        <PanelGeser
+          judul={varianUbah ? "Ubah varian" : "Varian baru"}
+          hrefTutup={hrefTutup}
+        >
+          <FormVarian
+            serviceId={id}
+            namaLayanan={layanan.nama}
+            varian={varianUbah}
+            hrefTutup={hrefTutup}
+          />
+        </PanelGeser>
+      )}
     </main>
   );
 }
