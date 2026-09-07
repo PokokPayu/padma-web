@@ -78,7 +78,7 @@ export function BilahDaftar({
                 aria-pressed={menyala}
                 className={`rounded-full border px-3 py-1.5 text-[12px] font-bold ${
                   menyala
-                    ? "border-panel-ink bg-panel-ink text-panel-accent"
+                    ? "border-panel-ink bg-panel-ink text-panel-surface"
                     : `border-panel-border bg-panel-surface ${p.menuntut ? "text-clay" : "text-panel-muted"}`
                 }`}
               >

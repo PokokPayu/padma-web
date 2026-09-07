@@ -508,7 +508,7 @@ export function BilahDaftar({
                 aria-pressed={menyala}
                 className={`rounded-full border px-3 py-1.5 text-[12px] font-bold ${
                   menyala
-                    ? "border-panel-ink bg-panel-ink text-panel-accent"
+                    ? "border-panel-ink bg-panel-ink text-panel-surface"
                     : `border-panel-border bg-panel-surface ${p.menuntut ? "text-clay" : "text-panel-muted"}`
                 }`}
               >
@@ -1285,7 +1285,7 @@ export default async function DaftarMitraPage({
         aksi={
           <Link
             href={`${BASIS}?ubah=baru`}
-            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-accent"
+            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-surface"
           >
             + Mitra baru
           </Link>
@@ -1427,7 +1427,7 @@ export function FormMitra({
 
       <div className="flex flex-wrap gap-2">
         <button type="submit" disabled={pending}
-          className="rounded-lg bg-panel-ink px-4 py-2 text-[12.5px] font-bold text-panel-accent disabled:opacity-60">
+          className="rounded-lg bg-panel-ink px-4 py-2 text-[12.5px] font-bold text-panel-surface disabled:opacity-60">
           {pending ? "Menyimpan…" : "Simpan"}
         </button>
         {/* Dua action terpisah, bukan satu action bernilai `!aktif`: keadaan
@@ -1811,7 +1811,7 @@ export default async function DaftarKlienPage({
         aksi={
           <Link
             href="/admin/klien/baru"
-            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-accent"
+            className="rounded-lg bg-panel-ink px-3 py-2 text-[12px] font-bold text-panel-surface"
           >
             + Klien baru
           </Link>
