@@ -56,6 +56,41 @@ pekerjaan yang lebih sedikit, bukan lebih banyak.
 Konsekuensinya seluruh perangkat itu tidak jadi dibangun: tidak ada ladder, tidak ada nilai enum
 baru, tidak ada kolom presisi, tidak ada penghapusan baris `geocode_cache`.
 
+### 1.2 Amandemen — ladder dihidupkan kembali, dibatasi setingkat jalan
+
+§1.1 membuang geocoding bertingkat. Bagian ini menghidupkannya kembali dalam bentuk yang lebih
+sempit, dan mencatat kenapa alasan pembuangannya tidak lagi berlaku utuh.
+
+Alasan §1.1 berbunyi: pin menghapus ketidakpastian dengan pekerjaan lebih sedikit, jadi menandai
+tebakan tidak sepadan. Itu benar untuk jalur staf — di sana ada admin yang melihat peta pada saat
+alamat diisi. Jalur klien tidak punya admin pada momen itu, dan justru keputusan §1 "layar klien:
+nol perubahan" yang membuatnya begitu. Keputusan itu dipertahankan: klien tetap mengetik teks,
+tanpa peta, tanpa pin.
+
+Keberatan yang paling konkret dan paling mudah diuji terhadap ladder bukan presisi melainkan
+**ambiguitas** — mengupas token membuang justru informasi yang membedakan, dan Malang punya
+banyak jalan bernama dasar sama di kecamatan berbeda ("Jalan Ijen" vs "Jl. Besar Ijen"
+memulangkan dua jalan berbeda; "Stasiun Malang" memulangkan "Jalan Stasiun Blimbing" yang meleset
+3 km). Keberatan itu diukur, dan pada bentuk "jalan + kota" hasilnya nol dari 23. Ia dicabut
+karena datanya tidak mendukungnya — dicatat di sini, bukan dihapus, supaya pembaca berikutnya
+tahu apa yang sudah dicoba dan kenapa runtuh.
+
+Aturan tolak-wilayah tidak pernah menyala sekali pun (0 dari 32). Ia tetap dipasang: ongkosnya
+nol dan ia menahan kelas kegagalan paling berbahaya — titik tengah kelurahan yang tampak seperti
+alamat. Tetapi bukan ia yang menaikkan angka keberhasilan.
+
+Yang dibangun, 7 September 2026: `variasiAlamat()` di `lib/transport/alamat.ts` (fungsi murni,
+tiga tingkat, varian kembar dibuang supaya alamat sederhana tetap berbiaya satu permintaan), dan
+penolakan `addresstype` setingkat wilayah di `geocodeAlamat()`. Tidak ada enum baru, tidak ada
+kolom presisi, tidak ada perambatan ke tabel mana pun — seluruh aturan hidup di dalam dua fungsi
+itu. Migrasi `20260907170000` membatalkan baris kegagalan lama, karena tanpa itu ladder tidak
+pernah berlaku bagi alamat yang paling membutuhkannya (utang #2).
+
+Yang TIDAK berubah: pin tetap menang. Ladder hanya bekerja ketika admin tidak menjatuhkan pin,
+atau saat menekan "Cari alamat di peta" — dan di situ hasilnya lewat di depan mata manusia sebelum
+menjadi uang. Itulah yang membuat urutan pin-dulu-ladder-kemudian bukan sekadar penjadwalan,
+melainkan syarat.
+
 ## 2. Batas Kejujuran — apa yang berubah dan apa yang tidak
 
 **Yang berubah:**

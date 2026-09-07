@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import { normalkanAlamat } from "./alamat";
+import { normalkanAlamat, variasiAlamat } from "./alamat";
 import type { Koordinat } from "./jarak";
 
 /**
@@ -20,6 +20,32 @@ import type { Koordinat } from "./jarak";
  */
 
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
+
+/**
+ * `addresstype` yang berarti OSM menjawab WILAYAH, bukan benda — titik tengah
+ * sebuah poligon. Koordinatnya sah, presisinya bukan alamatnya.
+ *
+ * Diukur 7 September 2026: pada 32 alamat berbentuk Malang, aturan ini tidak
+ * pernah menyala sekali pun. Ia tetap dipasang karena ongkosnya nol dan ia
+ * menahan kelas kegagalan yang paling berbahaya — bukan karena ia yang
+ * menaikkan angka keberhasilan.
+ */
+const WILAYAH = new Set([
+  "village",
+  "suburb",
+  "city",
+  "town",
+  "municipality",
+  "county",
+  "state",
+  "region",
+  "province",
+  "administrative",
+  "postcode",
+  "hamlet",
+  "quarter",
+  "neighbourhood",
+]);
 
 /**
  * Kebijakan Nominatim: maksimal 1 permintaan per detik.
@@ -74,17 +100,41 @@ export async function geocodeAlamat(alamat: string): Promise<Koordinat | null> {
         : { lat: tersimpan.lat as number, lon: tersimpan.lon as number };
     }
 
+    // LADDER: alamat apa adanya -> tanpa nomor rumah -> jalan + kota, berhenti
+    // pada tingkat pertama yang memulangkan titik yang bisa dipakai. Alasannya
+    // di `variasiAlamat`: Nominatim gagal TOTAL begitu ada satu kata yang tak
+    // dikenal, sehingga alamat yang ditulis lengkap justru paling sering gagal.
+    //
+    // Batas 1 permintaan/detik berlaku PER TINGKAT — alamat yang gagal di semua
+    // tingkat adalah yang paling lambat, dan itu memang harga yang disepakati.
     let hasil: Koordinat | null = null;
     try {
-      await tungguGiliran();
-      const url = `${NOMINATIM}?q=${encodeURIComponent(alamat)}&format=jsonv2&limit=1&countrycodes=id`;
-      const jawaban = await fetch(url, { headers: { "User-Agent": userAgent() } });
-      if (jawaban.ok) {
-        const isi = (await jawaban.json()) as Array<{ lat: string; lon: string }>;
-        if (isi.length > 0) {
-          const lat = Number(isi[0].lat);
-          const lon = Number(isi[0].lon);
-          if (Number.isFinite(lat) && Number.isFinite(lon)) hasil = { lat, lon };
+      for (const varian of variasiAlamat(alamat)) {
+        await tungguGiliran();
+        const url = `${NOMINATIM}?q=${encodeURIComponent(varian)}&format=jsonv2&limit=1&countrycodes=id`;
+        const jawaban = await fetch(url, { headers: { "User-Agent": userAgent() } });
+        if (!jawaban.ok) continue;
+
+        const isi = (await jawaban.json()) as Array<{
+          lat: string;
+          lon: string;
+          addresstype?: string;
+        }>;
+        if (isi.length === 0) continue;
+
+        // Hasil setingkat WILAYAH ditolak. Titik tengah kelurahan adalah
+        // koordinat yang sah dan masuk akal — ia tidak terlihat seperti
+        // tebakan, dan justru itu bahayanya: bisa meleset kilometer sambil
+        // tampak pasti, sementara jenjang tarif punya batas KERAS di 5/10/15/20
+        // km. Tingkat berikutnya tetap dicoba: kueri yang berbeda bisa
+        // mengenai jalannya walau kueri ini mengenai kelurahannya.
+        if (WILAYAH.has(String(isi[0].addresstype ?? ""))) continue;
+
+        const lat = Number(isi[0].lat);
+        const lon = Number(isi[0].lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          hasil = { lat, lon };
+          break;
         }
       }
     } catch {

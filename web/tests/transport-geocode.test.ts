@@ -1,16 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { geocodeAlamat } from "@/lib/transport/geocode";
-import { normalkanAlamat } from "@/lib/transport/alamat";
+import { normalkanAlamat, variasiAlamat } from "@/lib/transport/alamat";
 
 const svc = createAdminSupabase();
 const ALAMAT = "PAD-UJI Jl. Geocode No. 1";
 const ALAMAT_GAGAL = "PAD-UJI Alamat Yang Tidak Ada Di Peta Mana Pun";
+const ALAMAT_BERKOMA = "PAD-UJI Jl. Ladder No. 9, Klojen, Kota Malang";
+const ALAMAT_WILAYAH = "PAD-UJI Jl. Wilayah No. 1, Kota Malang";
 
 async function bersihkan() {
   await svc.from("geocode_cache").delete().in("alamat_normal", [
     normalkanAlamat(ALAMAT),
     normalkanAlamat(ALAMAT_GAGAL),
+    ...variasiAlamat(ALAMAT_BERKOMA).map(normalkanAlamat),
+    ...variasiAlamat(ALAMAT_WILAYAH).map(normalkanAlamat),
   ]);
 }
 
@@ -74,6 +78,10 @@ describe("geocodeAlamat", () => {
   });
 
   it("kegagalan DICATAT, sehingga tidak ditanyakan ulang", async () => {
+    // ALAMAT_GAGAL tidak punya nomor rumah maupun koma, jadi ketiga tingkat
+    // ladder memulangkan pertanyaan yang SAMA dan varian kembarnya dibuang —
+    // satu tembakan, bukan tiga. Bukan kebetulan: itu yang dijaga uji
+    // "varian kembar dibuang" di tests/transport-variasi-alamat.test.ts.
     const palsu = stubNominatim(() => new Response("[]", { status: 200 }));
 
     expect(await geocodeAlamat(ALAMAT_GAGAL)).toBeNull();
@@ -87,6 +95,78 @@ describe("geocodeAlamat", () => {
       .maybeSingle();
     expect(data).not.toBeNull();
     expect(data!.lat).toBeNull();
+  });
+
+
+  // ===== LADDER: pengupasan bertingkat =====
+
+  it("alamat berkoma yang gagal di tingkat pertama DICOBA ULANG lebih longgar", async () => {
+    const dicoba: string[] = [];
+    const palsu = stubNominatim(function (this: void) {
+      return new Response("[]", { status: 200 });
+    });
+    // Merekam URL tiap tembakan supaya urutan tingkatnya bisa dibuktikan,
+    // bukan cuma jumlahnya.
+    const asli = globalThis.fetch;
+    vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+      const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+      if (url.includes("nominatim")) {
+        dicoba.push(decodeURIComponent(new URL(url).searchParams.get("q") ?? ""));
+        return palsu(...args);
+      }
+      return asli(...args);
+    });
+
+    expect(await geocodeAlamat(ALAMAT_BERKOMA)).toBeNull();
+    expect(dicoba).toEqual([
+      "PAD-UJI Jl. Ladder No. 9, Klojen, Kota Malang",
+      "PAD-UJI Jl. Ladder, Klojen, Kota Malang",
+      "PAD-UJI Jl. Ladder, Kota Malang",
+    ]);
+  });
+
+  it("BERHENTI pada tingkat yang ketemu — tidak menembak sisanya", async () => {
+    let n = 0;
+    const palsu = stubNominatim(() => {
+      n += 1;
+      // Tingkat pertama kosong, tingkat kedua ketemu.
+      return n === 1
+        ? new Response("[]", { status: 200 })
+        : new Response(
+            JSON.stringify([{ lat: "-7.98", lon: "112.63", addresstype: "road" }]),
+            { status: 200 },
+          );
+    });
+    expect(await geocodeAlamat(ALAMAT_BERKOMA)).toEqual({ lat: -7.98, lon: 112.63 });
+    expect(palsu).toHaveBeenCalledTimes(2);
+  });
+
+  it("hasil setingkat WILAYAH ditolak jadi null, walau koordinatnya sah", async () => {
+    // Titik tengah kelurahan adalah koordinat yang sah dan MASUK AKAL — ia
+    // tidak terlihat seperti tebakan. Justru itu bahayanya: ia bisa meleset
+    // kilometer sambil tampak pasti, dan jenjang tarif punya batas keras di
+    // 5/10/15/20 km.
+    stubNominatim(() =>
+      new Response(
+        JSON.stringify([{ lat: "-7.97", lon: "112.62", addresstype: "village" }]),
+        { status: 200 },
+      ),
+    );
+    expect(await geocodeAlamat(ALAMAT_WILAYAH)).toBeNull();
+  });
+
+  it("hasil setingkat jalan atau benda DITERIMA", async () => {
+    for (const tipe of ["road", "building", "amenity"]) {
+      await svc.from("geocode_cache").delete().eq("alamat_normal", normalkanAlamat(ALAMAT));
+      stubNominatim(() =>
+        new Response(
+          JSON.stringify([{ lat: "-7.96", lon: "112.61", addresstype: tipe }]),
+          { status: 200 },
+        ),
+      );
+      expect(await geocodeAlamat(ALAMAT), tipe).toEqual({ lat: -7.96, lon: 112.61 });
+      vi.unstubAllGlobals();
+    }
   });
 
   it("galat jaringan memulangkan null, bukan melempar", async () => {
