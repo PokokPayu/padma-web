@@ -141,6 +141,11 @@ describe("ambilDaftarSkrining", () => {
     const { baris } = await ambilDaftarSkrining({
       cari: "", saring: { hasil: "merah" }, hal: 1,
     });
+    // Tanpa ini, `.every()` atas daftar KOSONG lolos diam-diam (vacuously
+    // true) — pagar yang seharusnya menangkap `.eq()` yang salah kolom atau
+    // yang tidak pernah mencocokkan apa pun lolos tanpa satu asersi pun
+    // benar-benar berjalan.
+    expect(baris.length).toBeGreaterThan(0);
     expect(baris.every((r) => r.hasil === "merah")).toBe(true);
   });
 
@@ -163,6 +168,9 @@ describe("ambilDaftarSkrining", () => {
     // "MERAH · URGENT" hanya berhenti muncul dan setiap baris merah terlihat
     // sama mendesaknya.
     const { baris } = await ambilDaftarSkrining({ cari: "", saring: {}, hal: 1 });
+    // Sama seperti "menyaring menurut hasil" di atas: tanpa ini, `.every()`
+    // atas daftar kosong lolos diam-diam.
+    expect(baris.length).toBeGreaterThan(0);
     expect(baris.every((r) => Array.isArray(r.flags))).toBe(true);
   });
 
@@ -280,19 +288,28 @@ describe("inbox admin — halaman & data", () => {
     expect(sumberAksi).toMatch(/\.eq\(\s*"id"\s*,\s*id\s*\)/);
   });
 
-  it("tidak menulis data ke log — dan `searchParams` di sini adalah navigasi, bukan data kesehatan", () => {
-    // Pagar ini dulu melarang `searchParams`/`URLSearchParams` sama sekali —
-    // sebelum Task 6, halaman ini tidak punya cari/saring apa pun, jadi
-    // kemunculannya hanya bisa berarti sesuatu bocor ke URL. Sejak bilah
+  it("data kesehatan tidak bocor ke URL maupun log", () => {
+    // `searchParams` DIKECUALIKAN hanya untuk `sumberHalaman`: sejak bilah
     // daftar hidup di URL untuk SETIAP daftar panel (Global Constraint 2,
-    // pola yang sama dengan /admin/bayar & /admin/sesi), `searchParams` di
-    // sini SAH: ia membawa `cari`/`tindak`/`hasil`, tiga parameter NAVIGASI,
-    // bukan satu pun jawaban kuesioner. Kolom `jawaban` sendiri tidak pernah
-    // ditarik oleh `ambilDaftarSkrining()` (lihat proyeksi `.select()`-nya) —
-    // itulah yang sebenarnya mencegah kebocorannya, bukan larangan memakai
-    // API `searchParams`.
+    // spec K2, pola yang sama dengan /admin/bayar & /admin/sesi), tanda
+    // tangan `page.tsx` WAJIB menerima `searchParams` dan meneruskan
+    // `cari`/`tindak`/`hasil` — tiga parameter NAVIGASI, bukan jawaban
+    // kuesioner.
+    //
+    // `sumberAksi` (`"use server"`, endpoint POST tersendiri) dan
+    // `sumberTabel` (komponen murni props-masuk) TIDAK PERNAH punya alasan
+    // membaca state URL sama sekali — keduanya menerima datanya lewat
+    // argumen/props, bukan lewat request. Skrining adalah DATA KESEHATAN;
+    // satu-satunya alasan pagar ini ada adalah mencegah salah satu dari
+    // keduanya diam-diam mulai menyalin sesuatu (jawaban, kode, nama) ke
+    // query string atau log — jadi keduanya TETAP dijaga penuh di sini,
+    // sama seperti sebelum Task 6.
     for (const sumber of [sumberHalaman, sumberAksi, sumberTabel]) {
       expect(sumber).not.toContain("console.");
+    }
+    for (const sumber of [sumberAksi, sumberTabel]) {
+      expect(sumber).not.toContain("searchParams");
+      expect(sumber).not.toContain("URLSearchParams");
     }
   });
 

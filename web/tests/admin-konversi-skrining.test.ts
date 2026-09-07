@@ -539,14 +539,21 @@ describe("berkas jalur konversi", () => {
     }
   });
 
-  it("tidak menulis data ke log", () => {
-    // `searchParams` TIDAK LAGI diperiksa di sini sejak Task 6: halaman inbox
-    // kini punya bilah cari & saring URL-driven, pola yang sama dengan
-    // /admin/bayar & /admin/sesi (Global Constraint 2) — kemunculannya sah,
-    // dan bukan lagi tanda kebocoran. Lihat pagar yang sama di
-    // `tests/admin-inbox.test.ts`.
+  it("data kesehatan tidak bocor ke URL maupun log", () => {
+    // `searchParams` DIKECUALIKAN hanya untuk `sumberHalaman`: sejak bilah
+    // daftar hidup di URL untuk SETIAP daftar panel (Global Constraint 2,
+    // spec K2, pola yang sama dengan /admin/bayar & /admin/sesi), tanda
+    // tangan `page.tsx` WAJIB menerima `searchParams`. `sumberAksi`
+    // (`"use server"`), `sumberTabel`, dan `sumberDialog` (`jadikan-klien.tsx`,
+    // komponen props-masuk) TIDAK PERNAH punya alasan membaca state URL —
+    // ketiganya tetap dijaga penuh, sama seperti sebelum Task 6. Skrining
+    // adalah DATA KESEHATAN; itulah alasan pagar ini ada.
     for (const sumber of [sumberAksi, sumberHalaman, sumberTabel, sumberDialog]) {
       expect(sumber).not.toContain("console.");
+    }
+    for (const sumber of [sumberAksi, sumberTabel, sumberDialog]) {
+      expect(sumber).not.toContain("searchParams");
+      expect(sumber).not.toContain("URLSearchParams");
     }
   });
 
