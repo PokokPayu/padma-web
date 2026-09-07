@@ -2,13 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { ambilLayanan } from "@/lib/admin/layanan";
-import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
+import { pilihanFase } from "@/lib/admin/katalog-admin";
 import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
 import type { ParamMentah } from "@/app/_shell/panel/daftar";
 import { Kartu } from "@/app/_shell/panel/kartu";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { PanelGeser } from "@/app/_shell/panel/panel-geser";
-import { AksiLayanan, AksiPaket, type PilihanFase } from "../form-layanan";
+import { AksiLayanan, AksiPaket } from "../form-layanan";
 import { FormVarian } from "../form-varian";
 import { labelVarian } from "@/lib/varian";
 
@@ -61,11 +61,14 @@ export default async function DetailLayananPage({
   const panelTerbuka = ubah === "baru" || varianUbah !== null;
   const hrefTutup = `${BASIS}/${id}`;
 
-  const [katalog, materiPerLayanan] = await Promise.all([
-    daftarKatalogAdmin(),
-    daftarMateriAdmin(),
-  ]);
-  const fase: PilihanFase[] = katalog.map((f) => ({ id: f.id, nama: f.nama }));
+  // `pilihanFase()`, bukan `daftarKatalogAdmin()` kedua kalinya: `ambilLayanan()`
+  // di atas SUDAH memanggil `daftarKatalogAdmin()` sendiri untuk data layanan
+  // ini. Memanggilnya lagi di sini hanya untuk daftar {id, nama} fase berarti
+  // membaca ULANG seluruh `sessions`/`packages`/`service_variants` klinik
+  // (temuan #4 review sapuan panel) — dua belas query per tampilan satu
+  // layanan padahal enam sudah cukup, dari dua snapshot yang bisa berbeda di
+  // bawah penulisan konkuren.
+  const [fase, materiPerLayanan] = await Promise.all([pilihanFase(), daftarMateriAdmin()]);
   const materi = materiPerLayanan.find((l) => l.id === id)?.materi ?? [];
 
   return (
@@ -183,9 +186,9 @@ export default async function DetailLayananPage({
           materi apa saja" tanpa berpindah modul.
 
           RULING B (Tugas 11): judul materi kini menaut ke `/admin/materi/[id]`
-          — rute itu tidak ada sampai Tugas 11 lahir (lihat catatan yang sama
-          di task-7-8-report.md), jadi Tugas 7/8 sengaja merender teks polos.
-          Sekarang rutenya nyata, jadi tautannya dipasang di sini.
+          — rute itu tidak ada sampai Tugas 11 lahir, jadi Tugas 7/8 sengaja
+          merender teks polos. Sekarang rutenya nyata, jadi tautannya dipasang
+          di sini.
         */}
         <Kartu judul="Materi yang termasuk layanan ini">
           {materi.length === 0 ? (

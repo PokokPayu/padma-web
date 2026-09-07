@@ -247,6 +247,30 @@ export async function pilihanLayanan(): Promise<LayananPilihan[]> {
   return data ?? [];
 }
 
+export type FasePilihan = { id: string; nama: string };
+
+/**
+ * Pilihan fase untuk formulir layanan (baru & ubah) — hanya id & nama.
+ *
+ * Dipisah dari `daftarKatalogAdmin()` untuk alasan yang sama dengan
+ * `pilihanLayanan()`/`pilihanVarian()` di bawah: formulir hanya butuh nama
+ * dan id fase, bukan seluruh katalog bersarang enam-query. Sebelum fungsi ini
+ * ada, `/admin/layanan/[id]` memanggil `daftarKatalogAdmin()` DUA KALI per
+ * render — sekali lewat `ambilLayanan()` untuk data layanannya sendiri, sekali
+ * lagi HANYA untuk daftar pilihan fase ini — yang berarti seluruh tabel
+ * `sessions` klinik terbaca dua kali, dari dua snapshot yang bisa berbeda di
+ * bawah penulisan konkuren, untuk menampilkan satu layanan.
+ */
+export async function pilihanFase(): Promise<FasePilihan[]> {
+  const supabase = await createServerSupabase();
+  const { data } = await supabase
+    .from("phases")
+    .select("id, nama")
+    .order("urutan")
+    .returns<FasePilihan[]>();
+  return data ?? [];
+}
+
 type BarisVarianPilihan = {
   id: string;
   service_id: string;
