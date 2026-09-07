@@ -647,6 +647,24 @@ describe("dashboard admin", () => {
     expect(m).toContain('href="/owner/transport"');
   });
 
+  it("tile 'Sesi selesai tanpa jenjang' menaut ke DAFTAR TERSARING, bukan ke modulnya", async () => {
+    // Tile yang hanya memberi angka lalu menurunkan admin di daftar penuh
+    // meninggalkannya memindai ratusan baris untuk menemukan tiga sesi.
+    // Urutan parameter mengikuti `bangunQuery`: saringan menurut abjad
+    // kemunculan, `hal` tidak ditulis untuk halaman 1.
+    const m = await markupDashboard();
+    expect(m).toContain('href="/admin/sesi?status=selesai&amp;jenjang=kosong"');
+  });
+
+  it("tile transport owner TIDAK ikut berubah — ia milik panel lain", async () => {
+    // Pagar regresi: kedua tile bertetangga dan mudah tertukar saat menyunting.
+    const sebelumnya = ref.sesi;
+    ref.sesi = await signInAs("owner@padma.test");
+    const m = await markupDashboard();
+    ref.sesi = sebelumnya;
+    expect(m).toContain('href="/owner/transport"');
+  });
+
   it("membawa grafik tren delapan pekan, lengkap dengan padanan tabelnya", async () => {
     const m = await markupDashboard();
     expect([...m.matchAll(/data-batang="/g)]).toHaveLength(8);

@@ -118,6 +118,16 @@ describe("ambilDaftarSesi — saringan", () => {
     expect(baris.every((s) => s.jenjang === null)).toBe(true);
   });
 
+  it("saringan yang ditunjuk StatTile memulangkan PERSIS sesi selesai tanpa jenjang", async () => {
+    // Tautan yang sintaksnya benar tetapi saringannya meleset tetap
+    // meninggalkan admin memindai dengan mata. Yang diuji di sini bukan
+    // href-nya (itu di admin-shell), melainkan barisnya.
+    const { baris, total } = await ambilDaftarSesi(
+      { cari: "", saring: { status: "selesai", jenjang: "kosong" }, hal: 1 }, HARI_INI);
+    expect(total).toBeGreaterThanOrEqual(N);
+    expect(baris.every((s) => s.status === "selesai" && s.jenjang === null)).toBe(true);
+  });
+
   it("waktu=mendatang membuang yang sudah lewat, waktu=lampau kebalikannya", async () => {
     const depan = await ambilDaftarSesi(
       { cari: "", saring: { waktu: "mendatang" }, hal: 1 }, HARI_INI);
