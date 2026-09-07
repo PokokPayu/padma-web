@@ -77,11 +77,26 @@ undangan" dari "daftar mandiri" — padahal justru pembedaan itu intinya.
 Langkah 4 menerbitkan baris `clients` dengan `user_id` terisi sejak INSERT. Tidak ada jendela
 waktu ketika baris itu menganggur dan bisa diperebutkan.
 
-- `nama`, `no_hp`, `phase_id` datang dari `user_metadata` yang diisi formulir pendaftaran.
-  `full_name` sudah otomatis mengalir ke `profiles.nama` lewat trigger `handle_new_user` yang ada.
-- Metadata dikendalikan pengguna, jadi ketiganya divalidasi di server: nama dipangkas dan dibatasi
-  panjang, `phase_id` harus salah satu id di tabel `phases`, `no_hp` dinormalkan. Efeknya hanya
-  pada baris miliknya sendiri — tidak ada hak yang bisa diraih dari sana.
+- `nama` dan `no_hp` datang dari `user_metadata` yang diisi formulir pendaftaran. `full_name`
+  sudah otomatis mengalir ke `profiles.nama` lewat trigger `handle_new_user` yang ada.
+- Metadata dikendalikan pengguna, jadi keduanya divalidasi di server: nama dipangkas dan dibatasi
+  panjang, `no_hp` dinormalkan. Efeknya hanya pada baris miliknya sendiri — tidak ada hak yang
+  bisa diraih dari sana.
+- **Fase TIDAK ditanyakan saat mendaftar dan `clients.phase_id` menjadi NULLABLE.** Alasannya:
+  setiap pemesanan wajib didahului skrining (K8), dan wizard skrining sudah menanyakan fase.
+  Menanyakannya dua kali berarti meminta orang menjawab hal yang sama dua kali, lalu menyimpan dua
+  jawaban yang bisa berbeda. Fase diisi dari skrining pertama yang tersambung; sebelum itu ia
+  kosong dan dibaca sebagai "belum ditentukan".
+
+  Keempat nilai fase pada skrining (`prekonsepsi`, `kehamilan`, `nifas`, `menopause`) memang id
+  `phases` yang sah — `newborn` sengaja tidak diskrining karena yang diskrining adalah ibunya. Jadi
+  pemetaannya langsung, tanpa penerjemahan.
+
+  Ongkosnya kecil: `src/lib/admin/klien.ts` sudah memperlakukan `phase_id` sebagai nullable dan
+  menampilkan "—". Yang perlu menyesuaikan hanya sampul Passport (`src/lib/passport/data.ts` dan
+  `_komponen/sampul.tsx`). Alternatif "fase palsu bernama Belum Ditentukan di tabel `phases`"
+  ditolak: tabel itu juga menggerakkan katalog layanan dan materi, sehingga fase palsu akan muncul
+  di tempat yang tidak diduga.
 - Peran tidak bisa dinaikkan lewat jalur ini: `handle_new_user` selalu membuat profil berperan
   `klien`, dan `trg_guard_profile_role` menolak peran non-klien dari jalur non-service-role.
   Pertahanan ini sudah ada; spec ini memakainya, bukan membuatnya.
@@ -102,7 +117,7 @@ hijau tetap ada sebagai kepala pendek karena ia yang membawa logo.
 | Rute | Panel kiri | Isi kanan |
 |---|---|---|
 | `/masuk` (ubah) | "Passport Anda menunggu." | email, sandi, lupa sandi, Google, tautan ke daftar |
-| `/daftar` (baru) | "Mulai perjalanan Anda." | nama, email, WhatsApp, fase, sandi, Google |
+| `/daftar` (baru) | "Mulai perjalanan Anda." | nama, email, WhatsApp, sandi, Google |
 | `/lupa-sandi` (baru) | "Tenang, ini bisa dipulihkan." | email → kirim tautan |
 | `/atur-sandi` (baru) | idem | sandi baru + ulangi |
 | `/periksa-email` (baru) | "Satu langkah lagi." | instruksi + kirim ulang |
@@ -221,13 +236,86 @@ adanya. Yang ditambahkan: test yang membuktikan dengan saklar mati, paket tidak 
 Jalur `ajukanJadwal(jenis: "paket")` ikut tertutup di sisi klien, sehingga tidak ada pintu belakang
 memesan tanpa skrining.
 
+### K12 — Penolakan pengajuan ditiadakan; klien membatalkan sendiri
+
+Admin untuk sementara **tidak** menolak pengajuan jadwal. Tombolnya disembunyikan dengan cara yang
+sama seperti K11 — saklar, bukan pembongkaran; nilai enum `booking_status.ditolak` dan penjaganya
+tetap di tempatnya.
+
+Meniadakan penolakan menutup satu-satunya pintu keluar kedua dari status "menunggu", sementara
+`BATAS_PERMINTAAN_MENUNGGU = 5` mengunci klien yang antreannya penuh. Tanpa penambal, klien yang
+mengajukan lima tanggal yang tidak bisa dilayani akan terkunci selamanya dan tidak seorang pun
+punya cara membereskannya.
+
+Penambalnya: **klien dapat membatalkan pengajuannya sendiri** selama statusnya masih "menunggu".
+Kendali atas antrean berpindah ke pemiliknya, dan admin tetap tidak perlu menolak siapa pun.
+Seperti seluruh tulisan klien di repo ini, syaratnya ditegakkan di DB (kepemilikan lewat
+`auth.uid()` dan status asal wajib "menunggu"), bukan hanya di server action.
+
+Pertanyaan "kalau pengajuan dibatalkan, skriningnya bagaimana?" ikut terjawab oleh K8: satu skrining
+menopang tepat satu pengajuan dan hangus setelah dipakai. Membatalkan tidak menghidupkannya kembali.
+
+### K13 — Skrining merah boleh diulang, dan setiap kali tercatat
+
+Klien yang mendapat hasil merah boleh mengisi skrining lagi tanpa jeda. Menahannya akan menghukum
+orang yang salah pencet, sementara siapa pun yang berniat mengulang sampai hijau toh bisa membuka
+jendela penyamaran.
+
+Yang menjaga bukan jeda, melainkan **jejak**: setiap hasil merah tersimpan sebagai baris tersendiri
+dan muncul di inbox admin seperti sekarang. Pola "mengulang sampai hijau" karena itu terlihat oleh
+tim, bukan tersembunyi. Ini sejalan dengan kalimat yang sudah ada di layar hasil — skrining adalah
+pra-skrining, bukan izin medis, dan tim tetap memverifikasi kondisi sebelum layanan.
+
+### K14 — Undangan WhatsApp tetap ada, tetapi jadi pilihan kedua
+
+Penautan lewat email terverifikasi (K1) membuat tautan undangan tidak lagi menjadi satu-satunya
+jalan: admin cukup meminta klien mendaftar sendiri dengan email yang sudah didaftarkan. Jalur
+undangan tetap dipertahankan — kodenya sudah teruji dan berguna untuk klien yang perlu dituntun —
+tetapi panel admin menempatkan "minta klien mendaftar sendiri" sebagai anjuran utama dan tautan
+undangan sebagai cadangan.
+
+Tidak ada kode penautan yang dihapus. Menghapus pertahanan yang sudah teruji demi kerapian adalah
+perdagangan yang buruk.
+
+### K15 — RLS `screenings` dibuka secukupnya untuk klien
+
+Policy yang ada hanya `"screenings: staf"`; klien tidak punya hak apa pun atas tabel itu. K8 dan K9
+menuntut dua hal baru, dan hanya dua:
+
+- **Baca:** klien boleh membaca baris `screenings` yang `client_id`-nya miliknya. Dibutuhkan agar
+  Passport tahu apakah ada skrining hijau yang belum terpakai.
+- **Tulis:** klien TIDAK diberi policy INSERT. Skrining dari dalam Passport ditulis lewat rute
+  terautentikasi yang memakai service role, sama seperti rute publik — supaya `hasil`, `flags`, dan
+  `kode` tetap ditentukan server, tidak pernah dikirim peramban.
+
+Kolom hash token klaim (K9) tidak ikut terbaca klien.
+
+### K16 — Skrining dari dalam Passport punya pembatasnya sendiri
+
+`src/lib/skrining/pembatas.ts` dirancang untuk corong anonim: 5 per menit per kunci IP, dan
+**30 per menit untuk seluruh aplikasi**. Langit-langit global itu masuk akal ketika skrining adalah
+peristiwa sekali seumur corong; ia tidak masuk akal begitu skrining menjadi langkah wajib pada
+setiap pemesanan, karena lonjakan wajar klien yang sudah login bisa menabraknya.
+
+Karena itu rute skrining terautentikasi memakai ember terpisah dengan kunci `client_id` — identitas
+yang sudah terbukti, bukan header kiriman peramban. Ember anonim tidak disentuh.
+
+### K17 — Bentrok email di panel admin dijawab dengan kalimat
+
+Setelah pendaftaran mandiri hidup, admin bisa membuat data klien beremail sama dengan akun yang
+sudah mendaftar sendiri. Yang muncul sekarang adalah pelanggaran `clients_email_key` mentah.
+
+Server action klien menangkap 23505 pada kolom email dan menjawab: "Email ini sudah punya akun
+PADMA" beserta tautan ke data klien yang sudah ada. Tidak ada penggabungan otomatis — admin melihat
+datanya lalu memutuskan sendiri.
+
 ## Ruang lingkup & urutan
 
 | Tahap | Isi | Sifat |
 |---|---|---|
 | **A** | K11 — sembunyikan paket di balik saklar | Sapuan luas, dangkal, risiko rendah |
-| **B** | K1–K7 — halaman auth, pendaftaran mandiri, lupa sandi, logo | Halaman baru + perubahan model penautan |
-| **C** | K8–K10 — corong skrining, `screening_id`, gerbang tiga lapis | Aturan bisnis baru + migrasi DB |
+| **B** | K1–K7, K14, K17 — halaman auth, pendaftaran mandiri, lupa sandi, logo | Halaman baru + perubahan model penautan |
+| **C** | K8–K10, K12, K13, K15, K16 — corong skrining, `screening_id`, gerbang tiga lapis, pembatalan | Aturan bisnis baru + migrasi DB |
 
 Urutannya mengikat: C membangun formulir pengajuan yang tidak boleh lagi menawarkan paket (jadi A
 lebih dulu), dan C butuh akun mandiri dari B untuk punya arti. Rencana implementasi memberi titik
@@ -258,14 +346,22 @@ henti di antara ketiganya.
   `passport-keamanan`, `passport-pembatas-jadwal`). Bukan penulisan ulang: satu helper
   `tests/helpers/skrining.ts` yang menerbitkan skrining hijau untuk klien uji, lalu dipakai di
   ke-18 titik itu. Diketahui sejak sekarang supaya tidak muncul sebagai kejutan di tengah Tahap C.
+- **Menyembunyikan tombol tolak akan menyentuh test antrean admin** (`admin-sesi-konfirmasi`,
+  `admin-shell`). Jalur penolakan di server dan DB tetap ada dan tetap diuji; yang berubah hanya
+  keterjangkauannya dari layar.
+- **Nama pada skrining tidak menimpa nama akun.** Skrining anonim menyimpan nama dan no. HP sendiri;
+  saat diklaim, keduanya TIDAK menindih data akun. Yang berpindah hanya `client_id`, dan `phase_id`
+  bila masih kosong. Klien yang menuliskan namanya berbeda saat skrining tidak boleh mendapati nama
+  akunnya berubah diam-diam.
 - **`README.md` wajib diperbarui**: `tests/inventaris-rute.test.ts` menjaga tabel rute dua arah.
 
 ## Pengujian
 
 Mengikuti disiplin yang sudah berlaku di repo, tanpa perkakas baru.
 
-- **Validator murni** (`src/lib/auth/daftar.ts`) — fase harus id `phases` yang sah, email
-  dinormalkan, sandi ≥ 8, nama tidak kosong. Tanpa DB.
+- **Validator murni** (`src/lib/auth/daftar.ts`) — email dinormalkan, sandi ≥ 8, nama tidak
+  kosong, no. HP dinormalkan. Tanpa DB. (Fase tidak lagi divalidasi di sini: K3 menghapusnya dari
+  formulir pendaftaran.)
 - **Keamanan penautan** (`tests/penautan-email-terverifikasi.test.ts`, pola
   `penautan-undangan.test.ts`): email belum terverifikasi + ada baris klien beremail sama → tidak
   tertaut; terverifikasi + baris sudah dimiliki orang lain → tidak bisa direbut; terverifikasi +
@@ -280,6 +376,14 @@ Mengikuti disiplin yang sudah berlaku di repo, tanpa perkakas baru.
   langsung ke DB untuk membuktikan lapis ketiga benar-benar menahan — pola
   `money-firewall-struktural.test.ts`.
 - **Saklar paket** — dengan `PAKET_TAMPIL = false`, paket tidak muncul di keluaran render mana pun.
+- **Pembatalan oleh klien** (K12) — klien membatalkan pengajuannya sendiri; klien lain TIDAK bisa
+  membatalkan pengajuan orang, dan pengajuan yang sudah dikonfirmasi tidak bisa dibatalkan. Ditembak
+  langsung ke DB, bukan lewat server action saja.
+- **RLS `screenings`** (K15) — klien membaca skriningnya sendiri; klien lain mendapat nol baris;
+  klien tidak punya hak INSERT.
+- **Pembatas terautentikasi** (K16) — ember `client_id` terpisah dari ember anonim; menghabiskan
+  jatah satu klien tidak memengaruhi klien lain maupun corong publik.
+- **Bentrok email admin** (K17) — 23505 pada email dijawab kalimat, bukan dilempar.
 - **E2E** — skrip baru untuk pendaftaran mandiri, dirangkai ke `test:e2e:semua`.
 
 **Batas jujur:** E2E pendaftaran menguji gerbang `/setelah-masuk` dengan user yang dibuat lewat
@@ -299,6 +403,11 @@ lokal. Kaki itu masuk runbook sebagai pemeriksaan manual sebelum rilis.
   "tombolnya belum jalan" menjadi "salah satu dari dua jalur pendaftaran belum jalan".
 - **`[auth.rate_limit] email_sent = 2`** perlu dinaikkan agar pengujian manual tidak terhenti
   sendiri.
+- **Migrasi penanam `phases` wajib ada sebelum Tahap C hidup di produksi.** `phases` hanya diisi
+  `supabase/seed.sql`, dan `supabase db push` tidak menjalankannya — di produksi tabel itu lahir
+  kosong. `clients.phase_id` menunjuk `phases(id)`, jadi langkah "isi fase dari skrining yang
+  disambungkan" (K3) akan melanggar foreign key pada klien pertama. Jebakan ini sudah tercatat di
+  spec deploy 7 September; di sini ia berubah dari catatan menjadi prasyarat berpalang.
 
 ## Risiko utama
 
