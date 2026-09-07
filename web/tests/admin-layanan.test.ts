@@ -1314,8 +1314,15 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   });
 
   it("judul mengandalkan template layout (tanpa menempel PADMA sendiri)", () => {
-    expect(sumberHalaman).toMatch(/title:\s*"Layanan/);
-    expect(sumberHalaman).not.toMatch(/title:\s*"[^"]*PADMA/);
+    // Sejak Task 3 (saklar K11), judulnya BUKAN string tunggal lagi — ia
+    // bergantung pada `PAKET_TAMPIL` ("Layanan & Paket" saat menyala,
+    // "Layanan" saat mati, lihat src/lib/paket-tampil.ts) — jadi asersi ini
+    // dilonggarkan dari kecocokan string PERSIS ke baris `metadata`
+    // seutuhnya: apa pun cabang yang aktif, judulnya wajib memuat "Layanan"
+    // dan TIDAK PERNAH menempelkan "PADMA" sendiri (itu tugas template layout).
+    const baris = sumberHalaman.match(/export const metadata = \{[^}]*\};/)?.[0] ?? "";
+    expect(baris).toContain("Layanan");
+    expect(baris).not.toContain("PADMA");
   });
 
   it("TIDAK ada nominal uang di modul layanan (money firewall)", () => {

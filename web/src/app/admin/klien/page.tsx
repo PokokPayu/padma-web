@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { ambilDaftarKlien, SARING_KLIEN } from "@/lib/admin/klien";
 import { uraikanParamDaftar, type ParamMentah } from "@/app/_shell/panel/daftar";
 import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
@@ -63,7 +64,16 @@ export default async function DaftarKlienPage({
               { nilai: "belum", label: "Belum aktivasi", menuntut: true },
             ],
           },
-          { nama: "paket", label: "Paket", pilihan: [{ nilai: "ada", label: "Punya paket" }] },
+          // GERBANG SAKLAR (K11, R6): dicabut sepenuhnya dari larik saringan,
+          // bukan hanya diberi kolom yang disembunyikan — chip ini menaut ke
+          // `?paket=ada` (lihat bilah-daftar.tsx), dan sekadar MEMASANG chip
+          // itu sudah cukup untuk mengetahui SIAPA yang berpaket, terlepas
+          // dari kolom Paket tampil atau tidak. Logika `saring.paket === "ada"`
+          // di `klien.ts` sendiri TIDAK dibongkar — yang dicabut cuma jalan
+          // kontrolnya di layar ini.
+          ...(PAKET_TAMPIL
+            ? [{ nama: "paket", label: "Paket", pilihan: [{ nilai: "ada", label: "Punya paket" }] }]
+            : []),
         ]}
         jumlah={baris.length}
         total={total}
@@ -88,7 +98,7 @@ export default async function DaftarKlienPage({
                 <Th>Nama</Th>
                 <Th>PADMA ID</Th>
                 <Th>Fase</Th>
-                <Th>Paket</Th>
+                {PAKET_TAMPIL && <Th>Paket</Th>}
                 <Th>Sesi</Th>
                 <Th>Aktivasi</Th>
               </tr>
@@ -106,7 +116,7 @@ export default async function DaftarKlienPage({
                   </Td>
                   <Td className="font-mono text-[12.5px]">{k.padmaId}</Td>
                   <Td>{k.namaFase}</Td>
-                  <Td>{k.paketAktif ?? "—"}</Td>
+                  {PAKET_TAMPIL && <Td>{k.paketAktif ?? "—"}</Td>}
                   <Td className="font-mono text-[12.5px]">{k.sesiSelesai}</Td>
                   <Td>
                     <PillAktivasi aktif={k.aktif} />

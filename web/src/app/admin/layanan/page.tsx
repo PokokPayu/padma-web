@@ -1,11 +1,12 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
 import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
 import { AksiLayanan, AksiPaket, FormLayananBaru, type PilihanFase } from "./form-layanan";
 import { BlokVarian } from "./form-varian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
-export const metadata = { title: "Layanan & Paket" };
+export const metadata = { title: PAKET_TAMPIL ? "Layanan & Paket" : "Layanan" };
 
 /**
  * Pill ketersediaan.
@@ -43,7 +44,9 @@ export default async function LayananPage() {
     <main>
       <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-serif text-2xl text-night">Layanan &amp; Paket</h1>
+          <h1 className="font-serif text-2xl text-night">
+            {PAKET_TAMPIL ? "Layanan & Paket" : "Layanan"}
+          </h1>
           <p className="mt-1 max-w-2xl text-[13px] text-ink-soft">
             Katalog yang dibaca beranda dan wizard pengajuan jadwal klien.
             Tidak ada satu pun angka harga di sini — tarif adalah wilayah Owner.
@@ -53,13 +56,27 @@ export default async function LayananPage() {
       </header>
 
       <p className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] text-ink">
-        ✦ Layanan, paket, dan varian tidak pernah dihapus, hanya{" "}
-        <b>dinonaktifkan</b>. Yang nonaktif berhenti muncul di beranda dan
-        berhenti ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b>{" "}
-        menempel pada riwayat sesi klien yang sudah berjalan. Menghapusnya
-        justru akan memutus riwayat itu. Satu layanan tidak bisa kehilangan
-        varian aktif terakhirnya — aktifkan varian lain dulu sebelum
-        menonaktifkan yang sedang dipakai.
+        {PAKET_TAMPIL ? (
+          <>
+            ✦ Layanan, paket, dan varian tidak pernah dihapus, hanya{" "}
+            <b>dinonaktifkan</b>. Yang nonaktif berhenti muncul di beranda dan
+            berhenti ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b>{" "}
+            menempel pada riwayat sesi klien yang sudah berjalan. Menghapusnya
+            justru akan memutus riwayat itu. Satu layanan tidak bisa kehilangan
+            varian aktif terakhirnya — aktifkan varian lain dulu sebelum
+            menonaktifkan yang sedang dipakai.
+          </>
+        ) : (
+          <>
+            ✦ Layanan dan varian tidak pernah dihapus, hanya{" "}
+            <b>dinonaktifkan</b>. Yang nonaktif berhenti muncul di beranda dan
+            berhenti ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b>{" "}
+            menempel pada riwayat sesi klien yang sudah berjalan. Menghapusnya
+            justru akan memutus riwayat itu. Satu layanan tidak bisa kehilangan
+            varian aktif terakhirnya — aktifkan varian lain dulu sebelum
+            menonaktifkan yang sedang dipakai.
+          </>
+        )}
       </p>
 
       {katalog.map((f) => (
@@ -111,7 +128,7 @@ export default async function LayananPage() {
 
                   <BlokVarian serviceId={l.id} namaLayanan={l.nama} varian={l.varian} />
 
-                  {l.paket.length > 0 && (
+                  {PAKET_TAMPIL && l.paket.length > 0 && (
                     <ul className="mt-3 grid gap-2 border-t border-black/5 pt-3">
                       {l.paket.map((p) => (
                         <li

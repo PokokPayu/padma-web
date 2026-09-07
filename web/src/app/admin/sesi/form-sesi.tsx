@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { jadwalkanSesi } from "./aksi";
 import { JENJANG_SAH } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
@@ -299,13 +300,21 @@ export function FormJadwalSesi({
         )}
       </div>
 
-      <label className="mt-3 flex items-start gap-2 text-[12.5px] text-ink">
-        <input name="pakai_paket" type="checkbox" className="mt-0.5" />
-        <span>
-          Hitung ke paket aktif klien (bila ada). Paketnya ditentukan dari klien
-          yang dipilih — sesi lepas bila klien itu belum punya paket berjalan.
-        </span>
-      </label>
+      {/* GERBANG SAKLAR (K11): checkbox dicabut sepenuhnya dari layar, bukan
+          disembunyikan lewat CSS — namanya (`pakai_paket`) tidak boleh
+          sampai ke formData sama sekali selagi saklar mati. `jadwalkanSesi`
+          (aksi.ts) sendiri tidak disentuh: field yang tidak pernah dikirim
+          form dibaca sebagai "tidak dicentang", persis seperti checkbox
+          biasa yang kosong. */}
+      {PAKET_TAMPIL && (
+        <label className="mt-3 flex items-start gap-2 text-[12.5px] text-ink">
+          <input name="pakai_paket" type="checkbox" className="mt-0.5" />
+          <span>
+            Hitung ke paket aktif klien (bila ada). Paketnya ditentukan dari klien
+            yang dipilih — sesi lepas bila klien itu belum punya paket berjalan.
+          </span>
+        </label>
+      )}
 
       {kosong && (
         <p className="mt-3 text-[12.5px] font-semibold text-clay">

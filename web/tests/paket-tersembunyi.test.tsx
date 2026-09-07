@@ -17,6 +17,7 @@
  * persis seperti di server.
  */
 import { describe, it, expect, beforeAll, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 
@@ -101,5 +102,69 @@ describe("saklar paket: gerbang data staf", () => {
     const { daftarTagihanAdmin } = await import("@/lib/admin/tagihan");
     const daftar = await daftarTagihanAdmin();
     expect(daftar.some((t) => t.jenis === "paket")).toBe(false);
+  });
+});
+
+/**
+ * Sapuan teks & kontrol (Task 3). Berbeda dari dua `describe` di atas: yang
+ * dijaga di sini bukan jalur DATA (sudah tuntas Task 1 & 2), melainkan JSX
+ * yang menyebut "paket" secara harfiah — judul halaman, label kolom,
+ * saringan, checkbox, dan teks pemasaran — yang tidak tersentuh gerbang data
+ * sama sekali karena tidak pernah membaca `PAKET_TAMPIL` sendiri.
+ *
+ * Sesi admin dipasang ulang lewat `beforeAll` MILIK BLOK INI (bukan menumpang
+ * punya "gerbang data staf" di atas) — mengikuti tepat pola yang sudah
+ * dipakai berkas ini, dan supaya blok ini tetap benar berdiri sendiri bila
+ * urutan blok lain berubah.
+ */
+describe("saklar paket: tidak ada kata 'paket' di layar", () => {
+  beforeAll(async () => {
+    ref.klien = await signInAs("admin@padma.test");
+  });
+
+  it("teaser Passport di landing tidak menyebut paket", async () => {
+    const { PassportTeaser } = await import("@/app/_landing/passport-teaser");
+    expect(renderToStaticMarkup(<PassportTeaser />)).not.toMatch(/paket/i);
+  });
+
+  it("halaman /admin/klien tidak menyebut paket, dan saringan 'punya paket' tidak lagi bisa dicapai dari layar", async () => {
+    const { default: HalamanKlien } = await import("@/app/admin/klien/page");
+    const m = renderToStaticMarkup(
+      await HalamanKlien({ searchParams: Promise.resolve({}) }),
+    );
+    expect(m).not.toMatch(/paket/i);
+    // R6 (keputusan pengontrol): tidak cukup kolomnya hilang — chip saringan
+    // yang menaut ke `?paket=ada` (lihat bilah-daftar.tsx) wajib juga tidak
+    // lagi punya jalan dari layar, karena chip itu sendiri sudah cukup untuk
+    // mengetahui SIAPA yang berpaket, terlepas dari kolomnya tampil atau
+    // tidak. Logika saringan di `klien.ts` sendiri TIDAK dibongkar (masih
+    // menerima `saring.paket === "ada"` bila dipanggil langsung) — yang
+    // dicabut cuma jalan menuju kontrolnya di layar.
+    expect(m).not.toContain("paket=ada");
+  });
+
+  it("halaman /admin/layanan tidak menyebut paket", async () => {
+    const { default: HalamanLayanan } = await import("@/app/admin/layanan/page");
+    expect(renderToStaticMarkup(await HalamanLayanan())).not.toMatch(/paket/i);
+  });
+
+  it("halaman /admin/bayar tidak menyebut paket", async () => {
+    const { default: HalamanBayar } = await import("@/app/admin/bayar/page");
+    expect(renderToStaticMarkup(await HalamanBayar())).not.toMatch(/paket/i);
+  });
+
+  it("halaman /admin/sesi tidak menyebut paket", async () => {
+    // Formulir "Jadwalkan sesi" (form-sesi.tsx) dimulai TERTUTUP, jadi checkbox
+    // "Hitung ke paket aktif" di dalamnya tidak akan pernah muncul di render
+    // SSR awal ini terlepas dari saklarnya — itu bukan yang dibuktikan test
+    // ini. Yang dibuktikan: tidak ada satu pun teks tetap di halaman yang
+    // menyebut "paket" pada keadaan awal yang dilihat setiap admin.
+    const { default: HalamanSesi } = await import("@/app/admin/sesi/page");
+    expect(renderToStaticMarkup(await HalamanSesi())).not.toMatch(/paket/i);
+  });
+
+  it("halaman /admin (dashboard) tidak menyebut paket", async () => {
+    const { default: HalamanAdmin } = await import("@/app/admin/page");
+    expect(renderToStaticMarkup(await HalamanAdmin())).not.toMatch(/paket/i);
   });
 });

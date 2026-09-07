@@ -563,16 +563,22 @@ describe("halaman daftar klien (/admin/klien)", () => {
     expect(markup).toContain("Prekonsepsi / Promil");
   });
 
-  it("kolom paket selalu '—' — gerbang K11 (Task 2) memaksa paketAktif null", () => {
-    // Sebelum gerbang: baris ini menegaskan "Sankalpa Prima · 8 sesi" untuk
-    // Ananda (yang benar-benar memegang paket itu di seed). Dengan
-    // `PAKET_TAMPIL = false`, `ambilDaftarKlien()` memulangkan
-    // `paketAktif: null` untuk SETIAP klien — termasuk Ananda (gerbangnya
-    // sendiri diuji tests/paket-tersembunyi.test.tsx) — sehingga kolom ini
-    // sekarang selalu jatuh ke placeholder yang sama dengan kolom Fase yang
-    // kosong, bukan lagi dibedakan per klien.
+  it("kolom Paket tidak lagi dirender sama sekali — gerbang data (Task 2) + kontrol (Task 3)", () => {
+    // Sejarah pagar ini bertingkat:
+    //  - Sebelum Task 2: baris ini menegaskan "Sankalpa Prima · 8 sesi" untuk
+    //    Ananda (yang benar-benar memegang paket itu di seed).
+    //  - Sesudah Task 2, sebelum Task 3: `ambilDaftarKlien()` memaksa
+    //    `paketAktif: null` untuk SETIAP klien, jadi kolomnya TETAP ADA tapi
+    //    selalu berisi "—" — baris ini dulu menegaskan itu lewat
+    //    `toMatch(/>—<\/td>/)`.
+    //  - Task 3 mencabut KONTROLNYA juga (`<Th>`/`<Td>` dibungkus
+    //    `PAKET_TAMPIL &&`, lihat page.tsx), jaminan yang lebih kuat: bukan
+    //    cuma isinya kosong, tapi kolomnya sendiri tidak pernah dirender.
+    //    `/>—<\/td>/` sudah tidak lagi membuktikan apa pun spesifik (kolom
+    //    lain pun bisa kebetulan berisi "—"), jadi diganti pemeriksaan
+    //    ketiadaan header "Paket" secara langsung.
     expect(markup).not.toContain("Sankalpa Prima");
-    expect(markup).toMatch(/>—<\/td>/);
+    expect(markup).not.toContain(">Paket<");
   });
 
   it("menampilkan jumlah sesi selesai apa adanya dari basis data", async () => {

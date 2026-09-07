@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { daftarTagihanAdmin } from "@/lib/admin/tagihan";
 import { TabelBayar } from "./tabel-bayar";
 
@@ -37,8 +38,15 @@ export default async function BayarPage() {
       <p className="mt-2 text-[12px] text-ink-soft">
         Item yang sudah <b>Lunas</b> tidak bisa diputar mundur dari sini —
         koreksi setelah rekap pekan berjalan adalah rekonsiliasi, bukan satu
-        klik. Sesi yang tercakup paket tidak muncul sendiri: status bayarnya
-        mengikuti paketnya.
+        klik.
+        {/* Kalimat "Sesi yang tercakup paket tidak muncul sendiri..."
+            DIHAPUS SELURUHNYA saat saklar mati — bukan diganti kata lain.
+            Baris paket sudah digerbang (daftarTagihanAdmin, Task 2), jadi
+            perilaku yang dijelaskannya sudah tidak bisa diamati siapa pun;
+            menerangkan hal yang tak terlihat hanya membingungkan. */}
+        {PAKET_TAMPIL && (
+          <> Sesi yang tercakup paket tidak muncul sendiri: status bayarnya mengikuti paketnya.</>
+        )}
       </p>
     </main>
   );

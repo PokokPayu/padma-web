@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { selesaikanSesi, tetapkanJenjang } from "./aksi";
 import { JENJANG_SAH, LABEL_STATUS_SESI, type StatusSesi } from "./status";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
@@ -71,7 +72,15 @@ export function BarisSesi({ sesi }: { sesi: BarisSesiTampil }) {
           {sesi.namaLayanan}
           <span className="mt-0.5 block text-[11.5px] text-ink-soft">
             {sesi.tanggal}
-            {sesi.dalamPaket ? " · paket" : ""}
+            {/* GERBANG SAKLAR (K11, ditemukan Task 3 lewat test render
+                /admin/sesi): tidak ditemukan di brief awal berkas ini, tapi
+                sesi lama yang sungguh `client_package_id`-nya terisi (mis.
+                seed Ananda) bocor lewat literal " · paket" ini terlepas dari
+                empat gerbang data Task 1/2 — page.tsx sesi membaca
+                `client_package_id` LANGSUNG dari tabel `sessions`, bukan
+                lewat salah satu fungsi yang digerbang. `dalamPaket` sendiri
+                (data) TIDAK diubah — hanya tampilannya yang dicabut. */}
+            {PAKET_TAMPIL && sesi.dalamPaket ? " · paket" : ""}
           </span>
         </td>
         <td className="p-4">
