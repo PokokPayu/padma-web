@@ -20,24 +20,18 @@
  *
  *  2. `FormJadwalSesi` (form-sesi.tsx), `FormMitra` (form-mitra.tsx), dan
  *     `SesiPage` (`app/admin/sesi/page.tsx`) jatuh ke PEMINDAIAN SUMBER
- *     seperti diizinkan Ruling 22, untuk TIGA alasan berbeda yang kebetulan
+ *     seperti diizinkan Ruling 22, untuk DUA alasan berbeda yang kebetulan
  *     berujung pada solusi yang sama:
- *       - `FormJadwalSesi` mulai TERTUTUP (`useState(false)`) — pola yang
- *         disengaja supaya admin tidak membuat baris ganda (lihat komentar
- *         di berkasnya). Rendernya statis (`renderToStaticMarkup`) tidak
- *         menjalankan efek atau event, sehingga tidak ada cara membuka
- *         formulirnya tanpa jsdom + testing-library — dua dependensi yang
- *         tidak ada di proyek ini dan bukan bagian tugas ini untuk
- *         ditambahkan hanya demi satu assertion.
- *       - `FormMitra` (sejak Task 7 — bilah daftar & panel geser) TIDAK LAGI
- *         bergerbang `useState(false)` sendiri: `page.tsx` yang memutuskan
- *         apakah `PanelGeser` dirender sama sekali, lewat URL (`?ubah=`).
- *         Ia tetap jatuh ke pemindaian sumber karena alasan LAIN:
- *         `FormMitra` memanggil `useRouter()` (untuk `router.push(hrefTutup)`
- *         sesudah submit berhasil), dan hook itu melempar di luar konteks
- *         App Router Next — `renderToStaticMarkup` polos tidak
- *         menyediakannya, beda dari `FormEditKlien` yang tidak memanggil
- *         hook navigasi apa pun (dibuktikan manual: merender `FormMitra`
+ *       - `FormJadwalSesi` DAN `FormMitra` (sejak Task 3/Task 7 — bilah
+ *         daftar & panel geser) TIDAK LAGI bergerbang `useState(false)`
+ *         sendiri: `page.tsx` masing-masing yang memutuskan apakah
+ *         `PanelGeser` dirender sama sekali, lewat URL (`?ubah=`). Keduanya
+ *         tetap jatuh ke pemindaian sumber karena alasan LAIN: keduanya
+ *         memanggil `useRouter()` (untuk `router.push(hrefTutup)` sesudah
+ *         submit berhasil), dan hook itu melempar di luar konteks App
+ *         Router Next — `renderToStaticMarkup` polos tidak menyediakannya,
+ *         beda dari `FormEditKlien` yang tidak memanggil hook navigasi apa
+ *         pun (dibuktikan manual: merender salah satu dari keduanya
  *         langsung tanpa mock router melempar galat, bukan markup).
  *       - `SesiPage` (Ruling — gelombang perbaikan akhir) SEBALIKNYA memuat
  *         atribusinya TIDAK bergerbang apa pun — ia tampil begitu halaman
@@ -46,10 +40,11 @@
  *         `sessions`/`clients`/dst lewat Supabase, dan `renderToStaticMarkup`
  *         atasnya menuntut memalsukan seluruh rantai data (pola berat yang
  *         dipakai tests/admin-shell.test.ts, bukan untuk satu assertion
- *         atribusi). Baris "Jenjang: …" yang dirender `BarisSesi`
- *         (form-selesai.tsx) untuk SETIAP sesi adalah hasil geocoding yang
- *         dimaksud — atribusinya sendiri sengaja hidup SEKALI di `page.tsx`,
- *         di atas tabel, bukan diulang di tiap baris.
+ *         atribusi). Kolom "Jenjang" yang dirender untuk SETIAP baris sesi
+ *         (di dalam `<Tabel>` pada `page.tsx` sendiri, sejak Task 3 — bilah
+ *         daftar & panel geser) adalah hasil geocoding yang dimaksud —
+ *         atribusinya sendiri sengaja hidup SEKALI di `page.tsx`, di atas
+ *         tabel, bukan diulang di tiap baris.
  *     Regexnya tetap menuntut atribusi berada di dalam TEKS JSX (di antara
  *     `>` dan `<`, sesudah komentar disingkirkan lebih dulu), bukan di
  *     komentar ataupun string sembarang, untuk KETIGA berkas itu.
@@ -123,14 +118,14 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
   //
   // Ketiga berkas di bawah jatuh ke pemindaian sumber untuk dua alasan
   // berbeda (rincian lengkap di komentar kepala berkas ini): `FormJadwalSesi`
-  // mulai TERTUTUP (`useState(false)`) sehingga blok atribusinya tidak
-  // pernah muncul di markup statis tanpa jsdom+testing-library (tidak ada
-  // di proyek ini); `FormMitra` sudah TIDAK bergerbang begitu sejak Task 7
-  // (page.tsx yang memutuskan lewat `?ubah=`), tapi memanggil `useRouter()`
-  // yang melempar di luar konteks App Router Next saat dirender polos.
-  // `SesiPage` punya alasan LAIN lagi, dijelaskan di bawahnya sendiri.
-  // form-klien.tsx tetap dibuktikan lewat render sungguhan di atas karena
-  // tidak satu pun dari kedua alasan ini berlaku untuknya.
+  // DAN `FormMitra` sama-sama TIDAK LAGI bergerbang `useState(false)` sendiri
+  // sejak Task 3/Task 7 (page.tsx masing-masing yang memutuskan lewat
+  // `?ubah=`), tapi keduanya memanggil `useRouter()` — yang melempar di luar
+  // konteks App Router Next saat dirender polos, sehingga tetap jatuh ke
+  // pemindaian sumber. `SesiPage` punya alasan LAIN lagi, dijelaskan di
+  // bawahnya sendiri. form-klien.tsx tetap dibuktikan lewat render
+  // sungguhan di atas karena tidak satu pun dari kedua alasan ini berlaku
+  // untuknya.
 
   it.each([
     "src/app/admin/sesi/form-sesi.tsx",
