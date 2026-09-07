@@ -167,9 +167,22 @@ describe("RULING A — Aksi varian & paket sudah final, tanpa sel kosong Tugas 9
 // "detail layanan — guarantee yang pindah dari Tugas 7" di bawah, ditulis
 // Tugas 8. Mengulanginya di sini akan menguji markup yang sama dua kali dengan
 // nama berbeda, bukan menambah jaminan baru — defect brief, dicatat di laporan
-// Tugas 9, bukan diperbaiki diam-diam. Hanya TIGA uji baru yang benar-benar
-// menambah cakupan (isi panel, pagar layanan lain, jalan menutup) yang tersisa
-// di sini.
+// Tugas 9, bukan diperbaiki diam-diam.
+//
+// FIX ROUND 1 (review Tugas 9): dua celah ditemukan di sini.
+//   1. Tidak ada uji yang benar-benar merender JALUR UBAH (hanya ?ubah=baru
+//      dan id yang tidak pernah ada). Uji baris data varian sungguhan
+//      dipindah ke describe "guarantee yang pindah dari Tugas 7" di bawah —
+//      di sanalah satu-satunya varian dengan medan TERISI (durasi 45 menit)
+//      sudah difixture-kan, jadi "pre-filled, bukan kosong" punya sesuatu
+//      nyata untuk dibandingkan.
+//   2. Uji "id varian milik layanan LAIN" di bawah dulu memakai UUID nol —
+//      itu menguji "id yang tidak pernah ada", BUKAN "id nyata milik layanan
+//      lain". Keduanya kedengarannya sama tapi membuktikan hal berbeda: UUID
+//      nol tidak bisa membedakan `layanan.varian.find(...)` (page.tsx) yang
+//      benar dari bug hipotetis yang mencari daftar varian GLOBAL, karena
+//      keduanya sama-sama tidak menemukan apa pun. Sekarang dipecah jadi dua
+//      uji dengan nama yang menyebut apa yang sebenarnya masing-masing buktikan.
 describe("panel geser varian di dalam halaman detail layanan", () => {
   it("?ubah=baru membuka panel geser berisi formulir varian", async () => {
     const m = await markup(LAYANAN.id, { ubah: "baru" });
@@ -178,10 +191,28 @@ describe("panel geser varian di dalam halaman detail layanan", () => {
     expect(m).toContain('name="durasi_menit"');
   });
 
-  it("id varian milik layanan LAIN tidak membuka panel", async () => {
-    // Pagar nyata, bukan kosmetik: panel yang terbuka untuk varian layanan
-    // lain akan menyimpan perubahan ke baris yang tidak sedang dilihat admin.
+  it("id varian yang TIDAK PERNAH ADA (mis. sudah terhapus atau salah ketik) tidak membuka panel", async () => {
+    // UUID nol tidak cocok dengan satu pun varian di basis data manapun —
+    // pagar ini membuktikan jalur "id tidak ditemukan". Untuk pagar
+    // "id nyata tapi milik layanan lain", lihat uji berikutnya.
     const m = await markup(LAYANAN.id, { ubah: "00000000-0000-0000-0000-000000000000" });
+    expect(m).not.toContain('role="dialog"');
+  });
+
+  it("id varian NYATA tapi milik layanan LAIN tidak membuka panel", async () => {
+    // Pagar sungguhan, bukan kosmetik: id-nya di sini BENAR ADA di basis
+    // data, hanya menunjuk `service_id` selain `LAYANAN.id` — satu-satunya
+    // cara membuktikan `page.tsx` mencari DI DALAM `layanan.varian` (per
+    // layanan), bukan di daftar varian global seluruh katalog. Panel yang
+    // salah terbuka di sini akan menyimpan perubahan ke baris yang tidak
+    // sedang dilihat admin.
+    const { data: varianLayananLain } = await admin
+      .from("service_variants")
+      .select("id")
+      .neq("service_id", LAYANAN.id)
+      .limit(1)
+      .single();
+    const m = await markup(LAYANAN.id, { ubah: varianLayananLain!.id });
     expect(m).not.toContain('role="dialog"');
   });
 
@@ -291,5 +322,34 @@ describe("detail layanan — guarantee yang pindah dari Tugas 7", () => {
     expect(m).toMatch(
       new RegExp(`href="/admin/layanan/${SVC_DETAIL}\\?ubah=${VARIAN_NONAKTIF_DETAIL}"`),
     );
+  });
+
+  // FIX ROUND 1 (review Tugas 9): sebelumnya TIDAK ADA uji yang benar-benar
+  // merender jalur UBAH (semua uji "panel geser varian" di atas hanya
+  // memakai ?ubah=baru atau id yang tidak pernah ada). Beda dari `BarisVarian`
+  // lama (bergerbang `useState`, betul-betul tidak bisa diuji tanpa jsdom),
+  // desain baru yang terbuka lewat URL ini SEPENUHNYA bisa diuji dengan
+  // `renderToStaticMarkup` — jadi jaminan "id ubah membawa varian yang benar,
+  // bukan formulir kosong" harus benar-benar dibuktikan, bukan diasumsikan
+  // dari membaca kode. `VARIAN_NONAKTIF_DETAIL` dipakai di sini karena ia
+  // satu-satunya varian di fixture berkas ini yang punya medan TERISI
+  // (durasi 45 menit) — varian baku (`varianBakuDetail`) berlabel kosong
+  // dengan durasi NULL, jadi tidak bisa membuktikan "pre-filled" karena
+  // formulir kosong akan tampak identik.
+  it("Tugas 9: ?ubah=<id varian nyata> membuka panel BERISI data varian, bukan formulir kosong", async () => {
+    const m = await markup(SVC_DETAIL, { ubah: VARIAN_NONAKTIF_DETAIL });
+    expect(m).toContain('role="dialog"');
+    // Medan `varian` membawa id yang BENAR — inilah bukti jalur ubah
+    // menyeberang batas server dengan id yang tepat (lihat `perbaruiVarian`
+    // di aksi.ts, yang membaca medan `varian`, bukan `service_id`).
+    expect(m).toContain(`name="varian" value="${VARIAN_NONAKTIF_DETAIL}"`);
+    // Medan create-only TIDAK boleh muncul di formulir ubah — `buatVarian`
+    // membaca `service_id`, `perbaruiVarian` tidak pernah membacanya sama
+    // sekali, dan formulir yang tetap menawarkannya menyesatkan.
+    expect(m).not.toContain('name="service_id"');
+    // Sekurang-kurangnya satu medan terisi DARI varian, bukan kosong: durasi
+    // 45 menit adalah fixture `beforeAll` di atas, bukan nilai yang mungkin
+    // muncul kebetulan dari formulir kosong (yang merender `value=""`).
+    expect(m).toMatch(/name="durasi_menit"[^>]*value="45"/);
   });
 });
