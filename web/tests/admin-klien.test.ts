@@ -85,6 +85,13 @@ const sumberAksi = baca("src/app/admin/klien/aksi.ts");
 const sumberDaftar = baca("src/app/admin/klien/page.tsx");
 const sumberForm = baca("src/app/admin/klien/form-klien.tsx");
 const sumberDetail = baca("src/app/admin/klien/[id]/page.tsx");
+const sumberLib = baca("src/lib/admin/klien.ts");
+// Rute berdiri sendiri (Task 9) — TIDAK ada di daftar `sumber*` sebelum Fix
+// Round 1. `tests/money-firewall-struktural.test.ts` TIDAK menutupinya: uji
+// itu murni memeriksa `information_schema.columns` di basis data, tidak
+// pernah membaca kode sumber sama sekali. Tanpa baris ini, berkas ini lolos
+// tanpa satu pagar sumber pun.
+const sumberBaru = baca("src/app/admin/klien/baru/page.tsx");
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
@@ -538,24 +545,31 @@ describe("halaman daftar klien (/admin/klien)", () => {
 
   beforeAll(async () => {
     ref.sesi = sesiAdmin;
-    markup = renderToStaticMarkup(await DaftarKlienPage());
+    // Halaman kini menerima `searchParams` (Task 9) — `{}` mereproduksi
+    // perilaku lama "hal 1 tanpa saringan".
+    markup = renderToStaticMarkup(await DaftarKlienPage({ searchParams: Promise.resolve({}) }));
   });
 
-  it("menampilkan PADMA ID, nama, dan email tiap klien", () => {
+  it("menampilkan PADMA ID dan nama tiap klien", () => {
+    // Sejak Task 9 (pola B) email TIDAK lagi duplikat di daftar — ia hanya
+    // hidup di halaman detail (`/admin/klien/<id>`) yang kini ditaut
+    // langsung dari baris nama, jadi tidak ada lagi alasan menampilkannya
+    // dua kali.
     expect(markup).toContain("PAD-UJI-0005");
     expect(markup).toContain("Uji Klien Fixture");
-    expect(markup).toContain(EMAIL_FIXTURE);
   });
 
   it("menampilkan label fase yang bisa dibaca manusia, bukan id mentah", () => {
     expect(markup).toContain("Prekonsepsi / Promil");
   });
 
-  it("menampilkan paket aktif sebagai 'nama · N sesi', dan 'Sesi lepas' bila tidak ada", () => {
+  it("menampilkan paket aktif sebagai 'nama · N sesi', dan '—' bila tidak ada", () => {
     // Ananda memegang paket Sankalpa Prima 8 sesi di seed.
     expect(markup).toContain("Sankalpa Prima · 8 sesi");
-    // Klien fixture tidak punya paket sama sekali.
-    expect(markup).toContain("Sesi lepas");
+    // Klien fixture tidak punya paket sama sekali — placeholder daftar
+    // (Task 9) memakai em dash yang sama dengan kolom Fase, bukan lagi
+    // "Sesi lepas".
+    expect(markup).toMatch(/>—<\/td>/);
   });
 
   it("menampilkan jumlah sesi selesai apa adanya dari basis data", async () => {
@@ -600,7 +614,7 @@ describe("halaman daftar klien (/admin/klien)", () => {
 
   it("tidak ada nominal uang di daftar klien (money firewall)", () => {
     expect(markup).not.toMatch(/Rp\s?\d/);
-    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi]) {
+    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi, sumberLib, sumberBaru]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
@@ -663,6 +677,66 @@ describe("halaman detail klien (/admin/klien/[id])", () => {
 });
 
 // ---------------------------------------------------------------------------
+// PAGAR IDENTITAS — lib/admin/klien.ts
+// ---------------------------------------------------------------------------
+//
+// Sama seperti pagar `admin-mitra.test.ts` ("pencocokan identitas memakai
+// operator setara, tidak pernah pola"): tiga bentuk penulisan yang bisa
+// menyelundupkan pencocokan POLA ke kolom identitas —
+//   1. bentuk metode      — `.ilike("id", ...)` / `.like("partner_id", ...)`
+//   2. bentuk string `.or(...)` — `"id.ilike.%x%"`
+//   3. bentuk `.filter(kolom, operator, nilai)` — `.filter("id","ilike",…)`
+// — semuanya berbahaya karena `.eq("id", x)` yang suatu hari diam-diam
+// menjadi pola akan meloloskan baris milik orang lain lewat sebuah AWALAN,
+// tanpa satu galat pun.
+//
+// `lib/admin/klien.ts` PERSIS memakai bentuk #2 — `q.or(\`nama.ilike.%x%,
+// padma_id.ilike.%x%\`)` — untuk mencari lewat nama DAN PADMA ID sekaligus.
+// Pola mitra yang hanya memeriksa kolom TEPAT SETELAH tanda kutip pembuka
+// tidak cukup di sini: `padma_id` muncul SETELAH KOMA di tengah string
+// `.or()`, bukan di awalnya. Pola di bawah diperluas supaya kolom identitas
+// yang muncul setelah koma ikut tertangkap — persis bentuk yang dipakai
+// modul ini.
+describe("pagar identitas — lib/admin/klien.ts (kolom identitas TIDAK pernah dicocokkan dengan pola, KECUALI padma_id)", () => {
+  const polaMetodeIdentitas = /\.(?:ilike|like)\(\s*['"`](id|\w*_id)['"`]/;
+  const polaFilterIdentitas =
+    /\.filter\(\s*['"`](id|\w*_id)['"`]\s*,\s*['"`](?:ilike|like)['"`]/;
+  // `[,'"`]` di depan, bukan hanya `['"`]`: menangkap kolom identitas yang
+  // muncul di TENGAH string `.or(...)` (setelah koma), bukan cuma yang
+  // pertama tepat setelah tanda kutip pembuka.
+  const polaOrIdentitas = /[,'"`](id|\w*_id)\.(?:ilike|like)\./g;
+
+  it("bentuk metode .ilike(\"id\"|\"*_id\", …) tidak dipakai sama sekali", () => {
+    expect(sumberLib).not.toMatch(polaMetodeIdentitas);
+  });
+
+  it('bentuk .filter("id"|"*_id", "ilike"|"like", …) tidak dipakai sama sekali', () => {
+    expect(sumberLib).not.toMatch(polaFilterIdentitas);
+  });
+
+  it("bentuk string .or(...) HANYA mengizinkan padma_id — kolom identitas lain ditolak", () => {
+    const kolom = [...sumberLib.matchAll(polaOrIdentitas)].map((m) => m[1]);
+
+    // Pagar bergigi: `ambilDaftarKlien` SUNGGUHAN memang mencocokkan
+    // `padma_id` dengan pola. Bila daftar ini kosong, dua `expect` di bawah
+    // lolos HAMPA — pagar tidak pernah benar-benar menyala.
+    expect(kolom.length).toBeGreaterThan(0);
+
+    // Ruling: `padma_id` DIKECUALIKAN, dan pengecualiannya bukan sekadar
+    // menyebut namanya. `grep -rn '\.eq("padma_id"' src/` memulangkan NOL
+    // hasil — kolom ini ditulis SEKALI saat klien dibuat (`buatKlien`) lalu
+    // hanya ditampilkan; ia tidak pernah menjadi kunci pembanding identitas
+    // yang menjaga baris siapa yang boleh dibaca. Mencocokkannya dengan pola
+    // karena itu tidak bisa meloloskan baris milik orang lain ke dalam
+    // sebuah perbandingan identitas — beda dari `id`/`user_id`/`client_id`,
+    // yang memang dipakai begitu. Dan PADMA ID justru DIRANCANG untuk
+    // dicari: itulah yang dibacakan klien lewat telepon saat admin tidak
+    // ingat namanya.
+    for (const k of kolom) expect(k).toBe("padma_id");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bentuk berkas server action
 // ---------------------------------------------------------------------------
 
@@ -689,17 +763,26 @@ describe("berkas server action klien", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib, sumberBaru]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
     expect(sumberAksi).toContain("createServerSupabase");
-    expect(sumberDaftar).toContain("createServerSupabase");
+    // `sumberDaftar` (page.tsx) TIDAK lagi menyentuh Supabase secara langsung
+    // sejak Task 9 — pembacaannya dipusatkan di `ambilDaftarKlien` (`sumberLib`,
+    // diperiksa di bawah), jadi guard "sesi pengguna" untuk halaman ini
+    // ditegakkan secara transitif, bukan lewat string literal di berkasnya
+    // sendiri.
     expect(sumberDetail).toContain("createServerSupabase");
+    expect(sumberLib).toContain("createServerSupabase");
+    // `sumberBaru` (rute /baru, Task 9) mengambil `phases` langsung lewat
+    // sesi pengguna — beda dari `sumberDaftar`, ia BELUM didelegasikan ke
+    // lapisan lib manapun, jadi diperiksa literal di sini.
+    expect(sumberBaru).toContain("createServerSupabase");
   });
 
   it("tidak menuliskan PII klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib, sumberBaru]) {
       expect(sumber).not.toContain("console.");
     }
   });

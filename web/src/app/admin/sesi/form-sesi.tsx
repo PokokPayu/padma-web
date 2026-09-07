@@ -30,11 +30,14 @@ const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
 /**
  * Formulir "Jadwalkan sesi" — jalur langsung, tanpa antrean permintaan.
  *
- * Sengaja dimulai TERTUTUP, mengikuti `FormKlienBaru`. Alasannya bukan sekadar
- * kerapian: layar pertama modul ini adalah DAFTAR sesi dan antrean permintaan
- * yang menunggu jawaban. Formulir yang selalu terbuka mendorong admin membuat
- * jadwal baru untuk permintaan yang sebenarnya tinggal dikonfirmasi — dan sesi
- * hasil jalur itu kehilangan tautan ke permintaan asalnya.
+ * Sengaja dimulai TERTUTUP — formulir ini masih duduk di HEADER daftar sesi
+ * (beda dari `FormKlienBaru`, yang sejak Task 9 pindah ke rute berdiri
+ * sendiri dan karena itu tidak lagi butuh gerbang buka/tutup sendiri).
+ * Alasannya bukan sekadar kerapian: layar pertama modul ini adalah DAFTAR
+ * sesi dan antrean permintaan yang menunggu jawaban. Formulir yang selalu
+ * terbuka mendorong admin membuat jadwal baru untuk permintaan yang
+ * sebenarnya tinggal dikonfirmasi — dan sesi hasil jalur itu kehilangan
+ * tautan ke permintaan asalnya.
  *
  * Yang tidak ada di sini juga penting: tidak ada medan status (sesi selalu
  * lahir `terjadwal`) dan tidak ada medan paket bebas. Centang paket hanyalah

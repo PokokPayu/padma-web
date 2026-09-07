@@ -85,7 +85,8 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
-| `/admin/klien` | Admin, Owner | Daftar klien + tambah klien (PADMA ID otomatis) & status aktivasi |
+| `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |
+| `/admin/klien/baru` | Admin, Owner | Formulir klien baru (PADMA ID otomatis) — halaman tersendiri, bukan formulir di header daftar |
 | `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp |
 | `/admin/sesi` | Admin, Owner | Antrean permintaan jadwal, jadwalkan sesi, tandai selesai + catatan bidan |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |

@@ -38,6 +38,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { PER_HAL } from "@/app/_shell/panel/daftar";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -75,6 +76,10 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/mitra",
+  // `PanelGeser` (Task 7) memakai `useRouter` untuk tombol Escape/overlay —
+  // `renderToStaticMarkup` tidak menjalankan efeknya, tapi pemanggilan
+  // `useRouter()` sendiri di badan komponen tetap butuh mock ini.
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const { simpanMitra, perbaruiMitra, aktifkanMitra, nonaktifkanMitra } =
@@ -496,7 +501,7 @@ describe("ambilDaftarMitra — sumber baris tabel kelola", () => {
     ref.sesi = sesiAdmin;
     await admin.from("partners").update({ aktif: false }).eq("id", MITRA_STATUS);
 
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     const nonaktif = daftar.find((m) => m.id === MITRA_STATUS);
     expect(nonaktif, "mitra nonaktif hilang dari halaman kelola").toBeDefined();
     expect(nonaktif!.aktif).toBe(false);
@@ -522,13 +527,13 @@ describe("ambilDaftarMitra — sumber baris tabel kelola", () => {
     ]);
     expect(semua).toBeGreaterThan(selesai ?? 0);
 
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     expect(daftar.find((m) => m.id === DEWI)!.sesiSelesai).toBe(selesai);
   });
 
   it("mitra tanpa sesi apa pun tercatat nol, bukan hilang dari daftar", async () => {
     ref.sesi = sesiAdmin;
-    const daftar = await ambilDaftarMitra();
+    const { baris: daftar } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     expect(daftar.find((m) => m.id === MITRA_EDIT)!.sesiSelesai).toBe(0);
   });
 });
@@ -620,6 +625,9 @@ describe("pagar basis data yang menopang modul ini", () => {
 
 describe("halaman daftar mitra (/admin/mitra)", () => {
   let markup = "";
+  // Panel dibuka lewat `?ubah=<id>` (Task 7) — dipakai HANYA oleh test
+  // "MENGAKTIFKAN" di bawah, yang butuh melihat isi formulir mitra nonaktif.
+  let markupPanelStatus = "";
   let sesiSelesaiSri = 0;
 
   beforeAll(async () => {
@@ -633,7 +641,12 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
       .eq("status", "selesai");
     sesiSelesaiSri = count ?? 0;
 
-    markup = renderToStaticMarkup(await MitraPage());
+    // Halaman kini menerima `searchParams` (Task 7) — `{}` mereproduksi
+    // perilaku lama "hal 1 tanpa saringan, panel tertutup".
+    markup = renderToStaticMarkup(await MitraPage({ searchParams: Promise.resolve({}) }));
+    markupPanelStatus = renderToStaticMarkup(
+      await MitraPage({ searchParams: Promise.resolve({ ubah: MITRA_STATUS }) }),
+    );
   });
 
   afterAll(async () => {
@@ -660,13 +673,14 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
 
   it("menawarkan jalan MENGAKTIFKAN kembali mitra yang nonaktif", () => {
     // Tanpa ini, satu klik salah menonaktifkan bidan selamanya dari panel.
-    expect(markup).toContain("Aktifkan");
+    // Sejak Task 7 tombol ini hidup DI DALAM panel geser (`?ubah=<id>`),
+    // bukan lagi di baris tabel — dibuka di sini lewat mitra yang sengaja
+    // dinonaktifkan (`MITRA_STATUS`) di `beforeAll`.
+    expect(markupPanelStatus).toContain("Aktifkan");
   });
 
   it("menyediakan jalan menambah mitra baru", () => {
     expect(markup).toContain("Mitra baru");
-    // Formulirnya dimulai tertutup (sama seperti modul klien), jadi medannya
-    // dijaga di sumber — bukan di markup keadaan awal.
     expect(sumberForm).toContain('name="nama"');
     expect(sumberForm).toContain('name="no_hp"');
   });
@@ -736,10 +750,54 @@ describe("berkas server action mitra", () => {
   });
 
   it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberLib]) {
+    // `sumberAksi` dan `sumberHalaman` TIDAK punya pencarian teks sama
+    // sekali, jadi larangan totalnya tetap tepat: `.ilike`/`.like` di sana
+    // hanya bisa berarti satu hal — identitas dicocokkan lewat pola.
+    for (const sumber of [sumberAksi, sumberHalaman]) {
       expect(sumber).not.toContain(".ilike(");
       expect(sumber).not.toContain(".like(");
     }
+
+    // `sumberLib` TIDAK dikecualikan total (Fix Round 1): yang berbahaya
+    // bukan `.ilike()` itu sendiri — `ambilDaftarMitra` sah memakainya untuk
+    // PENCARIAN NAMA — bahayanya adalah `.ilike()`/`.like()` dipakai pada
+    // kolom IDENTITAS (`id`, `*_id`). Bila `.eq("id", x)` suatu hari berubah
+    // jadi `.ilike("id", x)`, sebuah AWALAN bisa mencocokkan baris milik
+    // orang lain, dan tidak ada galat apa pun yang muncul.
+    //
+    // TIGA bentuk penulisan ditangkap (Fix Round 2 menambah bentuk #3 —
+    // ditemukan setelah #1 dan #2 lolos dari red-team putaran sebelumnya):
+    //  1. Bentuk metode — `.ilike("id", ...)` / `.like('partner_id', ...)`.
+    //  2. Bentuk string di dalam `.or(...)` — `"id.ilike.%x%"`. Bentuk ini
+    //     TIDAK memakai tanda kurung `(` dan lolos dari pemeriksaan naif
+    //     yang hanya mencari substring `.ilike(`. Modul KLIEN akan memakai
+    //     `.or()` semacam ini untuk mencari lewat nama DAN PADMA ID
+    //     sekaligus, jadi pagarnya harus sudah benar sebelum kode itu ada.
+    //  3. Bentuk `.filter(kolom, operator, nilai)` — API publik penuh
+    //     postgrest-js, mis. `.filter("id", "ilike", "%x%")`. Nama
+    //     operatornya di situ ARGUMEN STRING KETIGA, bukan nama metode,
+    //     jadi ia tidak mengandung `.ilike(` maupun `"id.ilike."` — lolos
+    //     dari kedua pola di atas sekaligus.
+    //
+    // Fix Round 1 (Temuan 3): pola #2 di bawah dulu mensyaratkan tanda kutip
+    // TEPAT sebelum nama kolom (`['"`]`), sehingga hanya menangkap kolom
+    // identitas bila ia adalah kondisi PERTAMA dalam string `.or(...)`. Modul
+    // Klien membuktikan lubangnya: `` `nama.ilike.%x%,padma_id.ilike.%x%` ``
+    // punya kolom identitas SETELAH KOMA, bukan tepat setelah kutip pembuka
+    // — pola lama tidak menyala untuk bentuk ini SAMA SEKALI (diverifikasi
+    // red-team dengan menembakkan `nama.ilike.%x%,partner_id.ilike.%x%` ke
+    // pola lama: tidak tertangkap). Kelas karakter di depan diperluas jadi
+    // `[,'"`]` supaya kolom identitas yang muncul di TENGAH string `.or()`
+    // — bukan cuma yang pertama — ikut tertangkap. Tidak ada pengecualian
+    // seperti `padma_id` di sini: `partners` tidak punya kolom ber-akhiran
+    // `_id` yang sah dicari lewat pola.
+    const polaMetodeIdentitas = /\.(?:ilike|like)\(\s*['"`](?:id|\w*_id)['"`]/;
+    const polaOrIdentitas = /[,'"`](?:id|\w*_id)\.(?:ilike|like)\./;
+    const polaFilterIdentitas =
+      /\.filter\(\s*['"`](?:id|\w*_id)['"`]\s*,\s*['"`](?:ilike|like)['"`]/;
+    expect(sumberLib).not.toMatch(polaMetodeIdentitas);
+    expect(sumberLib).not.toMatch(polaOrIdentitas);
+    expect(sumberLib).not.toMatch(polaFilterIdentitas);
   });
 
   it("tidak menuliskan data mitra ke log", () => {
@@ -752,5 +810,185 @@ describe("berkas server action mitra", () => {
     const layout = baca("src/app/admin/layout.tsx");
     expect([...layout.matchAll(/requireRole\(/g)]).toHaveLength(1);
     expect(baca("src/app/admin/page.tsx")).toContain('href="/admin/skrining"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6: ambilDaftarMitra menerima cari, saring, halaman
+// ---------------------------------------------------------------------------
+
+const UJI_AKTIF = Array.from({ length: 25 }, (_, i) =>
+  `33333333-3333-3333-3333-3333330000${String(i).padStart(2, "0")}`);
+const UJI_NONAKTIF = "33333333-3333-3333-3333-333333000099";
+
+// Fixture Fix Round 2 (Temuan 2): membuktikan kata cari diperlakukan
+// sebagai HURUF, bukan wildcard SQL. UJI_DECOY dibentuk supaya ia COCOK
+// dengan pola "50%_Off" BILA `%`/`_` dibaca sebagai wildcard Postgres
+// ("50" + apa pun + satu huruf + "Off"), tapi TIDAK mengandung substring
+// literal "50%_Off" — lihat uji "kata cari diperlakukan sebagai HURUF".
+const UJI_PERSEN = "33333333-3333-3333-3333-333333000098";
+const UJI_DECOY = "33333333-3333-3333-3333-333333000097";
+
+const UJI_SEMUA = [...UJI_AKTIF, UJI_NONAKTIF, UJI_PERSEN, UJI_DECOY];
+
+// Fixture Fix Round 2 (Temuan 1): salah satu mitra `UJI_AKTIF` menampung
+// LEBIH DARI `PER_HAL` sesi selesai. Baseline sebelumnya (seed hanya
+// menaruh 6 baris `sessions` berstatus selesai — lihat
+// `scripts/seed-users.ts`) berada jauh di bawah `PER_HAL`, sehingga
+// `LIMIT 25 OFFSET 0` atas 6 baris tetap memulangkan keenamnya — bug
+// ".range() ikut dipasang di query sesi" tidak akan PERNAH memerahkan uji
+// "jumlah sesi selesai TETAP benar" di bawah. `N_SESI_UJI` dibuat relatif
+// ke `PER_HAL` (bukan angka tetap) supaya jaminan ini tidak diam-diam
+// hilang bila `PER_HAL` kelak berubah.
+const UJI_MITRA_SESI = UJI_AKTIF[0];
+const N_SESI_UJI = PER_HAL + 5;
+const UJI_SESI = Array.from({ length: N_SESI_UJI }, (_, i) =>
+  `77777777-7777-7777-7777-7777770000${String(i).padStart(2, "0")}`);
+
+describe("daftar mitra — cari, saring, halaman", () => {
+  // beforeAll/afterAll DITARUH DI DALAM describe ini, bukan di puncak berkas
+  // seperti draf briefnya: keduanya jadi hook AKAR bila diletakkan di puncak,
+  // dan hook akar berjalan sebelum/sesudah SELURUH berkas — termasuk describe
+  // "ambilDaftarMitra — sumber baris tabel kelola" dan "halaman daftar mitra"
+  // di atas, yang mengasumsikan tidak lebih dari satu halaman mitra sehingga
+  // baris nonaktif satu-satunya (MITRA_STATUS) selalu ikut tampil. 25 mitra
+  // aktif tambahan akan mendorongnya ke halaman kedua dan memerahkan uji itu
+  // tanpa hubungan sama sekali dengan Task 6. Dilingkupi ke describe ini,
+  // fixture hanya hidup selama uji-uji di bawah ini berjalan.
+  beforeAll(async () => {
+    ref.sesi = sesiAdmin;
+    // Sesi dulu, baru mitranya: `sessions.partner_id` menahan penghapusan
+    // baris mitra selama sesi anaknya belum disapu (jaga-jaga sisa run yang
+    // terhenti di tengah jalan).
+    await admin.from("sessions").delete().in("id", UJI_SESI);
+    await admin.from("partners").delete().in("id", UJI_SEMUA);
+    await admin.from("partners").insert([
+      ...UJI_AKTIF.map((id, i) => ({
+        id, nama: `ZZUji Mitra ${String(i).padStart(2, "0")}`, no_hp: "", aktif: true,
+      })),
+      { id: UJI_NONAKTIF, nama: "ZZUji Mitra Nonaktif", no_hp: "", aktif: false },
+      { id: UJI_PERSEN, nama: "ZZUji Diskon 50%_Off Spesial", no_hp: "", aktif: true },
+      { id: UJI_DECOY, nama: "ZZUji Diskon 500xOff Lain", no_hp: "", aktif: true },
+    ]);
+    // `UJI_MITRA_SESI` sudah pasti ada di baris di atas (elemen pertama
+    // `UJI_AKTIF`) sebelum sesi-sesi ini disisipkan — FK `sessions.partner_id`
+    // menuntutnya. Klien & layanan memakai fixture SEED yang sudah stabil
+    // (Ananda, Fertility Massage), bukan fixture baru, karena sesi ini tidak
+    // menguji apa pun soal klien/layanan. `variant_id` WAJIB (NOT NULL sejak
+    // migrasi `varian_wajib`) — diambil langsung dari varian layanan itu,
+    // bukan ditulis literal, supaya fixture tidak diam-diam patah bila
+    // seed varian berubah.
+    const SERVICE_FERTILITY_MASSAGE = "11111111-1111-1111-1111-111111111101";
+    const { data: varian } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", SERVICE_FERTILITY_MASSAGE)
+      .limit(1)
+      .single<{ id: string }>();
+
+    await admin.from("sessions").insert(
+      UJI_SESI.map((id) => ({
+        id,
+        client_id: ANANDA,
+        service_id: SERVICE_FERTILITY_MASSAGE,
+        variant_id: varian!.id,
+        partner_id: UJI_MITRA_SESI,
+        tanggal: "2026-01-01",
+        status: "selesai",
+      })),
+    );
+  });
+
+  // Sesi dulu, baru mitranya — alasan yang sama dengan `beforeAll`: baris
+  // mitra tidak bisa disapu selama anak `sessions`-nya masih menunjuknya.
+  // Mitra fixture LAIN (24 dari 25 `UJI_AKTIF`, plus `UJI_NONAKTIF`,
+  // `UJI_PERSEN`, `UJI_DECOY`) tetap sengaja tanpa sesi.
+  afterAll(async () => {
+    await admin.from("sessions").delete().in("id", UJI_SESI);
+    await admin.from("partners").delete().in("id", UJI_SEMUA);
+  });
+
+  it("menyaring menurut ketersediaan", async () => {
+    const { baris } = await ambilDaftarMitra({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => !m.aktif)).toBe(true);
+  });
+
+  it("mencari menurut nama, tidak peduli besar kecil huruf", async () => {
+    const { baris } = await ambilDaftarMitra({ cari: "sri", saring: {}, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => m.nama.toLowerCase().includes("sri"))).toBe(true);
+  });
+
+  it("kata cari diperlakukan sebagai HURUF, bukan wildcard SQL (escaping % dan _)", async () => {
+    // Bagi Postgres LIKE/ILIKE, "%" berarti "nol atau lebih karakter apa
+    // pun" dan "_" berarti "satu karakter apa pun". `UJI_DECOY` ("ZZUji
+    // Diskon 500xOff Lain") sengaja dibentuk supaya ia COCOK dengan pola
+    // "50%_Off" BILA kedua karakter itu dibaca sebagai wildcard — "50" lalu
+    // apa pun ("0") lalu satu huruf apa pun ("x") lalu "Off" — tapi ia TIDAK
+    // mengandung substring literal "50%_Off" sama sekali. Bila baris
+    // escaping di `ambilDaftarMitra` suatu hari dihapus, decoy ini ikut
+    // lolos dan uji ini yang merah — bukan cuma "querynya tidak melempar
+    // galat".
+    const { baris } = await ambilDaftarMitra({ cari: "50%_Off", saring: {}, hal: 1 });
+    const id = baris.map((m) => m.id);
+    expect(id).toContain(UJI_PERSEN);
+    expect(id).not.toContain(UJI_DECOY);
+  });
+
+  it("total menghitung SELURUH baris yang cocok, bukan hanya yang tampil", async () => {
+    // Ini yang membuat "25 dari 40" mungkin. Total yang ikut terpotong halaman
+    // membuat paginasi berhenti di halaman 2 selamanya.
+    const { baris, total } = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
+    expect(total).toBeGreaterThanOrEqual(baris.length);
+  });
+
+  it("halaman kedua BERISI, dan TIDAK mengulang baris halaman pertama", async () => {
+    const a = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
+    const b = await ambilDaftarMitra({ cari: "", saring: {}, hal: 2 });
+    // Halaman 2 HARUS berisi. Tanpa asersi ini, seluruh uji lulus hampa pada
+    // basis data yang isinya kurang dari satu halaman: `[].some(...)` selalu
+    // `false`, dan hijaunya terbaca seperti bukti.
+    expect(b.baris.length).toBeGreaterThan(0);
+    expect(a.baris.length).toBe(PER_HAL);
+    const idA = new Set(a.baris.map((m) => m.id));
+    expect(b.baris.some((m) => idA.has(m.id))).toBe(false);
+  });
+
+  it("jumlah sesi selesai TETAP benar saat daftarnya dipaginasi", async () => {
+    // Jebakannya: query sesi dulu menarik SEMUA sesi lalu menghitungnya di JS.
+    // Bila paginasi diterapkan pada query mitra saja, angka kinerja tetap
+    // benar — tetapi bila seseorang kelak ikut memaginasi query sesi (memasang
+    // `.range()` di sana), angka itu mengecil diam-diam tanpa satu pun uji
+    // merah. Uji ini yang merah untuk JEBAKAN ITU.
+    //
+    // Targetnya SENGAJA `UJI_MITRA_SESI` (>PER_HAL sesi selesai — lihat
+    // `beforeAll`), bukan mitra seed manapun: seed hanya punya 6 baris
+    // `sessions` berstatus selesai, jauh di bawah `PER_HAL`, sehingga
+    // `LIMIT 25 OFFSET 0` atas 6 baris tetap memulangkan keenamnya — bug
+    // ".range() ikut dipasang di query sesi" tidak pernah kelihatan lewat
+    // mitra seed, betapapun uji ini ditulis.
+    //
+    // Yang TIDAK dijaga uji ini: batas `max_rows = 1000` bawaan PostgREST,
+    // yang memotong query sesi ini tanpa `.range()` apa pun begitu total sesi
+    // selesai di SELURUH sistem melewati 1000 (lihat komentar di
+    // `ambilDaftarMitra`). `UJI_MITRA_SESI` sengaja dikalibrasi di atas
+    // `PER_HAL`, bukan di atas 1000 — menaikkannya ke situ berarti menulis
+    // 1000+ baris fixture pada tiap run. Jebakan `.range()` dan jebakan
+    // `max_rows` adalah DUA batas berbeda; uji ini hanya membuktikan yang
+    // pertama tidak ada.
+    const { baris } = await ambilDaftarMitra({ cari: "ZZUji Mitra 00", saring: {}, hal: 1 });
+    const target = baris.find((m) => m.id === UJI_MITRA_SESI);
+    expect(target, "mitra fixture bersesi hilang dari hasil cari").toBeDefined();
+
+    const { count } = await admin
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("partner_id", UJI_MITRA_SESI)
+      .eq("status", "selesai");
+    // Pastikan fixture memang di atas PER_HAL — kalau tidak, uji ini
+    // kembali menjadi uji yang tidak bisa memerah seperti sebelumnya.
+    expect(count).toBeGreaterThan(PER_HAL);
+    expect(target!.sesiSelesai).toBe(count);
   });
 });

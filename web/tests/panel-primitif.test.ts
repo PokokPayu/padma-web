@@ -89,6 +89,50 @@ describe("token visual panel", () => {
     expect(css).toMatch(/--color-panel-bg:\s*#f5f6f4/i);
     expect(css).not.toMatch(/--color-panel-bg:\s*var\(--color-paper\)/);
   });
+
+  it("kelas Tailwind yang memakai token panel harus punya token yang didefinisikan", () => {
+    // Kelas Tailwind yang menunjuk token hantu gagal SENYAP — tidak ada galat
+    // build, tidak ada peringatan, hanya teks yang tidak terbaca di layar.
+    // Catat semua kelas berpola (text|bg|border)-panel-* di primitif panel,
+    // pastikan setiap satu punya token --color-panel-* yang cocok.
+    //
+    // Himpunan kelas seharusnya TIDAK KOSONG — kalau regex sesuatu saat
+    // berhenti cocok, uji ini akan lulus diam-diam. Penjagaan ini lolos jika
+    // himpunan kosong (validasi di akhir), jadi regex yang berhenti mencocok
+    // akan tampak sebagai regresi.
+    const kelasSemuanya = new Map<string, string[]>();
+    const tokenSemuanya = new Set<string>();
+
+    for (const berkas of berkasPanel()) {
+      const isi = baca(berkas);
+      // Pola kelas: text-panel-*, bg-panel-*, border-panel-*
+      const keluarKelas = isi.matchAll(/(text|bg|border)-panel-([a-z\-]+)/g);
+      for (const cocok of keluarKelas) {
+        const namaPenggunaan = `${cocok[1]}-panel-${cocok[2]}`;
+        const namaToken = `--color-panel-${cocok[2]}`;
+        tokenSemuanya.add(namaToken);
+
+        if (!kelasSemuanya.has(namaPenggunaan)) {
+          kelasSemuanya.set(namaPenggunaan, []);
+        }
+        kelasSemuanya.get(namaPenggunaan)!.push(berkas);
+      }
+    }
+
+    // Penjagaan anti-hampa: himpunan kelas yang dikumpulkan TIDAK boleh kosong.
+    expect(kelasSemuanya.size, "tidak ditemukan satu pun kelas panel di primitif").toBeGreaterThan(0);
+
+    // Untuk setiap kelas, pastikan token-nya ada di globals.css
+    const galatGabung: string[] = [];
+    for (const [kelas, berkasList] of kelasSemuanya) {
+      const namaToken = `--color-panel-${kelas.split("panel-")[1]}`;
+      if (!css.includes(namaToken)) {
+        galatGabung.push(`${kelas} (di ${berkasList[0]}) — token ${namaToken} tidak terdefinisi`);
+      }
+    }
+
+    expect(galatGabung, "kelas Tailwind menunjuk token hantu").toEqual([]);
+  });
 });
 
 const { Ikon, NAMA_IKON } = await import("@/app/_shell/panel/ikon");
@@ -461,6 +505,10 @@ describe("KerangkaPanel", () => {
     // Begitu satu berkas di sini tahu peran, pemisahan fisik money firewall
     // berubah menjadi satu kondisional yang bisa salah tulis dalam satu
     // karakter — dan yang bocor adalah seluruh nominal PADMA.
+    // Tanpa ini, seluruh badan test lolos hampa bila direktori primitif
+    // dipindah atau namanya berubah: `for (const berkas of [])` tidak pernah
+    // menjalankan satu asersi pun, dan hijaunya terbaca seperti bukti.
+    expect(berkasPanel().length).toBeGreaterThan(0);
     for (const berkas of berkasPanel()) {
       const isi = baca(berkas);
       // Flag `i`: kedua shell meneruskan "Admin"/"Owner" (huruf besar di

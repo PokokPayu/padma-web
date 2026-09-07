@@ -14,6 +14,9 @@
  *   5. Admin menjadwalkan sesi untuk klien itu, lalu menandainya selesai
  *      beserta catatan & rekomendasi bidan.
  *   6. Klien membuka `/passport/sesi` dan membaca catatan bidan tadi.
+ *   7. (Task 10) Admin mengubah data mitra lewat panel geser (`?ubah=<id>`,
+ *      medan di dalam `[role="dialog"]`) dan membuktikan bilah cari/saring
+ *      modul Mitra bekerja lewat NAVIGASI biasa, tanpa satu baris JavaScript.
  *
  * Rantai ini sengaja dijalankan dalam satu alur: tiap potongannya sudah punya
  * test unit sendiri, tetapi yang paling mudah patah tanpa ada yang merah adalah
@@ -30,7 +33,9 @@
  * dibersihkan lewat service role di awal (sisa run yang mati di tengah) maupun
  * di akhir. Data seed — Ananda, Rina, sesi & paketnya — tidak pernah disentuh:
  * `tests/rls-firewall.test.ts` dan `tests/passport-beranda.test.ts` meng-assert
- * jumlah barisnya PERSIS.
+ * jumlah barisnya PERSIS. Langkah 7 memakai mitra FIXTURE-nya sendiri
+ * (`E2E-ADMIN-MITRA-…`), bukan "Bidan Sri Wahyuni" milik seed yang dipakai
+ * langkah 5 di atas dan puluhan uji unit lain secara literal.
  */
 import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
@@ -48,6 +53,15 @@ const stempel = Date.now();
 const EMAIL_KLIEN = `${PENANDA}${stempel}@padma.test`;
 const NAMA_KLIEN = `Uji E2E Admin ${stempel}`;
 const NO_HP = "0899-0000-0001";
+
+// Fixture khusus modul Mitra (Task 10) — SENGAJA bukan "Bidan Sri Wahyuni" dari
+// seed: mengubah nama mitra seed lewat panel akan merusak langkah 5 di bawah
+// (yang memilihnya lewat label) dan lusinan uji unit lain yang meng-assert nama
+// itu literal. Prefiksnya bertahan sesudah diubah lewat panel, jadi satu
+// pemindaian `like` di `bersihkan()` menangkap fixture ini di kedua nama.
+const PENANDA_MITRA = "E2E-ADMIN-MITRA-";
+const NAMA_MITRA_UJI = `${PENANDA_MITRA}${stempel} Bidan Uji`;
+const NAMA_MITRA_UJI_BARU = `${PENANDA_MITRA}${stempel} Bidan Uji (diubah)`;
 
 // Layanan & mitra dari seed. Tanggal sengaja jauh di depan supaya sesi uji tidak
 // pernah bersaing dengan "sesi berikutnya" milik data demo.
@@ -145,6 +159,10 @@ async function bersihkan() {
       await admin.auth.admin.deleteUser(u.id);
     }
   }
+
+  // Fixture Mitra (Task 10): tanpa sesi apa pun, jadi aman dihapus langsung —
+  // tidak ada `sessions.partner_id` yang bisa terputus olehnya.
+  await admin.from("partners").delete().like("nama", `${PENANDA_MITRA}%`);
 }
 
 async function main() {
@@ -176,18 +194,25 @@ async function main() {
     );
 
     // ================= 2. Admin membuat klien baru =================
+    // Modul Klien memakai pola B (Task 9): "+ Klien baru" adalah TAUTAN menuju
+    // rute berdiri sendiri `/admin/klien/baru`, bukan tombol yang membuka
+    // formulir di header daftar.
     await kerja.goto(`${BASE}/admin/klien`, { waitUntil: "networkidle" });
-    await kerja.getByRole("button", { name: "+ Klien baru" }).click();
+    await Promise.all([
+      kerja.waitForURL(`${BASE}/admin/klien/baru`, { timeout: 20_000 }),
+      kerja.getByRole("link", { name: "+ Klien baru" }).click(),
+    ]);
     await kerja.locator('input[name="nama"]').fill(NAMA_KLIEN);
     await kerja.locator('input[name="email"]').fill(EMAIL_KLIEN);
     await kerja.locator('input[name="no_hp"]').fill(NO_HP);
     await kerja.selectOption('select[name="fase"]', "prekonsepsi");
     await kerja.getByRole("button", { name: /Simpan klien/i }).click();
 
-    // Formulir menutup sendiri saat server action berhasil.
-    await kerja
-      .getByRole("button", { name: "+ Klien baru" })
-      .waitFor({ state: "visible", timeout: 20_000 });
+    // `FormKlienBaru` tidak lagi unmount sesudah sukses (lihat komentar di
+    // `form-klien.tsx`): ia tetap di rute `/admin/klien/baru` dan menunjukkan
+    // "Tersimpan sebagai PAD-…" di bawah tombol, medannya dikosongkan lewat
+    // reset native. Menunggu tulisan itu, bukan tombol lama yang muncul lagi.
+    await kerja.getByText("Tersimpan sebagai").waitFor({ state: "visible", timeout: 20_000 });
 
     const { data: klienDb } = await admin
       .from("clients")
@@ -211,16 +236,24 @@ async function main() {
 
     await kerja.goto(`${BASE}/admin/klien`, { waitUntil: "networkidle" });
     const barisKlien = kerja.locator("tr", { hasText: PADMA_ID });
+    // Email TIDAK lagi diperiksa di sini: Task 9 mengeluarkannya dari kolom
+    // daftar — ia terlalu panjang untuk baris tabel dan tetap tampil utuh di
+    // halaman detail, yang diuji di langkah 3 di bawah. Yang tersisa di baris
+    // adalah identitas yang benar-benar dipakai admin untuk mengenalinya:
+    // nama, PADMA ID, fase, dan status aktivasi.
     catat(
       "2c. klien muncul di daftar dengan status Belum aktif",
       (await barisKlien.count()) === 1 &&
         memuat(await barisKlien.first().innerText(), "Belum aktif") &&
-        memuat(await barisKlien.first().innerText(), EMAIL_KLIEN),
+        memuat(await barisKlien.first().innerText(), NAMA_KLIEN),
       (await barisKlien.first().innerText()).replace(/\s+/g, " "),
     );
 
     // ================= 3. Terbitkan tautan aktivasi =================
-    await barisKlien.first().getByRole("link", { name: PADMA_ID }).click();
+    // Yang menaut ke halaman detail kini kolom NAMA, bukan PADMA ID (Task 9,
+    // pola B): klien punya isi turunan — riwayat sesi, paket, akses materi —
+    // jadi barisnya membuka halaman, dan nama adalah yang dicari mata admin.
+    await barisKlien.first().getByRole("link", { name: NAMA_KLIEN }).click();
     await kerja.waitForURL(/\/admin\/klien\/[0-9a-f-]{36}$/, { timeout: 20_000 });
     await tungguIsi(kerja);
 
@@ -399,6 +432,91 @@ async function main() {
       badge >= 1,
       `${badge} badge, ${stempelTerisi} stempel terisi (klien ini belum berpaket)`,
     );
+
+    // ================= 7. Modul Mitra: panel geser & cari/saring tanpa JS ===
+    // Task 10: susunan lama ("Ubah" membuka formulir DI DALAM sel tabel) sudah
+    // diganti panel geser dikendalikan URL (`?ubah=<id>`) dan bilah cari/saring
+    // tanpa JavaScript sama sekali (Task 1-9). Dibuktikan di sini lewat fixture
+    // sendiri — lihat komentar di deklarasi `NAMA_MITRA_UJI` di atas.
+    const { data: mitraUji, error: eMitraUji } = await admin
+      .from("partners")
+      .insert({ nama: NAMA_MITRA_UJI, no_hp: "0812-0000-0099" })
+      .select("id")
+      .single();
+    if (eMitraUji) throw eMitraUji;
+    const idMitraUji = mitraUji.id as string;
+
+    await kerja.goto(
+      `${BASE}/admin/mitra?cari=${encodeURIComponent(NAMA_MITRA_UJI)}`,
+      { waitUntil: "networkidle" },
+    );
+    const barisMitraUji = kerja.locator("tr", { hasText: NAMA_MITRA_UJI });
+    catat(
+      "7a. mitra fixture ketemu lewat pencarian nama",
+      (await barisMitraUji.count()) === 1,
+      `${await barisMitraUji.count()} baris cocok dengan "${NAMA_MITRA_UJI}"`,
+    );
+
+    // Pola baru: "Ubah" adalah TAUTAN yang membuka `?ubah=<id>`, dan medannya
+    // hidup di dalam panel geser (`[role="dialog"]`) — bukan lagi di sel tabel.
+    await barisMitraUji.getByRole("link", { name: "Ubah" }).click();
+    const panel = kerja.getByRole("dialog");
+    await panel.waitFor({ state: "visible", timeout: 20_000 });
+    catat(
+      "7b. tautan Ubah membuka panel geser yang SUDAH BERISI data baris itu",
+      (await panel.getByLabel("Nama mitra").inputValue()) === NAMA_MITRA_UJI,
+      `medan Nama mitra: "${await panel.getByLabel("Nama mitra").inputValue()}"`,
+    );
+
+    await panel.getByLabel("Nama mitra").fill(NAMA_MITRA_UJI_BARU);
+    await panel.getByRole("button", { name: "Simpan" }).click();
+
+    // Panel menutup dengan KEMBALI ke daftar (`router.push(hrefTutup)`) —
+    // dialognya harus benar-benar lenyap dari DOM, bukan sekadar tersembunyi.
+    await kerja.getByRole("dialog").waitFor({ state: "detached", timeout: 20_000 });
+    catat(
+      "7c. panel benar-benar tertutup — dialog lenyap dari DOM, bukan tersembunyi",
+      (await kerja.getByRole("dialog").count()) === 0,
+      `${await kerja.getByRole("dialog").count()} dialog tersisa di halaman`,
+    );
+
+    const { data: mitraSesudah } = await admin
+      .from("partners")
+      .select("nama")
+      .eq("id", idMitraUji)
+      .single();
+    catat(
+      "7d. perubahan lewat panel benar-benar tersimpan ke basis data",
+      mitraSesudah?.nama === NAMA_MITRA_UJI_BARU,
+      `nama tersimpan: "${mitraSesudah?.nama}"`,
+    );
+
+    // --- Cari & saring bekerja TANPA JavaScript -----------------------------
+    // Bilah cari adalah `<form method="get">` biasa dan chip saringan adalah
+    // `<Link>` biasa (`_shell/panel/bilah-daftar.tsx`) — menekan Enter di kotak
+    // cari harus menghasilkan NAVIGASI dengan query di URL, persis seperti
+    // sebuah situs tanpa satu baris JavaScript pun akan bekerja.
+    await kerja.goto(`${BASE}/admin/mitra`, { waitUntil: "networkidle" });
+    await kerja.getByLabel("Cari di daftar ini").fill("sri");
+    await kerja.keyboard.press("Enter");
+    await kerja.waitForURL(/\/admin\/mitra\?cari=sri/, { timeout: 20_000 });
+    catat(
+      "7e. Enter pada kotak cari berpindah ke ?cari=sri — navigasi, bukan state klien",
+      /\/admin\/mitra\?cari=sri/.test(kerja.url()),
+      `url: ${kerja.url()}`,
+    );
+
+    // `waitForURL` WAJIB di sini, bukan kemewahan: `click()` hanya menjamin
+    // klik terkirim, bukan navigasinya mendarat. Membaca `kerja.url()` tepat
+    // sesudahnya membaca alamat LAMA dan membuat langkah ini gagal — atau,
+    // lebih buruk, LULUS secara kebetulan pada mesin yang lebih lambat.
+    await kerja.getByRole("link", { name: "Nonaktif" }).click();
+    await kerja.waitForURL(/aktif=tidak/, { timeout: 20_000 });
+    catat(
+      "7f. chip saringan MENAMBAH query tanpa melepas pencarian yang sedang aktif",
+      /cari=sri/.test(kerja.url()) && /aktif=tidak/.test(kerja.url()),
+      `url: ${kerja.url()}`,
+    );
   } finally {
     await browser.close();
     await bersihkan();
@@ -414,10 +532,14 @@ async function main() {
   const sisaUser = (daftarUser?.users ?? []).filter((u) =>
     (u.email ?? "").startsWith(PENANDA),
   );
+  const { data: sisaMitra } = await admin
+    .from("partners")
+    .select("id")
+    .like("nama", `${PENANDA_MITRA}%`);
   catat(
-    "7a. seluruh data uji terhapus lewat service role",
-    (sisaKlien ?? []).length === 0 && sisaUser.length === 0,
-    `${(sisaKlien ?? []).length} baris klien & ${sisaUser.length} akun tersisa`,
+    "8a. seluruh data uji terhapus lewat service role",
+    (sisaKlien ?? []).length === 0 && sisaUser.length === 0 && (sisaMitra ?? []).length === 0,
+    `${(sisaKlien ?? []).length} baris klien, ${sisaUser.length} akun, ${(sisaMitra ?? []).length} mitra tersisa`,
   );
 
   const gagal = hasil.filter((h) => !h.lolos);
@@ -426,7 +548,9 @@ async function main() {
     console.error("GAGAL:\n" + gagal.map((g) => `  - ${g.nama}`).join("\n"));
     process.exit(1);
   }
-  console.log("Rantai operasional admin terbukti utuh: klien → aktivasi → sesi → passport.");
+  console.log(
+    "Rantai operasional admin terbukti utuh: klien → aktivasi → sesi → passport → panel mitra.",
+  );
 }
 
 main().catch((e) => {
