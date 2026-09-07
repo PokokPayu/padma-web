@@ -14,6 +14,7 @@ import {
   type SesiRekap,
   type TandaBayar,
   type TarifRingkas,
+  type TransportKhususRingkas,
 } from "./rekap";
 
 // ============================================================================
@@ -311,6 +312,7 @@ type BarisSesi = {
   status: SesiRekap["status"];
   client_package_id: string | null;
   updated_at: string | null;
+  jenjang: JenjangTransport | null;
   services: { nama: string } | null;
   partners: { nama: string } | null;
 };
@@ -328,13 +330,18 @@ type BarisSesi = {
  * memang berhak membaca tabelnya, dan `partner_publik` menyaring `aktif =
  * true` — mitra yang sudah dinonaktifkan tetap harus muncul di rekap pekan
  * saat ia masih bekerja, kalau tidak honornya lenyap dari riwayat.
+ *
+ * `jenjang` (Task 8/9) ikut ditarik mentah — `null` dibiarkan `null`, bukan
+ * di-default ke satu jenjang tertentu: `hitungRekap()`-lah yang memutuskan
+ * bagaimana `null` diperlakukan (jarak belum diketahui, bukan transport
+ * gratis), dan keputusan itu tidak boleh diam-diam dibuat lebih awal di sini.
  */
 export async function ambilSesiRekap(): Promise<SesiRekap[]> {
   const supabase = await createServerSupabase();
   const { data } = await supabase
     .from("sessions")
     .select(
-      "id, service_id, variant_id, partner_id, tanggal, status, client_package_id, updated_at, services(nama), partners(nama)",
+      "id, service_id, variant_id, partner_id, tanggal, status, client_package_id, updated_at, jenjang, services(nama), partners(nama)",
     )
     .order("tanggal", { ascending: false })
     .returns<BarisSesi[]>();
@@ -350,6 +357,7 @@ export async function ambilSesiRekap(): Promise<SesiRekap[]> {
     status: r.status,
     clientPackageId: r.client_package_id,
     selesaiPada: r.updated_at,
+    jenjang: r.jenjang,
   }));
 }
 
@@ -373,14 +381,110 @@ export async function ambilTandaBayar(): Promise<TandaBayar[]> {
   }));
 }
 
-/** Rekap seluruh pekan, terbaru di atas. Tiga bacaan sejajar + satu fungsi murni. */
+type BarisTransportRateHistori = {
+  id: string;
+  jenjang: JenjangTransport;
+  tarif_klien: number;
+  honor_mitra: number;
+  berlaku_sejak: string;
+};
+
+/**
+ * SELURUH riwayat tarif transport, bukan hanya yang berlaku hari ini —
+ * sejajar `ambilTarif()` di atas, dan untuk alasan yang SAMA: `hitungRekap()`
+ * mencocokkan tarif transport menurut TANGGAL SESI, jadi rekap pekan lama
+ * tetap membutuhkan baris lama SELAMANYA.
+ *
+ * Dipisah dari `ambilTarifTransport(hariIni)` (di bawah, untuk rate card
+ * `/owner/transport`) yang HANYA memulangkan tarif yang berlaku PADA
+ * `hariIni` — memakainya untuk rekap akan membuat sesi pekan lalu memakai
+ * tarif hari ini, persis kelas bug yang sudah dicegah `ambilTarif()` vs
+ * `ambilRateCard()`.
+ */
+export async function ambilRiwayatTarifTransport(): Promise<TarifTransportRingkas[]> {
+  const supabase = await createServerSupabase();
+
+  // Paginasi seperti `ambilTarif()`: `transport_rates` APPEND-ONLY SELAMANYA
+  // membuat riwayatnya tumbuh tanpa batas atas, dan `max_rows = 1000` di
+  // `supabase/config.toml` memotong bacaan tanpa `.range()` SENYAP.
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisTransportRateHistori[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman } = await supabase
+      .from("transport_rates")
+      .select("id, jenjang, tarif_klien, honor_mitra, berlaku_sejak")
+      .order("berlaku_sejak", { ascending: false })
+      .order("id", { ascending: false })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisTransportRateHistori[]>();
+
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
+
+  return baris.map((r) => ({
+    id: r.id,
+    jenjang: r.jenjang,
+    tarifKlien: r.tarif_klien,
+    honorMitra: r.honor_mitra,
+    berlakuSejak: r.berlaku_sejak,
+  }));
+}
+
+type BarisTransportKhususDb = {
+  session_id: string;
+  tarif_klien: number;
+  honor_mitra: number;
+};
+
+/**
+ * SELURUH tarif khusus >20 km yang pernah ditetapkan owner — satu baris per
+ * SESI (`transport_khusus.session_id` adalah primary key, TANPA riwayat: satu
+ * sesi, satu nominal, ditetapkan sekali). `hitungRekap()` butuh SELURUHNYA,
+ * bukan hanya yang "aktif": sesi lama yang sudah ditetapkan tarif khususnya
+ * bertahun lalu tetap harus dihargai dengan nominal itu di rekap pekan lama.
+ *
+ * Admin & klien yang memanggil fungsi ini memperoleh `[]` — itu RLS
+ * "transport_khusus: hanya owner" yang menjawab, bukan penyaringan di sini.
+ */
+export async function ambilTransportKhusus(): Promise<TransportKhususRingkas[]> {
+  const supabase = await createServerSupabase();
+
+  // Paginasi seperti fungsi lain di berkas ini: tidak ada batas atas berapa
+  // banyak sesi >20 km yang bisa terkumpul selama umur klinik.
+  const UKURAN_HALAMAN = 1000;
+  const baris: BarisTransportKhususDb[] = [];
+  for (let awal = 0; ; awal += UKURAN_HALAMAN) {
+    const { data: halaman } = await supabase
+      .from("transport_khusus")
+      .select("session_id, tarif_klien, honor_mitra")
+      .order("session_id", { ascending: true })
+      .range(awal, awal + UKURAN_HALAMAN - 1)
+      .returns<BarisTransportKhususDb[]>();
+
+    if (!halaman || halaman.length === 0) break;
+    baris.push(...halaman);
+    if (halaman.length < UKURAN_HALAMAN) break;
+  }
+
+  return baris.map((r) => ({
+    sessionId: r.session_id,
+    tarifKlien: r.tarif_klien,
+    honorMitra: r.honor_mitra,
+  }));
+}
+
+/** Rekap seluruh pekan, terbaru di atas. Lima bacaan sejajar + satu fungsi murni. */
 export async function ambilRekap(): Promise<RekapPekan[]> {
-  const [sesi, tarif, tanda] = await Promise.all([
+  const [sesi, tarif, tarifTransport, transportKhusus, tanda] = await Promise.all([
     ambilSesiRekap(),
     ambilTarif(),
+    ambilRiwayatTarifTransport(),
+    ambilTransportKhusus(),
     ambilTandaBayar(),
   ]);
-  return hitungRekap({ sesi, tarif, tanda });
+  return hitungRekap({ sesi, tarif, tarifTransport, transportKhusus, tanda });
 }
 
 export type RingkasanPekan = {

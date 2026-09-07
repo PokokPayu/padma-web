@@ -2,6 +2,12 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import type { PayStatus } from "@/lib/passport/turunan";
+import type { JenjangTransport } from "@/lib/transport/jarak";
+// SATU-SATUNYA sumber label jenjang — dipakai ULANG, sama seperti
+// `@/lib/passport/turunan` dan `app/owner/transport/status.ts` sudah
+// melakukannya. Lihat komentar di `SesiRingkas.jenjang` (passport/turunan.ts)
+// untuk alasan kenapa menulisnya kedua kali di sini adalah bug yang menunggu.
+import { LABEL_JENJANG } from "@/app/admin/sesi/status";
 
 export type ItemTagihanAdmin = {
   jenis: "paket" | "sesi";
@@ -24,6 +30,7 @@ type BarisSesi = {
   status_bayar: PayStatus;
   tanggal: string;
   variant_id: string | null;
+  jenjang: JenjangTransport | null;
   clients: { nama: string; padma_id: string } | null;
   services: { nama: string } | null;
 };
@@ -96,7 +103,9 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
       .returns<BarisPaket[]>(),
     supabase
       .from("sessions")
-      .select("id, status_bayar, tanggal, variant_id, clients(nama, padma_id), services(nama)")
+      .select(
+        "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
+      )
       .is("client_package_id", null)
       .neq("status", "batal")
       // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
@@ -156,6 +165,29 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
           : `${namaLayanan} · ${varLabel} · ${formatTanggalID(s.tanggal)}`,
       status: s.status_bayar,
     });
+
+    // (Task 9) Baris TRANSPORT tambahan — hanya ketika jaraknya diketahui.
+    // `id` & `jenis` SENGAJA SAMA PERSIS dengan baris sesi di atas: tidak ada
+    // kolom `status_bayar` terpisah untuk transport, jadi "Tandai lunas" pada
+    // baris ini melunasi SESI YANG SAMA, bukan baris hantu ber-id palsu.
+    //
+    // Labelnya IDENTIK huruf demi huruf dengan `susunTagihan()`
+    // (`@/lib/passport/turunan`) — keduanya merangkai dari `LABEL_JENJANG`
+    // (`@/app/admin/sesi/status`) yang SAMA persis. TANPA NOMINAL sama sekali
+    // (money firewall): berkas ini tidak membaca, dan tidak boleh membaca,
+    // satu pun tabel rate-card transport ataupun tarif per-kasusnya — RLS
+    // "hanya owner" akan memulangkan `[]` untuk admin, jadi tidak ada
+    // gunanya dicoba pun. Dikunci lewat uji parity di tests/admin-bayar.test.ts.
+    if (s.jenjang !== null) {
+      item.push({
+        jenis: "sesi",
+        id: s.id,
+        namaKlien: s.clients?.nama ?? "—",
+        padmaId: s.clients?.padma_id ?? "—",
+        label: `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`,
+        status: s.status_bayar,
+      });
+    }
   }
 
   // Komparator mengembalikan 0 untuk peringkat kembar: komparator yang

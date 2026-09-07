@@ -384,6 +384,101 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
 });
 
 // ---------------------------------------------------------------------------
+// ambilRekap() — komponen TRANSPORT terintegrasi lewat DB sungguhan (Task 9)
+// ---------------------------------------------------------------------------
+// Pekan TERPISAH dari PEKAN_A/PEKAN_B di atas — fixture ini menguji jalur
+// baca `transport_rates`/`transport_khusus` (RLS "hanya owner") dan kolom
+// `sessions.jenjang`, bukan mengulang logika `hitungRekap()` yang sudah
+// diuji habis sebagai fungsi murni di tests/owner-rekap.test.ts.
+describe("ambilRekap() — transport (Task 9)", () => {
+  const PEKAN_T9 = "2024-03-25"; // Senin, tidak tumpang tindih PEKAN_A/PEKAN_B
+  const SESI_DEKAT = "66666666-6666-6666-6666-666666667a5a"; // jenjang 5_10, bertarif
+  const SESI_JAUH = "66666666-6666-6666-6666-666666667a5b"; // di_atas_20, TANPA transport_khusus
+  const TARIF_TRANSPORT_ID = "88888888-8888-8888-8888-888888887a5a";
+  const TARIF_TRANSPORT_KLIEN = 20_000;
+  const TARIF_TRANSPORT_HONOR = 30_000;
+
+  async function bersihkanT9() {
+    await admin.from("transport_khusus").delete().in("session_id", [SESI_DEKAT, SESI_JAUH]);
+    await admin.from("sessions").delete().in("id", [SESI_DEKAT, SESI_JAUH]);
+    // Rate card transport ditolak UPDATE oleh trigger, tetapi service role
+    // tetap boleh DELETE — dipakai di sini supaya `npm test` tidak menumpuk
+    // baris fixture antar run, sama seperti pola `bersihkan()` di atas.
+    await admin.from("transport_rates").delete().eq("id", TARIF_TRANSPORT_ID);
+  }
+
+  beforeAll(async () => {
+    await bersihkanT9();
+    await admin.from("transport_rates").insert({
+      id: TARIF_TRANSPORT_ID,
+      jenjang: "5_10",
+      tarif_klien: TARIF_TRANSPORT_KLIEN,
+      honor_mitra: TARIF_TRANSPORT_HONOR,
+      berlaku_sejak: BERLAKU_LAMA,
+    });
+    await admin.from("sessions").insert([
+      {
+        id: SESI_DEKAT,
+        client_id: KLIEN,
+        service_id: LAYANAN_BERTARIF,
+        variant_id: VARIAN_BERTARIF,
+        partner_id: MITRA_A,
+        tanggal: PEKAN_T9,
+        status: "selesai",
+        status_bayar: "belum",
+        catatan: "",
+        rekomendasi: "",
+        jenjang: "5_10",
+      },
+      {
+        id: SESI_JAUH,
+        client_id: KLIEN,
+        service_id: LAYANAN_BERTARIF,
+        variant_id: VARIAN_BERTARIF,
+        partner_id: MITRA_A,
+        tanggal: PEKAN_T9,
+        status: "selesai",
+        status_bayar: "belum",
+        catatan: "",
+        rekomendasi: "",
+        jenjang: "di_atas_20",
+      },
+    ]);
+  });
+
+  afterAll(bersihkanT9);
+
+  it("honor mitra memuat komponen transport dari transport_rates, sesuai TANGGAL SESI", async () => {
+    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9)!;
+    expect(pekan, "pekan transport uji tidak muncul — fixture gagal").toBeDefined();
+    const a = pekan.perMitra.find((m) => m.partnerId === MITRA_A)!;
+    // SESI_DEKAT bertarif (honor varian HONOR + transport 30.000); SESI_JAUH
+    // tak-bertarif (di_atas_20 tanpa transport_khusus) dan TIDAK menyumbang
+    // apa pun — lihat test berikutnya.
+    expect(a.totalHonor).toBe(HONOR + TARIF_TRANSPORT_HONOR);
+  });
+
+  it("sesi di_atas_20 tanpa transport_khusus jatuh ke sesiTakBertarif dengan sebab 'transport'", async () => {
+    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9)!;
+    const tak = pekan.sesiTakBertarif.find((s) => s.id === SESI_JAUH);
+    expect(tak, "sesi >20 km tanpa tarif khusus seharusnya tak-bertarif").toBeDefined();
+    expect(tak!.sebab).toBe("transport");
+  });
+
+  it("ADMIN yang membaca rekap ini pun tidak memperoleh satu nominal transport pun", async () => {
+    ref.sesi = sesiAdmin;
+    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9);
+    ref.sesi = sesiOwner;
+    expect(pekan, "sesi hilang seluruhnya untuk admin — assertion di bawah jadi hampa").toBeDefined();
+    // RLS "transport_rates/transport_khusus: hanya owner" menjawab [] bagi
+    // admin, sama seperti variant_rates — SETIAP sesi (termasuk yang varian
+    // & transportnya lengkap bagi owner) jatuh tak-bertarif bagi admin.
+    expect(pekan!.totalHonor).toBe(0);
+    expect(pekan!.sesiTakBertarif.length).toBe(pekan!.jumlahSesi);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Halaman /owner/rekap
 // ---------------------------------------------------------------------------
 

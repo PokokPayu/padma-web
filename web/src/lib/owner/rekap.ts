@@ -1,4 +1,6 @@
 import { awalPekan, geserHari, rentangPekan } from "./pekan";
+import type { JenjangTransport } from "@/lib/transport/jarak";
+import { tarifTransportPadaTanggal, type TarifTransportRingkas } from "@/lib/transport/tarif";
 
 // ============================================================================
 // REKAP HONOR — agregasi uang, dihitung di TYPESCRIPT
@@ -41,6 +43,27 @@ export type SesiRekap = {
   clientPackageId: string | null;
   /** `sessions.updated_at` — kapan sesi terakhir disentuh admin. Boleh null. */
   selesaiPada: string | null;
+  /**
+   * Jenjang jarak (Task 8) — `null` berarti jaraknya belum pernah diketahui
+   * (sesi lama dari sebelum kolom ini lahir, atau mitra belum ditentukan saat
+   * sesi dicatat), BUKAN transport gratis. Lihat komentar di `hitungRekap()`
+   * untuk bagaimana `null` diperlakukan berbeda dari jenjang yang tarifnya
+   * hilang.
+   */
+  jenjang: JenjangTransport | null;
+};
+
+/**
+ * Nominal transport >20 km, DITETAPKAN OWNER PER KASUS (`transport_khusus`,
+ * Task 8) — bukan rate card per jenjang. Satu baris per SESI, bukan per
+ * jenjang: jenjang `di_atas_20` sengaja tidak pernah punya baris
+ * `transport_rates` (CHECK `transport_rates_bukan_per_kasus`), jadi
+ * `tarifTransportPadaTanggal()` tidak pernah bisa menjawabnya.
+ */
+export type TransportKhususRingkas = {
+  sessionId: string;
+  tarifKlien: number;
+  honorMitra: number;
 };
 
 export type TandaBayar = {
@@ -72,6 +95,15 @@ export type SesiTakBertarif = {
   namaLayanan: string;
   namaMitra: string;
   tanggal: string;
+  /**
+   * Ruling 14: dua sebab tak-bertarif diperbaiki di DUA LAYAR berbeda —
+   * "varian" di `/owner/tarif` (harga layanan belum ditetapkan), "transport"
+   * di `/owner/transport` (tarif jenjang atau tarif khusus >20 km belum
+   * ditetapkan). Tanpa medan ini owner tidak tahu layar mana yang harus ia
+   * buka, dan menebak salah berarti membuka layar yang tidak akan pernah
+   * menyelesaikan apa pun.
+   */
+  sebab: "varian" | "transport";
 };
 
 export type RekapPekan = {
@@ -135,8 +167,27 @@ type Ember = {
 export function hitungRekap(input: {
   sesi: readonly SesiRekap[];
   tarif: readonly TarifRingkas[];
+  /**
+   * Riwayat tarif transport per JENJANG (`transport_rates`, Task 8) —
+   * OPSIONAL, default `[]`. Dibuat opsional (bukan wajib) supaya seluruh
+   * pemanggil yang lahir sebelum transport ada tetap kompilasi tanpa
+   * perubahan: `[]` berarti "tidak ada tarif transport yang dikenal", yang
+   * konsisten dengan `tarifTransportPadaTanggal()` memulangkan `null` untuk
+   * setiap jenjang — sesi berjenjang tanpa satu pun baris di sini jatuh
+   * tak-bertarif, bukan dianggap gratis.
+   */
+  tarifTransport?: readonly TarifTransportRingkas[];
+  /**
+   * Nominal >20 km PER SESI (`transport_khusus`, Task 8) — OPSIONAL, default
+   * `[]`, alasan yang sama dengan `tarifTransport` di atas.
+   */
+  transportKhusus?: readonly TransportKhususRingkas[];
   tanda: readonly TandaBayar[];
 }): RekapPekan[] {
+  const tarifTransport = input.tarifTransport ?? [];
+  const petaKhusus = new Map(
+    (input.transportKhusus ?? []).map((k) => [k.sessionId, k] as const),
+  );
   // (1) Hanya sesi SELESAI yang berhak menghasilkan honor. Sesi terjadwal
   //     belum dikerjakan; sesi batal tidak pernah dikerjakan.
   const ember = new Map<string, Ember>();
@@ -185,23 +236,70 @@ export function hitungRekap(input: {
       //     pekan yang sudah lewat (spec bagian 5). Dicocokkan lewat variantId
       //     — harga menempel di varian, bukan di layanan.
       const t = tarifPadaTanggal(input.tarif, s.variantId, s.tanggal);
-      if (t === null) {
-        // (3) Sesi lebih tua dari tarif paling awal. TIDAK dihitung nol
-        //     diam-diam — itu uang yang hilang tanpa jejak. Ia dilaporkan.
+
+      // (3a) Komponen TRANSPORT (Task 9), dicari TERPISAH dari tarif varian
+      //      di atas — tabel sumbernya berbeda (`transport_rates` per
+      //      jenjang, `transport_khusus` per SESI untuk `di_atas_20`) dan
+      //      keduanya harus dikonsultasikan sebelum honor sesi ini dianggap
+      //      lengkap.
+      //
+      //      `s.jenjang === null` SENGAJA diperlakukan BERBEDA dari jenjang
+      //      yang tarifnya hilang: null berarti jaraknya belum pernah
+      //      diketahui (sesi lama dari sebelum kolom `sessions.jenjang` ada),
+      //      bukan "transport gratis" maupun "tak-bertarif". Memilih
+      //      menandainya tak-bertarif akan membuat SETIAP sesi lama yang
+      //      memang tidak akan pernah diisi retroaktif kehilangan honor
+      //      variannya yang sudah sah, hanya karena satu kolom yang lahir
+      //      belakangan — komponen transportnya sendiri diperlakukan NOL, di
+      //      sini, sengaja, dengan alasan ini tertulis di tempat keputusannya
+      //      diambil.
+      let transport: { tarifKlien: number; honorMitra: number } | null = null;
+      let transportHilang = false;
+      if (s.jenjang === "di_atas_20") {
+        const khusus = petaKhusus.get(s.id);
+        if (khusus) transport = { tarifKlien: khusus.tarifKlien, honorMitra: khusus.honorMitra };
+        else transportHilang = true;
+      } else if (s.jenjang !== null) {
+        const tt = tarifTransportPadaTanggal(tarifTransport, s.jenjang, s.tanggal);
+        if (tt) transport = { tarifKlien: tt.tarifKlien, honorMitra: tt.honorMitra };
+        else transportHilang = true;
+      }
+
+      if (t === null || transportHilang) {
+        // (3b) Sesi tak-bertarif — TIDAK dihitung nol diam-diam, dalam DUA
+        //      keadaan yang sejajar persis: tarif varian hilang (t === null,
+        //      seperti sebelum Task 9), ATAU tarif transport hilang padahal
+        //      jenjangnya diketahui (di_atas_20 tanpa transport_khusus, atau
+        //      jenjang lain yang rate card-nya belum mencakup tanggal sesi).
+        //      Honor separuh yang terlihat lengkap — honor varian dibayar,
+        //      transport ditelan senyap — lebih berbahaya daripada sesi yang
+        //      jujur dilaporkan tertunda: yang pertama tidak punya jejak yang
+        //      bisa diperiksa siapa pun. Karena itu honor VARIAN pun ikut
+        //      TIDAK disumkan di sini, walau `t` sendiri valid.
         baris.jumlahTakBertarif += 1;
         sesiTakBertarif.push({
           id: s.id,
           namaLayanan: s.namaLayanan,
           namaMitra: s.namaMitra,
           tanggal: s.tanggal,
+          // Varian diperiksa dulu: sesi yang KEDUANYA hilang menuding sebab
+          // yang paling mendasar (harga layanan itu sendiri belum ada) —
+          // memperbaikinya di /owner/tarif otomatis membuat sesi ini
+          // dievaluasi ulang, sementara menuding "transport" lebih dulu akan
+          // mengirim owner ke layar yang tidak akan pernah menyelesaikannya
+          // selama tarif variannya sendiri masih kosong.
+          sebab: t === null ? "varian" : "transport",
         });
       } else {
         // (4) Sesi berpaket DAN sesi lepas keduanya menghasilkan honor —
         //     bidan bekerja pada keduanya. `clientPackageId` sengaja TIDAK
-        //     dipakai sebagai penyaring di sini.
-        baris.totalHonor += t.honorMitra;
-        totalHonor += t.honorMitra;
-        totalHarga += t.hargaKlien;
+        //     dipakai sebagai penyaring di sini. Transport (bila ada)
+        //     ditambahkan di atas honor varian, bukan menggantikannya.
+        const honorTransport = transport?.honorMitra ?? 0;
+        const hargaTransport = transport?.tarifKlien ?? 0;
+        baris.totalHonor += t.honorMitra + honorTransport;
+        totalHonor += t.honorMitra + honorTransport;
+        totalHarga += t.hargaKlien + hargaTransport;
       }
 
       perMitra.set(s.partnerId, baris);

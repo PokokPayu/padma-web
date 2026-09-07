@@ -1,5 +1,12 @@
 import { formatTanggalID, sudahLewat } from "./waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
+import type { JenjangTransport } from "@/lib/transport/jarak";
+// Label jenjang dipakai ULANG dari modul Sesi admin — SATU-SATUNYA sumber,
+// sama seperti `app/owner/transport/status.ts` sudah melakukannya. Menulis
+// ulang lima label ini di sini akan melahirkan DUA daftar yang bisa berbeda
+// nama pada perubahan berikutnya (persis kelas bug yang diperingatkan
+// berulang kali di proyek ini untuk `labelVarian`/`tarifTransportPadaTanggal`).
+import { LABEL_JENJANG } from "@/app/admin/sesi/status";
 
 export type StatusSesi = "terjadwal" | "selesai" | "batal";
 export type PayStatus = "belum" | "menunggu_verifikasi" | "lunas";
@@ -15,6 +22,13 @@ export type SesiRingkas = {
   catatan: string;
   rekomendasi: string;
   statusBayar: PayStatus;
+  /**
+   * Jenjang jarak (Task 8/9) — `null` berarti jaraknya belum diketahui (sesi
+   * lama, atau mitra belum ditentukan). `susunTagihan()` hanya menambahkan
+   * baris transport ketika medan ini TERISI; tidak ada nominal di sini sama
+   * sekali (money firewall) — labelnya murni jenjang + tanggal.
+   */
+  jenjang: JenjangTransport | null;
   /**
    * Varian yang dipesan sesi ini — dibawa mentah (bukan label jadi) supaya
    * `susunTagihan()` merangkainya lewat `labelVarian()` (`@/lib/varian`),
@@ -140,6 +154,25 @@ export function susunTagihan(input: {
           : `${s.namaLayanan} · ${varLabel} · ${formatTanggalID(s.tanggal)}`,
       status: s.statusBayar,
     });
+
+    // (Task 9) Baris TRANSPORT tambahan — hanya ketika jaraknya diketahui.
+    // TANPA NOMINAL sama sekali (money firewall): klien di sini tidak pernah
+    // berhak baca `transport_rates`/`transport_khusus` (RLS "hanya owner"),
+    // jadi labelnya murni jenjang + tanggal, persis seperti rate card owner
+    // menamainya (`LABEL_JENJANG`, `@/app/admin/sesi/status`).
+    //
+    // `id` & `jenis` SENGAJA SAMA PERSIS dengan baris sesi di atas — tidak ada
+    // kolom `status_bayar` terpisah untuk transport, jadi "Tandai
+    // lunas"/"Saya sudah bayar" pada baris ini melunasi SESI YANG SAMA, bukan
+    // baris hantu ber-id palsu yang tidak pernah ada di `sessions`.
+    if (s.jenjang !== null) {
+      item.push({
+        jenis: "sesi",
+        id: s.id,
+        label: `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`,
+        status: s.statusBayar,
+      });
+    }
   }
   return item;
 }

@@ -424,6 +424,62 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Baris TRANSPORT di tagihan admin & klien (Task 9)
+// ---------------------------------------------------------------------------
+describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9)", () => {
+  // Fixture SENDIRI, sama polanya dengan describe varian di atas: sesi
+  // berjenjang butuh kolom `sessions.jenjang` yang tidak disentuh fixture
+  // modul ini (SESI_UJI seluruhnya `jenjang: null`).
+  const SESI_TRANSPORT = "66666666-6666-6666-6666-6666666666c6";
+
+  beforeAll(async () => {
+    await admin.from("sessions").insert(
+      baris(SESI_TRANSPORT, { status_bayar: "belum", jenjang: "10_15" }),
+    );
+  });
+
+  afterAll(async () => {
+    await admin.from("sessions").delete().eq("id", SESI_TRANSPORT);
+  });
+
+  it("sesi berjenjang menghasilkan DUA baris tagihan admin: sesi & transport, id SAMA", async () => {
+    const daftar = (await daftarTagihanAdmin()).filter((t) => t.id === SESI_TRANSPORT);
+    expect(daftar).toHaveLength(2);
+    expect(daftar.every((t) => t.jenis === "sesi")).toBe(true);
+    expect(daftar.some((t) => t.label.startsWith("Transport"))).toBe(true);
+    // >10–15 km — LABEL_JENJANG (@/app/admin/sesi/status), SATU-SATUNYA sumber.
+    expect(daftar.find((t) => t.label.startsWith("Transport"))!.label).toContain(">10–15 km");
+  });
+
+  it("baris transport TIDAK ada untuk sesi tanpa jenjang (SESI_MENUNGGU dkk.)", async () => {
+    const daftar = await daftarTagihanAdmin();
+    expect(daftar.filter((t) => t.id === SESI_MENUNGGU)).toHaveLength(1);
+  });
+
+  it("label baris transport klien (susunTagihan) dan admin (daftarTagihanAdmin) IDENTIK huruf demi huruf", async () => {
+    const labelAdmin = (await daftarTagihanAdmin())
+      .find((t) => t.id === SESI_TRANSPORT && t.label.startsWith("Transport"))!.label;
+
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+    const labelKlien = susunTagihan({ paket, sesi })
+      .find((t) => t.id === SESI_TRANSPORT && t.label.startsWith("Transport"))!.label;
+
+    expect(labelKlien).toBe(labelAdmin);
+  });
+
+  it("admin/tagihan.ts tidak pernah menyebut tabel uang transport (money firewall)", () => {
+    // Label transport dirangkai HANYA dari `sessions.jenjang` (enum, bukan
+    // nominal) — modul ini tidak butuh, dan tidak boleh, membaca
+    // `transport_rates`/`transport_khusus` sama sekali untuk menampilkan
+    // labelnya.
+    expect(sumberData).not.toContain("transport_rates");
+    expect(sumberData).not.toContain("transport_khusus");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // tandaiLunas
 // ---------------------------------------------------------------------------
 

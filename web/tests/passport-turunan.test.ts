@@ -3,11 +3,15 @@ import {
   progresPaket, gridStempel, sesiBerikutnya, badgeDari, susunTagihan,
   type SesiRingkas,
 } from "@/lib/passport/turunan";
+import { formatTanggalID } from "@/lib/passport/waktu";
 
+// `jenjang: null` secara BAWAAN — sama seperti `sesi()` di tests/owner-rekap.test.ts:
+// sesi lama yang belum menyebut jenjang tidak boleh diam-diam mendapat baris
+// transport apa pun.
 const s = (o: Partial<SesiRingkas>): SesiRingkas => ({
   id: "s1", serviceId: "svc1", namaLayanan: "Layanan", namaMitra: "Bidan A",
   tanggal: "2026-07-08", status: "selesai", clientPackageId: "pkg1",
-  catatan: "", rekomendasi: "", statusBayar: "belum",
+  catatan: "", rekomendasi: "", statusBayar: "belum", jenjang: null,
   varian: { label: "", durasiMenit: null, format: null }, ...o,
 });
 
@@ -174,5 +178,75 @@ describe("susunTagihan", () => {
       ],
     });
     expect((t[0].label.match(/ · /g) ?? []).length).toBe(1);
+  });
+
+  // ---------------------------------------------------------------------
+  // Baris TRANSPORT (Task 9) — label-nya harus IDENTIK huruf demi huruf
+  // dengan daftarTagihanAdmin() (@/lib/admin/tagihan); dikunci lewat uji
+  // parity di tests/admin-bayar.test.ts. Di sini hanya bentuknya sendiri.
+  // ---------------------------------------------------------------------
+
+  it("sesi lepas berjenjang mendapat SATU baris transport tambahan", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, jenjang: "5_10" })],
+    });
+    expect(t).toHaveLength(2);
+    const transport = t.find((it) => it.id === "x" && it !== t[0]) ?? t[1];
+    expect(transport.label).toContain("Transport");
+  });
+
+  it("baris transport berbagi id & jenis PERSIS dengan sesi induknya — satu status_bayar untuk keduanya", () => {
+    // Tidak ada kolom pembayaran transport terpisah: melunasi sesi berarti
+    // melunasi transportnya juga. Memberi id BERBEDA pada baris transport
+    // akan membuat "Tandai lunas"/"Saya sudah bayar" pada baris itu mencoba
+    // memperbarui baris yang tidak pernah ada di `sessions`.
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, jenjang: "5_10", statusBayar: "menunggu_verifikasi" })],
+    });
+    expect(t).toHaveLength(2);
+    for (const item of t) {
+      expect(item.jenis).toBe("sesi");
+      expect(item.id).toBe("x");
+      expect(item.status).toBe("menunggu_verifikasi");
+    }
+  });
+
+  it("label baris transport menyebut jenjang & tanggal, IDENTIK format label sesi lain", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, tanggal: "2026-09-05", jenjang: "0_5" })],
+    });
+    const transport = t[1];
+    expect(transport.label).toContain("0–5 km");
+    expect(transport.label).toContain(formatTanggalID("2026-09-05"));
+  });
+
+  it("sesi lepas TANPA jenjang (null) tidak mendapat baris transport", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, jenjang: null })],
+    });
+    expect(t).toHaveLength(1);
+  });
+
+  it("sesi BERPAKET berjenjang tidak mendapat baris transport tersendiri", () => {
+    // Sesi berpaket sendiri tidak menjadi item (ditelan item paket) — jadi
+    // transportnya pun tidak boleh muncul sebagai baris lepas.
+    const t = susunTagihan({
+      paket: [{ id: "p1", nama: "Sankalpa Prima", jumlahSesi: 8, statusBayar: "lunas" }],
+      sesi: [s({ id: "a", clientPackageId: "p1", jenjang: "5_10" })],
+    });
+    expect(t).toHaveLength(1);
+    expect(t[0].jenis).toBe("paket");
+  });
+
+  it("sesi BATAL berjenjang tidak mendapat baris transport", () => {
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, status: "batal", jenjang: "5_10" })],
+    });
+    expect(t).toHaveLength(0);
   });
 });

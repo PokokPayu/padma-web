@@ -202,6 +202,7 @@ function petakan(r: {
     catatan: r.catatan ?? "",
     rekomendasi: r.rekomendasi ?? "",
     statusBayar: "belum",
+    jenjang: null,
     varian: { label: "", durasiMenit: null, format: null },
   };
 }

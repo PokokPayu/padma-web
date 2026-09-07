@@ -6,7 +6,9 @@ import {
   type SesiRekap,
   type TandaBayar,
   type RekapPekan,
+  type TransportKhususRingkas,
 } from "@/lib/owner/rekap";
+import type { TarifTransportRingkas } from "@/lib/transport/tarif";
 
 // ============================================================================
 // Fungsi rekap adalah fungsi MURNI — tanpa I/O, tanpa DB, tanpa jam. Seluruh
@@ -24,11 +26,23 @@ const tarif = (o: Partial<TarifRingkas>): TarifRingkas => ({
 // ("svc-massage" dst.): fungsi rekap adalah fungsi MURNI yang tidak tahu-menahu
 // bentuk UUID sungguhan, dan pencocokan tarif kini lewat `variantId` — bukan
 // `serviceId`, yang tetap dibawa tipe ini untuk pengelompokan tampilan.
+// `jenjang: null` secara BAWAAN — Ruling 14: sesi TANPA jenjang berarti
+// jaraknya belum pernah diketahui (data lama sebelum kolom ini lahir, atau
+// mitra belum ditentukan saat sesi dicatat), BUKAN transport gratis. Seluruh
+// test lama di berkas ini yang tidak menyebut `jenjang` sama sekali karena itu
+// tetap lulus tanpa perlu disentuh — komponen transportnya nol, tetapi
+// honor VARIAN-nya tetap utuh dan sesinya TIDAK jatuh sebagai tak-bertarif.
+// Lihat komentar di `hitungRekap()` (lib/owner/rekap.ts) untuk alasan penuh.
 const sesi = (o: Partial<SesiRekap>): SesiRekap => ({
   id: "s1", serviceId: "svc-massage", variantId: "svc-massage",
   namaLayanan: "Sankalpa Fertility Massage",
   partnerId: "p-ananda", namaMitra: "Bidan Ananda", tanggal: "2026-08-26",
-  status: "selesai", clientPackageId: null, selesaiPada: null, ...o,
+  status: "selesai", clientPackageId: null, selesaiPada: null, jenjang: null, ...o,
+});
+
+const tarifTransport = (o: Partial<TarifTransportRingkas>): TarifTransportRingkas => ({
+  id: "tt1", jenjang: "5_10", tarifKlien: 20_000, honorMitra: 30_000,
+  berlakuSejak: "2026-01-01", ...o,
 });
 
 // Senin 2026-08-24 .. Minggu 2026-08-30
@@ -393,6 +407,126 @@ describe("hitungRekap — sesi berpaket DAN sesi lepas sama-sama menghasilkan ho
       tanda: [],
     });
     expect(r[0].totalHonor).toBe(200_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// hitungRekap — komponen TRANSPORT (Task 9)
+// ---------------------------------------------------------------------------
+// Tarif transport (Task 8) hidup di `transport_rates` (per jenjang, sejajar
+// `variant_rates`) dan `transport_khusus` (per SESI, hanya untuk `di_atas_20`).
+// Honor mitra & harga klien wajib memuat KEDUANYA — honor varian SENDIRIAN
+// bukan lagi honor penuh sesi sejak sesi punya jarak.
+describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
+  it("honor mitra memuat komponen transport menurut TANGGAL SESI", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "5_10" })],
+      tarif: [tarif({})],
+      tarifTransport: [tarifTransport({})],
+      tanda: [],
+    });
+    // tarif({}) = harga 500.000 / honor 200.000; tarifTransport({}) = tarif
+    // klien 20.000 / honor mitra 30.000.
+    expect(r[0].perMitra[0].totalHonor).toBe(200_000 + 30_000);
+    expect(r[0].totalHarga).toBe(500_000 + 20_000);
+  });
+
+  it("menaikkan tarif transport TIDAK menggeser rekap pekan lalu", () => {
+    const lama = tarifTransport({ id: "tt-lama", berlakuSejak: "2020-01-01" });
+    const baru = tarifTransport({
+      id: "tt-baru", tarifKlien: 99_000, honorMitra: 99_000, berlakuSejak: "2026-09-01",
+    });
+    const sesiLama = sesi({ jenjang: "5_10", tanggal: "2026-08-26" }); // < 2026-09-01
+    const dasar = { sesi: [sesiLama], tarif: [tarif({})], tanda: [] };
+
+    const sebelum = hitungRekap({ ...dasar, tarifTransport: [lama] });
+    const sesudah = hitungRekap({ ...dasar, tarifTransport: [lama, baru] });
+
+    expect(sebelum[0].perMitra[0].totalHonor).toBe(sesudah[0].perMitra[0].totalHonor);
+    expect(sesudah[0].perMitra[0].totalHonor).toBe(200_000 + 30_000); // tarif lama, bukan 99.000
+  });
+
+  it("subsidi 0–5 km muncul sebagai selisih, bukan kolom", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "0_5" })],
+      tarif: [tarif({})],
+      tarifTransport: [tarifTransport({ jenjang: "0_5", tarifKlien: 0, honorMitra: 10_000 })],
+      tanda: [],
+    });
+    // Klien membayar Rp0 untuk transport, mitra menerima Rp10.000 → margin
+    // pekan berkurang 10.000 dari yang tanpa transport. Tidak ada medan
+    // "subsidi" tersendiri mana pun di BarisMitra — ia HANYA selisih ini.
+    expect(r[0].margin).toBe(500_000 - 200_000 - 10_000);
+    expect(r[0].perMitra[0]).not.toHaveProperty("subsidi");
+  });
+
+  it("sesi di_atas_20 tanpa tarif khusus TIDAK dihitung sebagai transport nol (Ruling 14)", () => {
+    // Nol yang salah lebih berbahaya daripada nol yang jujur: ia terlihat
+    // benar. Karena itu SELURUH honor sesi ini — termasuk honor varian yang
+    // sebenarnya valid — jatuh sebagai tak-bertarif, sejajar persis perlakuan
+    // tarif varian yang hilang.
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "di_atas_20" })],
+      tarif: [tarif({})],
+      tarifTransport: [],
+      transportKhusus: [],
+      tanda: [],
+    });
+    expect(r[0].sesiTakBertarif).toHaveLength(1);
+    expect(r[0].sesiTakBertarif[0].sebab).toBe("transport");
+    expect(r[0].perMitra[0].jumlahTakBertarif).toBe(1);
+    expect(r[0].perMitra[0].totalHonor).toBe(0);
+  });
+
+  it("sesi di_atas_20 DENGAN tarif khusus dihitung dari transport_khusus, bukan rate card", () => {
+    const khusus: TransportKhususRingkas = { sessionId: "s1", tarifKlien: 80_000, honorMitra: 120_000 };
+    const r = hitungRekap({
+      sesi: [sesi({ id: "s1", jenjang: "di_atas_20" })],
+      tarif: [tarif({})],
+      tarifTransport: [],
+      transportKhusus: [khusus],
+      tanda: [],
+    });
+    expect(r[0].sesiTakBertarif).toHaveLength(0);
+    expect(r[0].perMitra[0].totalHonor).toBe(200_000 + 120_000);
+    expect(r[0].totalHarga).toBe(500_000 + 80_000);
+  });
+
+  it("jenjang yang tarifnya belum mencakup tanggal sesi jatuh tak-bertarif (sebab transport)", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "5_10", tanggal: "2019-01-01" })],
+      tarif: [tarif({ berlakuSejak: "2010-01-01" })], // tarif varian SUDAH mencakup tanggal sesi
+      tarifTransport: [tarifTransport({ berlakuSejak: "2026-01-01" })], // tarif transport BELUM
+      tanda: [],
+    });
+    expect(r[0].sesiTakBertarif[0].sebab).toBe("transport");
+    expect(r[0].perMitra[0].totalHonor).toBe(0);
+  });
+
+  it("sesi TANPA jenjang (null): transport nol, TAPI honor varian tetap utuh — bukan tertunda", () => {
+    // Keputusan didokumentasikan di `hitungRekap()`: `jenjang === null` berarti
+    // JARAK BELUM DIKETAHUI (sesi lama, sebelum kolom ini ada), bukan transport
+    // gratis. Menandainya tak-bertarif akan membuat SETIAP sesi lama yang
+    // memang tidak pernah diisi retroaktif kehilangan honor variannya yang
+    // sudah sah.
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: null })],
+      tarif: [tarif({})],
+      tarifTransport: [tarifTransport({})],
+      tanda: [],
+    });
+    expect(r[0].perMitra[0].totalHonor).toBe(200_000);
+    expect(r[0].sesiTakBertarif).toHaveLength(0);
+  });
+
+  it("tarif varian DAN tarif transport sama-sama hilang: sebab bertuding 'varian' (yang paling mendasar)", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "5_10", tanggal: "2019-01-01" })],
+      tarif: [tarif({ berlakuSejak: "2026-01-01" })], // lebih baru dari sesi
+      tarifTransport: [],
+      tanda: [],
+    });
+    expect(r[0].sesiTakBertarif[0].sebab).toBe("varian");
   });
 });
 

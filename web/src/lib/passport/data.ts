@@ -2,6 +2,7 @@ import { cache } from "react";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { FormatVarian } from "@/lib/varian";
+import type { JenjangTransport } from "@/lib/transport/jarak";
 import { saringDaftarMateri } from "./materi-tampil";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
 
@@ -72,6 +73,7 @@ type BarisSesi = {
   service_id: string;
   variant_id: string;
   partner_id: string;
+  jenjang: JenjangTransport | null;
   services: { nama: string } | null;
 };
 
@@ -106,7 +108,7 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
     supabase
       .from("sessions")
       .select(
-        "id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, services(nama)",
+        "id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, jenjang, services(nama)",
       )
       .eq("client_id", clientId) // eksplisit, walau RLS sudah menyaring
       // `tanggal` bertipe date dan sudah berupa string YYYY-MM-DD: urutannya
@@ -139,6 +141,7 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
       catatan: r.catatan ?? "",
       rekomendasi: r.rekomendasi ?? "",
       statusBayar: r.status_bayar,
+      jenjang: r.jenjang,
       varian: v
         ? { label: v.label, durasiMenit: v.durasi_menit, format: v.format }
         : VARIAN_BAKU,
