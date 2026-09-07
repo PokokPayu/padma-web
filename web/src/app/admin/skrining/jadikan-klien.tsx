@@ -5,8 +5,8 @@ import { useState, useTransition } from "react";
 import { jadikanKlien } from "./aksi";
 
 const KELAS_MEDAN =
-  "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
-const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
+  "mt-1 min-h-[42px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13.5px]";
+const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 
 /**
  * Dialog konversi Skrining → Klien.
@@ -49,7 +49,7 @@ export function JadikanKlien({
 
   if (hasil) {
     return (
-      <div className="rounded-2xl border-[1.5px] border-dashed border-leaf bg-leaf-soft p-4 text-[13px]">
+      <div className="rounded-lg border-[1.5px] border-dashed border-leaf bg-leaf-soft p-4 text-[13px]">
         <p>
           Tersimpan sebagai <b className="font-mono">{hasil.padmaId}</b>. Langkah
           berikutnya: terbitkan tautan aktivasi dari halaman kliennya.
@@ -77,13 +77,13 @@ export function JadikanKlien({
           }
         })
       }
-      className="rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
+      className="rounded-lg border-[1.5px] border-panel-border bg-panel-bg p-4"
     >
-      <h3 className="mb-1 text-[13.5px] font-extrabold text-ink">
+      <h3 className="mb-1 text-[13.5px] font-extrabold text-panel-ink">
         Daftarkan sebagai klien
       </h3>
-      <p className="mb-3 text-[12.5px] text-ink-soft">
-        Fase mengikuti hasil skrining: <b className="text-ink">{namaFase}</b>.
+      <p className="mb-3 text-[12.5px] text-panel-muted">
+        Fase mengikuti hasil skrining: <b className="text-panel-ink">{namaFase}</b>.
         PADMA ID dibuat otomatis, dan akunnya baru hidup setelah tautan aktivasi
         ditukarkan.
       </p>
@@ -121,7 +121,7 @@ export function JadikanKlien({
       <button
         type="submit"
         disabled={pending}
-        className="mt-4 rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+        className="mt-4 rounded-xl bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
       >
         {pending ? "Menyimpan…" : "Simpan klien"}
       </button>

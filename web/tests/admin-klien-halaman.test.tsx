@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 import { pesanBerikutnya } from "@/app/admin/klien/form-klien";
 import { nominalDalam } from "./helpers/nominal";
+
+const AKAR = path.resolve(__dirname, "..");
+const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: async () => "admin" }));
 
@@ -106,5 +111,46 @@ describe("pesanBerikutnya — pesan sukses dan galat FormKlienBaru saling meniad
       pesan: null,
       berhasil: "PAD-0002",
     });
+  });
+});
+
+describe("palet — satu layar, satu palet", () => {
+  const BERKAS = [
+    "src/app/admin/klien/baru/page.tsx",
+    "src/app/admin/klien/[id]/page.tsx",
+    "src/app/admin/klien/form-klien.tsx",
+    "src/app/admin/klien/[id]/kartu-aktivasi.tsx",
+    "src/app/admin/skrining/jadikan-klien.tsx",
+  ];
+
+  it("tidak ada sisa palet lama di modul Klien", () => {
+    // Kelas-kelas ini adalah palet halaman KLIEN (paper/night/gold), bukan
+    // palet ruang kerja staf. Bertetangga dengan daftar bertoken panel-*,
+    // keduanya terbaca sebagai dua aplikasi berbeda dalam satu layar.
+    // "border-black/10" dan "border-black/15" dituliskan terpisah (bukan
+    // sebagai awalan "border-black/1") supaya daftarnya tidak butuh
+    // penjelasan tambahan untuk dibaca.
+    const sisa: string[] = [];
+    for (const b of BERKAS) {
+      const isi = baca(b);
+      for (const kelas of [
+        "bg-night",
+        "text-gold-pale",
+        "border-gold",
+        "bg-white",
+        "border-black/10",
+        "border-black/15",
+      ]) {
+        if (isi.includes(kelas)) sisa.push(`${b}: ${kelas}`);
+      }
+    }
+    expect(sisa).toEqual([]);
+  });
+
+  it("pagar bergigi: daftar berkas tidak kosong dan berkasnya benar-benar terbaca", () => {
+    // Tanpa ini, salah tulis path membuat `baca()` melempar — atau, bila
+    // suatu saat diberi nilai cadangan, membuat seluruh uji lolos hampa.
+    expect(BERKAS.length).toBeGreaterThan(0);
+    for (const b of BERKAS) expect(baca(b).length).toBeGreaterThan(100);
   });
 });

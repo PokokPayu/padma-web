@@ -81,9 +81,9 @@ export function KartuAktivasi({
   }
 
   return (
-    <section className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-5">
-      <h2 className="font-serif text-lg text-night">Aktivasi akun</h2>
-      <p className="mt-1 text-[13px] text-ink-soft">
+    <section className="mb-4 rounded-lg border-[1.5px] border-panel-border bg-panel-bg p-5">
+      <h2 className="font-serif text-lg text-panel-ink">Aktivasi akun</h2>
+      <p className="mt-1 text-[13px] text-panel-muted">
         {nama} belum bisa masuk. Terbitkan tautan sekali-pakai, lalu kirimkan
         lewat WhatsApp bersama pesan sambutan di bawah.
       </p>
@@ -92,7 +92,7 @@ export function KartuAktivasi({
         type="button"
         onClick={terbitkan}
         disabled={pending}
-        className="mt-3.5 rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+        className="mt-3.5 rounded-xl bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
       >
         {pending
           ? "Menerbitkan…"
@@ -107,7 +107,7 @@ export function KartuAktivasi({
         <div className="mt-4">
           <label
             htmlFor="pesan-aktivasi"
-            className="block text-[12.5px] font-bold text-ink-soft"
+            className="block text-[12.5px] font-bold text-panel-muted"
           >
             Pesan WhatsApp siap salin
           </label>
@@ -116,14 +116,14 @@ export function KartuAktivasi({
             readOnly
             rows={9}
             value={teks}
-            className="mt-1 w-full rounded-lg border border-black/15 bg-white px-3 py-2 font-mono text-[12.5px] leading-relaxed"
+            className="mt-1 w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 font-mono text-[12.5px] leading-relaxed"
           />
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
             <button
               type="button"
               onClick={salin}
-              className="rounded-xl border border-black/15 bg-white px-4 py-2.5 text-[13px] font-bold text-ink"
+              className="rounded-xl border border-panel-border bg-panel-surface px-4 py-2.5 text-[13px] font-bold text-panel-ink"
             >
               Salin pesan
             </button>
@@ -132,8 +132,8 @@ export function KartuAktivasi({
             )}
           </div>
 
-          <p className="mt-3 rounded-xl bg-white/70 p-3 text-[12.5px] leading-relaxed text-ink-soft">
-            <b className="text-ink">Tautan ini hanya tampil sekali.</b> Yang
+          <p className="mt-3 rounded-xl bg-panel-surface/70 p-3 text-[12.5px] leading-relaxed text-panel-muted">
+            <b className="text-panel-ink">Tautan ini hanya tampil sekali.</b> Yang
             tersimpan di sistem cuma sidik jarinya, jadi halaman ini tidak bisa
             menampilkannya lagi setelah ditutup. Menerbitkan tautan baru akan
             membatalkan tautan yang sudah terkirim.
