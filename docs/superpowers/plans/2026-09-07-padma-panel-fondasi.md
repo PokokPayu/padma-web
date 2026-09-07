@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Tanpa dependensi baru.** Tidak ada jsdom, testing-library, pustaka tabel, atau pustaka drawer. Mengikat sejak rencana panel pertama.
-- **Primitif di `src/app/_shell/panel/**` WAJIB buta peran.** Tidak boleh ada satu pun kata `admin`, `owner`, atau `user_role` di dalamnya. Dijaga `tests/panel-primitif.test.ts`.
+- **Primitif di `src/app/_shell/panel/**` WAJIB buta peran.** Pagarnya (`tests/panel-primitif.test.ts`, uji "BUTA PERAN") menuntut empat hal secara harfiah: tidak ada literal string `"admin"`/`"owner"` (regex `/"(admin|owner)"/i` — TANDA KUTIPNYA bagian dari pola, jadi kata di dalam komentar prosa tidak dilanggar), tidak ada `requireRole`, tidak ada `createAdminSupabase`, dan tidak ada `Rp <angka>` maupun `formatRupiah`. Tetap tulis komentar dengan "staf" alih-alih "admin" bila maksudnya siapa pun yang memakai panel — primitif ini dipakai panel admin DAN owner, jadi "staf" memang lebih tepat, bukan sekadar menghindari pagar.
 - **Money firewall:** `/admin` tidak menampilkan satu nominal rupiah pun. Dijaga `tests/money-firewall-struktural.test.ts` yang memindai `information_schema` DAN teks sumber.
 - **Berkas `"use server"` hanya boleh mengekspor fungsi async.** Konstanta dan validator sinkron tinggal di `status.ts` sebelahnya.
 - **Fungsi tidak bisa dioper dari server component ke client component.** Oper string dan data biasa saja.
