@@ -2,8 +2,10 @@
  * E2E Digital Care Passport (Plan 4 Task 10).
  *
  * Membuktikan lewat browser sungguhan — bukan unit test dengan mock — bahwa:
- *   1. Beranda menampilkan sampul, 6 stempel terisi dari 8, progres 75%,
- *      dan bagian pencapaian.
+ *   1. Beranda menampilkan sampul dan bagian pencapaian; grid stempel &
+ *      progres paket (6 dari 8, 75%) HANYA selama `PAKET_TAMPIL` menyala
+ *      (saklar K11) — mati, beranda jatuh ke kartu fallback "Perjalanan
+ *      Anda" dan grid stempel wajib kosong. Lihat langkah 1b/1c.
  *   2. Riwayat sesi menyebut NAMA BIDAN (bukti `partner_publik` bekerja) dan
  *      catatan bidan baru terlihat sesudah kartunya diketuk.
  *   3. Materi tergating: isi bab & URL video tidak pernah ikut ke halaman
@@ -29,6 +31,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 config({ path: [".env.local", ".env"] });
 
@@ -127,21 +130,47 @@ async function main() {
       teksBeranda.includes("Ananda Putri") && teksBeranda.includes(PADMA_ID),
       `isi: ${teksBeranda.slice(0, 120)}`,
     );
-    catat(
-      "1b. progres paket 6 dari 8 (75%)",
-      teksBeranda.includes("6 dari 8 sesi selesai") && teksBeranda.includes("75%"),
-      teksBeranda.includes("75%") ? "75% tampil" : "progres TIDAK sesuai seed",
-    );
-    // JENIS slot dibaca lewat data-stempel, bukan lewat jumlah <svg>: kelas dan
-    // ikon berubah tiap desain disetel, sedangkan jenis slot adalah kontraknya.
-    const terisi = await page.locator('[data-stempel="terisi"]').count();
-    const berikutnya = await page.locator('[data-stempel="berikutnya"]').count();
-    const kosong = await page.locator('[data-stempel="kosong"]').count();
-    catat(
-      "1c. grid stempel 6 terisi + 1 berikutnya + 1 kosong",
-      terisi === 6 && berikutnya === 1 && kosong === 1,
-      `terisi=${terisi} berikutnya=${berikutnya} kosong=${kosong}`,
-    );
+    if (PAKET_TAMPIL) {
+      catat(
+        "1b. progres paket 6 dari 8 (75%)",
+        teksBeranda.includes("6 dari 8 sesi selesai") && teksBeranda.includes("75%"),
+        teksBeranda.includes("75%") ? "75% tampil" : "progres TIDAK sesuai seed",
+      );
+      // JENIS slot dibaca lewat data-stempel, bukan lewat jumlah <svg>: kelas dan
+      // ikon berubah tiap desain disetel, sedangkan jenis slot adalah kontraknya.
+      const terisi = await page.locator('[data-stempel="terisi"]').count();
+      const berikutnya = await page.locator('[data-stempel="berikutnya"]').count();
+      const kosong = await page.locator('[data-stempel="kosong"]').count();
+      catat(
+        "1c. grid stempel 6 terisi + 1 berikutnya + 1 kosong",
+        terisi === 6 && berikutnya === 1 && kosong === 1,
+        `terisi=${terisi} berikutnya=${berikutnya} kosong=${kosong}`,
+      );
+    } else {
+      // Saklar K11: `ambilPaket()` memulangkan [] selama PAKET_TAMPIL mati
+      // (src/lib/passport/data.ts), jadi `paketAktif` di page.tsx selalu null
+      // walau klien seed (Ananda) memang punya paket aktif di database.
+      // Beranda jatuh ke kartu fallback "Perjalanan Anda" — lihat
+      // tests/passport-beranda.test.ts, describe "paket & stempel", yang
+      // membuktikan bentuk statis lewat markup. Di sini, lewat browser
+      // sungguhan, dibuktikan yang sama: fallback benar-benar tampil DAN grid
+      // stempel benar-benar kosong — bukan diam-diam separuh jadi (mis. kartu
+      // fallback muncul BERSAMA sisa grid stempel lama).
+      catat(
+        "1b. tanpa paket aktif, beranda jatuh ke kartu fallback 'Perjalanan Anda' (saklar K11)",
+        teksBeranda.includes("Perjalanan Anda") &&
+          teksBeranda.includes("Anda mengambil layanan per sesi"),
+        teksBeranda.includes("Perjalanan Anda")
+          ? "kartu fallback tampil"
+          : "kartu fallback TIDAK tampil",
+      );
+      const totalStempel = await page.locator("[data-stempel]").count();
+      catat(
+        "1c. grid stempel tidak dirender sama sekali selama paket tersembunyi",
+        totalStempel === 0,
+        `elemen [data-stempel] ditemukan: ${totalStempel}`,
+      );
+    }
     const badge = await page.locator("[data-badge]").count();
     catat(
       "1d. bagian pencapaian memuat 3 badge",

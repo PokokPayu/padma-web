@@ -17,10 +17,17 @@ const MANFAAT = [
 // nyata) — sama seperti prototipe yang disetujui klien. Baris "Paket aktif"
 // diganti "Sesi berikutnya": ilustrasi tidak boleh menjanjikan sesuatu (kolom
 // paket) yang sedang tidak ada di produk sungguhan.
+//
+// Baris ketiga sebelumnya berbunyi "Progres · 6 dari 8 sesi" — bentuk "x dari
+// y" yang menjanjikan PERSIS hal yang sama dengan "Paket aktif" lewat rupa
+// berbeda: rangkaian sesi berbatas. Diganti "Sejak", field nyata yang memang
+// selalu ada di sampul sungguhan (`SampulPassport`, src/app/passport/
+// _komponen/sampul.tsx) dengan atau tanpa paket — supaya kartu ini tidak lagi
+// membawa dua promise "x dari y sesi" (di sini DAN di strip mono bawah).
 const CONTOH_ISI: Array<[string, string]> = [
   ["Fase perjalanan", "Sankalpa · Promil"],
   ["Sesi berikutnya", "Garbha Relief · 90 menit"],
-  ["Progres", "6 dari 8 sesi"],
+  ["Sejak", "Juli 2026"],
 ];
 
 export function PassportTeaser() {

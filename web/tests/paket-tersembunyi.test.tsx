@@ -19,6 +19,8 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { signInAs } from "./helpers/as-user";
 
 /** Klien seed yang memang punya paket aktif — nilai yang sama dipakai
@@ -290,5 +292,83 @@ describe("saklar paket: halaman owner tidak menyebut paket", () => {
   it("halaman /owner/rekap tidak menyebut paket", async () => {
     const { default: RekapPage } = await import("@/app/owner/rekap/page");
     expect(renderToStaticMarkup(await RekapPage())).not.toMatch(/paket/i);
+  });
+});
+
+/**
+ * PAGAR SAKLAR PAKET — SISI TULIS (review akhir cabang, temuan 3).
+ *
+ * `FormJadwalSesi` (form-sesi.tsx) menyimpan satu-satunya centang staf yang
+ * MENULIS `client_package_id` ke sesi baru: `jadwalkanSesi` (aksi.ts:220)
+ * membaca `formData.get("pakai_paket")` apa adanya dan sengaja TIDAK
+ * disentuh saklar ini — field yang tidak pernah dikirim form dibaca sebagai
+ * "tidak dicentang", persis checkbox kosong biasa (lihat komentar gerbang di
+ * form-sesi.tsx). Itu berarti SATU-SATUNYA pagar yang berdiri antara saklar
+ * mati dan sesi baru yang diam-diam terikat ke paket adalah blok
+ * `{PAKET_TAMPIL && (...)}` yang membungkus checkbox `<input
+ * name="pakai_paket">` di form-sesi.tsx.
+ *
+ * Uji "/admin/sesi tidak menyebut paket" di describe pertama berkas ini
+ * (di atas) MENGAKUI SENDIRI lewat komentarnya bahwa ia vakum untuk gerbang
+ * ini: `FormJadwalSesi` mulai TERTUTUP (`useState(false)`, form-sesi.tsx:63),
+ * jadi checkbox itu tidak pernah muncul di render SSR awal SAMA SEKALI —
+ * gerbangnya bisa dihapus total dari sumbernya dan uji itu tetap hijau.
+ * Tidak ada test lain di suite ini yang menyentuhnya.
+ *
+ * Merender formulir dalam keadaan TERBUKA butuh jsdom + testing-library
+ * (tidak ada di proyek ini, dan menambahkannya hanya demi satu assertion
+ * bukan bagian temuan ini) — persis alasan yang sama yang membuat
+ * `tests/transport-atribusi.test.ts` menjatuhkan `FormJadwalSesi` ke
+ * PEMINDAIAN SUMBER di bawah "Ruling 22" alih-alih render sungguhan. Berkas
+ * ini mengikuti pola yang sama: baca sumbernya, singkirkan komentar (supaya
+ * gerbang yang "dipindah ke komentar" tidak lolos palsu — kelas bug yang
+ * sama yang membuat transport-atribusi.test.ts menulis `tanpaKomentar()`),
+ * lalu buktikan checkbox itu duduk DI DALAM cakupan kurung `PAKET_TAMPIL &&
+ * ( ... )`, bukan sekadar di bawahnya dalam urutan baris.
+ */
+describe("saklar paket: gerbang TULIS pakai_paket (form-sesi.tsx)", () => {
+  const SUMBER_FORM_SESI = path.resolve(__dirname, "../src/app/admin/sesi/form-sesi.tsx");
+
+  /** Sama seperti tests/transport-atribusi.test.ts — komentar disingkirkan
+   *  lebih dulu supaya gerbang yang "dipindah ke komentar" tidak lolos palsu. */
+  function tanpaKomentar(kode: string): string {
+    return kode
+      .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+  }
+
+  /**
+   * Mencari `{PAKET_TAMPIL && (` lalu menghitung kurung sampai seimbang ke 0
+   * untuk mendapatkan CAKUPAN PERSIS blok yang digerbang — bukan sekadar
+   * "muncul sesudah kata PAKET_TAMPIL" (yang akan lolos palsu bila gerbangnya
+   * ditutup lebih awal dan checkbox ditulis di luar, sesudahnya).
+   */
+  function cakupanGerbangPaketTampil(kodeBersih: string): string | null {
+    const penanda = "PAKET_TAMPIL && (";
+    const mulaiPenanda = kodeBersih.indexOf(penanda);
+    if (mulaiPenanda === -1) return null;
+    const awalKurung = kodeBersih.indexOf("(", mulaiPenanda);
+    let dalam = 0;
+    for (let i = awalKurung; i < kodeBersih.length; i++) {
+      if (kodeBersih[i] === "(") dalam++;
+      else if (kodeBersih[i] === ")") {
+        dalam--;
+        if (dalam === 0) return kodeBersih.slice(awalKurung, i + 1);
+      }
+    }
+    return null; // kurung tidak pernah seimbang — sumber cacat, bukan blok valid
+  }
+
+  it("checkbox 'pakai_paket' masih ada di sumber (kontrol: bukan sekadar dihapus)", () => {
+    const sumber = readFileSync(SUMBER_FORM_SESI, "utf8");
+    expect(sumber).toContain('name="pakai_paket"');
+  });
+
+  it("checkbox 'pakai_paket' duduk DI DALAM cakupan `{PAKET_TAMPIL && (...)}`, bukan cuma sesudahnya", () => {
+    const bersih = tanpaKomentar(readFileSync(SUMBER_FORM_SESI, "utf8"));
+    const blok = cakupanGerbangPaketTampil(bersih);
+    expect(blok).not.toBeNull();
+    expect(blok).toContain('name="pakai_paket"');
   });
 });
