@@ -48,6 +48,11 @@ export function FormMasuk() {
           className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
         />
       </label>
+      <div className="text-right -mt-2">
+        <a href="/lupa-sandi" className="text-[12.5px] font-semibold text-leaf underline">
+          Lupa kata sandi?
+        </a>
+      </div>
       {pesan && <p className="text-sm text-clay">{pesan}</p>}
       <button
         type="submit" disabled={sibuk}
@@ -61,6 +66,10 @@ export function FormMasuk() {
       >
         Masuk dengan Google
       </button>
+      <p className="text-center text-[13px] text-ink-soft">
+        Belum punya akun?{" "}
+        <a href="/daftar" className="font-semibold text-leaf underline">Daftar</a>
+      </p>
     </form>
   );
 }
