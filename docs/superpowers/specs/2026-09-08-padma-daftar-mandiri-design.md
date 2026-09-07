@@ -4,6 +4,15 @@
 **Pendahulu:** `docs/superpowers/specs/2026-08-26-padma-v1-design.md` (model penautan akun),
 `docs/superpowers/specs/2026-09-07-padma-panel-list-form-design.md` (butir K8 — logo ditunda).
 
+> **Diperbarui 8 September 2026 (sore).** Tahap C dokumen ini — corong skrining, `screening_id`,
+> gerbang pemesanan, pembatalan oleh klien — **PINDAH** ke
+> `docs/superpowers/specs/2026-09-08-padma-c1-fondasi-jadwal-design.md`, yang memperluasnya dengan
+> jam sesi, rantai status dua objek, pemilihan mitra, dan rating. Sebabnya: klien memutuskan
+> merancang seluruh siklus hidup pemesanan sekarang, dan mengerjakan Tahap C lebih dulu berarti
+> membangun di atas `booking_requests` yang justru akan dirombak. Keputusan K8, K9, K10, K12, K13,
+> K15, dan K16 di bawah tetap berlaku sebagai catatan alasan, tetapi yang dieksekusi adalah
+> versinya di spec C1. **Tahap A dan B tidak berubah.**
+
 ## Masalah
 
 Empat hal berdiri sendiri-sendiri tetapi bertemu di satu tempat: pintu masuk aplikasi.
@@ -315,11 +324,11 @@ datanya lalu memutuskan sendiri.
 |---|---|---|
 | **A** | K11 — sembunyikan paket di balik saklar | Sapuan luas, dangkal, risiko rendah |
 | **B** | K1–K7, K14, K17 — halaman auth, pendaftaran mandiri, lupa sandi, logo | Halaman baru + perubahan model penautan |
-| **C** | K8–K10, K12, K13, K15, K16 — corong skrining, `screening_id`, gerbang tiga lapis, pembatalan | Aturan bisnis baru + migrasi DB |
+| ~~**C**~~ | Pindah ke spec C1 (lihat catatan di kepala dokumen) | — |
 
-Urutannya mengikat: C membangun formulir pengajuan yang tidak boleh lagi menawarkan paket (jadi A
-lebih dulu), dan C butuh akun mandiri dari B untuk punya arti. Rencana implementasi memberi titik
-henti di antara ketiganya.
+Urutannya mengikat: C1 membangun formulir pengajuan yang tidak boleh lagi menawarkan paket (jadi A
+lebih dulu), dan C1 butuh akun mandiri dari B untuk punya arti. Rencana implementasi memberi titik
+henti di antara tahap-tahapnya.
 
 ## Di luar ruang lingkup
 
