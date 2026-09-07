@@ -150,7 +150,49 @@ describe("saklar paket: tidak ada kata 'paket' di layar", () => {
 
   it("halaman /admin/bayar tidak menyebut paket", async () => {
     const { default: HalamanBayar } = await import("@/app/admin/bayar/page");
-    expect(renderToStaticMarkup(await HalamanBayar())).not.toMatch(/paket/i);
+    const m = renderToStaticMarkup(await HalamanBayar());
+    expect(m).not.toMatch(/paket/i);
+    // Perbaikan review Task 4: `/paket/i` di atas HARI INI kebetulan masih
+    // cukup — `TabelBayar` (tabel-bayar.tsx) menulis literal kata "Paket"
+    // terpisah dari label utama untuk setiap baris berjenis paket
+    // (`{t.jenis === "paket" ? "Paket" : "Sesi lepas"}`), jadi kebocoran
+    // masih tertangkap lewat teks itu — dibuktikan lewat "kontrol positif" di
+    // bawah. Tapi itu jaring pengaman KEBETULAN, bukan LABEL yang sebenarnya
+    // dijaga: `daftarTagihanAdmin()` (lib/admin/tagihan.ts) merakit LABEL
+    // baris itu sendiri dari `${p.packages?.nama ?? "Paket"} · ${jumlahSesi}
+    // sesi` — begitu nama paketnya TERISI (seed Ananda: "Sankalpa Prima"),
+    // LABEL itu sendiri tidak mengandung substring "paket" sama sekali,
+    // persis lubang yang sama dengan /passport/bayar. Kalau indikator jenis
+    // terpisah itu suatu hari dihapus atau digabung ke label utama (seperti
+    // sisi klien), sapuan akan diam-diam kembali buta. Diperiksa langsung
+    // nama paket seed dan pola labelnya ("· N sesi") supaya jaminannya tidak
+    // bergantung pada detail rendering yang tidak terkait dengan label itu
+    // sendiri.
+    expect(m).not.toContain("Sankalpa Prima");
+    expect(m).not.toMatch(/·\s*\d+\s*sesi\b/i);
+  });
+
+  // KONTROL POSITIF (review Task 4): membuktikan ketiga assertion di atas
+  // benar-benar bisa MERAH, bukan sekadar tidak pernah tersentuh. Saklar
+  // dinyalakan SEMENTARA hanya untuk render ini — begitu
+  // ambilPaket()/daftarTagihanAdmin() bocor sungguhan, baris "Sankalpa Prima
+  // · 8 sesi" MEMANG muncul di markup. `/paket/i` sendiri MEMANG masih
+  // menangkapnya hari ini (lewat indikator jenis terpisah di atas) — itu
+  // sebabnya `toMatch(/paket/i)` di bawah diharapkan BENAR, bukan salah;
+  // yang dibuktikan bukan bahwa /paket/i buta di admin, melainkan bahwa
+  // LABELnya sendiri ("Sankalpa Prima · 8 sesi") sungguh muncul dan
+  // tertangkap assertion baru secara independen dari indikator jenis itu.
+  it("kontrol positif: dengan saklar HIDUP, baris tagihan paket ('Sankalpa Prima · 8 sesi') sungguh muncul di /admin/bayar", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    const { default: HalamanBayarSaklarHidup } = await import("@/app/admin/bayar/page");
+    const m = renderToStaticMarkup(await HalamanBayarSaklarHidup());
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+
+    expect(m).toMatch(/paket/i); // indikator jenis terpisah — masih hijau hari ini
+    expect(m).toContain("Sankalpa Prima"); // LABEL itu sendiri, independen dari indikator di atas
+    expect(m).toMatch(/·\s*\d+\s*sesi\b/i);
   });
 
   it("halaman /admin/sesi tidak menyebut paket", async () => {
@@ -197,7 +239,43 @@ describe("saklar paket: halaman klien (passport) tidak menyebut paket", () => {
 
   it("halaman /passport/bayar tidak menyebut paket", async () => {
     const { default: HalamanBayar } = await import("@/app/passport/bayar/page");
-    expect(renderToStaticMarkup(await HalamanBayar())).not.toMatch(/paket/i);
+    const m = renderToStaticMarkup(await HalamanBayar());
+    expect(m).not.toMatch(/paket/i);
+    // Perbaikan review Task 4: `/paket/i` sendirian TIDAK CUKUP di halaman
+    // ini — dibuktikan salah, bukan sekadar dicurigai. Baris tagihan paket
+    // dirakit `susunTagihan()` (lib/passport/turunan.ts) dengan label
+    // `${p.nama} · ${p.jumlahSesi} sesi`, dan nama paket seed Ananda adalah
+    // "Sankalpa Prima" (supabase/seed.sql) — TIDAK mengandung substring
+    // "paket" sama sekali. Diverifikasi langsung: menyalakan saklar sementara
+    // dan merender ulang halaman ini menghasilkan markup yang LOLOS
+    // `/paket/i` (match=false) padahal baris "Sankalpa Prima · 8 sesi" ada
+    // di dalamnya — lihat "kontrol positif" di bawah untuk bukti yang
+    // dipertahankan permanen di suite ini. Diperiksa langsung nama paket
+    // seed dan pola label turunannya ("· N sesi") supaya kebocoran tetap
+    // tertangkap meski labelnya sendiri tidak menyebut kata "paket".
+    expect(m).not.toContain("Sankalpa Prima");
+    expect(m).not.toMatch(/·\s*\d+\s*sesi\b/i);
+  });
+
+  // KONTROL POSITIF (review Task 4): membuktikan assertion di atas benar-
+  // benar bisa MERAH, bukan sekadar tidak pernah tersentuh. Saklar dinyalakan
+  // SEMENTARA hanya untuk render ini — begitu ambilPaket() bocor sungguhan,
+  // baris "Sankalpa Prima · 8 sesi" MEMANG muncul di markup, dan `/paket/i`
+  // MEMANG gagal menangkapnya (`not.toMatch(/paket/i)` di bawah tetap lolos)
+  // — persis skenario yang membuat assertion utama vacuous sebelum
+  // perbaikan ini. Assertion baru (nama paket & pola label) yang menangkap
+  // kebocoran ini, bukan `/paket/i`.
+  it("kontrol positif: dengan saklar HIDUP, baris tagihan paket ('Sankalpa Prima · 8 sesi') sungguh muncul di /passport/bayar dan lolos dari /paket/i", async () => {
+    vi.resetModules();
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    const { default: HalamanBayarSaklarHidup } = await import("@/app/passport/bayar/page");
+    const m = renderToStaticMarkup(await HalamanBayarSaklarHidup());
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+
+    expect(m).not.toMatch(/paket/i); // buktinya persis: regex kata tidak pernah menangkap label ini
+    expect(m).toContain("Sankalpa Prima");
+    expect(m).toMatch(/·\s*\d+\s*sesi\b/i);
   });
 });
 
