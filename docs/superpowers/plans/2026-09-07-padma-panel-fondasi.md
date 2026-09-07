@@ -943,8 +943,36 @@ git commit -m "feat(panel): penjelasan halaman dilipat ke tombol bantuan"
 
 - [ ] **Step 1: Tulis uji yang gagal**
 
+**Fixture WAJIB — seed hanya punya DUA mitra, keduanya aktif.** Tanpa fixture di bawah, uji
+"menyaring nonaktif" gagal karena tidak ada satu pun mitra nonaktif, dan uji paginasi LULUS
+HAMPA: dengan 2 baris, halaman 2 selalu kosong, sehingga `b.baris.some(...)` memulangkan
+`false` tanpa membuktikan apa pun.
+
 ```ts
 // tambahkan ke web/tests/admin-mitra.test.ts
+const UJI_AKTIF = Array.from({ length: 25 }, (_, i) =>
+  `33333333-3333-3333-3333-3333330000${String(i).padStart(2, "0")}`);
+const UJI_NONAKTIF = "33333333-3333-3333-3333-333333000099";
+const UJI_SEMUA = [...UJI_AKTIF, UJI_NONAKTIF];
+
+// Awalan "ZZ" menaruhnya di URUTAN TERAKHIR menurut nama, sehingga dua mitra
+// seed tetap di halaman 1 dan uji lain yang mengandalkan mereka tidak bergeser.
+beforeAll(async () => {
+  await admin.from("partners").delete().in("id", UJI_SEMUA);
+  await admin.from("partners").insert([
+    ...UJI_AKTIF.map((id, i) => ({
+      id, nama: `ZZUji Mitra ${String(i).padStart(2, "0")}`, no_hp: "", aktif: true,
+    })),
+    { id: UJI_NONAKTIF, nama: "ZZUji Mitra Nonaktif", no_hp: "", aktif: false },
+  ]);
+});
+
+// Mitra fixture sengaja TANPA sesi, jadi menghapusnya tidak pernah memutus
+// `sessions.partner_id` milik baris lain.
+afterAll(async () => {
+  await admin.from("partners").delete().in("id", UJI_SEMUA);
+});
+
 describe("daftar mitra — cari, saring, halaman", () => {
   it("menyaring menurut ketersediaan", async () => {
     const { baris } = await ambilDaftarMitra({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
@@ -965,9 +993,14 @@ describe("daftar mitra — cari, saring, halaman", () => {
     expect(total).toBeGreaterThanOrEqual(baris.length);
   });
 
-  it("halaman kedua TIDAK mengulang baris halaman pertama", async () => {
+  it("halaman kedua BERISI, dan TIDAK mengulang baris halaman pertama", async () => {
     const a = await ambilDaftarMitra({ cari: "", saring: {}, hal: 1 });
     const b = await ambilDaftarMitra({ cari: "", saring: {}, hal: 2 });
+    // Halaman 2 HARUS berisi. Tanpa asersi ini, seluruh uji lulus hampa pada
+    // basis data yang isinya kurang dari satu halaman: `[].some(...)` selalu
+    // `false`, dan hijaunya terbaca seperti bukti.
+    expect(b.baris.length).toBeGreaterThan(0);
+    expect(a.baris.length).toBe(PER_HAL);
     const idA = new Set(a.baris.map((m) => m.id));
     expect(b.baris.some((m) => idA.has(m.id))).toBe(false);
   });
@@ -1142,11 +1175,17 @@ describe("halaman /admin/mitra", () => {
     expect(m).not.toContain('role="dialog"');
   });
 
-  it("panel geser menutup ke URL yang MEMPERTAHANKAN cari & halaman", async () => {
-    const daftar = await render({});
-    const id = /href="\/admin\/mitra\?ubah=([0-9a-f-]{36})"/.exec(daftar)?.[1]!;
-    const m = await render({ ubah: id, cari: "sri", hal: "2" });
-    expect(m).toContain('href="/admin/mitra?cari=sri&amp;hal=2"');
+  it("panel geser menutup ke URL yang MEMPERTAHANKAN pencarian", async () => {
+    // Dicari lebih dulu, BARU dibuka: sebuah baris hanya bisa dibuka bila ia
+    // ada di halaman yang sedang tampil. Membuka id dari halaman lain menutup
+    // panel — itu perilaku yang disengaja, dan uji "id tidak ada" di atas yang
+    // menjaganya. Aljabar halaman sendiri sudah diuji di tests/panel-daftar.
+    const daftar = await render({ cari: "sri" });
+    const id = /href="\/admin\/mitra\?cari=sri&amp;ubah=([0-9a-f-]{36})"/.exec(daftar)?.[1];
+    expect(id).toBeDefined();
+
+    const m = await render({ cari: "sri", ubah: id! });
+    expect(m).toContain('href="/admin/mitra?cari=sri"');
   });
 
   it("penjelasan halaman ada, tetapi terlipat", async () => {
@@ -1446,7 +1485,7 @@ git commit -m "feat(mitra): bilah daftar & panel geser menggantikan formulir dal
 
 ```ts
 // web/tests/admin-klien-data.test.ts
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
