@@ -11,7 +11,6 @@ export type BarisKlienDaftar = {
   id: string;
   padmaId: string;
   nama: string;
-  email: string;
   namaFase: string;
   /** `user_id` sudah terisi — tautan aktivasi sudah ditukarkan. */
   aktif: boolean;
@@ -23,7 +22,6 @@ type BarisKlien = {
   id: string;
   padma_id: string;
   nama: string;
-  email: string;
   phase_id: string | null;
   user_id: string | null;
 };
@@ -51,7 +49,7 @@ export async function ambilDaftarKlien(
 
   let q = supabase
     .from("clients")
-    .select("id, padma_id, nama, email, phase_id, user_id", { count: "exact" })
+    .select("id, padma_id, nama, phase_id, user_id", { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (param.saring.aktivasi === "aktif") q = q.not("user_id", "is", null);
@@ -80,6 +78,16 @@ export async function ambilDaftarKlien(
       supabase.from("phases").select("id, nama").returns<{ id: string; nama: string }[]>(),
       // Hanya paket yang masih berjalan yang menjadi identitas baris klien;
       // paket lama tidak menggantikan gambaran "sedang menjalani apa".
+      //
+      // Query ini TIDAK dipaginasi — ia menutupi paket aktif SELURUH klien,
+      // bukan hanya klien di halaman ini. Batas yang tidak dicegah: PostgREST
+      // memotong SETIAP hasil pada `max_rows = 1000` baris tanpa galat, jadi
+      // begitu jumlah baris `client_packages` berstatus "aktif" di SELURUH
+      // sistem melewati 1000, sebagian klien yang sebenarnya berpaket akan
+      // tampil seolah tidak berpaket — diam-diam, tanpa satu error pun.
+      // Menutupnya butuh agregat/lookup per-klien di sisi database (view atau
+      // RPC), bukan penarikan penuh lalu `Map` di JS seperti di bawah — itu
+      // pekerjaan rencana tersendiri.
       supabase
         .from("client_packages")
         .select("client_id, status, packages ( nama, jumlah_sesi )")
@@ -116,7 +124,6 @@ export async function ambilDaftarKlien(
     id: k.id,
     padmaId: k.padma_id,
     nama: k.nama,
-    email: k.email,
     namaFase: k.phase_id ? (labelFase.get(k.phase_id) ?? "—") : "—",
     aktif: k.user_id !== null,
     paketAktif: paketAktif.get(k.id) ?? null,
@@ -126,10 +133,31 @@ export async function ambilDaftarKlien(
   // Saringan "punya paket berjalan" dikerjakan di JS, bukan SQL, dan itu
   // disengaja: paket hidup di tabel lain, dan menyaringnya lewat `in` atas
   // daftar id akan pecah begitu daftar klien melewati batas panjang URL
-  // PostgREST. Konsekuensinya jujur dan disebut di sini: total tidak ikut
-  // menyempit, jadi saringan ini menyaring HALAMAN, bukan seluruh daftar.
-  // Menutupnya menuntut view SQL sendiri — pekerjaan rencana berikutnya.
-  if (param.saring.paket === "ada") baris = baris.filter((k) => k.paketAktif !== null);
+  // PostgREST. Konsekuensinya: saringan ini menyaring HALAMAN yang sudah
+  // ditarik, bukan seluruh daftar sebelum paginasi — klien berpaket di
+  // halaman lain tidak pernah terhitung di sini. Menutupnya menuntut view SQL
+  // sendiri (hitung "punya paket aktif" per klien di database) — pekerjaan
+  // rencana berikutnya.
+  const saringPaketMenyala = param.saring.paket === "ada";
+  if (saringPaketMenyala) baris = baris.filter((k) => k.paketAktif !== null);
 
-  return { baris, total: count ?? 0 };
+  // `total` TIDAK BOLEH dibiarkan sebagai `count` mentah selagi saringan di
+  // atas menyala: `count` menghitung SELURUH klien sebelum saringan paket
+  // diterapkan, sedangkan `baris` sudah tersaring. Memulangkan keduanya
+  // sebagaimana adanya membuat `BilahDaftar` menulis total yang tidak pernah
+  // benar-benar bisa dilihat, dan `Paginasi` menawarkan halaman berikutnya
+  // yang — bila halaman itu kebetulan tidak punya klien berpaket sama
+  // sekali — tampil kosong tanpa satu kalimat penjelasan padahal paginasi
+  // masih bilang "halaman sekian dari sekian".
+  //
+  // Perbaikan JUJUR, bukan perbaikan LENGKAP: kita tidak tahu (dan tidak
+  // menghitung) berapa total klien berpaket di SELURUH daftar, jadi kita
+  // hanya melaporkan yang benar-benar kita tahu — jumlah baris yang lolos
+  // saringan pada HALAMAN INI — dan berhenti menawarkan halaman lain sebagai
+  // konsekuensinya (`jumlahHalaman(baris.length)` dengan `baris.length` di
+  // bawah `PER_HAL` selalu jatuh ke 1 halaman). Itu tetap TIDAK SAMA dengan
+  // "total klien berpaket sungguhan" — itu tetap pekerjaan view SQL di atas.
+  const total = saringPaketMenyala ? baris.length : (count ?? 0);
+
+  return { baris, total };
 }

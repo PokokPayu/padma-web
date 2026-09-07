@@ -49,7 +49,7 @@ type BarisPartner = {
 };
 
 /** Nilai saringan yang sah untuk daftar mitra — dipakai halaman DAN uji. */
-export const SARING_MITRA: SaringSah = { aktif: ["ya", "tidak"] };
+export const SARING_MITRA = { aktif: ["ya", "tidak"] } as const satisfies SaringSah;
 
 /**
  * Satu halaman daftar kelola mitra, beserta TOTAL baris yang cocok.
@@ -87,8 +87,18 @@ export async function ambilDaftarMitra(
   const [{ data: mitra, count }, { data: sesi }] = await Promise.all([
     q.range(dari, sampai).returns<BarisPartner[]>(),
     // Query sesi TIDAK ikut dipaginasi dan TIDAK ikut disaring: ia menghitung
-    // kinerja SELURUH mitra, dan memotongnya akan mengecilkan angka kinerja
-    // secara senyap — tidak ada galat, angkanya hanya salah.
+    // kinerja SELURUH mitra, dan menambahkan `.range()` di sini akan
+    // mengecilkan angka kinerja secara senyap — tidak ada galat, angkanya
+    // hanya salah.
+    //
+    // Batas yang TIDAK dicegah oleh baris ini: PostgREST memotong SETIAP
+    // hasil pada `max_rows = 1000` baris apa pun query-nya — memaginasi atau
+    // tidak — tanpa satu galat pun. Begitu jumlah sesi berstatus "selesai" di
+    // SELURUH sistem melewati 1000, panggilan ini sendiri sudah terpotong dan
+    // angka kinerja mitra mengecil diam-diam persis yang komentar di atas
+    // klaim dicegah. Menutupnya butuh agregat hitung-per-mitra (view atau RPC
+    // `count(*) group by partner_id`) di sisi database, bukan penghitungan di
+    // JS atas baris yang sudah terpotong — itu pekerjaan rencana tersendiri.
     supabase
       .from("sessions")
       .select("partner_id")

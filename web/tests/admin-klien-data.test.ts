@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { jumlahHalaman } from "@/app/_shell/panel/daftar";
 import { signInAs } from "./helpers/as-user";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
@@ -67,9 +68,15 @@ describe("ambilDaftarKlien", () => {
 
   it("TIDAK memulangkan satu pun nominal rupiah", async () => {
     // Money firewall: /admin tidak melihat angka uang. Paket dipulangkan
-    // sebagai NAMA, bukan harganya.
+    // sebagai NAMA, bukan harganya. Mengunci pada EJAAN kata seperti
+    // "harga"/"nominal"/"honor" gagal dua arah: sebuah paket bernama "Paket
+    // Harga Hemat" akan memerahkan uji ini tanpa satu rupiah pun bocor, dan
+    // `paketAktif` yang diperkaya jadi "Sankalpa Prima · 3.500.000" akan
+    // lolos hijau karena tidak satu kata terlarang pun disebut. Menguji pola
+    // ANGKA RUPIAH (samakan dengan `admin-klien-halaman.test.tsx`) menjaga
+    // NILAI yang dilarang, bukan ejaan namanya.
     const { baris } = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
-    expect(JSON.stringify(baris)).not.toMatch(/harga|nominal|honor/i);
+    expect(JSON.stringify(baris)).not.toMatch(/Rp\s?\d/);
   });
 });
 
@@ -145,5 +152,46 @@ describe("ambilDaftarKlien — saring.paket = 'ada' (dua arah)", () => {
     const id = baris.map((k) => k.id);
     expect(id).toContain(KLIEN_PAKET_UJI);
     expect(id).not.toContain(KLIEN_KOSONG_UJI);
+  });
+
+  // -------------------------------------------------------------------------
+  // Fix Round 2, Temuan 1: saringan "punya paket" dikerjakan di JS SESUDAH
+  // paginasi (lihat komentar `ambilDaftarKlien`), jadi ia menyaring HALAMAN,
+  // bukan seluruh daftar. Sebelum perbaikan ini, `total` tetap dipulangkan
+  // dari `count` mentah — jumlah SELURUH klien SEBELUM saringan paket
+  // diterapkan — sehingga `BilahDaftar` menulis total yang tidak pernah bisa
+  // dilihat dan `Paginasi` menawarkan halaman berikutnya yang bisa tampil
+  // kosong tanpa penjelasan. Uji ini memerah pada regresi PERSIS itu: `total`
+  // harus konsisten dengan `baris` yang SUNGGUHAN dipulangkan saat saringan
+  // menyala, bukan dengan jumlah klien sebelum saringan.
+  // -------------------------------------------------------------------------
+  it("saring.paket = 'ada': total TIDAK BOHONG — ia mengikuti baris yang benar-benar tersaring", async () => {
+    const disaring = await ambilDaftarKlien({ cari: "", saring: { paket: "ada" }, hal: 1 });
+    const takDisaring = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
+
+    // Fixture berkas ini menjamin setidaknya ada klien TANPA paket
+    // (KLIEN_KOSONG_UJI) yang ikut di himpunan tak tersaring tapi bukan di
+    // himpunan tersaring — jadi dua himpunan ini benar-benar berbeda ukuran,
+    // dan `total` yang jujur WAJIB ikut berbeda, bukan kebetulan sama.
+    expect(disaring.baris.length).toBeLessThan(takDisaring.baris.length);
+
+    // Jaminan inti: `total` tidak boleh melebihi apa yang benar-benar bisa
+    // ditampilkan pemanggil pada halaman ini. `total` mentah dari `count`
+    // (jumlah SEMUA klien sebelum saringan) akan lolos syarat
+    // "total >= baris.length" tapi tetap BOHONG — maka baris di bawah ini
+    // menuntut KESETARAAN, bukan sekadar batas bawah: satu-satunya angka
+    // jujur yang bisa dipulangkan tanpa menghitung ulang seluruh daftar
+    // berpaket di database adalah jumlah baris pada halaman ini sendiri.
+    expect(disaring.total).toBe(disaring.baris.length);
+
+    // Regresi konkret yang harus tertangkap: `total` warisan dari `count`
+    // mentah akan sebesar himpunan TAK TERSARING — jelas berbeda di sini
+    // karena KLIEN_KOSONG_UJI ikut serta di sana.
+    expect(disaring.total).not.toBe(takDisaring.total);
+
+    // Konsekuensi yang dituntut spek: paginasi tidak boleh menawarkan halaman
+    // yang tidak ada. `total` yang jujur dan tidak melebihi `PER_HAL` di sini
+    // harus selalu jatuh ke tepat 1 halaman.
+    expect(jumlahHalaman(disaring.total)).toBe(1);
   });
 });

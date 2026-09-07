@@ -958,8 +958,9 @@ describe("daftar mitra — cari, saring, halaman", () => {
   it("jumlah sesi selesai TETAP benar saat daftarnya dipaginasi", async () => {
     // Jebakannya: query sesi dulu menarik SEMUA sesi lalu menghitungnya di JS.
     // Bila paginasi diterapkan pada query mitra saja, angka kinerja tetap
-    // benar — tetapi bila seseorang kelak ikut memaginasi query sesi, angka
-    // itu mengecil diam-diam tanpa satu pun uji merah. Uji ini yang merah.
+    // benar — tetapi bila seseorang kelak ikut memaginasi query sesi (memasang
+    // `.range()` di sana), angka itu mengecil diam-diam tanpa satu pun uji
+    // merah. Uji ini yang merah untuk JEBAKAN ITU.
     //
     // Targetnya SENGAJA `UJI_MITRA_SESI` (>PER_HAL sesi selesai — lihat
     // `beforeAll`), bukan mitra seed manapun: seed hanya punya 6 baris
@@ -967,6 +968,15 @@ describe("daftar mitra — cari, saring, halaman", () => {
     // `LIMIT 25 OFFSET 0` atas 6 baris tetap memulangkan keenamnya — bug
     // ".range() ikut dipasang di query sesi" tidak pernah kelihatan lewat
     // mitra seed, betapapun uji ini ditulis.
+    //
+    // Yang TIDAK dijaga uji ini: batas `max_rows = 1000` bawaan PostgREST,
+    // yang memotong query sesi ini tanpa `.range()` apa pun begitu total sesi
+    // selesai di SELURUH sistem melewati 1000 (lihat komentar di
+    // `ambilDaftarMitra`). `UJI_MITRA_SESI` sengaja dikalibrasi di atas
+    // `PER_HAL`, bukan di atas 1000 — menaikkannya ke situ berarti menulis
+    // 1000+ baris fixture pada tiap run. Jebakan `.range()` dan jebakan
+    // `max_rows` adalah DUA batas berbeda; uji ini hanya membuktikan yang
+    // pertama tidak ada.
     const { baris } = await ambilDaftarMitra({ cari: "ZZUji Mitra 00", saring: {}, hal: 1 });
     const target = baris.find((m) => m.id === UJI_MITRA_SESI);
     expect(target, "mitra fixture bersesi hilang dari hasil cari").toBeDefined();

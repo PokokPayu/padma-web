@@ -76,41 +76,47 @@ export default async function DaftarKlienPage({
           </Link>
         }
       />
-      <div className="rounded-lg border border-panel-border bg-panel-surface">
-        <Tabel label="Daftar klien">
-          <thead>
-            <tr>
-              <Th>Nama</Th>
-              <Th>PADMA ID</Th>
-              <Th>Fase</Th>
-              <Th>Paket</Th>
-              <Th>Sesi</Th>
-              <Th>Aktivasi</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {baris.map((k) => (
-              <tr key={k.id}>
-                <Td>
-                  {/* Barisnya sendiri yang menaut — pola B. Tidak ada kolom
-                      "Aksi" berisi tombol Ubah, karena yang dibuka adalah
-                      halaman klien itu, bukan formulirnya saja. */}
-                  <Link href={`/admin/klien/${k.id}`} className="font-bold text-panel-ink underline">
-                    {k.nama}
-                  </Link>
-                </Td>
-                <Td className="font-mono text-[12.5px]">{k.padmaId}</Td>
-                <Td>{k.namaFase}</Td>
-                <Td>{k.paketAktif ?? "—"}</Td>
-                <Td className="font-mono text-[12.5px]">{k.sesiSelesai}</Td>
-                <Td>
-                  <PillAktivasi aktif={k.aktif} />
-                </Td>
+      {baris.length === 0 ? (
+        <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
+          Tidak ada klien yang cocok dengan pencarian ini.
+        </p>
+      ) : (
+        <div className="rounded-lg border border-panel-border bg-panel-surface">
+          <Tabel label="Daftar klien">
+            <thead>
+              <tr>
+                <Th>Nama</Th>
+                <Th>PADMA ID</Th>
+                <Th>Fase</Th>
+                <Th>Paket</Th>
+                <Th>Sesi</Th>
+                <Th>Aktivasi</Th>
               </tr>
-            ))}
-          </tbody>
-        </Tabel>
-      </div>
+            </thead>
+            <tbody>
+              {baris.map((k) => (
+                <tr key={k.id}>
+                  <Td>
+                    {/* Barisnya sendiri yang menaut — pola B. Tidak ada kolom
+                        "Aksi" berisi tombol Ubah, karena yang dibuka adalah
+                        halaman klien itu, bukan formulirnya saja. */}
+                    <Link href={`/admin/klien/${k.id}`} className="font-bold text-panel-ink underline">
+                      {k.nama}
+                    </Link>
+                  </Td>
+                  <Td className="font-mono text-[12.5px]">{k.padmaId}</Td>
+                  <Td>{k.namaFase}</Td>
+                  <Td>{k.paketAktif ?? "—"}</Td>
+                  <Td className="font-mono text-[12.5px]">{k.sesiSelesai}</Td>
+                  <Td>
+                    <PillAktivasi aktif={k.aktif} />
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabel>
+        </div>
+      )}
 
       <Paginasi basis="/admin/klien" param={param} total={total} />
     </main>

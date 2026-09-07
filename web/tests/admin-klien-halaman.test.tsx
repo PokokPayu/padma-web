@@ -59,6 +59,16 @@ describe("halaman /admin/klien", () => {
     expect(await render()).not.toMatch(/Rp\s?\d/);
   });
 
+  it("pencarian tanpa hasil menampilkan kalimat keadaan kosong, bukan tabel kosong senyap", async () => {
+    // Sama seperti /admin/mitra: kepala tabel enam kolom di atas badan yang
+    // tidak menampilkan apa-apa terbaca sebagai galat, bukan sebagai "tidak
+    // ada yang cocok". "zzznotfoundzzz" tidak cocok padma_id maupun nama
+    // klien seed manapun.
+    const m = await render({ cari: "zzznotfoundzzz" });
+    expect(m).toContain("Tidak ada klien yang cocok dengan pencarian ini.");
+    expect(m).not.toMatch(/href="\/admin\/klien\/[0-9a-f-]{36}"/);
+  });
+
   it("berkas rute /admin/klien/baru berisi formulir klien baru, bukan markup halaman detail", async () => {
     // Membuktikan ISI berkas ini — bukan bahwa Next.js benar-benar mengarahkan
     // request `/admin/klien/baru` kemari alih-alih ke `[id]/page.tsx` dengan
