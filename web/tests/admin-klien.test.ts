@@ -86,6 +86,12 @@ const sumberDaftar = baca("src/app/admin/klien/page.tsx");
 const sumberForm = baca("src/app/admin/klien/form-klien.tsx");
 const sumberDetail = baca("src/app/admin/klien/[id]/page.tsx");
 const sumberLib = baca("src/lib/admin/klien.ts");
+// Rute berdiri sendiri (Task 9) — TIDAK ada di daftar `sumber*` sebelum Fix
+// Round 1. `tests/money-firewall-struktural.test.ts` TIDAK menutupinya: uji
+// itu murni memeriksa `information_schema.columns` di basis data, tidak
+// pernah membaca kode sumber sama sekali. Tanpa baris ini, berkas ini lolos
+// tanpa satu pagar sumber pun.
+const sumberBaru = baca("src/app/admin/klien/baru/page.tsx");
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
@@ -608,7 +614,7 @@ describe("halaman daftar klien (/admin/klien)", () => {
 
   it("tidak ada nominal uang di daftar klien (money firewall)", () => {
     expect(markup).not.toMatch(/Rp\s?\d/);
-    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi, sumberLib]) {
+    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi, sumberLib, sumberBaru]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
@@ -757,7 +763,7 @@ describe("berkas server action klien", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib, sumberBaru]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
@@ -769,10 +775,14 @@ describe("berkas server action klien", () => {
     // sendiri.
     expect(sumberDetail).toContain("createServerSupabase");
     expect(sumberLib).toContain("createServerSupabase");
+    // `sumberBaru` (rute /baru, Task 9) mengambil `phases` langsung lewat
+    // sesi pengguna — beda dari `sumberDaftar`, ia BELUM didelegasikan ke
+    // lapisan lib manapun, jadi diperiksa literal di sini.
+    expect(sumberBaru).toContain("createServerSupabase");
   });
 
   it("tidak menuliskan PII klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib, sumberBaru]) {
       expect(sumber).not.toContain("console.");
     }
   });

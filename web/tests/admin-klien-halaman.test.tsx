@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
+import { pesanBerikutnya } from "@/app/admin/klien/form-klien";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: async () => "admin" }));
 
@@ -58,10 +59,41 @@ describe("halaman /admin/klien", () => {
     expect(await render()).not.toMatch(/Rp\s?\d/);
   });
 
-  it("rute /admin/klien/baru merender formulir, bukan halaman detail id 'baru'", async () => {
+  it("berkas rute /admin/klien/baru berisi formulir klien baru, bukan markup halaman detail", async () => {
+    // Membuktikan ISI berkas ini — bukan bahwa Next.js benar-benar mengarahkan
+    // request `/admin/klien/baru` kemari alih-alih ke `[id]/page.tsx` dengan
+    // `id="baru"`. Prioritas segmen statis di atas dinamis adalah perilaku
+    // ROUTER Next sendiri, bukan sesuatu yang bisa diregresi oleh kode di
+    // berkas ini — jadi tidak diuji ulang di sini.
     const { default: Baru } = await import("@/app/admin/klien/baru/page");
     const m = renderToStaticMarkup(await Baru());
     expect(m).toContain('name="nama"');
     expect(m).toContain("Kembali ke Klien");
+  });
+});
+
+describe("pesanBerikutnya — pesan sukses dan galat FormKlienBaru saling meniadakan", () => {
+  // Fungsi murni, sengaja dites langsung tanpa merender komponennya: suite
+  // ini berjalan di `environment: "node"` (lihat vitest.config.ts) tanpa
+  // jsdom/testing-library, jadi mensimulasikan "submit sukses, LALU submit
+  // gagal di form yang sama tanpa reload" lewat klik sungguhan tidak
+  // tersedia di sini. Fungsi ini adalah SELURUH logika yang menentukan
+  // pesan mana yang tampil sesudah submit — mengujinya langsung membuktikan
+  // invariannya tanpa perlu jsdom.
+  it("submit GAGAL menghapus pesan sukses submit SEBELUMNYA (regresi Fix Round 1)", () => {
+    // Skenario: klien A tersimpan (berhasil="PAD-0001"), lalu admin mengisi
+    // klien B di form yang sama dan submitnya gagal. "Tersimpan sebagai
+    // PAD-0001" TIDAK BOLEH ikut nempel di layar bersama pesan galat B.
+    expect(pesanBerikutnya({ ok: false, pesan: "Email sudah dipakai." })).toEqual({
+      pesan: "Email sudah dipakai.",
+      berhasil: null,
+    });
+  });
+
+  it("submit SUKSES menghapus pesan galat submit SEBELUMNYA", () => {
+    expect(pesanBerikutnya({ ok: true, padmaId: "PAD-0002" })).toEqual({
+      pesan: null,
+      berhasil: "PAD-0002",
+    });
   });
 });

@@ -10,6 +10,28 @@ const KELAS_MEDAN =
 const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
 
 /**
+ * Pesan sukses dan pesan galat SALING MENIADAKAN — diekstrak jadi fungsi
+ * murni (tanpa `useState`) supaya invarian ini bisa diuji langsung tanpa
+ * jsdom/interaksi klik, yang tidak tersedia di suite ini (`environment:
+ * "node"`, lihat `vitest.config.ts`).
+ *
+ * Fungsi ini ada karena bug nyata: sejak `FormKlienBaru` berhenti unmount
+ * sesudah sukses (komponen ini sekarang tetap terbuka, lihat komentar di
+ * bawah), `berhasil` dari submit SEBELUMNYA tidak lagi lenyap bersama
+ * unmount. Tanpa fungsi ini, jalur gagal yang lupa menghapus `berhasil` lama
+ * membuat "Tersimpan sebagai PAD-XXXX" tampil berdampingan dengan pesan
+ * galat submit BERIKUTNYA — admin bisa membacanya sebagai "klien kedua ini
+ * ikut tersimpan", padahal sebaliknya.
+ */
+export function pesanBerikutnya(
+  hasil: { ok: true; padmaId: string } | { ok: false; pesan: string },
+): { pesan: string | null; berhasil: string | null } {
+  return hasil.ok
+    ? { pesan: null, berhasil: hasil.padmaId }
+    : { pesan: hasil.pesan, berhasil: null };
+}
+
+/**
  * Formulir "Klien baru".
  *
  * Dulu komponen ini menyimpan gerbang buka/tutup sendiri (mulai TERTUTUP),
@@ -41,16 +63,15 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
       action={(fd) =>
         mulai(async () => {
           const r = await buatKlien(fd);
+          const { pesan: pesanBaru, berhasil: berhasilBaru } = pesanBerikutnya(r);
+          setPesan(pesanBaru);
+          setBerhasil(berhasilBaru);
           if (r.ok) {
-            setBerhasil(r.padmaId);
-            setPesan(null);
             // Formulir tetap TERBUKA (tidak ada lagi state "tertutup" untuk
             // kembali ke sana) — medannya dikosongkan lewat reset native
             // supaya admin tidak keliru mengira submit kedua akan membuat
             // baris duplikat dari data yang masih tersisa di layar.
             formRef.current?.reset();
-          } else {
-            setPesan(r.pesan);
           }
         })
       }
