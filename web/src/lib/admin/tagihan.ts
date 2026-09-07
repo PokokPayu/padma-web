@@ -2,12 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import type { PayStatus } from "@/lib/passport/turunan";
-import type { JenjangTransport } from "@/lib/transport/jarak";
-// SATU-SATUNYA sumber label jenjang — dipakai ULANG, sama seperti
-// `@/lib/passport/turunan` dan `app/owner/transport/status.ts` sudah
-// melakukannya. Lihat komentar di `SesiRingkas.jenjang` (passport/turunan.ts)
-// untuk alasan kenapa menulisnya kedua kali di sini adalah bug yang menunggu.
-import { LABEL_JENJANG } from "@/app/admin/sesi/status";
+import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 
 export type ItemTagihanAdmin = {
   jenis: "paket" | "sesi";
@@ -15,6 +10,22 @@ export type ItemTagihanAdmin = {
   namaKlien: string;
   padmaId: string;
   label: string;
+  /**
+   * Rincian transport (Task 9, Ruling 16 — fix round 1). `null` untuk setiap
+   * item paket, dan untuk item sesi yang tidak berjenjang, atau berjenjang
+   * `di_atas_20` tapi tarif per-kasusnya BELUM ditetapkan owner (lihat
+   * gerbang di `daftarTagihanAdmin()`).
+   *
+   * SENGAJA sebuah MEDAN pada item sesi yang sudah ada — BUKAN item kedua
+   * ber-`id` yang sama. Draf pertama Task 9 menambahkan item transport KEDUA
+   * dengan `id` sama seperti sesinya, dan itu bug: `hitungKlaimMenunggu()`
+   * menghitung baris `sessions` (satu per sesi) sementara daftar ini
+   * menghitung ITEM (dua per sesi berjenjang) — badge dan tabel berselisih
+   * persis pada sesi yang paling sering terjadi (jenjang diisi OTOMATIS saat
+   * sesi lahir, `app/admin/sesi/aksi.ts`). Satu sesi punya SATU
+   * `status_bayar`, jadi ia wajib menghasilkan SATU item.
+   */
+  rincianTransport: string | null;
   status: PayStatus;
 };
 
@@ -41,6 +52,8 @@ type BarisVarian = {
   durasi_menit: number | null;
   format: FormatVarian | null;
 };
+
+type BarisMenungguTransport = { id: string };
 
 // Yang menunggu verifikasi naik ke atas — itulah pekerjaan admin hari ini.
 const URUT: Record<PayStatus, number> = {
@@ -95,33 +108,50 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
   // untuk embed semacam itu. Pola yang sudah dipakai `ambilSesiRekap()`
   // (`@/lib/owner/data`) diikuti di sini — tarik `variant_id` mentah, lalu
   // cocokkan ke katalog varian yang ditarik terpisah.
-  const [{ data: paket }, { data: sesi }, { data: varian }] = await Promise.all([
-    supabase
-      .from("client_packages")
-      .select("id, status_bayar, clients(nama, padma_id), packages(nama, jumlah_sesi)")
-      .eq("status", "aktif")
-      .returns<BarisPaket[]>(),
-    supabase
-      .from("sessions")
-      .select(
-        "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
-      )
-      .is("client_package_id", null)
-      .neq("status", "batal")
-      // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
-      // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
-      .order("tanggal", { ascending: false })
-      .returns<BarisSesi[]>(),
-    // Katalog varian saja (bukan tarifnya) — RLS "service_variants: baca
-    // terautentikasi" menjawab TRUE untuk siapa pun yang login, jadi baris
-    // ini tetap ada bagi admin.
-    supabase
-      .from("service_variants")
-      .select("id, label, durasi_menit, format")
-      .returns<BarisVarian[]>(),
-  ]);
+  const [{ data: paket }, { data: sesi }, { data: varian }, { data: menunggu }] =
+    await Promise.all([
+      supabase
+        .from("client_packages")
+        .select("id, status_bayar, clients(nama, padma_id), packages(nama, jumlah_sesi)")
+        .eq("status", "aktif")
+        .returns<BarisPaket[]>(),
+      supabase
+        .from("sessions")
+        .select(
+          "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
+        )
+        .is("client_package_id", null)
+        .neq("status", "batal")
+        // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
+        // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
+        .order("tanggal", { ascending: false })
+        .returns<BarisSesi[]>(),
+      // Katalog varian saja (bukan tarifnya) — RLS "service_variants: baca
+      // terautentikasi" menjawab TRUE untuk siapa pun yang login, jadi baris
+      // ini tetap ada bagi admin.
+      supabase
+        .from("service_variants")
+        .select("id, label, durasi_menit, format")
+        .returns<BarisVarian[]>(),
+      // (Task 9, Ruling 17) Sesi `di_atas_20` yang BELUM punya tarif per-kasus
+      // — dibaca dari VIEW `sesi_menunggu_tarif_transport` (Task 8, migrasi
+      // `20260907140000`), BUKAN dengan mencoba membaca tabel nominalnya
+      // langsung: RLS tabel itu ("hanya owner") akan memulangkan `[]` untuk
+      // admin tanpa error, dan `[]` yang dibaca naif sebagai "tidak ada yang
+      // menunggu" akan membuat SETIAP sesi >20 km lolos seolah sudah
+      // bertarif. View ini sudah jadi satu-satunya definisi "menunggu tarif
+      // khusus" untuk badge (`hitungMenungguTarifTransport`) & daftar owner
+      // (`ambilSesiMenungguTarif`, `lib/owner/data.ts`) — dipakai ULANG di
+      // sini, bukan predikat ketiga yang bisa berpisah diam-diam. Proyeksinya
+      // NOL NOMINAL (id, nama_klien, tanggal); hanya `id` yang diambil.
+      supabase
+        .from("sesi_menunggu_tarif_transport")
+        .select("id")
+        .returns<BarisMenungguTransport[]>(),
+    ]);
 
   const varianPerId = new Map((varian ?? []).map((v) => [v.id, v] as const));
+  const menungguTransportId = new Set((menunggu ?? []).map((m) => m.id));
 
   const item: ItemTagihanAdmin[] = [];
 
@@ -132,6 +162,10 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
       namaKlien: p.clients?.nama ?? "—",
       padmaId: p.clients?.padma_id ?? "—",
       label: `${p.packages?.nama ?? "Paket"} · ${p.packages?.jumlah_sesi ?? 0} sesi`,
+      // Paket tidak pernah punya rincian transport sendiri: harganya tetap/
+      // pre-paid per paket, bukan per sesi — lihat Ruling 18 di `hitungRekap()`
+      // (lib/owner/rekap.ts) untuk keputusan uang yang sama pada sisi owner.
+      rincianTransport: null,
       status: p.status_bayar,
     });
   }
@@ -145,6 +179,25 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
     const varLabel = v
       ? labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format })
       : "";
+
+    // Rincian TRANSPORT (Task 9) — TANPA NOMINAL sama sekali (money
+    // firewall), teksnya IDENTIK huruf demi huruf dengan `susunTagihan()`
+    // (`@/lib/passport/turunan`): keduanya merangkai dari `LABEL_JENJANG`
+    // (`@/lib/transport/jarak`), SATU-SATUNYA sumber. Dikunci lewat uji
+    // parity di tests/admin-bayar.test.ts.
+    //
+    // `di_atas_20` yang MASIH di `sesi_menunggu_tarif_transport` (Ruling 17)
+    // TIDAK mendapat rincian: view itu adalah satu-satunya definisi "tarif
+    // per-kasusnya belum ditetapkan", dan menampilkan rincian untuk sesi yang
+    // nominalnya belum pernah ditetapkan siapa pun berarti menagih admin
+    // untuk sesuatu yang tidak ada. Begitu owner menetapkannya, sesi itu
+    // lenyap dari view — dan rincian ini muncul, TETAP tanpa nominal apa pun
+    // (hanya label ">20 km").
+    const rincianTransport =
+      s.jenjang !== null && !(s.jenjang === "di_atas_20" && menungguTransportId.has(s.id))
+        ? `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`
+        : null;
+
     item.push({
       jenis: "sesi",
       id: s.id,
@@ -163,31 +216,9 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
         varLabel === ""
           ? `${namaLayanan} · ${formatTanggalID(s.tanggal)}`
           : `${namaLayanan} · ${varLabel} · ${formatTanggalID(s.tanggal)}`,
+      rincianTransport,
       status: s.status_bayar,
     });
-
-    // (Task 9) Baris TRANSPORT tambahan — hanya ketika jaraknya diketahui.
-    // `id` & `jenis` SENGAJA SAMA PERSIS dengan baris sesi di atas: tidak ada
-    // kolom `status_bayar` terpisah untuk transport, jadi "Tandai lunas" pada
-    // baris ini melunasi SESI YANG SAMA, bukan baris hantu ber-id palsu.
-    //
-    // Labelnya IDENTIK huruf demi huruf dengan `susunTagihan()`
-    // (`@/lib/passport/turunan`) — keduanya merangkai dari `LABEL_JENJANG`
-    // (`@/app/admin/sesi/status`) yang SAMA persis. TANPA NOMINAL sama sekali
-    // (money firewall): berkas ini tidak membaca, dan tidak boleh membaca,
-    // satu pun tabel rate-card transport ataupun tarif per-kasusnya — RLS
-    // "hanya owner" akan memulangkan `[]` untuk admin, jadi tidak ada
-    // gunanya dicoba pun. Dikunci lewat uji parity di tests/admin-bayar.test.ts.
-    if (s.jenjang !== null) {
-      item.push({
-        jenis: "sesi",
-        id: s.id,
-        namaKlien: s.clients?.nama ?? "—",
-        padmaId: s.clients?.padma_id ?? "—",
-        label: `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`,
-        status: s.status_bayar,
-      });
-    }
   }
 
   // Komparator mengembalikan 0 untuk peringkat kembar: komparator yang

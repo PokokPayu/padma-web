@@ -1,4 +1,4 @@
-import type { JenjangTransport } from "@/lib/transport/jarak";
+import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 
 // Daftar putih & label modul Sesi.
 //
@@ -48,22 +48,15 @@ export const LABEL_STATUS_SESI: Record<StatusSesi, string> = {
   batal: "Batal",
 };
 
-// Label JENJANG persis penulisan materi klien ("0–5 km" lalu ">5–10 km" dst,
-// lihat `jenjangDariJarak` di `lib/transport/jarak.ts`). `Record<JenjangTransport, …>`
-// dipakai justru supaya daftar ini TIDAK BISA diam-diam kehilangan satu jenjang
-// atau punya nama yang menyimpang dari enum `jenjang_transport` — TypeScript
-// menolak build bila salah satu anggota tipe itu tidak disebut di sini.
-export const LABEL_JENJANG: Record<JenjangTransport, string> = {
-  "0_5": "0–5 km",
-  "5_10": ">5–10 km",
-  "10_15": ">10–15 km",
-  "15_20": ">15–20 km",
-  di_atas_20: ">20 km",
-};
-
-// Daftar putih diturunkan dari kunci label, bukan ditulis dua kali — dua
-// daftar nilai yang harus identik adalah persis jenis kesalahan yang sudah
-// diperingatkan pre-flight rencana ini (JenjangTransport ↔ enum Postgres).
+// `LABEL_JENJANG` sendiri kini hidup di `lib/transport/jarak.ts` (Ruling 20,
+// Task 9 fix round 1) — SATU-SATUNYA sumber, diimpor di atas alih-alih
+// ditulis di sini. `lib/` adalah lapisan domain; `app/` (berkas ini) lapisan
+// presentasi, dan domain tidak boleh diimpor NILAINYA dari presentasi.
+//
+// Daftar putih di bawah tetap diturunkan dari kunci label, bukan ditulis dua
+// kali — dua daftar nilai yang harus identik adalah persis jenis kesalahan
+// yang sudah diperingatkan pre-flight rencana ini (JenjangTransport ↔ enum
+// Postgres).
 export const JENJANG_SAH = Object.keys(LABEL_JENJANG) as JenjangTransport[];
 
 /**

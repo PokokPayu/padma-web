@@ -172,7 +172,9 @@ async function bersihkan() {
 }
 
 const { tandaiHonorDibayar } = await import("@/app/owner/rekap/aksi");
-const { ambilRekap } = await import("@/lib/owner/data");
+const { ambilRekap, ambilRiwayatTarifTransport, ambilTransportKhusus } = await import(
+  "@/lib/owner/data"
+);
 const { default: RekapPage } = await import("@/app/owner/rekap/page");
 
 const sumberAksi = baca("src/app/owner/rekap/aksi.ts");
@@ -465,16 +467,41 @@ describe("ambilRekap() — transport (Task 9)", () => {
     expect(tak!.sebab).toBe("transport");
   });
 
-  it("ADMIN yang membaca rekap ini pun tidak memperoleh satu nominal transport pun", async () => {
+  // (Important 7, Task 9 fix round 1) Uji "ADMIN tidak memperoleh nominal
+  // transport" LEWAT `ambilRekap()` tetap HIJAU bila `ambilRiwayatTarifTransport()`
+  // atau `ambilTransportKhusus()` diam-diam memakai service role — kebocoran
+  // firewall total — karena bagi admin `variant_rates` SUDAH memulangkan []
+  // lebih dulu (RLS yang sama), `t === null` untuk SETIAP sesi, dan cabang
+  // transport di `hitungRekap()` tidak pernah tereksekusi sama sekali. Uji
+  // seperti itu mengulang firewall `variant_rates` yang sudah dijaga test
+  // lain di berkas ini (~371-383) dan tidak membuktikan apa pun tentang
+  // transport. Diganti dengan menguji KEDUA fungsi transport LANGSUNG.
+  it("ambilRiwayatTarifTransport() & ambilTransportKhusus() memulangkan [] untuk ADMIN — RLS yang menjawab", async () => {
     ref.sesi = sesiAdmin;
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9);
+    const [tarifTransport, transportKhusus] = await Promise.all([
+      ambilRiwayatTarifTransport(),
+      ambilTransportKhusus(),
+    ]);
     ref.sesi = sesiOwner;
-    expect(pekan, "sesi hilang seluruhnya untuk admin — assertion di bawah jadi hampa").toBeDefined();
-    // RLS "transport_rates/transport_khusus: hanya owner" menjawab [] bagi
-    // admin, sama seperti variant_rates — SETIAP sesi (termasuk yang varian
-    // & transportnya lengkap bagi owner) jatuh tak-bertarif bagi admin.
-    expect(pekan!.totalHonor).toBe(0);
-    expect(pekan!.sesiTakBertarif.length).toBe(pekan!.jumlahSesi);
+    expect(tarifTransport).toEqual([]);
+    expect(transportKhusus).toEqual([]);
+  });
+
+  it("kontrol positif: OWNER yang sama memperoleh baris tarif transport yang sesungguhnya", async () => {
+    // Tanpa kontrol ini, test di atas bisa hijau semata karena fixture-nya
+    // gagal ditulis — [] yang benar tidak bisa dibedakan dari [] yang salah.
+    const tarifTransport = await ambilRiwayatTarifTransport();
+    expect(tarifTransport.some((t) => t.id === TARIF_TRANSPORT_ID)).toBe(true);
+  });
+
+  // (Critical 2, Task 9 fix round 1) `sebab: "transport"` juga wajib punya
+  // konsumen — SESI_JAUH di sini tak-bertarif karena tarif TRANSPORTnya
+  // hilang (di_atas_20 tanpa transport_khusus), jadi sarannya harus mengarah
+  // ke rate card transport (/owner/transport), bukan ke /owner/tarif.
+  it("sesi tak-bertarif sebab TRANSPORT menyarankan owner membuka /owner/transport", async () => {
+    const kartu = kartuPekan(await renderHalaman(), PEKAN_T9);
+    expect(kartu).toContain("/owner/transport");
+    expect(kartu).not.toContain("/owner/tarif");
   });
 });
 
@@ -516,6 +543,16 @@ describe("halaman rekap honor (/owner/rekap)", () => {
     // Sesi yang lebih tua dari tarif paling awal tidak boleh hilang diam-diam.
     expect(kartuA).toMatch(/tak bertarif|belum bertarif/i);
     expect(kartuA).toContain("PAD-UJI Rekap Layanan Tanpa Tarif");
+  });
+
+  // (Critical 2, Task 9 fix round 1) `sebab: "varian"` wajib punya konsumen —
+  // owner harus tahu LAYAR MANA yang menuntaskan sesi ini. SESI.a5 di sini
+  // tak-bertarif karena tarif VARIANnya hilang (LAYANAN_TANPA_TARIF tidak
+  // pernah diberi baris `variant_rates`), jadi sarannya harus mengarah ke
+  // rate card layanan (/owner/tarif), bukan ke /owner/transport.
+  it("sesi tak-bertarif sebab VARIAN menyarankan owner membuka /owner/tarif", () => {
+    expect(kartuA).toContain("/owner/tarif");
+    expect(kartuA).not.toContain("/owner/transport");
   });
 
   it("menyediakan tombol 'Tandai dibayar' untuk mitra yang belum ditandai", () => {

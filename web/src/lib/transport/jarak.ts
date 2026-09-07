@@ -50,3 +50,25 @@ export function jenjangDariJarak(km: number): JenjangTransport {
   if (km <= 20) return "15_20";
   return "di_atas_20";
 }
+
+/**
+ * Label JENJANG persis penulisan materi klien ("0–5 km" lalu ">5–10 km" dst).
+ * `Record<JenjangTransport, …>` dipakai justru supaya daftar ini TIDAK BISA
+ * diam-diam kehilangan satu jenjang atau punya nama yang menyimpang dari enum
+ * `jenjang_transport` — TypeScript menolak build bila salah satu anggota tipe
+ * itu tidak disebut di sini.
+ *
+ * SATU-SATUNYA sumber (Ruling 20, Task 9 fix round 1). Sebelumnya hidup di
+ * `app/admin/sesi/status.ts` dan diimpor NILAINYA oleh `lib/passport/turunan.ts`
+ * & `lib/admin/tagihan.ts` — pembalikan arah kebergantungan yang salah: `lib/`
+ * adalah lapisan domain murni, `app/` lapisan presentasi Next.js, dan domain
+ * tidak boleh bergantung pada presentasi. `app/admin/sesi/status.ts` (dan
+ * pengimpor lain di bawah `app/`) sekarang mengimpor BALIK dari sini.
+ */
+export const LABEL_JENJANG: Record<JenjangTransport, string> = {
+  "0_5": "0–5 km",
+  "5_10": ">5–10 km",
+  "10_15": ">10–15 km",
+  "15_20": ">15–20 km",
+  di_atas_20: ">20 km",
+};

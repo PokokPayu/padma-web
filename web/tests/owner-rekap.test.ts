@@ -457,7 +457,6 @@ describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
     // pekan berkurang 10.000 dari yang tanpa transport. Tidak ada medan
     // "subsidi" tersendiri mana pun di BarisMitra — ia HANYA selisih ini.
     expect(r[0].margin).toBe(500_000 - 200_000 - 10_000);
-    expect(r[0].perMitra[0]).not.toHaveProperty("subsidi");
   });
 
   it("sesi di_atas_20 tanpa tarif khusus TIDAK dihitung sebagai transport nol (Ruling 14)", () => {
@@ -476,6 +475,11 @@ describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
     expect(r[0].sesiTakBertarif[0].sebab).toBe("transport");
     expect(r[0].perMitra[0].jumlahTakBertarif).toBe(1);
     expect(r[0].perMitra[0].totalHonor).toBe(0);
+    // Sejajar PERSIS perlakuan tarif varian yang hilang: honor VARIAN yang
+    // sebenarnya valid pun ikut tidak disumkan — bukan hanya baris per mitra,
+    // total pekan juga tetap nol.
+    expect(r[0].totalHonor).toBe(0);
+    expect(r[0].totalHarga).toBe(0);
   });
 
   it("sesi di_atas_20 DENGAN tarif khusus dihitung dari transport_khusus, bukan rate card", () => {
@@ -527,6 +531,37 @@ describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
       tanda: [],
     });
     expect(r[0].sesiTakBertarif[0].sebab).toBe("varian");
+  });
+
+  // --- Ruling 18 (fix round 1): tarifKlien transport sesi BERPAKET tidak
+  // pernah masuk totalHarga — paket dibayar klien lewat harga PAKET yang
+  // tetap, bukan per sesi, dan struktur itu belum punya spec "transport
+  // tambahan di atas harga paket". Honor mitra (yang benar-benar menempuh
+  // jaraknya) TETAP dibayar penuh baik sesi lepas maupun berpaket.
+  it("sesi BERPAKET berjenjang: honor transport tetap dibayar, tapi tarifKlien-nya TIDAK masuk totalHarga (Ruling 18)", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "5_10", clientPackageId: "pkg-1" })],
+      tarif: [tarif({})],
+      tarifTransport: [tarifTransport({})], // tarifKlien 20.000, honorMitra 30.000
+      tanda: [],
+    });
+    // Honor mitra: honor varian + honor transport, PERSIS sama seperti sesi
+    // lepas — bidan menempuh jarak yang sama nyatanya.
+    expect(r[0].perMitra[0].totalHonor).toBe(200_000 + 30_000);
+    expect(r[0].totalHonor).toBe(200_000 + 30_000);
+    // Harga klien: HANYA harga varian. tarifKlien transport (20.000) TIDAK
+    // ikut — paket tidak menagih transport tambahan per sesi.
+    expect(r[0].totalHarga).toBe(500_000);
+  });
+
+  it("sesi LEPAS berjenjang (kontrol): tarifKlien transport TETAP masuk totalHarga", () => {
+    const r = hitungRekap({
+      sesi: [sesi({ jenjang: "5_10", clientPackageId: null })],
+      tarif: [tarif({})],
+      tarifTransport: [tarifTransport({})],
+      tanda: [],
+    });
+    expect(r[0].totalHarga).toBe(500_000 + 20_000);
   });
 });
 

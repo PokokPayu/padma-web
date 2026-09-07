@@ -9,6 +9,19 @@ import { BarisHonorMitra } from "./tabel-rekap";
 export const metadata = { title: "Rekap & Honor" };
 
 /**
+ * Ke layar mana owner harus pergi untuk menuntaskan satu sesi tak-bertarif.
+ *
+ * (Critical 2, Task 9 fix round 1) `SesiTakBertarif.sebab` sempat ditambahkan
+ * tanpa satu pun konsumen — komentar di `lib/owner/rekap.ts` berjanji "owner
+ * tahu layar mana yang harus ia buka", tetapi tidak ada baris UI yang
+ * membacanya. Kemampuan tanpa konsumen adalah kemampuan yang tidak ada.
+ */
+const SARAN_LAYAR: Record<"varian" | "transport", string> = {
+  varian: "Buka /owner/tarif untuk menetapkan tarif layanannya",
+  transport: "Buka /owner/transport untuk menetapkan tarif jaraknya",
+};
+
+/**
  * Satu kartu pekan — bentuk `.week-card` prototipe.
  *
  * `data-pekan` membawa Senin pekannya. Ia bukan hiasan: seluruh nominal di
@@ -54,7 +67,8 @@ function KartuPekan({ pekan }: { pekan: RekapPekan }) {
           <ul className="mt-1.5">
             {pekan.sesiTakBertarif.map((s) => (
               <li key={s.id} className="text-[11.5px] leading-relaxed text-ink-soft">
-                {`${formatTanggalID(s.tanggal)} · ${s.namaLayanan} · ${s.namaMitra}`}
+                {`${formatTanggalID(s.tanggal)} · ${s.namaLayanan} · ${s.namaMitra} · `}
+                <span className="font-semibold text-ink">{SARAN_LAYAR[s.sebab]}</span>
               </li>
             ))}
           </ul>

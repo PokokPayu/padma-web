@@ -12,16 +12,18 @@
 
 import { geserHari } from "@/lib/owner/pekan";
 import { JENJANG_TARIF_RATE_CARD } from "@/lib/transport/tarif";
-import { LABEL_JENJANG, JENJANG_SAH } from "@/app/admin/sesi/status";
+import { JENJANG_SAH } from "@/app/admin/sesi/status";
 
-// Label & daftar putih jenjang dipakai ULANG dari modul Sesi admin, BUKAN
-// ditulis kedua kalinya di sini. `LABEL_JENJANG` di sana sudah dijaga tipe
-// `Record<JenjangTransport, string>`, yang berarti TypeScript menolak build
-// bila satu anggota enum `jenjang_transport` hilang; menyalinnya ke berkas
-// ini akan melahirkan DUA daftar berlabel yang bisa berbeda nama pada
-// perubahan berikutnya — persis kelas bug yang diperingatkan berulang kali
+// Daftar putih jenjang dipakai ULANG dari modul Sesi admin, BUKAN ditulis
+// kedua kalinya di sini — persis kelas bug yang diperingatkan berulang kali
 // di proyek ini ("dua definisi yang berpisah diam-diam").
-export { LABEL_JENJANG, JENJANG_SAH };
+//
+// `LABEL_JENJANG` TIDAK di re-export lagi dari sini (Ruling 20, Task 9 fix
+// round 1): pengimpornya (`owner/transport/page.tsx`) kini mengambilnya
+// LANGSUNG dari `@/lib/transport/jarak`, SATU-SATUNYA sumber — re-export
+// berantai lib → app/admin/sesi/status → app/owner/transport/status hanya
+// menambah satu titik lagi yang bisa diam-diam berpisah dari sumbernya.
+export { JENJANG_SAH };
 export { JENJANG_TARIF_RATE_CARD };
 
 /**

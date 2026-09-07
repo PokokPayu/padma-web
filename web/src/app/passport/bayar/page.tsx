@@ -59,6 +59,13 @@ export default async function HalamanBayar() {
                 </span>
               </div>
 
+              {/* Rincian transport (Task 9) — SUB-BARIS pada item yang sama,
+                  TANPA tombol sendiri dan TANPA id kembar: menekan "Saya
+                  sudah bayar" di bawah sudah mencakup transportnya juga. */}
+              {t.rincianTransport && (
+                <p className="mt-1 text-[12px] text-ink-soft">{t.rincianTransport}</p>
+              )}
+
               {/* Tombol klaim hanya untuk item yang benar-benar masih 'belum'.
                   Server action tetap memeriksa syarat itu sendiri: tampilan
                   bukan pagar. */}

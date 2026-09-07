@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { jadwalkanSesi } from "./aksi";
-import { JENJANG_SAH, LABEL_JENJANG } from "./status";
+import { JENJANG_SAH } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
+import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { VarianPilihan } from "@/lib/admin/katalog-admin";
 
 // `alamatLat`/`alamatLon` adalah alamat DEFAULT klien (Task 6/T7 spec),

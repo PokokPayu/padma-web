@@ -19,8 +19,15 @@
  *     lunas` diizinkan DB, ia bisa benar-benar "melunasi" hantu itu berikut
  *     jejak audit palsunya.
  *  2. BADGE YANG TIDAK BISA DIBERSIHKAN. Badge `klaimMenunggu` wajib sama
- *     dengan jumlah baris menunggu verifikasi di daftar. Bila berbeda, admin
- *     membuka modulnya dan tidak menemukan apa pun untuk dipadamkan.
+ *     dengan jumlah baris menunggu verifikasi di daftar — satu SESI SELALU
+ *     satu ITEM, bahkan yang berjenjang (Task 9): rincian transportnya
+ *     hidup sebagai MEDAN `rincianTransport` pada item sesi itu sendiri,
+ *     bukan item kedua ber-`id` sama. Draf pertama Task 9 melanggar invarian
+ *     ini (item kedua ber-id sama untuk transport), dan lolos dari test di
+ *     bawah semata karena fixturenya kebetulan tidak pernah men-set sesi
+ *     berjenjang ke 'menunggu_verifikasi' — lihat fixture
+ *     `SESI_TRANSPORT_MENUNGGU` di describe "baris transport". Bila berbeda,
+ *     admin membuka modulnya dan tidak menemukan apa pun untuk dipadamkan.
  *  3. KEADAAN TUJUAN SEBAGAI PARAMETER. Prototipe memakai
  *     `<select onchange="ubahStatusBayar(id, this.value)">` — status dikirim
  *     dari browser. Bentuk celah itu sudah pernah tembus di proyek ini, jadi
@@ -426,56 +433,123 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
 // ---------------------------------------------------------------------------
 // Baris TRANSPORT di tagihan admin & klien (Task 9)
 // ---------------------------------------------------------------------------
-describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9)", () => {
+describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix round 1)", () => {
   // Fixture SENDIRI, sama polanya dengan describe varian di atas: sesi
   // berjenjang butuh kolom `sessions.jenjang` yang tidak disentuh fixture
   // modul ini (SESI_UJI seluruhnya `jenjang: null`).
-  const SESI_TRANSPORT = "66666666-6666-6666-6666-6666666666c6";
+  const SESI_TRANSPORT = "66666666-6666-6666-6666-6666666666c6"; // 10_15, belum
+  // Berjenjang DAN 'menunggu_verifikasi' — prasyarat uji invarian badge di
+  // bawah. Draf pertama Task 9 hijau semata karena SESI_TRANSPORT di atas
+  // memilih 'belum', satu-satunya status yang tidak pernah menyentuh cabang
+  // badge (`hitungKlaimMenunggu`) sama sekali.
+  const SESI_TRANSPORT_MENUNGGU = "66666666-6666-6666-6666-6666666666c7"; // 5_10, menunggu
+  const SESI_JAUH_BELUM = "66666666-6666-6666-6666-6666666666c8"; // di_atas_20, TANPA transport_khusus
+  const SESI_JAUH_SUDAH = "66666666-6666-6666-6666-6666666666c9"; // di_atas_20, DENGAN transport_khusus
 
   beforeAll(async () => {
-    await admin.from("sessions").insert(
+    await admin.from("sessions").insert([
       baris(SESI_TRANSPORT, { status_bayar: "belum", jenjang: "10_15" }),
-    );
+      baris(SESI_TRANSPORT_MENUNGGU, { status_bayar: "menunggu_verifikasi", jenjang: "5_10" }),
+      baris(SESI_JAUH_BELUM, { status_bayar: "belum", jenjang: "di_atas_20" }),
+      baris(SESI_JAUH_SUDAH, { status_bayar: "belum", jenjang: "di_atas_20" }),
+    ]);
+    await admin
+      .from("transport_khusus")
+      .insert({ session_id: SESI_JAUH_SUDAH, tarif_klien: 80000, honor_mitra: 60000 });
   });
 
   afterAll(async () => {
-    await admin.from("sessions").delete().eq("id", SESI_TRANSPORT);
+    await admin.from("transport_khusus").delete().eq("session_id", SESI_JAUH_SUDAH);
+    await admin
+      .from("sessions")
+      .delete()
+      .in("id", [SESI_TRANSPORT, SESI_TRANSPORT_MENUNGGU, SESI_JAUH_BELUM, SESI_JAUH_SUDAH]);
   });
 
-  it("sesi berjenjang menghasilkan DUA baris tagihan admin: sesi & transport, id SAMA", async () => {
+  // --- Ruling 16: transport adalah RINCIAN pada item sesi, bukan item kedua ---
+
+  it("sesi berjenjang menghasilkan SATU item; rincianTransport terisi (Ruling 16)", async () => {
     const daftar = (await daftarTagihanAdmin()).filter((t) => t.id === SESI_TRANSPORT);
-    expect(daftar).toHaveLength(2);
-    expect(daftar.every((t) => t.jenis === "sesi")).toBe(true);
-    expect(daftar.some((t) => t.label.startsWith("Transport"))).toBe(true);
-    // >10–15 km — LABEL_JENJANG (@/app/admin/sesi/status), SATU-SATUNYA sumber.
-    expect(daftar.find((t) => t.label.startsWith("Transport"))!.label).toContain(">10–15 km");
+    expect(daftar).toHaveLength(1);
+    expect(daftar[0].jenis).toBe("sesi");
+    // >10–15 km — LABEL_JENJANG (@/lib/transport/jarak), SATU-SATUNYA sumber.
+    expect(daftar[0].rincianTransport).toContain(">10–15 km");
+    // Label sesinya sendiri TIDAK bercampur dengan rincian transport.
+    expect(daftar[0].label).not.toContain("Transport");
   });
 
-  it("baris transport TIDAK ada untuk sesi tanpa jenjang (SESI_MENUNGGU dkk.)", async () => {
+  it("rincianTransport null untuk sesi tanpa jenjang (SESI_MENUNGGU dkk.)", async () => {
     const daftar = await daftarTagihanAdmin();
     expect(daftar.filter((t) => t.id === SESI_MENUNGGU)).toHaveLength(1);
+    expect(daftar.find((t) => t.id === SESI_MENUNGGU)!.rincianTransport).toBeNull();
   });
 
-  it("label baris transport klien (susunTagihan) dan admin (daftarTagihanAdmin) IDENTIK huruf demi huruf", async () => {
-    const labelAdmin = (await daftarTagihanAdmin())
-      .find((t) => t.id === SESI_TRANSPORT && t.label.startsWith("Transport"))!.label;
+  it("badge klaimMenunggu tetap sama dengan jumlah baris menunggu_verifikasi walau ADA sesi berjenjang yang menunggu", async () => {
+    const daftar = await daftarTagihanAdmin();
+    // Prasyarat fixture: benar-benar berjenjang DAN menunggu_verifikasi —
+    // tanpa baris ini, test bisa hijau tanpa pernah menguji apa pun.
+    const baris = daftar.find((t) => t.id === SESI_TRANSPORT_MENUNGGU);
+    expect(baris?.status).toBe("menunggu_verifikasi");
+    expect(baris?.rincianTransport).not.toBeNull();
+
+    const menunggu = daftar.filter((t) => t.status === "menunggu_verifikasi").length;
+    expect(await hitungKlaimMenunggu()).toBe(menunggu);
+  });
+
+  // --- Ruling 17: di_atas_20 tanpa transport_khusus TIDAK dapat rincian ---
+
+  it("sesi di_atas_20 TANPA transport_khusus: rincianTransport null (Ruling 17)", async () => {
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_JAUH_BELUM)!;
+    expect(item.rincianTransport).toBeNull();
+  });
+
+  it("sesi di_atas_20 SUDAH punya transport_khusus: rincianTransport terisi, TETAP tanpa nominal", async () => {
+    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_JAUH_SUDAH)!;
+    expect(item.rincianTransport).toContain(">20 km");
+    expect(item.rincianTransport).not.toMatch(/Rp/);
+  });
+
+  it("klien TIDAK PERNAH mendapat rincian transport untuk di_atas_20 — bahkan yang sudah bertarif khusus", async () => {
+    // Keputusan konservatif (Ruling 17): klien tidak punya, dan tidak boleh
+    // punya, cara memverifikasi `transport_khusus` sudah ditetapkan (RLS
+    // "hanya owner" menutup tabel itu dari klien MAUPUN admin) — beda dengan
+    // admin yang punya anti-join `sesi_menunggu_tarif_transport`. Rate-card
+    // jenjang lain tidak punya masalah ini: sekali owner menetapkan SATU
+    // tarif jenjang, ia otomatis berlaku untuk SETIAP sesi jenjang itu.
+    ref.sesi = sesiKlien;
+    const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
+    ref.sesi = sesiAdmin;
+    const item = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_JAUH_SUDAH);
+    expect(item?.rincianTransport ?? null).toBeNull();
+  });
+
+  // --- Parity & money firewall ---
+
+  it("rincianTransport klien (susunTagihan) dan admin (daftarTagihanAdmin) IDENTIK huruf demi huruf", async () => {
+    const rincianAdmin = (await daftarTagihanAdmin()).find((t) => t.id === SESI_TRANSPORT)!
+      .rincianTransport;
+    expect(rincianAdmin).not.toBeNull();
 
     ref.sesi = sesiKlien;
     const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
     ref.sesi = sesiAdmin;
-    const labelKlien = susunTagihan({ paket, sesi })
-      .find((t) => t.id === SESI_TRANSPORT && t.label.startsWith("Transport"))!.label;
+    const rincianKlien = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_TRANSPORT)!
+      .rincianTransport;
 
-    expect(labelKlien).toBe(labelAdmin);
+    expect(rincianKlien).toBe(rincianAdmin);
   });
 
-  it("admin/tagihan.ts tidak pernah menyebut tabel uang transport (money firewall)", () => {
-    // Label transport dirangkai HANYA dari `sessions.jenjang` (enum, bukan
+  it("admin/tagihan.ts tidak pernah menyebut tabel uang transport, dan memakai anti-join view (money firewall)", () => {
+    // Rincian transport dirangkai HANYA dari `sessions.jenjang` (enum, bukan
     // nominal) — modul ini tidak butuh, dan tidak boleh, membaca
-    // `transport_rates`/`transport_khusus` sama sekali untuk menampilkan
-    // labelnya.
+    // `transport_rates`/`transport_khusus` sama sekali. Kepastian "sesi
+    // di_atas_20 ini sudah bertarif" datang dari anti-join ke
+    // `sesi_menunggu_tarif_transport` (Task 8) — BUKAN dari mencoba membaca
+    // `transport_khusus` langsung (yang akan dijawab `[]` oleh RLS, dibaca
+    // naif sebagai "tidak ada yang menunggu").
     expect(sumberData).not.toContain("transport_rates");
     expect(sumberData).not.toContain("transport_khusus");
+    expect(sumberData).toContain("sesi_menunggu_tarif_transport");
   });
 });
 
@@ -664,6 +738,7 @@ describe("tombol dirender BERSYARAT menurut status barisnya", () => {
       namaKlien: "Ananda Putri",
       padmaId: PADMA_ID,
       label: "Nutrisi · 23 Desember 2026",
+      rincianTransport: null,
       status: "menunggu_verifikasi" as const,
     },
     {
@@ -672,6 +747,7 @@ describe("tombol dirender BERSYARAT menurut status barisnya", () => {
       namaKlien: "Ananda Putri",
       padmaId: PADMA_ID,
       label: "Massage · 23 Desember 2026",
+      rincianTransport: null,
       status: "belum" as const,
     },
     {
@@ -680,6 +756,7 @@ describe("tombol dirender BERSYARAT menurut status barisnya", () => {
       namaKlien: "Ananda Putri",
       padmaId: PADMA_ID,
       label: "Massage · 23 Desember 2026",
+      rincianTransport: null,
       status: "lunas" as const,
     },
   ];

@@ -74,6 +74,15 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                       <span className="mt-0.5 block text-[11.5px] text-ink-soft">
                         {t.jenis === "paket" ? "Paket" : "Sesi lepas"}
                       </span>
+                      {/* Rincian transport (Task 9) — SUB-BARIS pada item yang
+                          sama, TANPA tombol sendiri dan TANPA id kembar: satu
+                          sesi punya satu status_bayar, jadi "Tandai lunas" di
+                          baris ini sudah melunasi transportnya juga. */}
+                      {t.rincianTransport && (
+                        <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                          {t.rincianTransport}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4">
                       <span

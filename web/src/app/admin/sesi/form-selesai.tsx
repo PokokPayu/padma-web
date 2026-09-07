@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { selesaikanSesi, tetapkanJenjang } from "./aksi";
-import { JENJANG_SAH, LABEL_JENJANG, LABEL_STATUS_SESI, type StatusSesi } from "./status";
-import type { JenjangTransport } from "@/lib/transport/jarak";
+import { JENJANG_SAH, LABEL_STATUS_SESI, type StatusSesi } from "./status";
+import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 
 export type BarisSesiTampil = {
   id: string;

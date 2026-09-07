@@ -1,12 +1,6 @@
 import { formatTanggalID, sudahLewat } from "./waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
-import type { JenjangTransport } from "@/lib/transport/jarak";
-// Label jenjang dipakai ULANG dari modul Sesi admin — SATU-SATUNYA sumber,
-// sama seperti `app/owner/transport/status.ts` sudah melakukannya. Menulis
-// ulang lima label ini di sini akan melahirkan DUA daftar yang bisa berbeda
-// nama pada perubahan berikutnya (persis kelas bug yang diperingatkan
-// berulang kali di proyek ini untuk `labelVarian`/`tarifTransportPadaTanggal`).
-import { LABEL_JENJANG } from "@/app/admin/sesi/status";
+import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 
 export type StatusSesi = "terjadwal" | "selesai" | "batal";
 export type PayStatus = "belum" | "menunggu_verifikasi" | "lunas";
@@ -114,6 +108,24 @@ export type ItemTagihan = {
   jenis: "paket" | "sesi";
   id: string;
   label: string;
+  /**
+   * Rincian transport (Task 9, Ruling 16 — fix round 1). `null` untuk SETIAP
+   * item paket, dan untuk item sesi yang tidak berjenjang atau berjenjang
+   * `di_atas_20` (lihat gerbang di `susunTagihan()`).
+   *
+   * SENGAJA sebuah MEDAN pada item sesi yang sudah ada — BUKAN item kedua
+   * ber-`id` yang sama. Draf pertama Task 9 menambahkan
+   * `item.push({ jenis: "sesi", id: s.id, ... })` KEDUA untuk transport, dan
+   * itu ternyata bug, bukan sekadar gaya: `key={`${t.jenis}-${t.id}`}` di
+   * `app/passport/bayar/page.tsx` membuatnya identik dengan baris sesi
+   * induknya, dan React boleh mencampur STATE dua `<TombolKlaim>` client
+   * component yang keduanya ber-key sama — klien melihat dua tombol "Saya
+   * sudah bayar" untuk satu pembayaran, di dalam dua elemen yang React sendiri
+   * tidak bisa membedakan. Satu sesi punya SATU `status_bayar`, jadi ia wajib
+   * menghasilkan SATU item — transport hanya boleh menjadi rincian di
+   * dalamnya, dirender sebagai sub-baris tanpa tombol sendiri.
+   */
+  rincianTransport: string | null;
   status: PayStatus;
 };
 
@@ -127,12 +139,19 @@ export function susunTagihan(input: {
     jenis: "paket",
     id: p.id,
     label: `${p.nama} · ${p.jumlahSesi} sesi`,
+    // Paket tidak pernah punya rincian transport sendiri: harganya tetap/
+    // pre-paid per paket, bukan per sesi — lihat Ruling 18 di `hitungRekap()`
+    // (lib/owner/rekap.ts) untuk keputusan uang yang sama pada sisi owner.
+    rincianTransport: null,
     status: p.statusBayar,
   }));
 
   // Hanya sesi LEPAS yang menjadi item. `sessions.status_bayar` untuk sesi
   // berpaket tidak relevan dan memang kontradiktif di data nyata — memakainya
-  // akan melahirkan "tagihan hantu" saat presentasi.
+  // akan melahirkan "tagihan hantu" saat presentasi. Konsekuensinya sesi
+  // BERPAKET yang berjenjang pun tidak pernah sampai ke loop ini sama sekali
+  // — rincian transportnya menunggu spec paket yang sama (Ruling 18), bukan
+  // hilang sendirian di sini.
   //
   // Label menyertakan LABEL varian sejak layanan punya lebih dari satu harga:
   // dua sesi layanan yang sama bisa berbeda harga bila variannya berbeda (mis.
@@ -145,6 +164,29 @@ export function susunTagihan(input: {
     if (s.clientPackageId !== null) continue;
     if (s.status === "batal") continue;
     const varLabel = labelVarian(s.varian);
+
+    // Rincian TRANSPORT (Task 9) — TANPA NOMINAL sama sekali (money
+    // firewall): klien di sini tidak pernah berhak baca
+    // `transport_rates`/`transport_khusus` (RLS "hanya owner"), jadi
+    // teksnya murni jenjang + tanggal, dari `LABEL_JENJANG`
+    // (`@/lib/transport/jarak`) — SATU-SATUNYA sumber, sama persis yang
+    // dipakai `daftarTagihanAdmin()` (`@/lib/admin/tagihan`).
+    //
+    // `di_atas_20` SENGAJA DIKECUALIKAN (Ruling 17): materi klien menulis
+    // ">20 km: konfirmasi admin" — KETIADAAN tarif otomatis, dirundingkan
+    // langsung per kasus, bukan lewat baris otomatis. Klien di sini juga
+    // TIDAK PUNYA cara memverifikasi apakah owner sudah menetapkan tarif
+    // khususnya (RLS yang sama menutup `transport_khusus` dari klien maupun
+    // admin) — menampilkan rincian transport untuk sesi yang nominalnya
+    // belum pernah ditetapkan siapa pun akan menagih sesuatu yang belum ada.
+    // Rate-card jenjang lain (`0_5`..`15_20`) tidak punya masalah ini: sekali
+    // owner menetapkan tarif SATU jenjang, tarif itu otomatis berlaku untuk
+    // SETIAP sesi jenjang itu — bukan keputusan per sesi seperti `di_atas_20`.
+    const rincianTransport =
+      s.jenjang !== null && s.jenjang !== "di_atas_20"
+        ? `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`
+        : null;
+
     item.push({
       jenis: "sesi",
       id: s.id,
@@ -152,27 +194,9 @@ export function susunTagihan(input: {
         varLabel === ""
           ? `${s.namaLayanan} · ${formatTanggalID(s.tanggal)}`
           : `${s.namaLayanan} · ${varLabel} · ${formatTanggalID(s.tanggal)}`,
+      rincianTransport,
       status: s.statusBayar,
     });
-
-    // (Task 9) Baris TRANSPORT tambahan — hanya ketika jaraknya diketahui.
-    // TANPA NOMINAL sama sekali (money firewall): klien di sini tidak pernah
-    // berhak baca `transport_rates`/`transport_khusus` (RLS "hanya owner"),
-    // jadi labelnya murni jenjang + tanggal, persis seperti rate card owner
-    // menamainya (`LABEL_JENJANG`, `@/app/admin/sesi/status`).
-    //
-    // `id` & `jenis` SENGAJA SAMA PERSIS dengan baris sesi di atas — tidak ada
-    // kolom `status_bayar` terpisah untuk transport, jadi "Tandai
-    // lunas"/"Saya sudah bayar" pada baris ini melunasi SESI YANG SAMA, bukan
-    // baris hantu ber-id palsu yang tidak pernah ada di `sessions`.
-    if (s.jenjang !== null) {
-      item.push({
-        jenis: "sesi",
-        id: s.id,
-        label: `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`,
-        status: s.statusBayar,
-      });
-    }
   }
   return item;
 }

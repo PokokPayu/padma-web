@@ -260,6 +260,16 @@ export function hitungRekap(input: {
         if (khusus) transport = { tarifKlien: khusus.tarifKlien, honorMitra: khusus.honorMitra };
         else transportHilang = true;
       } else if (s.jenjang !== null) {
+        // (Ruling 19, Task 9 fix round 1) Sesi lebih tua dari tarif transport
+        // paling awal jenjangnya JATUH TAK-BERTARIF PERMANEN — tidak ada jalur
+        // retroaktif: `guard_tarif_transport_maju` menolak SETIAP tarif baru
+        // yang `berlaku_sejak`-nya mundur, bahkan dari owner, jadi tarif lama
+        // tidak akan pernah bisa ditambahkan untuk menutup sesi ini. Ini BUKAN
+        // lubang baru milik Task 9 — sejajar persis konsekuensi append-only
+        // yang sudah diterima untuk tarif VARIAN (`variant_rates`, spec
+        // sebelumnya) — dan karena itu SENGAJA tidak "diperbaiki" di sini;
+        // memperlebar jalur mundur adalah keputusan tingkat spec rate card,
+        // bukan keputusan kalkulasi rekap.
         const tt = tarifTransportPadaTanggal(tarifTransport, s.jenjang, s.tanggal);
         if (tt) transport = { tarifKlien: tt.tarifKlien, honorMitra: tt.honorMitra };
         else transportHilang = true;
@@ -291,15 +301,28 @@ export function hitungRekap(input: {
           sebab: t === null ? "varian" : "transport",
         });
       } else {
-        // (4) Sesi berpaket DAN sesi lepas keduanya menghasilkan honor —
-        //     bidan bekerja pada keduanya. `clientPackageId` sengaja TIDAK
-        //     dipakai sebagai penyaring di sini. Transport (bila ada)
-        //     ditambahkan di atas honor varian, bukan menggantikannya.
+        // (4) Sesi berpaket DAN sesi lepas keduanya menghasilkan HONOR —
+        //     bidan bekerja pada keduanya, dan honor transport (perjalanan
+        //     yang benar-benar ditempuh) TETAP dibayarkan tanpa syarat
+        //     `clientPackageId` — persis seperti honor varian di atasnya.
+        //
+        //     (Ruling 18, Task 9 fix round 1) `tarifKlien` TRANSPORT beda
+        //     ceritanya: sesi berpaket dibayar klien lewat harga PAKET yang
+        //     tetap/pre-paid, dan struktur itu BELUM punya spec "transport
+        //     tambahan di atas harga paket". Menambah `tarifKlien` transport
+        //     ke `totalHarga` untuk sesi berpaket akan membuat margin PADMA
+        //     terlihat lebih besar daripada uang yang akan benar-benar
+        //     ditagihkan — pendapatan yang tidak pernah sampai ke siapa pun.
+        //     Ditunda sampai ada spec paket transport: hari ini `tarifKlien`
+        //     transport HANYA masuk `totalHarga` untuk sesi LEPAS, dan
+        //     PADMA-lah yang menanggung selisihnya (margin turun sebesar
+        //     honor transport pada sesi berpaket) — angka yang jujur, karena
+        //     memang tidak ditagihkan.
         const honorTransport = transport?.honorMitra ?? 0;
-        const hargaTransport = transport?.tarifKlien ?? 0;
+        const hargaTransportKlien = s.clientPackageId === null ? (transport?.tarifKlien ?? 0) : 0;
         baris.totalHonor += t.honorMitra + honorTransport;
         totalHonor += t.honorMitra + honorTransport;
-        totalHarga += t.hargaKlien + hargaTransport;
+        totalHarga += t.hargaKlien + hargaTransportKlien;
       }
 
       perMitra.set(s.partnerId, baris);

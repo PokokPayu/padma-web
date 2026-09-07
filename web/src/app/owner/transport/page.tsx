@@ -6,7 +6,8 @@ import {
 } from "@/lib/owner/data";
 import { formatRupiah } from "@/lib/owner/rupiah";
 import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
-import { JENJANG_TARIF_RATE_CARD, LABEL_JENJANG } from "./status";
+import { JENJANG_TARIF_RATE_CARD } from "./status";
+import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { FormTarifTransport, FormTarifKhusus } from "./form-tarif-transport";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
