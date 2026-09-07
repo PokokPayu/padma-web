@@ -778,8 +778,21 @@ describe("berkas server action mitra", () => {
     //     operatornya di situ ARGUMEN STRING KETIGA, bukan nama metode,
     //     jadi ia tidak mengandung `.ilike(` maupun `"id.ilike."` — lolos
     //     dari kedua pola di atas sekaligus.
+    //
+    // Fix Round 1 (Temuan 3): pola #2 di bawah dulu mensyaratkan tanda kutip
+    // TEPAT sebelum nama kolom (`['"`]`), sehingga hanya menangkap kolom
+    // identitas bila ia adalah kondisi PERTAMA dalam string `.or(...)`. Modul
+    // Klien membuktikan lubangnya: `` `nama.ilike.%x%,padma_id.ilike.%x%` ``
+    // punya kolom identitas SETELAH KOMA, bukan tepat setelah kutip pembuka
+    // — pola lama tidak menyala untuk bentuk ini SAMA SEKALI (diverifikasi
+    // red-team dengan menembakkan `nama.ilike.%x%,partner_id.ilike.%x%` ke
+    // pola lama: tidak tertangkap). Kelas karakter di depan diperluas jadi
+    // `[,'"`]` supaya kolom identitas yang muncul di TENGAH string `.or()`
+    // — bukan cuma yang pertama — ikut tertangkap. Tidak ada pengecualian
+    // seperti `padma_id` di sini: `partners` tidak punya kolom ber-akhiran
+    // `_id` yang sah dicari lewat pola.
     const polaMetodeIdentitas = /\.(?:ilike|like)\(\s*['"`](?:id|\w*_id)['"`]/;
-    const polaOrIdentitas = /['"`](?:id|\w*_id)\.(?:ilike|like)\./;
+    const polaOrIdentitas = /[,'"`](?:id|\w*_id)\.(?:ilike|like)\./;
     const polaFilterIdentitas =
       /\.filter\(\s*['"`](?:id|\w*_id)['"`]\s*,\s*['"`](?:ilike|like)['"`]/;
     expect(sumberLib).not.toMatch(polaMetodeIdentitas);
