@@ -32,7 +32,7 @@ export type SaringSah = Readonly<Record<string, readonly string[]>>;
  *
  * Bedanya bukan kosmetik: hanya perubahan pada SARINGAN yang mengembalikan
  * halaman ke 1. `hal` jelas dikecualikan; `ubah` dikecualikan karena membuka
- * lalu menutup sebuah baris tidak boleh memindahkan admin dari halamannya.
+ * lalu menutup sebuah baris tidak boleh memindahkan staf dari halamannya.
  */
 const BUKAN_SARINGAN = new Set(["cari", "hal", "ubah"]);
 
@@ -107,7 +107,7 @@ export function bangunQuery(
   //
   // `hal` dan `ubah` dikecualikan dari aturan itu: keduanya bukan saringan.
   // Membuka sebuah baris di halaman 4 lalu menutupnya harus mengembalikan
-  // admin ke halaman 4 — kalau `ubah` ikut me-reset halaman, baris yang
+  // staf ke halaman 4 — kalau `ubah` ikut me-reset halaman, baris yang
   // barusan diubah justru lenyap dari layar begitu panelnya ditutup.
   const menyentuhSaringan = Object.keys(ubahan).some((k) => !BUKAN_SARINGAN.has(k));
   const halDiminta = "hal" in ubahan ? Number(ubahan.hal ?? 1) : param.hal;
