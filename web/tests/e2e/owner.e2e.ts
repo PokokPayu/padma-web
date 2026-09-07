@@ -29,7 +29,7 @@
  *      pembatalan, dan tandanya bertahan sesudah halaman dimuat ulang.
  *   6. Owner punya JALAN PULANG yang bisa DIKLIK dari `/owner` ke `/admin`.
  *   7. Admin ditolak di `/owner`, DAN tidak satu pun nominal rate card muncul
- *      di HTML sembilan rute /admin/** maupun enam rute /passport/**.
+ *      di HTML sepuluh rute /admin/** maupun enam rute /passport/**.
  *   8. KONTROL POSITIF: nominal yang sama HARUS terbaca di `/owner/tarif`.
  *      Tanpa langkah ini, "nol nominal" di langkah 7 bisa hijau palsu hanya
  *      karena pemindainya rusak — kelas kegagalan yang paling berbahaya di
@@ -95,13 +95,35 @@ const TANGGAL_SESI_B = geserHari(SENIN_LALU, 2);
 /** Honor yang harus muncul di rekap: dua sesi selesai × tarif LAMA. */
 const HONOR_PEKAN = HONOR_LAMA * 2;
 
-/** Rute yang HTML-nya wajib bersih dari nominal rate card. */
+/**
+ * Layanan seed permanen ("Sankalpa Fertility Massage") — SATU-SATUNYA id yang
+ * dipakai untuk memeriksa rute DINAMIS `/admin/layanan/[id]` di bawah. Baris
+ * ini hidup selamanya di `supabase/seed.sql` (bukan fixture `PAD-UJI` milik
+ * berkas vitest mana pun, yang dibuat & dihapus dalam satu run test dan
+ * karenanya bisa TIDAK ADA saat skrip e2e ini berjalan terpisah).
+ */
+const SVC_SEED_E2E = "11111111-1111-1111-1111-111111111101";
+
+/**
+ * Rute yang HTML-nya wajib bersih dari nominal rate card.
+ *
+ * Seluruh entri di sini SELALU statis — `buka()` di bawah hanya melakukan
+ * `page.goto(BASE + path)` literal, dan sesudahnya memeriksa `tiba === path`
+ * persis (redirect dianggap "rute tidak benar-benar diperiksa"). Sampai baris
+ * `/admin/layanan/[id]` di bawah, tidak ada satu pun rute berparameter
+ * (`/admin/klien/[id]`, `/passport/materi/[id]`, dst.) yang pernah masuk daftar
+ * ini — jadi TIDAK ADA konvensi template/placeholder untuk rute dinamis untuk
+ * diikuti. Diselesaikan dengan cara TERKECIL yang konsisten dengan pola yang
+ * sudah ada: satu string literal dengan id sungguhan tertanam, dievaluasi
+ * PERSIS seperti sembilan entri statis lain, bukan mesin templating baru.
+ */
 const RUTE_ADMIN = [
   "/admin",
   "/admin/bayar",
   "/admin/klien",
   "/admin/sesi",
   "/admin/layanan",
+  `/admin/layanan/${SVC_SEED_E2E}`,
   "/admin/materi",
   "/admin/mitra",
   "/admin/pengaturan",
@@ -530,7 +552,7 @@ async function main() {
     // ================= 8. KONTROL POSITIF pemindai nominal ===============
     // Dijalankan SEBELUM pemindaian /admin/**: bila pemindainya rusak, langkah
     // 7 akan hijau tanpa menguji apa pun, dan kegagalan itu harus terlihat
-    // lebih dulu — bukan tersembunyi di balik sembilan baris PASS.
+    // lebih dulu — bukan tersembunyi di balik sepuluh baris PASS.
     let pemindaiBekerja = false;
     {
       const page = await buka(owner, "/owner/tarif");

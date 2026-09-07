@@ -1357,9 +1357,27 @@ describe("berkas server action layanan", () => {
 
 describe("ambilDaftarLayanan", () => {
   it("menyaring menurut ketersediaan", async () => {
-    const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "ya" }, hal: 1 });
-    expect(baris.length).toBeGreaterThan(0);
-    expect(baris.every((l) => l.aktif)).toBe(true);
+    // BRIEF ASLINYA (dan versi tak berubah sampai review round 1) hanya
+    // memeriksa `baris.every((l) => l.aktif)` tanpa memaksa ada baris
+    // NONAKTIF nyata yang harus dikecualikan filter ini. `supabase/seed.sql`
+    // tidak punya satu pun baris `services` yang permanen nonaktif, dan
+    // setiap fixture yang pernah dinonaktifkan file lain sudah dikembalikan
+    // `aktif = true` oleh `afterAll`/`finally` masing-masing sebelum describe
+    // ini berjalan — jadi `.every()` di atas larik yang kebetulan HANYA berisi
+    // baris aktif lulus persis sama walau klausa `.eq("aktif", ...)` di
+    // `ambilDaftarLayanan` dihapus total. SVC_STATUS dinonaktifkan sendiri di
+    // sini, sementara, supaya lulus/gagalnya test benar-benar bergantung pada
+    // filter itu — pola yang sama dengan "memuat layanan NONAKTIF juga" di
+    // bawah.
+    await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
+    try {
+      const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "ya" }, hal: 1 });
+      expect(baris.length).toBeGreaterThan(0);
+      expect(baris.every((l) => l.aktif)).toBe(true);
+      expect(baris.map((l) => l.id)).not.toContain(SVC_STATUS);
+    } finally {
+      await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
+    }
   });
 
   it("membawa jumlah varian, paket, dan sesi tercatat", async () => {
