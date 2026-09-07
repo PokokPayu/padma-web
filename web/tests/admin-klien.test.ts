@@ -85,6 +85,7 @@ const sumberAksi = baca("src/app/admin/klien/aksi.ts");
 const sumberDaftar = baca("src/app/admin/klien/page.tsx");
 const sumberForm = baca("src/app/admin/klien/form-klien.tsx");
 const sumberDetail = baca("src/app/admin/klien/[id]/page.tsx");
+const sumberLib = baca("src/lib/admin/klien.ts");
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
@@ -600,7 +601,7 @@ describe("halaman daftar klien (/admin/klien)", () => {
 
   it("tidak ada nominal uang di daftar klien (money firewall)", () => {
     expect(markup).not.toMatch(/Rp\s?\d/);
-    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi]) {
+    for (const sumber of [sumberDaftar, sumberForm, sumberDetail, sumberAksi, sumberLib]) {
       expect(sumber).not.toMatch(/Rp\s?\d/);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
@@ -663,6 +664,66 @@ describe("halaman detail klien (/admin/klien/[id])", () => {
 });
 
 // ---------------------------------------------------------------------------
+// PAGAR IDENTITAS — lib/admin/klien.ts
+// ---------------------------------------------------------------------------
+//
+// Sama seperti pagar `admin-mitra.test.ts` ("pencocokan identitas memakai
+// operator setara, tidak pernah pola"): tiga bentuk penulisan yang bisa
+// menyelundupkan pencocokan POLA ke kolom identitas —
+//   1. bentuk metode      — `.ilike("id", ...)` / `.like("partner_id", ...)`
+//   2. bentuk string `.or(...)` — `"id.ilike.%x%"`
+//   3. bentuk `.filter(kolom, operator, nilai)` — `.filter("id","ilike",…)`
+// — semuanya berbahaya karena `.eq("id", x)` yang suatu hari diam-diam
+// menjadi pola akan meloloskan baris milik orang lain lewat sebuah AWALAN,
+// tanpa satu galat pun.
+//
+// `lib/admin/klien.ts` PERSIS memakai bentuk #2 — `q.or(\`nama.ilike.%x%,
+// padma_id.ilike.%x%\`)` — untuk mencari lewat nama DAN PADMA ID sekaligus.
+// Pola mitra yang hanya memeriksa kolom TEPAT SETELAH tanda kutip pembuka
+// tidak cukup di sini: `padma_id` muncul SETELAH KOMA di tengah string
+// `.or()`, bukan di awalnya. Pola di bawah diperluas supaya kolom identitas
+// yang muncul setelah koma ikut tertangkap — persis bentuk yang dipakai
+// modul ini.
+describe("pagar identitas — lib/admin/klien.ts (kolom identitas TIDAK pernah dicocokkan dengan pola, KECUALI padma_id)", () => {
+  const polaMetodeIdentitas = /\.(?:ilike|like)\(\s*['"`](id|\w*_id)['"`]/;
+  const polaFilterIdentitas =
+    /\.filter\(\s*['"`](id|\w*_id)['"`]\s*,\s*['"`](?:ilike|like)['"`]/;
+  // `[,'"`]` di depan, bukan hanya `['"`]`: menangkap kolom identitas yang
+  // muncul di TENGAH string `.or(...)` (setelah koma), bukan cuma yang
+  // pertama tepat setelah tanda kutip pembuka.
+  const polaOrIdentitas = /[,'"`](id|\w*_id)\.(?:ilike|like)\./g;
+
+  it("bentuk metode .ilike(\"id\"|\"*_id\", …) tidak dipakai sama sekali", () => {
+    expect(sumberLib).not.toMatch(polaMetodeIdentitas);
+  });
+
+  it('bentuk .filter("id"|"*_id", "ilike"|"like", …) tidak dipakai sama sekali', () => {
+    expect(sumberLib).not.toMatch(polaFilterIdentitas);
+  });
+
+  it("bentuk string .or(...) HANYA mengizinkan padma_id — kolom identitas lain ditolak", () => {
+    const kolom = [...sumberLib.matchAll(polaOrIdentitas)].map((m) => m[1]);
+
+    // Pagar bergigi: `ambilDaftarKlien` SUNGGUHAN memang mencocokkan
+    // `padma_id` dengan pola. Bila daftar ini kosong, dua `expect` di bawah
+    // lolos HAMPA — pagar tidak pernah benar-benar menyala.
+    expect(kolom.length).toBeGreaterThan(0);
+
+    // Ruling: `padma_id` DIKECUALIKAN, dan pengecualiannya bukan sekadar
+    // menyebut namanya. `grep -rn '\.eq("padma_id"' src/` memulangkan NOL
+    // hasil — kolom ini ditulis SEKALI saat klien dibuat (`buatKlien`) lalu
+    // hanya ditampilkan; ia tidak pernah menjadi kunci pembanding identitas
+    // yang menjaga baris siapa yang boleh dibaca. Mencocokkannya dengan pola
+    // karena itu tidak bisa meloloskan baris milik orang lain ke dalam
+    // sebuah perbandingan identitas — beda dari `id`/`user_id`/`client_id`,
+    // yang memang dipakai begitu. Dan PADMA ID justru DIRANCANG untuk
+    // dicari: itulah yang dibacakan klien lewat telepon saat admin tidak
+    // ingat namanya.
+    for (const k of kolom) expect(k).toBe("padma_id");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bentuk berkas server action
 // ---------------------------------------------------------------------------
 
@@ -689,17 +750,18 @@ describe("berkas server action klien", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
     expect(sumberAksi).toContain("createServerSupabase");
     expect(sumberDaftar).toContain("createServerSupabase");
     expect(sumberDetail).toContain("createServerSupabase");
+    expect(sumberLib).toContain("createServerSupabase");
   });
 
   it("tidak menuliskan PII klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm]) {
+    for (const sumber of [sumberAksi, sumberDaftar, sumberDetail, sumberForm, sumberLib]) {
       expect(sumber).not.toContain("console.");
     }
   });

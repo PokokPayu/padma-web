@@ -1,25 +1,11 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { ambilDaftarKlien } from "@/lib/admin/klien";
 import { FormKlienBaru } from "./form-klien";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Klien" };
-
-type BarisKlien = {
-  id: string;
-  padma_id: string;
-  nama: string;
-  email: string;
-  phase_id: string;
-  user_id: string | null;
-};
-
-type BarisPaket = {
-  client_id: string;
-  status: string;
-  packages: { nama: string; jumlah_sesi: number } | null;
-};
 
 /**
  * Pill status aktivasi.
@@ -48,44 +34,19 @@ export default async function DaftarKlienPage() {
   // daftar ini terbaca, dan itulah yang ingin diuji ikut berjalan.
   const supabase = await createServerSupabase();
 
-  const [{ data: klien }, { data: fase }, { data: paket }, { data: sesiSelesai }] =
-    await Promise.all([
-      supabase
-        .from("clients")
-        .select("id, padma_id, nama, email, phase_id, user_id")
-        .order("created_at", { ascending: false })
-        .returns<BarisKlien[]>(),
-      supabase
-        .from("phases")
-        .select("id, nama, urutan")
-        .order("urutan")
-        .returns<{ id: string; nama: string; urutan: number }[]>(),
-      // Hanya paket yang masih berjalan yang menjadi identitas baris klien;
-      // paket lama tidak menggantikan gambaran "sedang menjalani apa".
-      supabase
-        .from("client_packages")
-        .select("client_id, status, packages ( nama, jumlah_sesi )")
-        .eq("status", "aktif")
-        .returns<BarisPaket[]>(),
-      // Sesi dihitung di sini, bukan lewat agregat tertanam PostgREST: filter
-      // pada sumber tertanam mengubah arti gabungannya dan gampang menghitung
-      // sesi milik klien lain tanpa error apa pun.
-      supabase
-        .from("sessions")
-        .select("client_id")
-        .eq("status", "selesai")
-        .returns<{ client_id: string }[]>(),
-    ]);
-
-  const labelFase = new Map((fase ?? []).map((f) => [f.id, f.nama]));
-  const paketAktif = new Map((paket ?? []).map((p) => [p.client_id, p.packages]));
-
-  const selesaiPerKlien = new Map<string, number>();
-  for (const s of sesiSelesai ?? []) {
-    selesaiPerKlien.set(s.client_id, (selesaiPerKlien.get(s.client_id) ?? 0) + 1);
-  }
-
-  const baris = klien ?? [];
+  // Cari, saring, dan paginasi belum disambungkan ke `searchParams` halaman
+  // ini — itu pekerjaan rencana berikutnya (bandingkan Mitra: Task 6
+  // memindahkan lapisan data, Task 7 baru menyambungkannya ke URL). Param
+  // tetap dikirim eksplisit supaya bentuknya sudah sesuai `ParamDaftar` sejak
+  // sekarang.
+  const [{ baris }, { data: fase }] = await Promise.all([
+    ambilDaftarKlien({ cari: "", saring: {}, hal: 1 }),
+    supabase
+      .from("phases")
+      .select("id, nama, urutan")
+      .order("urutan")
+      .returns<{ id: string; nama: string; urutan: number }[]>(),
+  ]);
 
   return (
     <main>
@@ -121,39 +82,32 @@ export default async function DaftarKlienPage() {
                 </tr>
               </thead>
               <tbody>
-                {baris.map((k) => {
-                  const p = paketAktif.get(k.id);
-                  return (
-                    <tr key={k.id} className="border-b border-black/5">
-                      <td className="p-4">
-                        <Link
-                          href={`/admin/klien/${k.id}`}
-                          className="font-mono text-xs font-bold text-leaf underline underline-offset-4"
-                        >
-                          {k.padma_id}
-                        </Link>
-                      </td>
-                      <td className="p-4">
-                        <b>{k.nama}</b>
-                        <span className="mt-0.5 block text-[11.5px] text-ink-soft">
-                          {k.email}
-                        </span>
-                      </td>
-                      <td className="p-4">{labelFase.get(k.phase_id) ?? k.phase_id}</td>
-                      <td className="p-4">
-                        {p ? (
-                          `${p.nama} · ${p.jumlah_sesi} sesi`
-                        ) : (
-                          <span className="text-ink-soft">Sesi lepas</span>
-                        )}
-                      </td>
-                      <td className="p-4 font-mono">{selesaiPerKlien.get(k.id) ?? 0}</td>
-                      <td className="p-4">
-                        <PillAktivasi aktif={k.user_id !== null} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                {baris.map((k) => (
+                  <tr key={k.id} className="border-b border-black/5">
+                    <td className="p-4">
+                      <Link
+                        href={`/admin/klien/${k.id}`}
+                        className="font-mono text-xs font-bold text-leaf underline underline-offset-4"
+                      >
+                        {k.padmaId}
+                      </Link>
+                    </td>
+                    <td className="p-4">
+                      <b>{k.nama}</b>
+                      <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                        {k.email}
+                      </span>
+                    </td>
+                    <td className="p-4">{k.namaFase}</td>
+                    <td className="p-4">
+                      {k.paketAktif ?? <span className="text-ink-soft">Sesi lepas</span>}
+                    </td>
+                    <td className="p-4 font-mono">{k.sesiSelesai}</td>
+                    <td className="p-4">
+                      <PillAktivasi aktif={k.aktif} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
