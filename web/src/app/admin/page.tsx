@@ -66,11 +66,11 @@ export default async function AdminPage() {
         </Link>
       </div>
 
-      {/* Kelima angka antrean. `menuntut` menyala hanya saat ada pekerjaan —
+      {/* Keenam angka antrean. `menuntut` menyala hanya saat ada pekerjaan —
           bila semua angka merah, tidak ada yang berarti merah. */}
       <section
         aria-label="Antrean klinik"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6"
       >
         <StatTile
           label="Skrining baru"
@@ -105,18 +105,33 @@ export default async function AdminPage() {
             nominal. Hanya OWNER yang berwenang menuntaskannya (aksi
             tetapkanTarifKhusus menuntut peran pemilik), dan admin tetap
             berhak tahu ada pekerjaan menunggu di sana — tapi `href` HANYA
-            diberikan untuk owner (Ruling 13): memberinya ke admin juga
-            membuat tile ini satu-satunya yang menyala lalu memantulkan
-            sebagian penggunanya kembali ke /admin lewat penjaga peran milik
-            layout owner, tanpa penjelasan apa pun. `StatTile` sendiri sudah
-            mendukung ini — `href` opsional, dan tanpa itu ia merender
-            `<div>` polos (lihat komentarnya di stat-tile.tsx). */}
+            diberikan untuk owner: memberinya ke admin juga membuat tile ini
+            satu-satunya yang menyala lalu memantulkan sebagian penggunanya
+            kembali ke /admin lewat penjaga peran milik layout owner, tanpa
+            penjelasan apa pun. `StatTile` sendiri sudah mendukung ini —
+            `href` opsional, dan tanpa itu ia merender `<div>` polos (lihat
+            komentarnya di stat-tile.tsx). */}
         <StatTile
           label="Sesi >20 km menunggu tarif"
           nilai={String(antrean.menungguTarifTransport)}
           keterangan="Tarif khusus per kasus, ditetapkan owner"
           href={role === "owner" ? "/owner/transport" : undefined}
           menuntut={antrean.menungguTarifTransport > 0}
+        />
+        {/* (Ruling 24, gelombang perbaikan akhir) Sesi SELESAI yang jenjang
+            transportnya masih null — jaraknya tidak pernah diketahui, baik
+            karena sesi pra-migrasi maupun karena geocoding sesi baru gagal.
+            Beda dari tile di atas: memperbaikinya TIDAK menuntut peran owner
+            — `tetapkanJenjang` (app/admin/sesi/aksi.ts) menerima admin
+            maupun owner — jadi `href` di sini tidak bersyarat peran, cukup
+            menunjuk ke /admin/sesi tempat laci "ubah jenjang" sudah ada pada
+            tiap baris sesi. */}
+        <StatTile
+          label="Sesi selesai tanpa jenjang"
+          nilai={String(antrean.menungguJenjangTransport)}
+          keterangan="Jarak belum diketahui — geocoding gagal atau data lama"
+          href="/admin/sesi"
+          menuntut={antrean.menungguJenjangTransport > 0}
         />
       </section>
 

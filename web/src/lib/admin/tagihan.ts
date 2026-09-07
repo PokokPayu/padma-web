@@ -108,8 +108,12 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
   // untuk embed semacam itu. Pola yang sudah dipakai `ambilSesiRekap()`
   // (`@/lib/owner/data`) diikuti di sini — tarik `variant_id` mentah, lalu
   // cocokkan ke katalog varian yang ditarik terpisah.
-  const [{ data: paket }, { data: sesi }, { data: varian }, { data: menunggu }] =
-    await Promise.all([
+  const [
+    { data: paket },
+    { data: sesi },
+    { data: varian },
+    { data: menunggu, error: galatMenunggu },
+  ] = await Promise.all([
       supabase
         .from("client_packages")
         .select("id, status_bayar, clients(nama, padma_id), packages(nama, jumlah_sesi)")
@@ -151,7 +155,29 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
     ]);
 
   const varianPerId = new Map((varian ?? []).map((v) => [v.id, v] as const));
-  const menungguTransportId = new Set((menunggu ?? []).map((m) => m.id));
+  // (Ruling 25, gelombang perbaikan akhir) Gagal TERTUTUP bila view ini
+  // gagal dibaca — mis. PGRST205 saat schema cache PostgREST belum reload
+  // sesudah deploy, atau timeout.
+  //
+  // Draf sebelumnya mendestrukturisasi `{ data: menunggu }` TANPA memeriksa
+  // `error`: bila query gagal, `menunggu` jatuh ke `null` → `menungguTransportId`
+  // jadi Set KOSONG → gerbang di bawah (`!(s.jenjang === "di_atas_20" &&
+  // menungguTransportId.has(s.id))`) lolos untuk SETIAP sesi `di_atas_20`,
+  // termasuk yang nominalnya belum pernah ditetapkan siapa pun. Itu Ruling 17
+  // batal diam-diam: `/admin/bayar` akan menampilkan "Transport · >20 km · …"
+  // untuk sesi yang tarif per-kasusnya tidak ada.
+  //
+  // Perbaikannya BUKAN melempar (lihat Ruling 25 lengkap): jalur admin ini
+  // dipanggil dari halaman `/admin/bayar` yang menangani operasional harian,
+  // bukan dari konteks yang boleh menampilkan 500 untuk satu galat baca view
+  // sekunder. Sebaliknya, `menungguTransportId = null` menandai "gagal
+  // dibaca — anggap SELURUH sesi di_atas_20 masih menunggu tarif", sehingga
+  // TIDAK SATU PUN mendapat rincian transport sampai galatnya reda. Arah
+  // aman yang benar: tidak menagih sesuatu yang belum ada nominalnya, bukan
+  // menagih sesuatu yang sudah lunas dua kali.
+  const menungguTransportId = galatMenunggu
+    ? null
+    : new Set((menunggu ?? []).map((m) => m.id));
 
   const item: ItemTagihanAdmin[] = [];
 
@@ -193,8 +219,17 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
     // untuk sesuatu yang tidak ada. Begitu owner menetapkannya, sesi itu
     // lenyap dari view — dan rincian ini muncul, TETAP tanpa nominal apa pun
     // (hanya label ">20 km").
+    //
+    // `menungguTransportId === null` (Ruling 25 — view gagal dibaca) membuat
+    // kondisi ini TRUE untuk SETIAP sesi `di_atas_20`, apa pun `s.id`-nya:
+    // gagal tertutup berarti tidak satu sesi >20 km pun mendapat rincian
+    // transport selama status tarifnya tidak bisa dipastikan.
     const rincianTransport =
-      s.jenjang !== null && !(s.jenjang === "di_atas_20" && menungguTransportId.has(s.id))
+      s.jenjang !== null &&
+      !(
+        s.jenjang === "di_atas_20" &&
+        (menungguTransportId === null || menungguTransportId.has(s.id))
+      )
         ? `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`
         : null;
 

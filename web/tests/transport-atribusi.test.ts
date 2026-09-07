@@ -18,20 +18,35 @@
  *     (beda dari `FormKlienBaru`), jadi markup atribusinya langsung terlihat
  *     tanpa simulasi klik apa pun. Ini bukti terkuat: literal ada di DOM.
  *
- *  2. `FormJadwalSesi` (form-sesi.tsx) dan kedua formulir mitra
- *     (form-mitra.tsx) SEMUANYA mulai TERTUTUP (`useState(false)`) — pola
- *     yang disengaja di seluruh panel admin (lihat komentar di berkas-berkas
- *     itu) supaya admin tidak membuat baris ganda. Rendernya statis
- *     (`renderToStaticMarkup`) tidak menjalankan efek atau event, sehingga
- *     tidak ada cara membuka formulirnya tanpa jsdom + testing-library — dua
- *     dependensi yang tidak ada di proyek ini dan bukan bagian tugas ini
- *     untuk ditambahkan hanya demi satu assertion. Untuk kedua berkas itu,
- *     uji jatuh ke PEMINDAIAN SUMBER seperti diizinkan Ruling 22 — TAPI
- *     regexnya menuntut atribusi berada di dalam TEKS JSX (di antara `>` dan
- *     `<`, sesudah komentar disingkirkan lebih dulu), bukan di komentar
- *     ataupun string sembarang. `tanpaKomentar()` di bawah membuktikan itu:
- *     memindahkan atribusi ke komentar membuat test ini MERAH (dibuktikan
- *     manual sebelum berkas ini dianggap selesai — lihat laporan Task 10).
+ *  2. `FormJadwalSesi` (form-sesi.tsx), kedua formulir mitra (form-mitra.tsx),
+ *     dan `SesiPage` (`app/admin/sesi/page.tsx`) jatuh ke PEMINDAIAN SUMBER
+ *     seperti diizinkan Ruling 22, untuk dua alasan berbeda yang kebetulan
+ *     berujung pada solusi yang sama:
+ *       - `FormJadwalSesi` & `FormMitraBaru` SEMUANYA mulai TERTUTUP
+ *         (`useState(false)`) — pola yang disengaja di seluruh panel admin
+ *         (lihat komentar di berkas-berkas itu) supaya admin tidak membuat
+ *         baris ganda. Rendernya statis (`renderToStaticMarkup`) tidak
+ *         menjalankan efek atau event, sehingga tidak ada cara membuka
+ *         formulirnya tanpa jsdom + testing-library — dua dependensi yang
+ *         tidak ada di proyek ini dan bukan bagian tugas ini untuk
+ *         ditambahkan hanya demi satu assertion.
+ *       - `SesiPage` (Ruling — gelombang perbaikan akhir) SEBALIKNYA memuat
+ *         atribusinya TIDAK bergerbang apa pun — ia tampil begitu halaman
+ *         dimuat, sama seperti `FormEditKlien`. Ia jatuh ke pemindaian sumber
+ *         murni karena alasan LAIN: komponen server async yang membaca
+ *         `sessions`/`clients`/dst lewat Supabase, dan `renderToStaticMarkup`
+ *         atasnya menuntut memalsukan seluruh rantai data (pola berat yang
+ *         dipakai tests/admin-shell.test.ts, bukan untuk satu assertion
+ *         atribusi). Baris "Jenjang: …" yang dirender `BarisSesi`
+ *         (form-selesai.tsx) untuk SETIAP sesi adalah hasil geocoding yang
+ *         dimaksud — atribusinya sendiri sengaja hidup SEKALI di `page.tsx`,
+ *         di atas tabel, bukan diulang di tiap baris.
+ *     Regexnya tetap menuntut atribusi berada di dalam TEKS JSX (di antara
+ *     `>` dan `<`, sesudah komentar disingkirkan lebih dulu), bukan di
+ *     komentar ataupun string sembarang, untuk KETIGA berkas itu.
+ *     `tanpaKomentar()` di bawah membuktikan itu: memindahkan atribusi ke
+ *     komentar membuat test ini MERAH (dibuktikan manual sebelum berkas ini
+ *     dianggap selesai — lihat laporan Task 10).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -96,13 +111,14 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
   // HANYA berlaku untuk dua berkas di bawah; form-klien.tsx tetap dibuktikan
   // lewat render sungguhan di atas.
 
-  it.each(["src/app/admin/sesi/form-sesi.tsx", "src/app/admin/mitra/form-mitra.tsx"])(
-    "%s — atribusi duduk di dalam TEKS JSX, bukan komentar",
-    (berkas) => {
-      const sumber = baca(berkas);
-      expect(atribusiDalamJsx(sumber)).toBe(true);
-    },
-  );
+  it.each([
+    "src/app/admin/sesi/form-sesi.tsx",
+    "src/app/admin/mitra/form-mitra.tsx",
+    "src/app/admin/sesi/page.tsx",
+  ])("%s — atribusi duduk di dalam TEKS JSX, bukan komentar", (berkas) => {
+    const sumber = baca(berkas);
+    expect(atribusiDalamJsx(sumber)).toBe(true);
+  });
 
   it("berkas ketiga (form-klien.tsx) JUGA lolos pemindaian JSX yang sama — dua bukti independen", () => {
     // Uji render di atas sudah cukup, tapi baris ini menegaskan bahwa
@@ -118,6 +134,7 @@ describe("atribusi OpenStreetMap sampai ke layar", () => {
       "src/app/admin/sesi/form-sesi.tsx",
       "src/app/admin/klien/form-klien.tsx",
       "src/app/admin/mitra/form-mitra.tsx",
+      "src/app/admin/sesi/page.tsx",
     ]) {
       const sumber = tanpaKomentar(baca(berkas));
       const i = sumber.indexOf(TEKS_ATRIBUSI);

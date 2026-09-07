@@ -42,6 +42,28 @@ describe("jenjangDariJarak — batas ditetapkan EKSPLISIT (spec T11)", () => {
     expect(jenjangDariJarak(5.01)).toBe("5_10");
   });
 
+  // (Ruling — gelombang perbaikan akhir) Batas TENGAH (10 km, 15 km) tidak
+  // pernah diuji sebelumnya — hanya batas terluar (5 km, 20 km). Konkretnya:
+  // `if (km <= 10) return "5_10"` diubah jadi `km < 10` LOLOS seluruh suite
+  // sebelumnya, dan mutasi itu diam-diam menaikkan tagihan klien tepat 10 km
+  // dari Rp10.000 ke Rp20.000 (dan honor mitra dari Rp10.000 ke Rp15.000)
+  // secara PERMANEN — sesi lama tidak pernah dihitung ulang.
+  it("tepat 10,0 km masih jenjang 5–10 (bukan 10–15)", () => {
+    expect(jenjangDariJarak(10)).toBe("5_10");
+  });
+
+  it("10,01 km sudah naik ke jenjang 10–15", () => {
+    expect(jenjangDariJarak(10.01)).toBe("10_15");
+  });
+
+  it("tepat 15,0 km masih jenjang 10–15 (bukan 15–20)", () => {
+    expect(jenjangDariJarak(15)).toBe("10_15");
+  });
+
+  it("15,01 km sudah naik ke jenjang 15–20", () => {
+    expect(jenjangDariJarak(15.01)).toBe("15_20");
+  });
+
   it("tepat 20,0 km masih jenjang tertinggi bertarif", () => {
     expect(jenjangDariJarak(20)).toBe("15_20");
   });

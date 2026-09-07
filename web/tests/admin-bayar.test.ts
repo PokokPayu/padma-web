@@ -515,6 +515,62 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
     expect(item.rincianTransport).not.toMatch(/Rp/);
   });
 
+  // --- Ruling 25 (gelombang perbaikan akhir): gagal TERTUTUP, bukan lempar ---
+
+  /**
+   * Ganjalan tipis di atas klien Supabase SUNGGUHAN: SETIAP tabel lain tetap
+   * lewat ke klien asli (RLS & data nyata tetap berlaku), tapi query ke
+   * `sesi_menunggu_tarif_transport` dipaksa memulangkan `{ data: null, error }`
+   * — mensimulasikan PGRST205 (schema cache belum reload) atau timeout tanpa
+   * benar-benar mematikan koneksi database uji.
+   */
+  function klienGalatMenungguTransport(asli: SupabaseClient): SupabaseClient {
+    const hasilGalat = { data: null, error: { message: "galat paksa (uji Ruling 25)" } };
+    // Proxy generik: setiap pemanggilan method (select/returns/…) mengembalikan
+    // proxy yang sama untuk mendukung chaining apa pun, dan `await` di ujung
+    // rantai (yang membaca `.then`) diselesaikan dengan `hasilGalat`.
+    const stub: unknown = new Proxy(() => {}, {
+      apply: () => stub,
+      get: (_t, prop) =>
+        prop === "then" ? (resolve: (v: unknown) => void) => resolve(hasilGalat) : () => stub,
+    });
+    return new Proxy(asli, {
+      get(target, prop, receiver) {
+        if (prop === "from") {
+          return (tabel: string) =>
+            tabel === "sesi_menunggu_tarif_transport"
+              ? stub
+              : Reflect.get(target, "from").call(target, tabel);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as SupabaseClient;
+  }
+
+  it("view sesi_menunggu_tarif_transport gagal dibaca -> TIDAK SATU PUN sesi di_atas_20 mendapat rincianTransport (gagal tertutup, Ruling 25)", async () => {
+    const sebelumnya = ref.sesi;
+    ref.sesi = klienGalatMenungguTransport(sesiAdmin);
+    const daftar = await daftarTagihanAdmin();
+    ref.sesi = sebelumnya;
+
+    // SESI_JAUH_BELUM (belum bertarif) DAN SESI_JAUH_SUDAH (SUDAH bertarif
+    // transport_khusus) keduanya harus null — tanpa view ini, tagihan.ts
+    // tidak punya cara membedakan siapa yang sudah dan belum. Menampilkan
+    // rincian untuk SESI_JAUH_SUDAH sekalipun (karena kebetulan ia memang
+    // sudah bertarif) masih salah: itu berarti nasibnya bergantung isi tabel,
+    // bukan pada apakah view berhasil dibaca — arsitektur yang sama akan
+    // menagih SESI_JAUH_BELUM begitu urutan datanya kebetulan berbeda.
+    const jauhBelum = daftar.find((t) => t.id === SESI_JAUH_BELUM)!;
+    const jauhSudah = daftar.find((t) => t.id === SESI_JAUH_SUDAH)!;
+    expect(jauhBelum.rincianTransport).toBeNull();
+    expect(jauhSudah.rincianTransport).toBeNull();
+
+    // Jenjang LAIN (bukan di_atas_20) tidak pernah bergantung pada view ini
+    // sama sekali — kegagalannya tidak boleh ikut menelan rincian yang sehat.
+    const dekat = daftar.find((t) => t.id === SESI_TRANSPORT)!;
+    expect(dekat.rincianTransport).toContain(">10–15 km");
+  });
+
   it("klien TIDAK PERNAH mendapat rincian transport untuk di_atas_20 — bahkan yang sudah bertarif khusus", async () => {
     // Keputusan konservatif (Ruling 17): klien tidak punya, dan tidak boleh
     // punya, cara memverifikasi `transport_khusus` sudah ditetapkan (RLS

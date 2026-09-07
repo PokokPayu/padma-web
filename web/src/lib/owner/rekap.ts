@@ -245,14 +245,39 @@ export function hitungRekap(input: {
       //
       //      `s.jenjang === null` SENGAJA diperlakukan BERBEDA dari jenjang
       //      yang tarifnya hilang: null berarti jaraknya belum pernah
-      //      diketahui (sesi lama dari sebelum kolom `sessions.jenjang` ada),
-      //      bukan "transport gratis" maupun "tak-bertarif". Memilih
-      //      menandainya tak-bertarif akan membuat SETIAP sesi lama yang
-      //      memang tidak akan pernah diisi retroaktif kehilangan honor
-      //      variannya yang sudah sah, hanya karena satu kolom yang lahir
-      //      belakangan — komponen transportnya sendiri diperlakukan NOL, di
+      //      diketahui, bukan "transport gratis" maupun "tak-bertarif".
+      //      Memilih menandainya tak-bertarif akan membuat honor VARIAN
+      //      (yang sudah sah) ikut hilang hanya karena kolom jarak yang
+      //      kosong — komponen transportnya sendiri diperlakukan NOL, di
       //      sini, sengaja, dengan alasan ini tertulis di tempat keputusannya
       //      diambil.
+      //
+      //      DUA sumber `jenjang = null` (Ruling 24, gelombang perbaikan
+      //      akhir — komentar ini SEBELUMNYA hanya menyebut sumber pertama):
+      //        1. sesi PRA-MIGRASI, dari sebelum kolom `sessions.jenjang`
+      //           ada — tidak akan pernah terisi retroaktif, sesuai
+      //           keputusan Task 9 di atas.
+      //        2. sesi BARU yang GEOCODING-nya gagal (Task 6/7) — alamat
+      //           tidak dikenal OSM, `geocodeAlamat()` memulangkan `null`,
+      //           dan admin tetap bisa menugaskan mitra tanpa satu pun galat
+      //           atau peringatan. Sumber ini TIDAK ADA saat komentar ini
+      //           mula-mula ditulis, dan diperlakukan NOL transport yang
+      //           sama seperti sumber (1) — benar untuk (1), tapi untuk (2)
+      //           murni kebetulan, karena kolomnya BISA dan SEHARUSNYA
+      //           diisi (`tetapkanJenjang`, `app/admin/sesi/aksi.ts`).
+      //
+      //      Perlakuan NOL di sini TIDAK berubah untuk kedua sumber — sesi
+      //      ber-jenjang null tetap tidak menyumbang komponen transport, titik
+      //      itu bukan yang diperbaiki. Yang diperbaiki adalah VISIBILITASNYA:
+      //      view `sesi_menunggu_jenjang_transport` (migrasi `20260907150000`)
+      //      + `hitungMenungguJenjangTransport()` (`lib/admin/antrean.ts`)
+      //      kini menghitung SETIAP sesi SELESAI ber-jenjang null sebagai
+      //      antrean di dashboard admin — sebelum perbaikan ini, sumber (2)
+      //      adalah lubang honor yang senyap total: sesi selesai, dihitung
+      //      SEHAT di sini (honor varian penuh, transport nol,
+      //      `jumlahTakBertarif` = 0), dan tidak ada satu tempat pun di
+      //      aplikasi yang menunjuk sesi mana yang butuh jenjangnya
+      //      ditetapkan.
       let transport: { tarifKlien: number; honorMitra: number } | null = null;
       let transportHilang = false;
       if (s.jenjang === "di_atas_20") {

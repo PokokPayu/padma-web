@@ -169,7 +169,18 @@ export default async function SesiPage() {
       </section>
 
       <section aria-label="Daftar sesi" className="mt-6">
-        <h2 className="mb-3 font-serif text-lg text-night">Sesi terbaru</h2>
+        <h2 className="mb-1 font-serif text-lg text-night">Sesi terbaru</h2>
+        {/* Kolom "Jenjang" pada setiap baris (form-selesai.tsx, BarisSesi) adalah
+            hasil geocoding Nominatim (OSM) — lisensi ODbL mewajibkan atribusi
+            tampak persis di LAYAR yang menampilkannya, bukan cukup di komentar
+            kode maupun di dalam formulir yang mulai tertutup (form-sesi.tsx
+            sudah memuatnya, tapi hanya terlihat setelah formulirnya dibuka).
+            Ditaruh di sini, di atas tabel, karena inilah bagian halaman yang
+            SELALU tampak begitu /admin/sesi dimuat — tidak menunggu klik apa
+            pun. Nol rupiah di baris ini (money firewall). */}
+        <p className="mb-3 text-[11px] text-ink-soft/70">
+          Jenjang jarak pada tiap baris dihitung dari data lokasi © OpenStreetMap contributors.
+        </p>
 
         {daftarSesi.length === 0 ? (
           <p className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm italic text-ink-soft">

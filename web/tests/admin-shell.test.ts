@@ -101,7 +101,7 @@ async function bersihkan() {
   await admin.from("jejak_status_bayar").delete().eq("paket_klien_id", PAKET_UJI);
 }
 
-const { hitungAntrean } = await import("@/lib/admin/antrean");
+const { hitungAntrean, hitungMenungguJenjangTransport } = await import("@/lib/admin/antrean");
 const { NavAdmin } = await import("@/app/admin/_shell/nav-admin");
 
 type Antrean = Awaited<ReturnType<typeof hitungAntrean>>;
@@ -111,10 +111,13 @@ const NOL: Antrean = {
   permintaanMenunggu: 0,
   klaimMenunggu: 0,
   klienBelumAktif: 0,
-  // `hitungMenungguTarifTransport()` (Task 8) sengaja 0 untuk admin biasa —
-  // lihat komentarnya di `lib/admin/antrean.ts`. Tidak ada tujuan menu yang
-  // memakainya sebagai badge di sini, jadi NOL sudah cukup untuk fixture ini.
+  // `hitungMenungguTarifTransport()` menghitung angka yang BENAR untuk admin
+  // maupun owner (Ruling 12 mencabut gerbang peran itu — lihat
+  // `lib/admin/antrean.ts`). Tidak ada tujuan menu yang memakainya sebagai
+  // badge SIDEBAR di sini (ia tampil sebagai StatTile dashboard, bukan badge
+  // nav), jadi NOL sudah cukup untuk fixture ini.
   menungguTarifTransport: 0,
+  menungguJenjangTransport: 0,
 };
 
 function markupNav(pathname: string, antrean: Antrean = NOL): string {
@@ -232,6 +235,130 @@ describe("hitungAntrean — angka datang dari data, lewat RLS sesi pengguna", ()
     expect(sumber).not.toContain("createAdminSupabase");
     expect(sumber).not.toContain("SERVICE_ROLE");
   });
+
+  // --- Ruling 26 (gelombang perbaikan akhir): satu galat baca tidak boleh ---
+  // --- menjatuhkan SELURUH shell admin (/admin/bayar, /sesi, /skrining) -----
+
+  /**
+   * Ganjalan tipis di atas klien Supabase SUNGGUHAN — sama polanya dengan
+   * `klienGalatMenungguTransport` di tests/admin-bayar.test.ts: setiap tabel
+   * LAIN tetap lewat ke klien asli, hanya query ke
+   * `sesi_menunggu_tarif_transport` yang dipaksa memulangkan galat.
+   * `ambilSesiMenungguTarif()` (lib/owner/data.ts) mem-paginasi lewat
+   * `.order().order().range().returns()` di atas tabel itu — proxy generik
+   * ini menampung rantai method APA PUN, bukan cuma satu bentuk pemanggilan.
+   */
+  function klienGalatMenungguTransport(asli: SupabaseClient): SupabaseClient {
+    const hasilGalat = { data: null, error: { message: "galat paksa (uji Ruling 26)" } };
+    const stub: unknown = new Proxy(() => {}, {
+      apply: () => stub,
+      get: (_t, prop) =>
+        prop === "then" ? (resolve: (v: unknown) => void) => resolve(hasilGalat) : () => stub,
+    });
+    return new Proxy(asli, {
+      get(target, prop, receiver) {
+        if (prop === "from") {
+          return (tabel: string) =>
+            tabel === "sesi_menunggu_tarif_transport"
+              ? stub
+              : Reflect.get(target, "from").call(target, tabel);
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as SupabaseClient;
+  }
+
+  it("hitungAntrean() TIDAK throw saat sesi_menunggu_tarif_transport gagal dibaca — degradasi ke 0 (Ruling 26)", async () => {
+    const sebelumnya = ref.sesi;
+    ref.sesi = klienGalatMenungguTransport(sebelumnya!);
+
+    let hasil: Awaited<ReturnType<typeof hitungAntrean>> | undefined;
+    await expect(
+      (async () => {
+        hasil = await hitungAntrean();
+      })(),
+    ).resolves.not.toThrow();
+
+    ref.sesi = sebelumnya;
+
+    // Degradasi ke 0 — sama seperti empat saudaranya (skriningBaru dkk. sudah
+    // memakai `.count ?? 0`), BUKAN gerbang peran yang mengembalikan 0 secara
+    // permanen: pada request BERIKUTNYA yang berhasil, angkanya kembali benar
+    // (dibuktikan `dasar`/`sesudah` di describe ini datang dari klien yang
+    // sama, tidak pernah lewat proxy galat).
+    expect(hasil?.menungguTarifTransport).toBe(0);
+    // Empat angka lain TIDAK ikut jatuh — satu tabel gagal bukan alasan
+    // seluruh antrean kosong. Dibandingkan ke `sesudah` (bukan `dasar`):
+    // fixture beforeAll sudah menambahkan baris-barisnya pada titik ini.
+    expect(hasil?.skriningBaru).toBe(sesudah.skriningBaru);
+    expect(hasil?.klienBelumAktif).toBe(sesudah.klienBelumAktif);
+  });
+
+  it("ambilSesiMenungguTarif() SENDIRI (dipakai /owner/transport) tetap THROW pada galat yang sama — disiplin berbeda disengaja (Ruling 26)", async () => {
+    const { ambilSesiMenungguTarif } = await import("@/lib/owner/data");
+    const sebelumnya = ref.sesi;
+    ref.sesi = klienGalatMenungguTransport(sebelumnya!);
+
+    await expect(ambilSesiMenungguTarif()).rejects.toThrow();
+
+    ref.sesi = sebelumnya;
+  });
+
+  // --- Ruling 24 (gelombang perbaikan akhir): antrean sesi selesai tanpa ---
+  // --- jenjang — lubang honor yang sebelumnya sama sekali tidak terlihat --
+
+  it("hitungMenungguJenjangTransport() menghitung sesi SELESAI ber-jenjang null, mengabaikan yang terjadwal/berjenjang (Ruling 24)", async () => {
+    const varianSvc = await varianBaku(admin, SVC);
+    const SESI_JENJANG_NULL = "66666666-6666-6666-6666-6666666666f5";
+    const SESI_TERJADWAL_NULL = "66666666-6666-6666-6666-6666666666f6";
+
+    const sebelum = await hitungMenungguJenjangTransport();
+    try {
+      const { error: galatInsert } = await admin.from("sessions").insert([
+        {
+          id: SESI_JENJANG_NULL,
+          client_id: KLIEN_UJI,
+          service_id: SVC,
+          variant_id: varianSvc,
+          partner_id: MITRA,
+          tanggal: "2026-12-24",
+          // SELESAI + jenjang null: persis kasus geocoding gagal pada sesi
+          // baru (Ruling 24) — inilah satu-satunya baris yang harus terhitung.
+          status: "selesai",
+          catatan: "Kunjungan selesai, alamat tidak dikenali OSM.",
+          jenjang: null,
+        },
+        {
+          id: SESI_TERJADWAL_NULL,
+          client_id: KLIEN_UJI,
+          service_id: SVC,
+          variant_id: varianSvc,
+          partner_id: MITRA,
+          tanggal: "2026-12-25",
+          // TERJADWAL + jenjang null: wajar (belum ada yang perlu dihitung),
+          // TIDAK boleh ikut masuk antrean ini.
+          status: "terjadwal",
+          catatan: "",
+          jenjang: null,
+        },
+      ]);
+      expect(galatInsert, galatInsert?.message).toBeNull();
+
+      const sesudahInsert = await hitungMenungguJenjangTransport();
+      expect(sesudahInsert).toBe(sebelum + 1);
+
+      const antreanBaru = await hitungAntrean();
+      expect(antreanBaru.menungguJenjangTransport).toBe(sesudahInsert);
+    } finally {
+      const IDS = [SESI_JENJANG_NULL, SESI_TERJADWAL_NULL];
+      // Sesi ini lahir dengan status_bayar default (bukan menunggu_verifikasi
+      // via update), tapi jejaknya tetap disapu mengikuti pola `bersihkan()`
+      // di atas — tabel jejak sengaja tanpa FK, jadi tidak akan tersapu
+      // otomatis oleh penghapusan sesi di bawah.
+      await admin.from("jejak_status_bayar").delete().in("sesi_id", IDS);
+      await admin.from("sessions").delete().in("id", IDS);
+    }
+  });
 });
 
 describe("navigasi admin", () => {
@@ -299,6 +426,7 @@ describe("navigasi admin", () => {
       klaimMenunggu: 9,
       klienBelumAktif: 7,
       menungguTarifTransport: 0,
+      menungguJenjangTransport: 0,
     });
     // Keempat tujuan berbadge ada di sidebar DAN bar bawah -> dua kali.
     expect([...m.matchAll(/aria-label="3 menunggu"/g)]).toHaveLength(2); // Inbox
@@ -358,6 +486,7 @@ describe("navigasi admin", () => {
       klaimMenunggu: 1,
       klienBelumAktif: 1,
       menungguTarifTransport: 1,
+      menungguJenjangTransport: 1,
     });
     expect(m).not.toMatch(/Rp\s?\d/);
     expect(sumberNav).not.toMatch(/Rp\s?\d/);

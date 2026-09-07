@@ -66,6 +66,10 @@ const TABEL_TERTUTUP_ANON = [
   // view, yang membaca identitas pemanggil lewat auth.uid(); anon tidak
   // pernah punya identitas semacam itu, dan tidak pernah butuh membaca ini.
   "sesi_menunggu_tarif_transport",
+  // View kembar (Ruling 24, gelombang perbaikan akhir): sesi selesai yang
+  // jenjangnya belum ditetapkan. Pola hak persis sama dengan view di atas —
+  // nol nominal, batas peran ada DI DALAM view lewat `user_role()`.
+  "sesi_menunggu_jenjang_transport",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
