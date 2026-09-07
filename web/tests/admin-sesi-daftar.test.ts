@@ -6,10 +6,19 @@
  * dan markup yang benar di atas baris yang salah tetap terlihat benar.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 import { PER_HAL } from "@/app/_shell/panel/daftar";
 import { SARING_SESI, ambilDaftarSesi } from "@/lib/admin/sesi";
+
+// Sumber `sesi.ts` dibaca SEKALI di sini — `require()` dinamis di dalam body
+// `describe` (draf brief semula) ditolak `@typescript-eslint/no-require-imports`,
+// dan membaca berkas yang sama dua kali (satu per describe) tidak menambah
+// jaminan apa pun. Pola idiom rumah: `tests/panel-primitif.test.ts`.
+const AKAR = path.resolve(__dirname, "..");
+const SUMBER_SESI = readFileSync(path.join(AKAR, "src/lib/admin/sesi.ts"), "utf8");
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -222,15 +231,12 @@ describe("ambilDaftarSesi — paginasi", () => {
 });
 
 describe("pagar identitas — lib/admin/sesi.ts", () => {
-  const sumber = require("node:fs").readFileSync(
-    require("node:path").resolve(__dirname, "../src/lib/admin/sesi.ts"), "utf8") as string;
-
   it('bentuk metode .ilike("id"|"*_id", …) tidak dipakai', () => {
-    expect(sumber).not.toMatch(/\.(?:ilike|like)\(\s*['"`](id|\w*_id)['"`]/);
+    expect(SUMBER_SESI).not.toMatch(/\.(?:ilike|like)\(\s*['"`](id|\w*_id)['"`]/);
   });
 
   it("di dalam .or(...) hanya padma_id yang boleh dicocokkan dengan pola", () => {
-    const kolom = [...sumber.matchAll(/[,'"`](id|\w*_id)\.(?:ilike|like)\./g)].map((m) => m[1]);
+    const kolom = [...SUMBER_SESI.matchAll(/[,'"`](id|\w*_id)\.(?:ilike|like)\./g)].map((m) => m[1]);
     // Pagar bergigi: `ambilDaftarSesi` memang mencocokkan `padma_id`.
     expect(kolom.length).toBeGreaterThan(0);
     expect(kolom.filter((k) => k !== "padma_id")).toEqual([]);
@@ -239,10 +245,8 @@ describe("pagar identitas — lib/admin/sesi.ts", () => {
 
 describe("money firewall", () => {
   it("lapisan data sesi tidak pernah menyebut tabel uang", () => {
-    const sumber = require("node:fs").readFileSync(
-      require("node:path").resolve(__dirname, "../src/lib/admin/sesi.ts"), "utf8") as string;
     for (const tabel of ["variant_rates", "honor_marks", "transport_rates", "transport_khusus"]) {
-      expect(sumber).not.toContain(tabel);
+      expect(SUMBER_SESI).not.toContain(tabel);
     }
   });
 });
