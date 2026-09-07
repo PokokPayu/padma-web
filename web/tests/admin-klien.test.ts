@@ -563,12 +563,15 @@ describe("halaman daftar klien (/admin/klien)", () => {
     expect(markup).toContain("Prekonsepsi / Promil");
   });
 
-  it("menampilkan paket aktif sebagai 'nama · N sesi', dan '—' bila tidak ada", () => {
-    // Ananda memegang paket Sankalpa Prima 8 sesi di seed.
-    expect(markup).toContain("Sankalpa Prima · 8 sesi");
-    // Klien fixture tidak punya paket sama sekali — placeholder daftar
-    // (Task 9) memakai em dash yang sama dengan kolom Fase, bukan lagi
-    // "Sesi lepas".
+  it("kolom paket selalu '—' — gerbang K11 (Task 2) memaksa paketAktif null", () => {
+    // Sebelum gerbang: baris ini menegaskan "Sankalpa Prima · 8 sesi" untuk
+    // Ananda (yang benar-benar memegang paket itu di seed). Dengan
+    // `PAKET_TAMPIL = false`, `ambilDaftarKlien()` memulangkan
+    // `paketAktif: null` untuk SETIAP klien — termasuk Ananda (gerbangnya
+    // sendiri diuji tests/paket-tersembunyi.test.tsx) — sehingga kolom ini
+    // sekarang selalu jatuh ke placeholder yang sama dengan kolom Fase yang
+    // kosong, bukan lagi dibedakan per klien.
+    expect(markup).not.toContain("Sankalpa Prima");
     expect(markup).toMatch(/>—<\/td>/);
   });
 

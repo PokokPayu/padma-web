@@ -51,3 +51,55 @@ describe("saklar paket: gerbang data klien", () => {
     vi.resetModules();
   });
 });
+
+// `ref.klien` dipakai ulang (bukan `ref` baru): `vi.mock` untuk satu path
+// modul hanya efektif SEKALI per berkas — mock kedua akan menimpa mock
+// pertama dan memutuskan `describe` di atas dari sesi yang disetelnya
+// sendiri. Nama medannya "klien" adalah sisa Tugas 1; wadahnya generik untuk
+// sesi APA PUN yang sedang aktif, staf maupun klien.
+describe("saklar paket: gerbang data staf", () => {
+  beforeAll(async () => {
+    ref.klien = await signInAs("admin@padma.test");
+  });
+
+  it("daftar klien tidak membawa nama paket", async () => {
+    const { ambilDaftarKlien } = await import("@/lib/admin/klien");
+    // `ParamDaftar` mewajibkan ketiga medan ({} saja gagal tipe DAN runtime —
+    // `param.saring.aktivasi` melempar begitu `saring` hilang); pola pemanggilan
+    // sama dengan tests/admin-klien-data.test.ts.
+    const hasil = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
+    expect(hasil.baris.every((k) => k.paketAktif === null)).toBe(true);
+  });
+
+  it("katalog admin tidak membawa daftar paket per layanan", async () => {
+    const { daftarKatalogAdmin } = await import("@/lib/admin/katalog-admin");
+    const fase = await daftarKatalogAdmin();
+    const semuaLayanan = fase.flatMap((f) => f.layanan);
+    expect(semuaLayanan.length).toBeGreaterThan(0); // katalog seed memang berisi
+    expect(semuaLayanan.every((l) => l.paket.length === 0)).toBe(true);
+  });
+
+  it("penghitung klaim hanya menghitung sesi lepas", async () => {
+    const { hitungKlaimMenunggu } = await import("@/lib/admin/antrean");
+    const { count } = await ref.klien!
+      .from("sessions")
+      .select("*", { count: "exact", head: true })
+      .eq("status_bayar", "menunggu_verifikasi")
+      .is("client_package_id", null)
+      .neq("status", "batal");
+    expect(await hitungKlaimMenunggu()).toBe(count ?? 0);
+  });
+
+  // Gerbang KEEMPAT (R4, keputusan pengontrol): daftar `daftarTagihanAdmin()`
+  // yang tidak sama dengan yang tiga di atas — bukan dari brief awal, tetapi
+  // tanpa ini `/admin/bayar` tetap menampilkan baris paket. Ananda (ANANDA)
+  // memegang paket aktif di seed, jadi bila gerbang ini bocor, baris
+  // `jenis: "paket"` miliknya akan muncul di daftar admin — sesi ADMIN
+  // melihat SELURUH klien, bukan hanya Ananda, jadi cukup memeriksa daftar
+  // keseluruhan tidak pernah membawa satu pun baris paket.
+  it("daftar tagihan admin tidak membawa baris jenis 'paket'", async () => {
+    const { daftarTagihanAdmin } = await import("@/lib/admin/tagihan");
+    const daftar = await daftarTagihanAdmin();
+    expect(daftar.some((t) => t.jenis === "paket")).toBe(false);
+  });
+});

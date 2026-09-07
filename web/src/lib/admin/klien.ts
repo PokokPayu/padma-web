@@ -1,5 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar } from "@/app/_shell/panel/daftar";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 /** Nilai saringan yang sah untuk daftar klien — dipakai halaman DAN uji. */
 export const SARING_KLIEN = {
@@ -126,6 +127,11 @@ export async function ambilDaftarKlien(
     nama: k.nama,
     namaFase: k.phase_id ? (labelFase.get(k.phase_id) ?? "—") : "—",
     aktif: k.user_id !== null,
+    // Nilai SEBENARNYA di sini — bukan digerbang: saringan "punya paket"
+    // tepat di bawah membaca medan ini SEBELUM saklar dipasang. Menggerbang
+    // di titik ini akan membuat saringan itu selalu menyaring HABIS
+    // (paketAktif tinggal null untuk siapa pun), yang bukan lagi menyembunyikan
+    // TAMPILAN melainkan MERUSAK saringan itu sendiri.
     paketAktif: paketAktif.get(k.id) ?? null,
     sesiSelesai: selesaiPer.get(k.id) ?? 0,
   }));
@@ -140,6 +146,13 @@ export async function ambilDaftarKlien(
   // rencana berikutnya.
   const saringPaketMenyala = param.saring.paket === "ada";
   if (saringPaketMenyala) baris = baris.filter((k) => k.paketAktif !== null);
+
+  // GERBANG SAKLAR (K11): kolom Paket pada daftar klien ikut disembunyikan,
+  // jadi NAMANYA tidak boleh sampai ke pemanggil. Dipasang SESUDAH saringan
+  // "punya paket" di atas — bukan di titik rakit — supaya saringan itu tetap
+  // menyaring dari keadaan SEBENARNYA (data & pagar tidak disentuh), dan yang
+  // hilang betul-betul cuma jalan menuju layar, persis prinsip saklar ini.
+  if (!PAKET_TAMPIL) baris = baris.map((k) => ({ ...k, paketAktif: null }));
 
   // `total` TIDAK BOLEH dibiarkan sebagai `count` mentah selagi saringan di
   // atas menyala: `count` menghitung SELURUH klien sebelum saringan paket

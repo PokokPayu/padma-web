@@ -122,7 +122,7 @@ const {
   nonaktifkanVarian,
 } = await import("@/app/admin/layanan/aksi");
 const { daftarKatalogAdmin, pilihanLayanan } = await import("@/lib/admin/katalog-admin");
-const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
+const { ambilSesi } = await import("@/lib/passport/data");
 const { progresPaket } = await import("@/lib/passport/turunan");
 const { bacaKatalog } = await import("@/lib/katalog");
 const { default: LayananPage } = await import("@/app/admin/layanan/page");
@@ -364,10 +364,50 @@ describe("daftarKatalogAdmin — katalog kelola, bukan katalog publik", () => {
     }
   });
 
+  it("menghitung sesi yang sudah tercatat pada tiap layanan", async () => {
+    const { count } = await admin
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("service_id", SVC_SEED);
+    expect(count).toBeGreaterThan(0);
+
+    const katalog = await daftarKatalogAdmin();
+    const layanan = katalog.flatMap((f) => f.layanan).find((l) => l.id === SVC_SEED)!;
+    expect(layanan.sesiTercatat).toBe(count);
+    expect(
+      katalog.flatMap((f) => f.layanan).find((l) => l.id === SVC_EDIT)!.sesiTercatat,
+    ).toBe(0);
+  });
+});
+
+// GERBANG SAKLAR (K11, Task 2): `daftarKatalogAdmin()` memulangkan
+// `paket: []` untuk SETIAP layanan begitu `PAKET_TAMPIL` mati — gerbangnya
+// sendiri diuji tests/paket-tersembunyi.test.tsx. Ketiga uji di bawah bukan
+// tentang tampilan, melainkan tentang PEMETAAN data paket per layanan
+// (termasuk paket nonaktif), hitungan `dipakai`, dan isolasi RLS per klien —
+// logika itu sengaja tidak dihapus, jadi saklarnya dinyalakan sementara di
+// sini supaya pemetaannya tetap terbukti benar selama saklar produksi mati,
+// pola yang sama dengan tests/passport-data.test.ts.
+describe("daftarKatalogAdmin — data paket (saklar K11 dinyalakan sementara)", () => {
+  let daftarKatalogAdminSementara: typeof daftarKatalogAdmin;
+
+  beforeAll(async () => {
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    ({ daftarKatalogAdmin: daftarKatalogAdminSementara } = await import(
+      "@/lib/admin/katalog-admin"
+    ));
+  });
+
+  afterAll(() => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  });
+
   it("paket menempel pada layanannya, termasuk paket nonaktif", async () => {
     await admin.from("packages").update({ aktif: false }).eq("id", PAKET_STATUS);
     try {
-      const katalog = await daftarKatalogAdmin();
+      const katalog = await daftarKatalogAdminSementara();
       const layanan = katalog
         .flatMap((f) => f.layanan)
         .find((l) => l.id === SVC_STATUS)!;
@@ -390,7 +430,7 @@ describe("daftarKatalogAdmin — katalog kelola, bukan katalog publik", () => {
       .eq("package_id", PAKET_SEED);
     expect(count).toBeGreaterThan(1); // Ananda + klien uji
 
-    const katalog = await daftarKatalogAdmin();
+    const katalog = await daftarKatalogAdminSementara();
     const paket = katalog
       .flatMap((f) => f.layanan)
       .flatMap((l) => l.paket)
@@ -404,39 +444,25 @@ describe("daftarKatalogAdmin — katalog kelola, bukan katalog publik", () => {
     expect(belumDipakai.dipakai).toBe(0);
   });
 
-  it("menghitung sesi yang sudah tercatat pada tiap layanan", async () => {
-    const { count } = await admin
-      .from("sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("service_id", SVC_SEED);
-    expect(count).toBeGreaterThan(0);
-
-    const katalog = await daftarKatalogAdmin();
-    const layanan = katalog.flatMap((f) => f.layanan).find((l) => l.id === SVC_SEED)!;
-    expect(layanan.sesiTercatat).toBe(count);
-    expect(
-      katalog.flatMap((f) => f.layanan).find((l) => l.id === SVC_EDIT)!.sesiTercatat,
-    ).toBe(0);
-  });
-
   it("dibaca lewat sesi pengguna: klien tidak melihat katalog kelola", async () => {
     // Bila lapisan ini memakai service role, angka & baris tetap keluar untuk
     // siapa pun dan RLS tidak pernah ikut diperiksa. `client_packages` adalah
     // pembeda paling tajam: dua klien memakai paket seed, tetapi seorang klien
     // hanya boleh melihat miliknya sendiri.
     ref.sesi = sesiAdmin;
-    const untukAdmin = (await daftarKatalogAdmin())
+    const untukAdmin = (await daftarKatalogAdminSementara())
       .flatMap((f) => f.layanan)
       .flatMap((l) => l.paket)
       .find((p) => p.id === PAKET_SEED)!;
     expect(untukAdmin.dipakai).toBeGreaterThanOrEqual(2);
 
     ref.sesi = sesiKlien;
-    const untukKlien = (await daftarKatalogAdmin())
+    const untukKlien = (await daftarKatalogAdminSementara())
       .flatMap((f) => f.layanan)
       .flatMap((l) => l.paket)
       .find((p) => p.id === PAKET_SEED)!;
     expect(untukKlien.dipakai).toBe(1); // hanya paketnya sendiri
+    ref.sesi = sesiAdmin;
   });
 });
 
@@ -1081,7 +1107,25 @@ describe("aktifkanVarian & nonaktifkanVarian — pagar varian aktif terakhir", (
 // ---------------------------------------------------------------------------
 
 describe("mengubah jumlah_sesi menggeser progres passport klien yang berjalan", () => {
+  // Saklar K11 (PAKET_TAMPIL, Task 1) membuat `ambilPaket()` top-level di
+  // berkas ini (baris 125) memulangkan [] — gerbangnya sendiri sudah diuji di
+  // tests/paket-tersembunyi.test.tsx. Test di bawah bukan tentang TAMPILAN,
+  // melainkan tentang PENYUSUTAN PENYEBUT (`progresPaket`) yang menggeser
+  // progres berjalan begitu admin memperkecil `jumlah_sesi` — logika itu
+  // sengaja tidak dihapus, jadi saklarnya dinyalakan sementara di sini
+  // supaya `ambilPaket()` betul-betul membaca baris yang diubah
+  // `perbaruiPaket()`, pola yang sama dengan tests/passport-data.test.ts.
+  let ambilPaketSementara: typeof import("@/lib/passport/data").ambilPaket;
+
+  beforeAll(async () => {
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    ({ ambilPaket: ambilPaketSementara } = await import("@/lib/passport/data"));
+  });
+
   afterAll(async () => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
     await admin
       .from("packages")
       .update({ jumlah_sesi: JUMLAH_SESI_SEED })
@@ -1091,7 +1135,7 @@ describe("mengubah jumlah_sesi menggeser progres passport klien yang berjalan", 
   it("penyebut progres klien ikut berubah — dan persen tetap dicap 100", async () => {
     ref.sesi = sesiKlien;
     const sesi = await ambilSesi(ANANDA);
-    const paketAwal = (await ambilPaket(ANANDA)).find((p) => p.jumlahSesi > 0)!;
+    const paketAwal = (await ambilPaketSementara(ANANDA)).find((p) => p.jumlahSesi > 0)!;
     expect(paketAwal.jumlahSesi).toBe(JUMLAH_SESI_SEED);
 
     const awal = progresPaket({ totalSesi: paketAwal.jumlahSesi, sesi })!;
@@ -1109,7 +1153,7 @@ describe("mengubah jumlah_sesi menggeser progres passport klien yang berjalan", 
     ).toBe(true);
 
     ref.sesi = sesiKlien;
-    const paketBaru = (await ambilPaket(ANANDA))[0];
+    const paketBaru = (await ambilPaketSementara(ANANDA))[0];
     expect(paketBaru.jumlahSesi).toBe(3);
 
     const sesudah = progresPaket({ totalSesi: paketBaru.jumlahSesi, sesi })!;
@@ -1220,9 +1264,14 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
     expect(markup).toContain("Aktifkan");
   });
 
-  it("menampilkan paket di bawah layanannya beserta jumlah sesinya", () => {
-    expect(markup).toContain("PAD-UJI Paket Edit Baru");
-    expect(markup).toMatch(/10 sesi/);
+  it("tidak lagi menampilkan sublist paket — gerbang K11 (Task 2)", () => {
+    // Sebelum gerbang: baris ini menegaskan "PAD-UJI Paket Edit Baru" dan
+    // "10 sesi" tampil di bawah layanannya. Dengan `PAKET_TAMPIL = false`,
+    // `daftarKatalogAdmin()` memulangkan `layanan.paket: []` untuk SETIAP
+    // layanan (lihat tests/paket-tersembunyi.test.tsx), jadi apa pun bentuk
+    // markup-nya, nama & jumlah sesi paket itu sendiri sudah tidak bisa lagi
+    // muncul di layar.
+    expect(markup).not.toContain("PAD-UJI Paket Edit Baru");
   });
 
   it("menampilkan varian di bawah layanannya, termasuk yang nonaktif", () => {

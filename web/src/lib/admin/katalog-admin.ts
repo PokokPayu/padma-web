@@ -1,5 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 /**
  * Lapisan data modul Layanan, Paket, & Varian.
@@ -223,7 +224,10 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
         deskripsi: l.deskripsi,
         aktif: l.aktif,
         sesiTercatat: sesiPer.get(l.id) ?? 0,
-        paket: paketPerLayanan.get(l.id) ?? [],
+        // GERBANG SAKLAR (K11): Admin › Layanan tidak lagi menampilkan sublist
+        // paket maupun tombol aktif/nonaktifkan paket. Server action-nya
+        // tetap ada dan tetap diuji — yang hilang hanya jalan menuju layar.
+        paket: PAKET_TAMPIL ? (paketPerLayanan.get(l.id) ?? []) : [],
         varian: varianPerLayanan.get(l.id) ?? [],
       })),
   }));

@@ -205,10 +205,28 @@ describe("hitungAntrean — angka datang dari data, lewat RLS sesi pengguna", ()
     expect(sesudah.permintaanMenunggu).toBe(dasar.permintaanMenunggu + 1);
   });
 
-  it("klaim menunggu menjumlahkan DUA sumber: sesi dan paket klien", () => {
-    // Satu sesi + satu paket klien ditambahkan; bila salah satu sumber
-    // terlupa, selisihnya hanya 1 dan antrean pembayaran diam-diam separuh.
-    expect(sesudah.klaimMenunggu).toBe(dasar.klaimMenunggu + 2);
+  it("klaim menunggu menjumlahkan DUA sumber: sesi dan paket klien", async () => {
+    // GERBANG SAKLAR (K11, Task 2): `hitungKlaimMenunggu()` mengabaikan
+    // `client_packages` selagi `PAKET_TAMPIL = false` (gerbangnya sendiri
+    // diuji tests/paket-tersembunyi.test.tsx), jadi fixture ini — satu sesi +
+    // satu paket, keduanya menunggu verifikasi — sekarang hanya menaikkan
+    // badge SATU, bukan dua. Assertion lama ("+2") tidak dibuang, hanya
+    // dipindah ke bawah dan dibuktikan dengan saklar dinyalakan sementara:
+    // penjumlahan DUA-SUMBER di dalam `hitungKlaimMenunggu()` sendiri TIDAK
+    // dihapus, dan tetap harus benar begitu K11 kembali dicabut.
+    expect(sesudah.klaimMenunggu).toBe(dasar.klaimMenunggu + 1); // sesi saja, saklar mati
+
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    const { hitungKlaimMenunggu: hitungDenganPaket } = await import("@/lib/admin/antrean");
+    const denganPaket = await hitungDenganPaket();
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+
+    // Dihitung SESUDAH fixture (sesi + paket keduanya menunggu): selisihnya
+    // terhadap versi bergerbang (yang sudah menghitung sesi) wajib tepat
+    // satu — paket uji itu sendiri.
+    expect(denganPaket).toBe(sesudah.klaimMenunggu + 1);
   });
 
   it("klien belum aktif bertambah tepat satu", () => {
