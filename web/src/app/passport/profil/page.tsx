@@ -1,44 +1,58 @@
 import { notFound } from "next/navigation";
 import { ambilKlien } from "@/lib/passport/data";
 import { TombolKeluar } from "@/app/_shell/tombol-keluar";
+import { FormProfil } from "./form-profil";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Profil" };
 
-// Halaman ini READ-ONLY, dan itu keputusan keamanan, bukan kemalasan: `clients`
-// menyimpan penautan akun (`user_id`, `linked_at`), sehingga satu jalur tulis
-// milik klien di tabel ini akan membuka kembali celah yang ditutup migration
-// kunci_kolom_penautan_klien. Klien memang tidak punya policy UPDATE di sana —
-// perubahan data ditempuh lewat admin, dan tests/passport-profil.test.ts
-// membuktikan janji itu ditegakkan basis data, bukan hanya ditulis di layar.
+// Halaman ini punya SATU jalur tulis, dan batasnya adalah keputusan keamanan.
+//
+// Yang boleh disunting klien: nama, no. WhatsApp, alamat — data operasional.
+// Yang TIDAK, dan tetap ditampilkan sebagai bacaan: email (dasar penautan akun
+// — `linkClientByInvite` menuntutnya cocok persis), PADMA ID, dan fase
+// perjalanan (penentu materi yang terbuka). Ketiganya keputusan identitas.
+//
+// Penegakannya bukan di layar ini. `clients` tetap tanpa policy UPDATE untuk
+// klien — dibuktikan `tests/passport-profil.test.ts` lewat UPDATE sungguhan
+// yang harus tetap nol baris — dan satu-satunya pintu adalah RPC
+// `perbarui_profil_klien`, yang hanya menerima tiga kolom itu. Menambah medan
+// ke formulir di bawah TIDAK cukup untuk melebarkan apa yang bisa ditulis;
+// migration-nya harus diubah lebih dulu, dan di sanalah alasannya tertulis.
 export default async function HalamanProfil() {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
 
-  const baris: Array<[string, string]> = [
-    ["Nama lengkap", klien.nama],
+  const bacaan: Array<[string, string]> = [
     ["PADMA ID", klien.padmaId],
     ["Email", klien.email],
-    ["No. WhatsApp", klien.noHp],
     ["Fase perjalanan", `${klien.faseSanskrit} · ${klien.faseNama}`],
   ];
 
   return (
     <section className="rounded-2xl border border-black/10 bg-white p-6">
       <h1 className="mb-4 font-serif text-xl text-night">Profil</h1>
-      {baris.map(([k, v]) => (
-        <div
-          key={k}
-          className="flex items-center justify-between gap-3 border-b border-dashed border-black/10 py-2.5 text-[13.5px] last:border-0"
-        >
-          <span className="text-ink-soft">{k}</span>
-          <b className={k === "PADMA ID" ? "font-mono font-medium" : ""}>{v}</b>
-        </div>
-      ))}
-      <p className="mt-4 text-xs text-ink-soft">
-        Ada data yang berubah? Hubungi tim PADMA via WhatsApp — demi keamanan,
-        perubahan data dilakukan oleh admin.
-      </p>
+
+      <FormProfil nama={klien.nama} noHp={klien.noHp} alamat={klien.alamat} />
+
+      <div className="mt-6 border-t border-dashed border-black/10 pt-4">
+        {bacaan.map(([k, v]) => (
+          <div
+            key={k}
+            className="flex items-center justify-between gap-3 border-b border-dashed border-black/10 py-2.5 text-[13.5px] last:border-0"
+          >
+            <span className="text-ink-soft">{k}</span>
+            <b className={k === "PADMA ID" ? "font-mono font-medium" : ""}>{v}</b>
+          </div>
+        ))}
+        <p className="mt-4 text-xs text-ink-soft">
+          Email, PADMA ID, dan fase perjalanan hanya bisa diubah tim PADMA —
+          ketiganya menentukan akun mana yang berhak membaca data Anda dan
+          materi apa yang terbuka. Hubungi kami via WhatsApp bila ada yang
+          keliru.
+        </p>
+      </div>
+
       <TombolKeluar />
     </section>
   );

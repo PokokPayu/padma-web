@@ -20,8 +20,30 @@ Isi keempat jenjang (`0_5`, `5_10`, `10_15`, `15_20`) di `/owner/transport` lebi
 dan itu berarti KETIADAAN tarif, bukan tarif bernilai besar. Nominalnya ditetapkan owner per sesi.
 Sesi semacam itu muncul di antrean `/admin` dan tagihannya tertahan sampai owner mengisinya.
 
-**3. Geocoding memakai Nominatim (OpenStreetMap) — layanan publik gratis dengan batas 1 permintaan
-per detik.** Konsekuensi yang harus diketahui sebelum trafik naik:
+**3. Geocoding lewat Nominatim SEBAGIAN BESAR GAGAL untuk alamat Malang. Diukur, bukan
+diperkirakan.** Ini yang paling penting dari seluruh runbook ini, dan ia tidak diketahui saat
+rantai transport ditulis.
+
+Pengukuran 7 September 2026 dengan 32 alamat berbentuk Malang: **26 gagal total**, 4 pulang
+setingkat ruas jalan, 2 setingkat benda. Pemblokiran sudah disingkirkan sebagai penjelasan —
+Nominatim menjawab HTTP 200 dengan array kosong. Mekanismenya:
+
+- Nominatim menuntut SELURUH kata cocok, dan gagal total — bukan mundur ke jalannya — begitu ada
+  satu kata yang tak dikenal. Akibatnya **semakin lengkap alamat ditulis, semakin besar
+  kemungkinannya gagal**, kebalikan dari naluri siapa pun yang merancang formulir alamat.
+- Saat berhasil pun **nomor rumahnya dibuang**: `Jl. Veteran No. 8` dan `Jl. Veteran` memulangkan
+  koordinat yang identik. Presisi setingkat rumah tidak tersedia di OSM Malang.
+
+Konsekuensi operasionalnya langsung: **penghitung "Sesi selesai tanpa jenjang" (runbook #4) bukan
+jalur pengecualian, ia jalur utama** — dan setiap sesi di dalamnya adalah honor transport yang
+belum terbayar. Utang #1 dan #2 karena itu jauh lebih mendesak daripada yang tertulis di tabelnya.
+
+Alatnya ada di `web/scripts/probe-geocode.ts` bila perlu diukur ulang untuk kota lain. Jalan
+keluarnya dirancang di `docs/superpowers/specs/2026-09-07-padma-pemilih-lokasi-design.md`, yang
+belum diimplementasikan saat baris ini ditulis.
+
+**3b. Nominatim juga punya batas 1 permintaan per detik.** Konsekuensi yang harus diketahui sebelum
+trafik naik:
 - Batas itu ditegakkan per PROSES, bukan per akun. Di lingkungan serverless setiap instance punya
   jatahnya sendiri, sehingga batas sesungguhnya bisa terlampaui tanpa satu pun galat di sisi kita
   (utang #7).
