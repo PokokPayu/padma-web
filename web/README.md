@@ -91,7 +91,8 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/sesi` | Admin, Owner | Antrean permintaan jadwal, jadwalkan sesi, tandai selesai + catatan bidan |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
-| `/admin/layanan` | Admin, Owner | Katalog layanan & paket per fase; pensiun lewat `aktif = false`, tanpa hapus |
+| `/admin/layanan` | Admin, Owner | Daftar layanan datar: cari, saring ketersediaan, paginasi; baris menaut ke detail |
+| `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
 | `/admin/materi` | Admin, Owner | Materi panduan per layanan; metadata + isi disimpan satu aksi, nonaktif menutup isinya di RLS |
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
