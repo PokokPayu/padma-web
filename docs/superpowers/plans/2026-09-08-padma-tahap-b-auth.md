@@ -336,7 +336,61 @@ describe("penautan lewat email terverifikasi", () => {
 });
 ```
 
-Isi setiap `it` dengan pembuatan fixture memakai `createAdminSupabase()` dan `auth.admin.createUser({ email, email_confirm: true | false })`, lalu panggil fungsi yang diuji langsung. Bersihkan barisnya di `afterEach`.
+Isi lengkap perkara pertama — tiga sisanya mengikuti bentuk yang sama, dengan
+`email_confirm: true` dan variasi keadaan baris kliennya:
+
+```ts
+import { describe, it, expect, afterEach } from "vitest";
+import { createAdminSupabase } from "@/lib/supabase/admin";
+import { tautkanKlienLewatEmailTerverifikasi } from "@/lib/auth/link-client";
+
+const admin = createAdminSupabase();
+const bekas: { userIds: string[]; clientIds: string[] } = { userIds: [], clientIds: [] };
+
+afterEach(async () => {
+  for (const id of bekas.clientIds) await admin.from("clients").delete().eq("id", id);
+  for (const id of bekas.userIds) await admin.auth.admin.deleteUser(id);
+  bekas.userIds = [];
+  bekas.clientIds = [];
+});
+
+async function siapkan(email: string, terverifikasi: boolean) {
+  const { data: u } = await admin.auth.admin.createUser({
+    email,
+    password: "rahasia123",
+    email_confirm: terverifikasi,
+  });
+  bekas.userIds.push(u!.user!.id);
+
+  const { data: c } = await admin
+    .from("clients")
+    .insert({
+      padma_id: `PAD-UJI-${Math.floor(Math.random() * 100000)}`,
+      nama: "Klien Uji",
+      email,
+      phase_id: "prekonsepsi",
+    })
+    .select("id")
+    .single();
+  bekas.clientIds.push(c!.id as string);
+
+  return { user: u!.user!, clientId: c!.id as string };
+}
+
+it("email BELUM terverifikasi tidak menautkan apa pun, walau ada baris klien beremail sama", async () => {
+  const { user, clientId } = await siapkan(`belum-${Date.now()}@padma.test`, false);
+
+  expect(await tautkanKlienLewatEmailTerverifikasi(user)).toBe(false);
+
+  // Dibuktikan dari DB, bukan dari nilai balik saja: fungsi yang memulangkan
+  // false tetapi sudah menulis adalah kegagalan yang paling sulit terlihat.
+  const { data } = await admin.from("clients").select("user_id").eq("id", clientId).single();
+  expect(data!.user_id).toBeNull();
+});
+```
+
+Perhatikan `phase_id: "prekonsepsi"` pada fixture: kolomnya menjadi nullable di Step 3, tetapi
+fixture ini sengaja mengisinya supaya yang diuji adalah penautan, bukan efek samping fase.
 
 - [ ] **Step 2: Jalankan, pastikan MERAH**
 
@@ -586,13 +640,25 @@ Ubah `minimum_password_length = 6` menjadi `8` di `web/supabase/config.toml`, de
 
 Tambahkan lima rute baru ke tabel rute `web/README.md`: `/daftar`, `/lupa-sandi`, `/atur-sandi`, `/periksa-email`, dan `/auth/callback` bila belum terdaftar. `tests/inventaris-rute.test.ts` menjaga tabel itu **dua arah** — rute yang ada tapi tak terdaftar, dan baris yang terdaftar tapi rutenya tak ada, sama-sama memerahkan.
 
-- [ ] **Step 4: Lengkapi kalimat bentrok email di panel admin**
+- [ ] **Step 4: Turunkan undangan WhatsApp menjadi pilihan kedua (K14)**
+
+Penautan lewat email terverifikasi membuat tautan undangan tidak lagi satu-satunya jalan: admin
+cukup meminta klien mendaftar sendiri dengan email yang sudah didaftarkan. **Tidak ada kode
+penautan yang dihapus** — membuang pertahanan yang sudah teruji demi kerapian adalah perdagangan
+yang buruk, dan undangan tetap berguna untuk klien yang perlu dituntun.
+
+Yang berubah hanya urutan anjuran di panel admin: pada layar sesudah klien dibuat, taruh "Minta
+klien mendaftar sendiri di halaman Daftar dengan email ini" sebagai anjuran **utama**, dan tautan
+undangan WhatsApp di bawahnya sebagai cadangan dengan kalimat "atau kirimkan tautan aktivasi".
+Berkas yang menyusun pesan undangan (`web/src/lib/auth/pesan-undangan.ts`) tidak disentuh.
+
+- [ ] **Step 5: Lengkapi kalimat bentrok email di panel admin**
 
 `web/src/app/admin/klien/aksi.ts` sudah menjawab bentrok email dengan "Alamat itu sudah dipakai klien lain." Sejak pendaftaran mandiri hidup, penyebab yang paling mungkin berubah: orangnya sudah membuat akun sendiri. Ubah kalimatnya menjadi menyebut kemungkinan itu dan mengarahkan admin membuka data yang sudah ada, mis. "Alamat itu sudah terdaftar — kemungkinan klien ini sudah membuat akun sendiri. Buka datanya lewat pencarian di daftar klien."
 
 Tidak ada penggabungan otomatis. Admin melihat datanya lalu memutuskan sendiri.
 
-- [ ] **Step 5: Jalankan seluruh suite**
+- [ ] **Step 6: Jalankan seluruh suite**
 
 Koordinasikan lebih dulu — Supabase lokal dipakai bersama.
 
@@ -606,10 +672,10 @@ Setelah mengubah `config.toml`, stack lokal perlu dimuat ulang agar env containe
 cd web && npx supabase stop && npx supabase start
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add web/supabase/config.toml web/README.md web/src/app/admin/klien/aksi.ts web/tests/konfirmasi-email-wajib.test.ts
+git add web/supabase/config.toml web/README.md web/src/app/admin/klien web/tests/konfirmasi-email-wajib.test.ts
 git commit -m "feat(auth): pagar konfirmasi email, sandi minimum 8, inventaris rute"
 ```
 
