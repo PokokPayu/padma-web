@@ -167,4 +167,50 @@ describe("saklar paket: tidak ada kata 'paket' di layar", () => {
     const { default: HalamanAdmin } = await import("@/app/admin/page");
     expect(renderToStaticMarkup(await HalamanAdmin())).not.toMatch(/paket/i);
   });
+
+  // Landing (`/`) tidak butuh sesi apa pun — katalog dibaca dengan anon key
+  // (lihat lib/katalog.ts) dan pengaturan dengan service role (lib/settings.ts),
+  // keduanya tidak pernah lewat `createServerSupabase()` yang di-mock berkas
+  // ini. Ditaruh di sini (bukan describe tersendiri) karena tidak butuh
+  // `beforeAll` sendiri — sesi admin yang aktif di blok ini tidak berpengaruh.
+  it("halaman landing '/' tidak menyebut paket", async () => {
+    const { default: Home } = await import("@/app/page");
+    expect(renderToStaticMarkup(await Home())).not.toMatch(/paket/i);
+  });
+});
+
+// Sesi KLIEN (Ananda) untuk kedua halaman /passport — beda dari sesi admin di
+// atas, jadi butuh `beforeAll` sendiri seperti pola berkas ini. `ambilKlien`
+// dkk memakai `createServerSupabase()` (di-mock ke `ref.klien`), sama seperti
+// gerbang data klien di describe pertama berkas ini.
+describe("saklar paket: halaman klien (passport) tidak menyebut paket", () => {
+  beforeAll(async () => {
+    ref.klien = await signInAs("ananda@padma.test");
+  });
+
+  it("halaman /passport tidak menyebut paket", async () => {
+    // Ananda (ANANDA) memegang paket aktif di seed — kalau gerbang bocor,
+    // section "Paket Aktif" akan muncul persis di sini.
+    const { default: BerandaPassport } = await import("@/app/passport/page");
+    expect(renderToStaticMarkup(await BerandaPassport())).not.toMatch(/paket/i);
+  });
+
+  it("halaman /passport/bayar tidak menyebut paket", async () => {
+    const { default: HalamanBayar } = await import("@/app/passport/bayar/page");
+    expect(renderToStaticMarkup(await HalamanBayar())).not.toMatch(/paket/i);
+  });
+});
+
+// Sesi OWNER untuk /owner/rekap — halaman ini memanggil requireRole(["owner"])
+// LANGSUNG di badan page.tsx (bukan cuma di layout), jadi sesinya wajib benar
+// berperan owner sebelum halaman dirender.
+describe("saklar paket: halaman owner tidak menyebut paket", () => {
+  beforeAll(async () => {
+    ref.klien = await signInAs("owner@padma.test");
+  });
+
+  it("halaman /owner/rekap tidak menyebut paket", async () => {
+    const { default: RekapPage } = await import("@/app/owner/rekap/page");
+    expect(renderToStaticMarkup(await RekapPage())).not.toMatch(/paket/i);
+  });
 });

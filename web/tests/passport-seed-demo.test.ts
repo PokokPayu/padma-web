@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
@@ -33,20 +33,6 @@ beforeAll(async () => {
 });
 
 describe("seed demo — passport Ananda terlihat penuh", () => {
-  it("progres paket 6 dari 8 sesi (75%), bukan 1 dari 8", async () => {
-    const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
-    const { progresPaket } = await import("@/lib/passport/turunan");
-
-    const [sesi, paket] = await Promise.all([ambilSesi(ANANDA), ambilPaket(ANANDA)]);
-    expect(paket).toHaveLength(1);
-
-    expect(progresPaket({ totalSesi: paket[0].jumlahSesi, sesi })).toEqual({
-      selesai: 6,
-      total: 8,
-      persen: 75,
-    });
-  });
-
   it("tiga badge layanan berbeda dari sesi yang sudah selesai", async () => {
     const { ambilSesi } = await import("@/lib/passport/data");
     const { badgeDari } = await import("@/lib/passport/turunan");
@@ -58,33 +44,6 @@ describe("seed demo — passport Ananda terlihat penuh", () => {
       "PADMA Flow Yoga - Prekonsepsi",
       "Sankalpa Fertility Massage",
     ]);
-  });
-
-  it("grid stempel: 6 terisi, 1 penanda berikutnya, 1 kosong", async () => {
-    const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
-    const { gridStempel } = await import("@/lib/passport/turunan");
-
-    const [sesi, paket] = await Promise.all([ambilSesi(ANANDA), ambilPaket(ANANDA)]);
-    const grid = gridStempel({ totalSesi: paket[0].jumlahSesi, sesi, sekarang: SEKARANG });
-
-    expect(grid.map((g) => g.jenis)).toEqual([
-      "terisi", "terisi", "terisi", "terisi", "terisi", "terisi",
-      "berikutnya",
-      "kosong",
-    ]);
-  });
-
-  it("ada satu sesi lepas belum dibayar sebagai bahan halaman Bayar", async () => {
-    const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
-    const { susunTagihan } = await import("@/lib/passport/turunan");
-
-    const [sesi, paket] = await Promise.all([ambilSesi(ANANDA), ambilPaket(ANANDA)]);
-    const tagihan = susunTagihan({ paket, sesi });
-
-    expect(tagihan.filter((t) => t.jenis === "paket")).toHaveLength(1);
-    const lepas = tagihan.filter((t) => t.jenis === "sesi");
-    expect(lepas).toHaveLength(1);
-    expect(lepas[0].status).toBe("belum");
   });
 
   it("catatan & rekomendasi bidan pantas dibaca saat presentasi", async () => {
@@ -99,6 +58,80 @@ describe("seed demo — passport Ananda terlihat penuh", () => {
     expect(selesai.some((s) => /dummy|lorem/i.test(s.catatan + s.rekomendasi))).toBe(false);
     // Nama bidan tampil di tiap kartu ("Tim PADMA" = pemetaan mitra gagal).
     expect(selesai.every((s) => s.namaMitra.startsWith("Bidan "))).toBe(true);
+  });
+});
+
+// GERBANG SAKLAR (K11, Task 4): tiga uji di bawah membaca `ambilPaket()`
+// LANGSUNG — bukan lewat halaman — untuk mengunci kekayaan seed paket Ananda
+// (progres 6/8, grid stempel, tagihan paket). `ambilPaket()` memulangkan []
+// begitu `PAKET_TAMPIL` mati (gerbangnya sendiri diuji
+// tests/paket-tersembunyi.test.tsx), jadi ketiganya dipertahankan dengan
+// menyalakan saklar SEMENTARA hanya untuk blok ini — pola yang sama dengan
+// tests/klaim-sesi-lepas.test.ts & tests/admin-klien-data.test.ts. Fungsi
+// turunannya (progresPaket/gridStempel/susunTagihan) tidak menyentuh saklar
+// sama sekali, jadi tidak perlu diimpor ulang.
+describe("seed demo — passport Ananda terlihat penuh (paket, saklar K11 sementara)", () => {
+  let ambilSesiSementara: (id: string) => Promise<Awaited<ReturnType<typeof import("@/lib/passport/data").ambilSesi>>>;
+  let ambilPaketSementara: (id: string) => Promise<Awaited<ReturnType<typeof import("@/lib/passport/data").ambilPaket>>>;
+
+  beforeAll(async () => {
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    ({ ambilSesi: ambilSesiSementara, ambilPaket: ambilPaketSementara } = await import(
+      "@/lib/passport/data"
+    ));
+  });
+
+  afterAll(() => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  });
+
+  it("progres paket 6 dari 8 sesi (75%), bukan 1 dari 8", async () => {
+    const { progresPaket } = await import("@/lib/passport/turunan");
+
+    const [sesi, paket] = await Promise.all([
+      ambilSesiSementara(ANANDA),
+      ambilPaketSementara(ANANDA),
+    ]);
+    expect(paket).toHaveLength(1);
+
+    expect(progresPaket({ totalSesi: paket[0].jumlahSesi, sesi })).toEqual({
+      selesai: 6,
+      total: 8,
+      persen: 75,
+    });
+  });
+
+  it("grid stempel: 6 terisi, 1 penanda berikutnya, 1 kosong", async () => {
+    const { gridStempel } = await import("@/lib/passport/turunan");
+
+    const [sesi, paket] = await Promise.all([
+      ambilSesiSementara(ANANDA),
+      ambilPaketSementara(ANANDA),
+    ]);
+    const grid = gridStempel({ totalSesi: paket[0].jumlahSesi, sesi, sekarang: SEKARANG });
+
+    expect(grid.map((g) => g.jenis)).toEqual([
+      "terisi", "terisi", "terisi", "terisi", "terisi", "terisi",
+      "berikutnya",
+      "kosong",
+    ]);
+  });
+
+  it("ada satu sesi lepas belum dibayar sebagai bahan halaman Bayar", async () => {
+    const { susunTagihan } = await import("@/lib/passport/turunan");
+
+    const [sesi, paket] = await Promise.all([
+      ambilSesiSementara(ANANDA),
+      ambilPaketSementara(ANANDA),
+    ]);
+    const tagihan = susunTagihan({ paket, sesi });
+
+    expect(tagihan.filter((t) => t.jenis === "paket")).toHaveLength(1);
+    const lepas = tagihan.filter((t) => t.jenis === "sesi");
+    expect(lepas).toHaveLength(1);
+    expect(lepas[0].status).toBe("belum");
   });
 });
 
