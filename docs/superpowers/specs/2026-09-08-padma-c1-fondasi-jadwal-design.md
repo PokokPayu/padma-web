@@ -310,8 +310,21 @@ sebelum paket dibuka kembali:
 - bagaimana paket masuk ke rantai status C1 yang dirancang tanpa memikirkannya.
 
 Peta jalan 6 September menaruh paket sebagai spec ke-3 dan rangkaian status ke-4; urutan itu
-sekarang terbalik atas keputusan klien. Konsekuensinya diterima sadar: paket akan dipasang ke
-rantai yang sudah jadi, bukan sebaliknya.
+sekarang terbalik atas keputusan klien.
+
+**Jawaban kandidat — dicatat supaya pembahasan nanti tidak mulai dari nol.** Kekhawatiran di balik
+catatan itu ("layanan tidak selesai satu waktu") mengandaikan paket menuntut model penjadwalan
+tersendiri. Kemungkinan besar tidak: **paket adalah pembelian, bukan jadwal.** Membeli paket
+menerbitkan beberapa **hak sesi** — objek yang sama persis dengan kredit layanan di C3, hanya
+berjumlah lebih dari satu. Tiap hak ditebus lewat pengajuan jadwal biasa: skriningnya sendiri,
+jamnya sendiri, mitranya sendiri, kapan pun klien mau, sampai masa berlakunya habis. Bila begitu,
+"beberapa waktu" bukan masalah yang perlu dipecahkan — ia perilaku bawaan, dan rantai status C1
+tidak perlu tahu apa pun tentang paket; ia hanya melihat pengajuan yang kebetulan lahir sudah
+lunas. Syaratnya satu: kredit di C3 memang dikerjakan dalam bentuk hak sesi. Satu hak dan sepuluh
+hak adalah mekanisme yang sama.
+
+Yang tetap tidak bisa ditebak dan wajib ditanyakan: apakah pembeli boleh berbeda dari penerima
+layanan (RS membayar, pasiennya yang dirawat).
 
 **2. Katalog produksi masih dummy.** Gambar alur klien menyebut "Garbha Relief · 90 menit ·
 Rp179.000"; angka itu tidak ada di repo. Katalog di `seed.sql` adalah data karangan (keputusan #12)
