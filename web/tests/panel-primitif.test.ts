@@ -461,6 +461,10 @@ describe("KerangkaPanel", () => {
     // Begitu satu berkas di sini tahu peran, pemisahan fisik money firewall
     // berubah menjadi satu kondisional yang bisa salah tulis dalam satu
     // karakter — dan yang bocor adalah seluruh nominal PADMA.
+    // Tanpa ini, seluruh badan test lolos hampa bila direktori primitif
+    // dipindah atau namanya berubah: `for (const berkas of [])` tidak pernah
+    // menjalankan satu asersi pun, dan hijaunya terbaca seperti bukti.
+    expect(berkasPanel().length).toBeGreaterThan(0);
     for (const berkas of berkasPanel()) {
       const isi = baca(berkas);
       // Flag `i`: kedua shell meneruskan "Admin"/"Owner" (huruf besar di
