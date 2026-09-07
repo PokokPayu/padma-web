@@ -459,11 +459,17 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   });
 
   afterAll(async () => {
+    const SESI = [SESI_TRANSPORT, SESI_TRANSPORT_MENUNGGU, SESI_JAUH_BELUM, SESI_JAUH_SUDAH];
     await admin.from("transport_khusus").delete().eq("session_id", SESI_JAUH_SUDAH);
-    await admin
-      .from("sessions")
-      .delete()
-      .in("id", [SESI_TRANSPORT, SESI_TRANSPORT_MENUNGGU, SESI_JAUH_BELUM, SESI_JAUH_SUDAH]);
+    // Jejak DULU — alasan yang sama persis dengan `bersihkan()` di atas: tabel
+    // jejak sengaja TANPA foreign key, jadi menghapus sesinya tidak menyapu
+    // jejaknya. `SESI_TRANSPORT_MENUNGGU` lahir ber-`status_bayar`
+    // 'menunggu_verifikasi', dan itulah yang menerbitkan satu baris jejak;
+    // tanpa sapuan ini `tests/jejak-yatim.test.ts` memerah setiap kali suite
+    // penuh dijalankan — dan ia MEMANG memerah sekali di sini sebelum baris
+    // ini ada.
+    await admin.from("jejak_status_bayar").delete().in("sesi_id", SESI);
+    await admin.from("sessions").delete().in("id", SESI);
   });
 
   // --- Ruling 16: transport adalah RINCIAN pada item sesi, bukan item kedua ---
