@@ -29,10 +29,18 @@ describe("halaman /masuk", () => {
   // getByLabel("Email"), getByLabel("Kata sandi"), dan tombol persis "Masuk".
   // Mengganti ketiga nama itu memerahkan matriks akses tanpa menyentuh satu
   // pun test unit — jadi pagarnya dipasang di sini.
+  //
+  // Regex-nya berjangkar pada strukturnya, bukan sekadar isi teks di suatu
+  // tempat di halaman: getByLabel butuh input yang benar-benar terbungkus
+  // <label> bersama teksnya (toContain("Email") tetap hijau meski input-nya
+  // dilepas dari <label>-nya — kegagalan yang justru harus ditangkap di
+  // sini), dan tombol "Masuk" harus persis elemen <button>, bukan cuma teks
+  // ">Masuk<" yang bisa nyasar ke elemen lain. Repo ini tidak punya
+  // @testing-library, jadi regex berjangkar adalah proksi berbiaya rendah.
   it("mempertahankan label yang dipakai skrip E2E", () => {
-    expect(m).toContain("Email");
-    expect(m).toContain("Kata sandi");
-    expect(m).toMatch(/>Masuk</);
+    expect(m).toMatch(/<label[^>]*>\s*<span[^>]*>Email<\/span>\s*<input/);
+    expect(m).toMatch(/<label[^>]*>\s*<span[^>]*>Kata sandi<\/span>\s*<input/);
+    expect(m).toMatch(/<button[^>]*>Masuk<\/button>/);
   });
 
   it("menawarkan daftar dan lupa sandi", () => {

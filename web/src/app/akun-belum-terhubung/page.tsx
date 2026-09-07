@@ -15,9 +15,11 @@ export default function AkunBelumTerhubungPage() {
       kalimat="Tautan aktivasi dari tim PADMA yang menghubungkan akun Anda ke rekam klien. Buka pesan WhatsApp Anda untuk menemukannya."
     >
       <div className="text-center">
-        <h1 className="font-serif text-2xl text-night mb-3">
+        {/* h2, bukan h1 — panel kiri panggung memegang h1. Lihat komentar
+            hierarki judul di panggung.tsx. */}
+        <h2 className="font-serif text-2xl text-night mb-3">
           Akun Anda belum terhubung
-        </h1>
+        </h2>
         <p className="text-sm text-ink-soft mb-4">
           Akun klien PADMA diaktifkan lewat <strong>tautan aktivasi</strong> yang
           tim PADMA kirimkan via WhatsApp. Buka tautan itu lebih dulu, lalu masuk
