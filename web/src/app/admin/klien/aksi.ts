@@ -6,6 +6,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { buatPadmaId } from "@/lib/admin/padma-id";
 import { createClientInvite, normalizeEmail } from "@/lib/auth/link-client";
 import { geocodeAlamat } from "@/lib/transport/geocode";
+import { koordinatDariFormData } from "@/lib/transport/koordinat-form";
 import { bersihkanAlamat } from "./status";
 
 /**
@@ -66,7 +67,15 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
   // `geocodeAlamat` sudah menelan setiap galatnya dan memulangkan null; alamat
   // profil klien pun BOLEH kosong (terisi menyusul) — alamat kosong memulangkan
   // null lebih awal di dalam `geocodeAlamat` sendiri, tanpa perlu dicabang di sini.
-  const koordinat = await geocodeAlamat(alamat);
+  // PIN MENANG. Bila admin sudah menjatuhkan titik di peta, koordinat itu yang
+  // dipakai dan Nominatim TIDAK ditanyai sama sekali — menanyakan alamat yang
+  // jawabannya sudah pasti dibuang hanya membakar kuota gratis milik pihak
+  // lain, dan pada volume nyata itulah yang memicu pemblokiran.
+  //
+  // Tanpa pin, jalur lama berlaku utuh: geocoding boleh gagal, dan kegagalannya
+  // tidak pernah menggagalkan penyimpanan alamat (Ruling 9).
+  const pin = koordinatDariFormData(formData);
+  const koordinat = pin ?? (await geocodeAlamat(alamat));
 
   for (let percobaan = 0; percobaan < PERCOBAAN_ID; percobaan++) {
     const padmaId = await buatPadmaId(supabase);
@@ -126,7 +135,9 @@ export async function perbaruiKlien(
   const supabase = await createServerSupabase();
 
   // Geocoding TIDAK PERNAH menggagalkan penyimpanan (spec T6) — lihat `buatKlien`.
-  const koordinat = await geocodeAlamat(alamat);
+  // PIN MENANG — lihat alasan lengkapnya di buatKlien.
+  const pin = koordinatDariFormData(formData);
+  const koordinat = pin ?? (await geocodeAlamat(alamat));
 
   // Hanya kolom operasional yang pernah menyentuh basis data. Medan lain yang
   // ikut dikirim browser diabaikan tanpa pernah masuk payload — termasuk

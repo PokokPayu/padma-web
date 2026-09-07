@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { geocodeAlamat } from "@/lib/transport/geocode";
+import { koordinatDariFormData } from "@/lib/transport/koordinat-form";
 import { bersihkanAlamat } from "./status";
 
 /**
@@ -55,7 +56,15 @@ export async function simpanMitra(formData: FormData): Promise<Dibuat | Gagal> {
   // Geocoding TIDAK PERNAH menggagalkan penyimpanan mitra (spec T6).
   // `geocodeAlamat` sudah menelan setiap galatnya dan memulangkan null; domisili
   // mitra pun BOLEH kosong (terisi menyusul).
-  const koordinat = await geocodeAlamat(alamat);
+  // PIN MENANG. Bila admin sudah menjatuhkan titik di peta, koordinat itu yang
+  // dipakai dan Nominatim TIDAK ditanyai sama sekali — menanyakan alamat yang
+  // jawabannya sudah pasti dibuang hanya membakar kuota gratis milik pihak
+  // lain, dan pada volume nyata itulah yang memicu pemblokiran.
+  //
+  // Tanpa pin, jalur lama berlaku utuh: geocoding boleh gagal, dan kegagalannya
+  // tidak pernah menggagalkan penyimpanan alamat (Ruling 9).
+  const pin = koordinatDariFormData(formData);
+  const koordinat = pin ?? (await geocodeAlamat(alamat));
 
   // `aktif` tidak ikut dikirim: kolomnya `default true` di basis data, dan
   // membiarkan default yang memutuskan berarti tidak ada satu pun jalan bagi
@@ -89,7 +98,9 @@ export async function perbaruiMitra(
   const supabase = await createServerSupabase();
 
   // Geocoding TIDAK PERNAH menggagalkan penyimpanan (spec T6) — lihat `simpanMitra`.
-  const koordinat = await geocodeAlamat(alamat);
+  // PIN MENANG — lihat alasan lengkapnya di simpanMitra.
+  const pin = koordinatDariFormData(formData);
+  const koordinat = pin ?? (await geocodeAlamat(alamat));
 
   // Medan `aktif` yang ikut dikirim browser diabaikan tanpa pernah masuk
   // payload — keadaan mitra punya action tersendiri.

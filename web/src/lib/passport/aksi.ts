@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { geocodeAlamat } from "@/lib/transport/geocode";
+import { normalkanAlamat } from "@/lib/transport/alamat";
 import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
 import { periksaAlamat } from "./status";
 import { hariIniJakarta } from "./waktu";
@@ -178,7 +179,35 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
   // Dipanggil SESUDAH seluruh pemeriksaan lain lolos — supaya permintaan yang
   // pasti ditolak (layanan mati, tanggal lampau, dst.) tidak ikut membakar
   // jatah 1 permintaan/detik Nominatim untuk sesuatu yang tidak akan tersimpan.
-  const koordinat = await geocodeAlamat(cekAlamat.nilai);
+  // Alamat yang TIDAK diubah klien mewarisi koordinat profilnya — titik yang
+  // sudah dijatuhkan dan dibenarkan admin di peta. Formulir ini terisi otomatis
+  // dari profil, jadi mayoritas pengajuan lewat jalur ini, dan mewarisi jawaban
+  // manusia jelas lebih baik daripada menanyakan ulang kepada OSM yang untuk
+  // alamat Malang sebagian besar tidak tahu (26 dari 32 gagal; lihat §1 spec
+  // pemilih-lokasi).
+  //
+  // Ini TIDAK melanggar spec T6 ("jangan ambil ulang alamat dari profil"). Yang
+  // T6 cegah adalah berubahnya ALAMAT tujuan mitra ketika klien memesan untuk
+  // tempat lain. Di sini perbandingannya menuntut teks yang IDENTIK, sehingga
+  // tidak ada alamat yang berubah — yang diwarisi hanyalah jawaban atas
+  // pertanyaan yang sudah pernah dijawab manusia. MELONGGARKAN perbandingan ini
+  // (mis. mencocokkan sebagian, atau mengabaikan nomor rumah) mengembalikan
+  // persis bahaya yang T6 cegah.
+  const { data: profil } = await supabase
+    .from("clients")
+    .select("alamat, alamat_lat, alamat_lon")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  const warisan =
+    profil &&
+    profil.alamat_lat !== null &&
+    profil.alamat_lon !== null &&
+    normalkanAlamat(String(profil.alamat ?? "")) === normalkanAlamat(cekAlamat.nilai)
+      ? { lat: profil.alamat_lat as number, lon: profil.alamat_lon as number }
+      : null;
+
+  const koordinat = warisan ?? (await geocodeAlamat(cekAlamat.nilai));
 
   // Insert memakai SESI PENGGUNA, bukan service role: RLS + trigger
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
