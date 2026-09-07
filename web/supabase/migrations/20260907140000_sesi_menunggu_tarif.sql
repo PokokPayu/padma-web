@@ -58,7 +58,20 @@ create view public.sesi_menunggu_tarif_transport
      )
      and public.user_role() in ('admin', 'owner');
 
-revoke all on public.sesi_menunggu_tarif_transport from anon;
+-- Ruling 13 (coordinator, Task 8 fix round 2): dicabut dari KEDUA peran
+-- (`anon` DAN `authenticated`) SEBELUM memberi hak yang tepat — pola yang
+-- sama persis dengan `harga_publik`. Supabase memberi hak bawaan PENUH atas
+-- SETIAP objek baru di skema `public` — termasuk VIEW — kepada `anon` maupun
+-- `authenticated`; `grant select ... to authenticated` di bawah MENAMBAH,
+-- bukan MENGGANTIKAN, jadi verba tulis bawaannya tetap menempel bila tidak
+-- dicabut lebih dulu. `public` ikut dicabut karena itulah yang dipakai
+-- `harga_publik` — menutup jalur yang tidak tertutup oleh mencabut dua peran
+-- aplikasi saja. Persis pola yang sudah benar dua kali untuk
+-- `transport_rates`/`transport_khusus`; yang terlewat draf pertama migrasi
+-- ini hanya view-nya, karena view mudah dikira tidak punya hak tulis sendiri
+-- — padahal Postgres memberinya, dan view SEDERHANA seperti ini akan
+-- meneruskan tulisan itu ke tabel dasarnya.
+revoke all on public.sesi_menunggu_tarif_transport from public, anon, authenticated;
 grant select on public.sesi_menunggu_tarif_transport to authenticated;
 
 comment on view public.sesi_menunggu_tarif_transport is

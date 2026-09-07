@@ -16,7 +16,7 @@ const TAUTAN_KECIL =
   "text-[12px] font-bold text-leaf underline underline-offset-4 transition hover:text-night";
 
 export default async function AdminPage() {
-  const { nama } = await requireRole(["admin", "owner"]);
+  const { nama, role } = await requireRole(["admin", "owner"]);
 
   // "Hari ini" menurut Jakarta, bukan menurut jam server (Vercel berjalan UTC).
   // Tanggalnya diteruskan sebagai argumen ke seluruh lapisan data supaya tidak
@@ -103,15 +103,19 @@ export default async function AdminPage() {
         {/* Angkanya, bukan nominalnya (money firewall) — hitungAntrean()
             menghitung ini dari VIEW sesi_menunggu_tarif_transport, nol
             nominal. Hanya OWNER yang berwenang menuntaskannya (aksi
-            tetapkanTarifKhusus menuntut peran pemilik), tapi admin tetap
-            berhak tahu ada pekerjaan menunggu di sana — persis alasan
-            StatTile ini wajib punya href walau sebagian pengunjungnya
-            (admin biasa) akan dialihkan keluar saat mengekliknya. */}
+            tetapkanTarifKhusus menuntut peran pemilik), dan admin tetap
+            berhak tahu ada pekerjaan menunggu di sana — tapi `href` HANYA
+            diberikan untuk owner (Ruling 13): memberinya ke admin juga
+            membuat tile ini satu-satunya yang menyala lalu memantulkan
+            sebagian penggunanya kembali ke /admin lewat penjaga peran milik
+            layout owner, tanpa penjelasan apa pun. `StatTile` sendiri sudah
+            mendukung ini — `href` opsional, dan tanpa itu ia merender
+            `<div>` polos (lihat komentarnya di stat-tile.tsx). */}
         <StatTile
           label="Sesi >20 km menunggu tarif"
           nilai={String(antrean.menungguTarifTransport)}
           keterangan="Tarif khusus per kasus, ditetapkan owner"
-          href="/owner/transport"
+          href={role === "owner" ? "/owner/transport" : undefined}
           menuntut={antrean.menungguTarifTransport > 0}
         />
       </section>
