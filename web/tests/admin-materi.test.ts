@@ -1236,8 +1236,39 @@ describe("ambilDaftarMateri", () => {
     // Materi tanpa layanan tidak pernah terbuka lewat jalur otomatis, hanya
     // lewat penugasan manual. Materi yang diam-diam tidak terlihat siapa pun
     // adalah persis kegagalan yang modul ini ada untuk mencegah.
-    const { baris } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
-    expect(baris.every((m) => typeof m.jumlahLayanan === "number")).toBe(true);
+    const { baris: awal } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+    expect(awal.every((m) => typeof m.jumlahLayanan === "number")).toBe(true);
+
+    // `typeof === "number"` di atas lolos untuk konstanta 0/1 yang HARDCODED
+    // ataupun tautan yang dihitung dua kali — tidak satu pun membuktikan
+    // ANGKANYA benar. MATERI_EBOOK tertaut PERSIS ke SVC_TERBUKA di titik ini
+    // (dibuktikan describe "perbaruiMateri" & "radius tautan layanan" di
+    // atas, yang mengembalikan tautannya ke [SVC_TERBUKA] di akhir masing-
+    // masing). Menautkan SVC_KEDUA lalu melepasnya lagi membuktikan angkanya
+    // ikut BERGERAK 1 -> 2 -> 1, menangkap baik konstanta tetap maupun cache
+    // basi — bukan sekadar "bertipe number".
+    const jumlahSebelum = awal.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan;
+    expect(jumlahSebelum).toBe(1);
+
+    await admin
+      .from("material_services")
+      .insert({ material_id: MATERI_EBOOK, service_id: SVC_KEDUA });
+    try {
+      const { baris: sesudah } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+      expect(sesudah.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan).toBe(2);
+    } finally {
+      // Simetris dengan penyisipan di atas — baris yatim di `material_services`
+      // memerahkan berkas LAIN yang meng-assert `layananId`/`jumlahLayanan`
+      // MATERI_EBOOK secara persis (sudah terjadi sekali di rencana ini).
+      await admin
+        .from("material_services")
+        .delete()
+        .eq("material_id", MATERI_EBOOK)
+        .eq("service_id", SVC_KEDUA);
+    }
+
+    const { baris: kembali } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+    expect(kembali.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan).toBe(1);
   });
 
   it("saringan isi 'belum' melaporkan total sesuai baris yang BENAR-BENAR tersaring, bukan count mentah", async () => {
