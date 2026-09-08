@@ -28,10 +28,6 @@ let VARIAN: string;
 let sesiKlien: SupabaseClient;
 let sesiAdmin: SupabaseClient;
 
-/** Tanggal jauh di depan supaya tidak bentrok dengan fixture berkas lain. */
-const TGL_JAUH = "2027-09-20"; // jenjang 1
-const TGL_DEKAT = "2027-09-21"; // dipakai dengan jam yang digeser
-
 /**
  * Satu jam layanan sah (seed: 08–11, 13–16) yang jaraknya dari SEKARANG jatuh
  * ketat di dalam jendela jenjang 2 (2–24 jam) — dipakai uji balapan
@@ -55,25 +51,52 @@ function slotDekatJenjang2(): { tanggal: string; jam: string } {
   throw new Error("tidak menemukan slot jam layanan di jendela jenjang 2");
 }
 
-// Dihitung SEKALI saat berkas dimuat, bukan di dalam tiap `it`: `bersihkan()`
-// perlu tahu tanggalnya lebih dulu supaya baris peninggalan dari eksekusi
-// SEBELUMNYA (mis. uji balapan yang berhasil lalu menaruh sesi tepat di slot
-// ini) ikut tersapu. Dua panggilan RPC di uji balapan memakai KONSTANTA yang
-// sama ini, bukan memanggil `slotDekatJenjang2()` lagi masing-masing.
+// Dihitung SEKALI saat berkas dimuat, bukan di dalam tiap `it`: dua panggilan
+// RPC di uji balapan memakai KONSTANTA yang sama ini, bukan memanggil
+// `slotDekatJenjang2()` lagi masing-masing (sasarannya harus identik supaya
+// keduanya benar-benar berebut baris yang sama).
 const SLOT_BALAPAN = slotDekatJenjang2();
 
+// `bersihkan()` menyapu berdasarkan APA YANG DIBUAT berkas ini, BUKAN
+// tanggal yang kebetulan diingat. Percobaan pertama menyapu daftar tanggal
+// tetap ("2027-09-20", "2027-09-25", dst) — itu bocor: `jamRelatif()` (dipakai
+// hampir semua uji di berkas ini) menghasilkan tanggal yang BERGERAK
+// mengikuti hari ini (mis. `jamRelatif(48)` = hari-ini+48 jam), tidak pernah
+// masuk daftar tetap manapun, sehingga setiap sesi yang dibuat lewatnya
+// tertinggal permanen. 148 baris menumpuk sebelum ini ketahuan dari
+// suite penuh yang dijalankan orang lain.
+//
+// Alternatif yang DITOLAK: menyapu SELURUH sesi milik ANANDA/RINA. Kedua id
+// klien itu bukan milik eksklusif berkas ini — dipakai puluhan berkas uji
+// lain (`grep -rl "$ANANDA" tests/` mengembalikan >40 berkas) — jadi menyapu
+// berdasarkan client_id berisiko menabrak fixture berkas lain bila pernah
+// dijalankan berdampingan (mis. worker paralel Vitest). Begitu pula
+// `partner_id = MITRA`: id itu juga dipakai puluhan berkas lain.
+//
+// Sebagai gantinya, SETIAP id sesi yang lahir dari kode berkas ini —
+// `buatSesiUntuk()` dan setiap panggilan `tukar_hak_sesi` yang melahirkan
+// sesi baru — dicatat ke `SESI_MILIK_UJI`, dan `bersihkan()` menyapu TEPAT
+// himpunan itu. Gejala bila pagar id ini lepas lagi (mis. jalur pembuatan
+// sesi baru ditambahkan tanpa mencatatnya ke set ini): berkas uji LAIN yang
+// tidak pernah disentuh ikut merah karena jumlah baris yang mereka hitung
+// membengkak — persis laporan yang membuka perbaikan ini.
+const SESI_MILIK_UJI = new Set<string>();
+
+function catatSesi(id: string | null | undefined): void {
+  if (id) SESI_MILIK_UJI.add(id);
+}
+
 async function bersihkan() {
-  const tanggalTersapu = [TGL_JAUH, TGL_DEKAT, "2027-09-25", "2027-09-26", SLOT_BALAPAN.tanggal];
-  const { data } = await admin.from("sessions").select("id").in("tanggal", tanggalTersapu);
-  const ids = (data ?? []).map((s) => s.id as string);
+  const ids = Array.from(SESI_MILIK_UJI);
   if (ids.length > 0) {
     // Jejak DULU: tabelnya tanpa foreign key, jadi tidak ada cascade yang
     // menyapunya, dan `tests/jejak-yatim.test.ts` akan merah bila dilewati.
     await admin.from("jejak_jadwal").delete().in("sesi_id", ids);
     await admin.from("jejak_status_bayar").delete().in("sesi_id", ids);
+    await admin.from("sessions").delete().in("id", ids);
   }
   await admin.from("hak_sesi").delete().in("client_id", [ANANDA, RINA]);
-  await admin.from("sessions").delete().in("tanggal", tanggalTersapu);
+  SESI_MILIK_UJI.clear();
 }
 
 /** Satu sesi terjadwal & lunas milik klien yang disebut. */
@@ -93,6 +116,7 @@ async function buatSesiUntuk(klien: string, tanggal: string, jam: string): Promi
     .select("id")
     .single<{ id: string }>();
   if (error) throw error;
+  catatSesi(data.id);
   return data.id;
 }
 
@@ -521,6 +545,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
       jam_baru: "14:00",
       mitra: MITRA,
     });
+    catatSesi(sesiBaru);
 
     const { data: s } = await admin
       .from("sessions")
@@ -536,12 +561,13 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
 
   it("hak yang sudah dipakai TIDAK bisa dipakai lagi", async () => {
     const hak = await terbitkanHak("2027-12-31");
-    await sesiAdmin.rpc("tukar_hak_sesi", {
+    const { data: pertama } = await sesiAdmin.rpc("tukar_hak_sesi", {
       hak_id: hak,
       tanggal_baru: "2027-09-25",
       jam_baru: "15:00",
       mitra: MITRA,
     });
+    catatSesi(pertama);
 
     const { data: kedua, error } = await sesiAdmin.rpc("tukar_hak_sesi", {
       hak_id: hak,
@@ -549,6 +575,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
       jam_baru: "15:00",
       mitra: MITRA,
     });
+    catatSesi(kedua);
     expect(kedua === null || error !== null).toBe(true);
   });
 
@@ -558,12 +585,13 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
     // RPC.
     const hak = await terbitkanHak("2020-01-01");
 
-    const { error } = await sesiAdmin.rpc("tukar_hak_sesi", {
+    const { data, error } = await sesiAdmin.rpc("tukar_hak_sesi", {
       hak_id: hak,
       tanggal_baru: "2027-09-25",
       jam_baru: "16:00",
       mitra: MITRA,
     });
+    catatSesi(data);
     expect(error).not.toBeNull();
   });
 
@@ -587,6 +615,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
       jam_baru: "16:00",
       mitra: MITRA,
     });
+    catatSesi(data);
     expect(data === null || error !== null).toBe(true);
   });
 });
@@ -605,7 +634,7 @@ describe("balapan — dua panggilan bersamaan tidak boleh melahirkan dua akibat"
     // ikut campur — satu-satunya yang boleh menggagalkan sembilan lainnya
     // adalah hak yang sudah terpakai.
     const jamPilihan = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "08:00", "09:00"];
-    await Promise.all(
+    const hasil = await Promise.all(
       jamPilihan.map((jam, i) =>
         sesiAdmin.rpc("tukar_hak_sesi", {
           hak_id: hak,
@@ -615,6 +644,10 @@ describe("balapan — dua panggilan bersamaan tidak boleh melahirkan dua akibat"
         }),
       ),
     );
+    // Dicatat untuk `bersihkan()` walau kesepuluh percobaan gagal kecuali satu:
+    // `data` yang null bagi sembilan panggilan yang kalah cukup diabaikan oleh
+    // `catatSesi()` sendiri.
+    hasil.forEach((r) => catatSesi(r.data));
 
     // Basis data yang membuktikan, bukan nilai kembalian RPC: hitung sesi yang
     // benar-benar lahir dari klien ini di tanggal-tanggal percobaan.
