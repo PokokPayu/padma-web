@@ -1,0 +1,15 @@
+-- ============================================================================
+-- C3-a (1/2): NILAI ENUM STATUS SESI
+-- ============================================================================
+-- Berkas ini HANYA menambah anggota enum, dan itu wajib terpisah: nilai yang
+-- baru ditambahkan tidak boleh DIPAKAI di transaksi yang sama
+-- (`55P04 unsafe use of new value`), sedangkan Supabase CLI menjalankan tiap
+-- berkas migrasi dalam transaksinya sendiri. Aturan "tidak boleh di dalam
+-- transaksi sama sekali" adalah Postgres SEBELUM v12 dan tidak berlaku di sini.
+--
+-- `dibatalkan_klien` berdampingan dengan `dibatalkan_padma` yang sudah ada, dan
+-- pemisahannya disengaja: status adalah CATATAN TENTANG SIAPA. Jenjang 4
+-- (PADMA membatalkan) mengembalikan uang penuh; klien yang membatalkan sendiri
+-- tunduk pada jenjang waktu. Menumpangkan keduanya pada satu nilai membuat
+-- setiap layar dan setiap laporan salah menyebut apa yang terjadi.
+alter type session_status add value 'dibatalkan_klien';
