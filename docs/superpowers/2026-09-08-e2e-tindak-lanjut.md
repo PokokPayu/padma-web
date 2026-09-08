@@ -263,8 +263,24 @@ $ npx vitest run tests/e2e-selektor.test.ts
    bawah untuk keluaran lengkapnya).
 
 4. **Jika login menggantung atau muncul `Processing this request timed out`:**
-   `docker restart supabase_auth_web`, tunggu ~20 detik, ulangi. **JANGAN** `npm run db:recover`
-   atau `npx supabase db reset` — keduanya rusak di mesin ini.
+   `docker restart supabase_auth_web`, tunggu ~20 detik, ulangi. **JANGAN** `npm run db:recover` —
+   langkah `supabase stop`-nya gagal (`LegacyStopContainerError`) dan seluruh perintah berhenti.
+
+   Kalimat sebelumnya di baris ini berbunyi "keduanya rusak", menyertakan `npx supabase db reset`.
+   **Itu KELIRU** dan dikoreksi 8 Sep sesudah sesi lain menabraknya: `db reset` BEKERJA — ia
+   menerapkan seluruh migrasi + seed dengan benar. Yang tidak beres hanyalah SESUDAHNYA: ia kerap
+   berakhir dengan `LegacyHealthCheckTimeoutError` dan meninggalkan ~8 dari 12 container mati,
+   termasuk `kong` dan `rest` — yaitu seluruh jalur API yang dipakai uji. Menulis "rusak" untuk itu
+   memberi tahu pembaca bahwa ia tidak punya cara mereset basis data sama sekali, padahal punya.
+
+   **Urutan yang benar-benar bekerja di mesin ini:**
+   1. `npx supabase db reset`
+   2. `docker start <container yang mati>` satu per satu — JANGAN `npx supabase start`, ia
+      memulangkan exit 0 tanpa menyalakan apa pun selama container `db` masih hidup
+   3. `docker restart supabase_auth_web` — **wajib**; tanpa ini suite melambat 8× dengan timeout
+      yang menunjuk ke mana-mana
+
+   Tetap koordinasikan dengan sesi lain sebelum menjalankannya: basis datanya dipakai bersama.
 
 5. **Jika kegagalan berpindah-pindah berkas antar run**, curigai sesi lain lebih dulu:
    `ps -Ao args | grep vitest` (atau `grep -i "tsx tests/e2e"` untuk E2E) sebelum menyimpulkan
