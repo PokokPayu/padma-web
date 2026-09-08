@@ -844,56 +844,95 @@ describe("ambilRateCard — layanan baru otomatis punya varian baku (Temuan 1 / 
 // Halaman /owner/tarif
 // ---------------------------------------------------------------------------
 
-describe("halaman rate card (/owner/tarif)", () => {
+describe("halaman rate card (/owner/tarif) — daftar datar", () => {
+  const halaman = (sp: Record<string, string> = {}) =>
+    TarifPage({ searchParams: Promise.resolve(sp) });
+
   let markup = "";
 
   beforeAll(async () => {
     ref.sesi = sesiOwner;
-    markup = renderToStaticMarkup(await TarifPage());
+    markup = renderToStaticMarkup(await halaman());
   });
 
-  it("menampilkan nama layanan beserta nominal yang berlaku", async () => {
+  it("menampilkan nama layanan beserta nominal yang berlaku", () => {
     expect(markup).toContain("PAD-UJI Tarif Layanan Mundur");
     expect(markup).toContain(`Rp ${HARGA_BARU.toLocaleString("id-ID")}`);
     expect(markup).toContain(`Rp ${HONOR_BARU.toLocaleString("id-ID")}`);
   });
 
-  it("menampilkan margin per layanan (harga klien − honor mitra)", async () => {
+  it("menampilkan margin per varian (harga klien − honor mitra)", () => {
     expect(markup).toContain(`Rp ${(HARGA_BARU - HONOR_BARU).toLocaleString("id-ID")}`);
   });
 
   it("menampilkan tanggal berlaku tarif, bukan hanya angkanya", () => {
-    // Tanpa tanggal berlaku, rate card menjadi angka tanpa riwayat — dan
-    // seluruh janji "rekap lama tidak berubah" kehilangan penjelasannya.
     expect(markup).toMatch(/berlaku/i);
   });
 
-  it("riwayat tarif lama TERBUKA tanpa JavaScript (details/summary)", async () => {
-    // Riwayat yang bersembunyi di balik state React tidak pernah sampai ke
-    // markup, dan karenanya tidak pernah bisa dibuktikan ada.
-    expect(markup).toContain("<details");
-    expect(markup).toMatch(/Riwayat/i);
-    // Tarif 2020 milik LAYANAN_MUNDUR wajib ikut tercetak.
-    expect(markup).toContain(`Rp ${HARGA_LAMA.toLocaleString("id-ID")}`);
+  it("setiap baris menaut ke halaman tarif varian itu", () => {
+    // Barisnya sendiri yang menaut — pola B. Tidak ada kolom "Aksi" berisi
+    // tombol: yang dibuka adalah varian itu beserta RIWAYAT tarifnya.
+    expect(markup).toContain(`href="/owner/tarif/${VARIAN_MUNDUR}"`);
   });
 
-  it("memperingatkan bahwa tarif baru TIDAK mengubah rekap pekan lalu", () => {
-    const teks = markup + sumberForm;
-    expect(teks).toMatch(/pekan/i);
-    expect(teks).toMatch(/tidak (akan )?meng(ubah|geser)/i);
+  it("TIDAK ada formulir penetapan tarif di halaman daftar", () => {
+    // Inilah keluhan klien yang ditutup rencana ini: formulir di dalam sel
+    // tabel. Ia tidak dipindahkan setengah — ia tidak lagi ada di sini.
+    expect(markup).not.toContain('name="harga"');
+    expect(markup).not.toContain('name="mulai"');
+    expect(sumberHalaman).not.toContain("FormTarif");
   });
 
-  it("menyediakan form penetapan tarif dengan medan tanggal berlaku", () => {
-    expect(sumberForm).toContain('name="varian"');
-    expect(sumberForm).toContain('name="harga"');
-    expect(sumberForm).toContain('name="honor"');
-    expect(sumberForm).toContain('name="mulai"');
+  it("TIDAK ada riwayat tarif di halaman daftar — riwayat milik halaman detail", () => {
+    // `<details>` sendiri TIDAK bisa dijadikan penanda: <Bantuan> juga sebuah
+    // <details>, dan ia memang milik halaman ini.
+    expect(markup).not.toMatch(/Riwayat tarif/i);
+  });
+
+  it("bilah daftar menyediakan kotak cari dan chip saringan", () => {
+    expect(markup).toContain('name="cari"');
+    expect(markup).toContain("href=\"/owner/tarif?tarif=belum\"");
+    expect(markup).toContain("href=\"/owner/tarif?aktif=tidak\"");
+  });
+
+  it("cari menyaring baris yang tampil, bukan sekadar menyorotnya", async () => {
+    const hasil = renderToStaticMarkup(await halaman({ cari: "PAD-UJI Tarif Layanan Mundur" }));
+    expect(hasil).toContain("PAD-UJI Tarif Layanan Mundur");
+    // Seluruh yang cocok muat di satu halaman, dan angka totalnya ikut menyempit —
+    // pencarian yang hanya MENYOROT akan meninggalkan total daftar penuhnya utuh.
+    expect(hasil).toMatch(/Menampilkan (\d+) dari \1\b/);
+    // Dan yang tidak cocok memang hilang.
+    expect(hasil).not.toContain("PAD-UJI Tarif Layanan Baru");
+  });
+
+  it("saring tarif=belum mengumpulkan varian yang belum bertarif", async () => {
+    const hasil = renderToStaticMarkup(await halaman({ tarif: "belum" }));
+    // Saringan ini per VARIAN, bukan per layanan (`trg_terbitkan_varian_baku`
+    // membuat varian baku otomatis bagi setiap layanan begitu `services`
+    // disisipkan — jadi LAYANAN_MUNDUR di fixture ini punya SATU varian baku
+    // otomatis, belum bertarif, di samping VARIAN_MUNDUR yang sudah bertarif;
+    // nama layanannya sendiri karena itu BOLEH tetap muncul). Yang tidak
+    // boleh lolos adalah HARGA varian yang sudah bertarif.
+    expect(hasil).not.toContain(`Rp ${HARGA_BARU.toLocaleString("id-ID")}`);
+  });
+
+  it("halaman kosong menjelaskan sebabnya, bukan sekadar diam", async () => {
+    const hasil = renderToStaticMarkup(await halaman({ cari: "tidak ada varian bernama begini" }));
+    expect(hasil).toMatch(/tidak ada varian yang cocok/i);
+  });
+
+  it("judul mengandalkan template `%s · PADMA`", () => {
+    expect(sumberHalaman).toMatch(/metadata\s*=\s*\{\s*title:\s*"[^"]+"\s*\}/);
+    expect(sumberHalaman).not.toMatch(/title:\s*"[^"]*PADMA/);
+  });
+
+  it("halaman menjaga perannya sendiri dengan requireRole(['owner'])", () => {
+    expect(sumberHalaman).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
+    expect(sumberHalaman).not.toContain('"admin"');
   });
 
   it("TIDAK ada tombol/label Hapus — DELETE memang sudah dicabut", () => {
-    for (const sumber of [sumberHalaman, sumberForm]) {
-      expect(sumber).not.toMatch(/>\s*Hapus/);
-    }
+    expect(sumberHalaman).not.toMatch(/>\s*Hapus/);
     expect(markup).not.toMatch(/>\s*Hapus/);
   });
 
@@ -914,16 +953,6 @@ describe("halaman rate card (/owner/tarif)", () => {
       .maybeSingle();
     expect(barisDihapus).not.toBeNull();
     expect(await tarifVarian(VARIAN_MUNDUR)).not.toHaveLength(0);
-  });
-
-  it("judul mengandalkan template `%s · PADMA`", () => {
-    expect(sumberHalaman).toMatch(/metadata\s*=\s*\{\s*title:\s*"[^"]+"\s*\}/);
-    expect(sumberHalaman).not.toMatch(/title:\s*"[^"]*PADMA/);
-  });
-
-  it("halaman menjaga perannya sendiri dengan requireRole(['owner'])", () => {
-    expect(sumberHalaman).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
-    expect(sumberHalaman).not.toContain('"admin"');
   });
 });
 
