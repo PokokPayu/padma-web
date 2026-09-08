@@ -184,18 +184,30 @@ berada di halaman itu sejak Langkah 3, tidak perlu navigasi lagi:
 
 - [ ] **Langkah 5: Ganti "Kelola penugasan" dengan Kartu penugasan**
 
-Sekitar `:360` — Kartu "Penugasan manual" juga selalu tampil di halaman detail:
+Sekitar `:360` — Kartu "Penugasan manual" juga selalu tampil di halaman detail. Perubahannya
+MINIMAL: buang klik `"Kelola penugasan"` dan pembungkus `kartuMateri`, pertahankan sisanya persis
+apa adanya — konstanta `ANANDA_CLIENT_ID`, pemilihan lewat `value`, dan penungguan `<li>`:
 
 ```ts
     // Kartu "Penugasan manual" SELALU tampil di halaman detail; tombol
-    // "Kelola penugasan" tidak ada lagi. Pemilih klien dikenali lewat
-    // aria-label-nya, yang menyebut judul materinya.
+    // "Kelola penugasan" tidak ada lagi (lihat dokblok `AksiMateri`).
     await kerja
       .getByLabel(`Tugaskan materi ${JUDUL_MATERI} ke klien`)
-      .selectOption({ label: new RegExp(NAMA_KLIEN_UJI) });
+      .selectOption({ value: ANANDA_CLIENT_ID });
+    await kerja.getByRole("button", { name: "Tugaskan", exact: true }).click();
+    // `li` MENGIKAT: sebelum diklik, "Ananda Putri" sudah ada di DOM sebagai
+    // <option> pilihan dropdown (tidak pernah visible, tapi tetap dalam DOM).
+    // Menunggu `<li>` yang memuat namanya membedakan baris "ditugaskan"
+    // sungguhan dari opsi dropdown yang kebetulan memuat teks yang sama.
+    await kerja
+      .locator("li")
+      .filter({ hasText: NAMA_ANANDA })
+      .first()
+      .waitFor({ state: "visible", timeout: 20_000 });
 ```
 
-Sesuaikan nama variabel klien dengan yang sudah dipakai skrip ini; jangan mengarang konstanta baru.
+`ANANDA_CLIENT_ID` dan `NAMA_ANANDA` sudah ada di kepala berkas ini — jangan mengarang konstanta
+baru, dan jangan mengganti pemilihan `value` menjadi pencocokan label.
 
 - [ ] **Langkah 6: Jalankan sampai hijau, ulangi setiap kali muncul patahan berikutnya**
 
