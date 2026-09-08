@@ -400,18 +400,32 @@ export async function terbitkanKlienMandiri(user: User): Promise<boolean> {
     if (!error) return true;
 
     if (error.code === "23505") {
-      // Dua sumber bentrok yang sangat berbeda artinya — pembedaan yang sama
-      // dengan `buatKlien` di panel admin, tetapi dengan akibat yang berbeda:
+      // Dibedakan lewat NAMA CONSTRAINT, bukan lewat substring pada kalimat
+      // galatnya. Mencocokkan kata "email" pada `error.message` kebetulan benar
+      // hari ini, tetapi kalimat itu milik Postgres dan boleh berubah
+      // antarversi — sementara nama constraint milik skema kita sendiri dan
+      // berubah hanya lewat migration. `details` ikut dibaca karena di sanalah
+      // PostgREST menaruh kolom yang bentrok.
       //
+      // Tabel ini punya TIGA sumber 23505, dan hanya satu yang boleh diulang:
+      //
+      //  - `clients_padma_id_key`: nomornya direbut permintaan lain pada detik
+      //    yang sama (nomor urut tidak datang dari sequence — lihat
+      //    `PERCOBAAN_ID_MANDIRI`) → coba nomor berikutnya.
       //  - `clients_email_key`: ADA YANG MENDAHULUI. Baris klien beremail ini
-      //    sudah ada — entah baru saja lahir dari permintaan kembar, entah
-      //    dibuat admin sedetik lalu. Jangan diulang di sini: pemanggil yang
-      //    harus kembali ke langkah 1 dan menilai ulang keadaan barunya.
-      //    Menautkannya dari sini akan melewati pemeriksaan yang ada di sana.
-      //  - `clients_padma_id_key`: nomor direbut permintaan lain pada detik
-      //    yang sama → coba nomor berikutnya.
-      if (error.message.includes("email")) return false;
-      continue;
+      //    sudah ada — entah baru lahir dari permintaan kembar, entah dibuat
+      //    admin sedetik lalu.
+      //  - `clients_user_id_unik` (indeks unik, migration 20260829130000):
+      //    user ini SUDAH punya baris klien — permintaan kembarnya menang
+      //    sepersekian detik lalu.
+      //
+      // Dua yang terakhir sama-sama berarti "keadaannya sudah berubah sejak
+      // langkah 1", dan jawabannya bukan mengulang di sini melainkan menyerah
+      // supaya PEMANGGIL menilai ulang dari langkah 1. Menautkan atau mengulang
+      // dari sini akan melewati pemeriksaan yang ada di sana.
+      const bentrok = `${error.message} ${error.details ?? ""}`;
+      if (bentrok.includes("clients_padma_id_key")) continue;
+      return false;
     }
 
     // Sisanya (mis. 23503 fase tidak dikenal) dilempar: jalur ini berjalan di

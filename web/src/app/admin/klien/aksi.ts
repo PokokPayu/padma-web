@@ -130,7 +130,14 @@ export async function perbaruiKlien(
   const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < 2) return { ok: false, pesan: "Nama terlalu pendek." };
-  if (!faseId) return { ok: false, pesan: "Fase wajib dipilih." };
+  // Fase BOLEH kosong di sini — dan hanya di sini, bukan di `buatKlien`.
+  // Klien yang mendaftar sendiri tiba dengan `phase_id` NULL karena fasenya
+  // datang dari skrining, bukan dari pendaftaran (migration
+  // `fase_klien_boleh_kosong`). Menolak simpanan hanya karena medan itu kosong
+  // akan memaksa admin MENEBAK fase seseorang supaya bisa membetulkan
+  // alamatnya — tepat kesalahan yang penjaga ini seharusnya cegah.
+  // "" menjadi NULL, bukan string kosong: `phase_id` menunjuk `phases(id)`.
+  const faseBaru = faseId === "" ? null : faseId;
 
   const supabase = await createServerSupabase();
 
@@ -147,7 +154,7 @@ export async function perbaruiKlien(
     .update({
       nama,
       no_hp: noHp,
-      phase_id: faseId,
+      phase_id: faseBaru,
       alamat,
       alamat_lat: koordinat?.lat ?? null,
       alamat_lon: koordinat?.lon ?? null,

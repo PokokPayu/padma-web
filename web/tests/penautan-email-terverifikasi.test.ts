@@ -210,23 +210,25 @@ describe("penautan lewat email terverifikasi", () => {
     expect(await barisKlienBeremail(email)).toHaveLength(0);
   });
 
-  it("kedua fungsi menuntut objek User, bukan string email telanjang", async () => {
-    // Bentuk `(email: string)` adalah `linkClientByEmail` yang dulu dihapus.
-    // Selama fungsi berbentuk begitu tidak ada, celahnya tidak bisa kambuh
-    // hanya dengan satu pemanggilan dari rute baru.
-    const email = emailUji("telanjang");
+  it("pemeriksaan konfirmasi hidup DI DALAM fungsi, bukan di pemanggilnya", async () => {
+    // Perkara ini SENGAJA tidak lagi menyodorkan string email telanjang.
+    // Versi itu hanya lulus karena `"str".id` bernilai undefined — ia tidak
+    // membuktikan apa pun tentang BENTUK fungsinya. Yang benar-benar menjaga
+    // bentuk itu adalah tipe TypeScript, plus asersi struktural
+    // `not.toContain("linkClientByEmail")` di tests/penautan-undangan.test.ts.
+    //
+    // Yang MASIH perlu dibuktikan di sini, dan tidak dijaga keduanya: user
+    // yang emailnya sungguh terverifikasi tetapi objeknya sampai ke fungsi
+    // TANPA `email_confirmed_at` harus tetap ditolak. Itulah bentuk yang
+    // muncul bila suatu hari pemeriksaannya dipindahkan ke pemanggil.
+    const email = emailUji("tanpa-konfirmasi");
     const user = await buatUser(email, true);
     const clientId = await buatKlien(email);
 
-    const telanjang = email as unknown as User;
-    expect(await tautkanKlienLewatEmailTerverifikasi(telanjang)).toBe(false);
-    expect(await terbitkanKlienMandiri(telanjang)).toBe(false);
-
-    // Dan user terverifikasi yang objeknya kehilangan `email_confirmed_at`
-    // tetap ditolak — pemeriksaannya hidup DI DALAM fungsi, bukan di pemanggil.
     expect(await tautkanKlienLewatEmailTerverifikasi(tanpaKonfirmasi(user))).toBe(false);
     expect(await terbitkanKlienMandiri(tanpaKonfirmasi(user))).toBe(false);
     expect((await barisKlien(clientId)).user_id).toBeNull();
+    expect(await barisKlienBeremail(email)).toHaveLength(1); // tidak ada baris kedua
   });
 });
 

@@ -180,13 +180,19 @@ refresh_token_reuse_interval = 10
 # `signup_disabled: "Signups not allowed for this instance"` — padahal keputusan #4
 # mengharuskan klien login Google untuk mengaktifkan akunnya. Jadi mematikan signup
 # akan mematahkan aktivasi akun klien.
-# Pengaman sebenarnya ada di penautan, dan sejak 28 Agu 2026 pengaman itu BUKAN LAGI
-# pencocokan email: mencocokkan email — sepersis apa pun — hanya membuktikan bahwa
-# penyerang bisa MENEBAK alamat email klien. Server kini mengisi clients.user_id
-# hanya bila pengguna membawa TOKEN UNDANGAN sekali-pakai yang dikirim admin lewat
-# pesan sambutan WhatsApp, DAN emailnya cocok persis (lihat src/lib/auth/link-client.ts
-# serta migration 20260828220000). Mendaftar sendiri tidak memberi akses apa pun ke
-# data klien.
+# Pengaman sebenarnya ada di PENAUTAN, dan sejak 8 Sep 2026 ada DUA jalur penautan
+# yang sah — keduanya menuntut bukti, tidak satu pun cukup dengan email saja:
+#   (1) TOKEN UNDANGAN sekali-pakai yang dikirim admin lewat pesan sambutan
+#       WhatsApp, DAN emailnya cocok persis (src/lib/auth/link-client.ts,
+#       migration 20260828220000);
+#   (2) EMAIL YANG SUDAH TERBUKTI milik penggunanya — yaitu email terkonfirmasi,
+#       yang keabsahannya bersandar SEPENUHNYA pada enable_confirmations di bawah.
+# Mencocokkan email — sepersis apa pun — hanya membuktikan bahwa penyerang bisa
+# MENEBAK alamat email klien; yang membuat jalur (2) sah bukan kecocokannya,
+# melainkan konfirmasinya. Karena itu kalimat lama di sini ("mendaftar sendiri
+# tidak memberi akses apa pun ke data klien") SUDAH TIDAK BERLAKU: mendaftar
+# sendiri memang menerbitkan baris klien — sesudah emailnya dikonfirmasi.
+# Yang menjaga urutan itu ada di src/lib/auth/pastikan-klien.ts.
 enable_signup = true
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
@@ -244,12 +250,30 @@ double_confirm_changes = true
 # menebak alamat email klien (`rina@padma.test`), mendaftar sendiri, dan
 # akunnya langsung dianggap "pemilik email itu".
 #
-# Perisai utamanya sekarang adalah penautan bertoken undangan
-# (src/lib/auth/link-client.ts + migration 20260828220000) — email yang cocok
-# tidak lagi menautkan apa pun. Konfirmasi email adalah LAPIS KEDUA: ia
-# mencegah penyerang menduduki alamat email klien sebelum kliennya sempat
-# mengaktifkan akun (squatting), yang tanpa ini bisa mengunci klien asli
-# keluar dari email miliknya sendiri.
+# JANGAN MATIKAN BARIS INI. Sejak 8 Sep 2026 (spec K1) ia bukan lagi lapis
+# kedua melainkan PENOPANG UTAMA salah satu dari dua jalur penautan.
+#
+# Waktu setelan ini dinyalakan, perisai utamanya memang penautan bertoken
+# undangan (src/lib/auth/link-client.ts + migration 20260828220000), dan
+# konfirmasi email hanya lapis kedua yang mencegah squatting alamat email klien.
+# Itu sudah berubah. Kini ADA jalur kedua yang sah — pendaftaran mandiri, tempat
+# baris klien ditautkan (atau diterbitkan) berdasarkan email TERVERIFIKASI —
+# dan jalur itu sah SEMATA-MATA karena baris ini `true`. Yang berubah bukan
+# pendapat, melainkan fakta: dengan konfirmasi menyala, email dibuktikan sebelum
+# sesi diberikan.
+#
+# Konsekuensinya harus dipikul terbuka: MEMATIKAN baris ini tidak melemahkan
+# sistem sedikit — ia mengembalikan celah yang sudah DUA KALI ditutup, utuh
+# seperti semula. GoTrue kembali meng-auto-confirm pendaftaran mandiri,
+# `tautkanKlienLewatEmailTerverifikasi` kembali percaya pada email yang tidak
+# pernah dibuktikan, dan menebak alamat email seorang klien kembali cukup untuk
+# membaca catatan medisnya lewat RLS `clients.user_id = auth.uid()`.
+#
+# Kalau setelan ini benar-benar harus mati (mis. SMTP belum siap), yang WAJIB
+# ikut mati adalah jalur keduanya — bukan hanya baris ini. Spec K7 menuntut
+# pagar fail-closed yang memerahkan `npm test` bila keduanya berselisih, justru
+# karena pagar itu berbunyi SESUDAH orangnya telanjur salah diberi tahu oleh
+# komentar seperti paragraf ini.
 #
 # Hasil uji terhadap instance GoTrue terisolasi (image sama, v2.196.0; database
 # terpisah; stack lokal tidak disentuh), MAILER_AUTOCONFIRM=false vs true:
@@ -268,7 +292,9 @@ double_confirm_changes = true
 # Catatan operasional: sesudah mengubah baris ini, stack lokal perlu
 # `supabase stop && supabase start` agar env container GoTrue ikut berubah.
 # Test suite sengaja tidak bergantung pada setelan ini (user uji dibuat lewat
-# service role dengan email_confirm), jadi `npm test` hijau di kedua keadaan.
+# service role dengan email_confirm), jadi PERILAKUnya hijau di kedua keadaan —
+# dan itu justru sebabnya pagar K7 harus membaca berkas ini secara langsung:
+# tanpa pagar itu, matinya baris ini tidak memerahkan apa pun.
 enable_confirmations = true
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false

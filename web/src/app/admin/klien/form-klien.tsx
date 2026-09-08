@@ -180,7 +180,8 @@ export function FormEditKlien({
   awal: {
     nama: string;
     noHp: string;
-    faseId: string;
+    /** NULL = belum ditentukan — lihat penjelasan di medan Fase di bawah. */
+    faseId: string | null;
     alamat: string;
     lat: number | null;
     lon: number | null;
@@ -222,7 +223,30 @@ export function FormEditKlien({
         </label>
         <label>
           <span className={KELAS_LABEL}>Fase</span>
-          <select name="fase" required defaultValue={awal.faseId} className={KELAS_MEDAN}>
+          {/* PILIHAN KOSONG YANG SAH — bukan kerapian, dan bukan `required`.
+              Sejak `clients.phase_id` boleh NULL (migration
+              `fase_klien_boleh_kosong`), baris klien yang lahir dari
+              pendaftaran mandiri datang ke layar ini TANPA fase, karena fasenya
+              memang belum ditanyakan siapa pun — ia datang dari skrining.
+
+              Sebelum opsi ini ada, `defaultValue` bernilai null membuat
+              peramban diam-diam memilih OPSI PERTAMA, dan `required` merasa
+              puas. Akibatnya admin yang membuka halaman ini untuk menyunting
+              ALAMAT saja ikut menetapkan fase yang tidak pernah dipilih
+              siapa pun — data klinis berubah tanpa ada yang memutuskan, dan
+              tanpa satu pun jejak bahwa itu terjadi.
+
+              Karena itu keadaan kosong harus BISA disimpan apa adanya: memaksa
+              admin menebak fase hanya supaya formulirnya lolos adalah bentuk
+              lain dari kesalahan yang sama. Mengisinya tetap boleh, dan
+              mengosongkannya kembali juga — keduanya kini pilihan sadar.
+              `perbaruiKlien` menerjemahkan "" menjadi NULL. */}
+          <select
+            name="fase"
+            defaultValue={awal.faseId ?? ""}
+            className={KELAS_MEDAN}
+          >
+            <option value="">— Belum ditentukan —</option>
             {fase.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.nama}

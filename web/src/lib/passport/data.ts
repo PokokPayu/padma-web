@@ -18,7 +18,14 @@ export type KlienPassport = {
   // sengaja TIDAK ikut — layar klien tidak pernah memerlukannya, dan yang
   // tidak dikirim tidak bisa bocor.
   alamat: string;
-  faseId: string;
+  // Ketiganya boleh KOSONG, dan kosongnya berarti "belum ditentukan" — bukan
+  // data hilang. Baris klien yang lahir dari pendaftaran mandiri belum punya
+  // fase karena fase datang dari skrining pertama yang tersambung (migration
+  // `fase_klien_boleh_kosong`). `faseId` dibuat `string | null` supaya
+  // kompilator memaksa setiap layar memutuskan apa yang ditampilkannya;
+  // `faseNama`/`faseSanskrit` tetap string karena embed-nya sudah diratakan
+  // ke "" di bawah — yang menandakan kosong adalah `faseId`.
+  faseId: string | null;
   faseNama: string;
   faseSanskrit: string;
 };
@@ -30,7 +37,9 @@ type BarisKlien = {
   email: string;
   no_hp: string;
   alamat: string;
-  phase_id: string;
+  // Nullable sejak migration `fase_klien_boleh_kosong`: klien yang mendaftar
+  // sendiri belum punya fase sampai skrining pertamanya tersambung.
+  phase_id: string | null;
   // Embed many-to-one PostgREST = OBJEK (atau null), bukan array.
   phases: { nama: string; nama_sanskrit: string } | null;
 };
