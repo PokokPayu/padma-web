@@ -278,7 +278,7 @@ export const KALIMAT_AKIBAT: Record<Akibat, string> = {
 - [ ] **Step 4: Jalankan uji, pastikan LULUS**
 
 Run: `npx vitest run tests/pembatalan-jenjang.test.ts`
-Expected: PASS (16 uji)
+Expected: PASS (14 uji)
 
 - [ ] **Step 5: Commit**
 
