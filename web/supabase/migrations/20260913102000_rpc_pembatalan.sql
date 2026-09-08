@@ -192,3 +192,134 @@ $$;
 
 revoke execute on function public.batalkan_sesi(uuid, text, boolean) from public, anon;
 grant execute on function public.batalkan_sesi(uuid, text, boolean) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- JADWAL ULANG
+-- ---------------------------------------------------------------------------
+-- MENGUBAH BARIS YANG SAMA, tidak pernah membuat baris baru (spec C3 P4).
+-- Baris baru lahir dengan `jadwal_ulang_terpakai = false`, sehingga jatah
+-- "1× per pemesanan" bisa di-reset tanpa batas hanya dengan menjadwal ulang
+-- berulang — aturannya jadi bohong tanpa satu pun galat.
+--
+-- Bidannya DIPERTAHANKAN (spec C3 P8): hubungan klien–bidan sudah terbentuk,
+-- dan mengganti orang yang akan masuk ke rumah seseorang bukan akibat wajar
+-- dari memindahkan jam.
+--
+-- PAGARNYA TIDAK DIWARISI. `guard_booking_pembatas` adalah trigger
+-- `before insert on booking_requests`; ia tidak pernah melihat `sessions`.
+-- Jam layanan dibaca lewat `jam_layanan_terpakai()` — fungsi `security definer`
+-- yang sudah ada — supaya jam buka klinik tetap punya SATU sumber. Membacanya
+-- langsung dari `app_settings` di sini akan mengulang jebakan C1-a: pembacaan
+-- dengan hak pemanggil memulangkan nol baris karena policy, dan pagarnya DIAM
+-- alih-alih menolak.
+create or replace function public.jadwal_ulang_sesi(
+  sesi_id uuid,
+  tanggal_baru date,
+  jam_baru time
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  s public.sessions%rowtype;
+  peran text := public.user_role();
+  staf boolean := peran in ('admin', 'owner');
+  jenjang smallint;
+  pakai_jatah boolean := false;
+  daftar_jam text;
+begin
+  select * into s from public.sessions where id = sesi_id;
+  if not found then
+    return null;
+  end if;
+
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = s.client_id and c.user_id = auth.uid()
+  ) then
+    raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
+  end if;
+
+  jenjang := public.jenjang_pembatalan(s.tanggal, s.jam_mulai);
+
+  -- Jenjang 3 tidak mengenal jadwal ulang: poster menyebutnya pemesanan baru.
+  if jenjang = 3 then
+    raise exception 'kurang dari 2 jam sebelum sesi — jadwal ulang dihitung sebagai pemesanan baru'
+      using errcode = '23514';
+  end if;
+
+  if jenjang = 2 then
+    if s.jadwal_ulang_terpakai then
+      raise exception 'jatah jadwal ulang gratis untuk pemesanan ini sudah terpakai'
+        using errcode = '23514';
+    end if;
+    pakai_jatah := true;
+  end if;
+
+  -- Jam wajib anggota daftar jam layanan. Dibaca lewat fungsi definer yang
+  -- sudah ada; daftar kosong berarti pemesanan memang sedang dimatikan.
+  -- `daftar_jam` disimpan dengan spasi sesudah koma ("08:00, 09:00, ..."),
+  -- jadi pencocokannya wajib `btrim` tiap unsur — persis pola yang sudah
+  -- dipakai `guard_booking_pembatas` untuk daftar yang sama. Tanpa `btrim`,
+  -- `<> all (string_to_array(...))` menolak SETIAP jam kecuali yang pertama.
+  daftar_jam := public.jam_layanan_terpakai();
+  if daftar_jam is null or not exists (
+    select 1 from unnest(string_to_array(daftar_jam, ',')) as j(teks)
+     where btrim(j.teks) = to_char(jam_baru, 'HH24:MI')
+  ) then
+    raise exception 'jam % di luar jam layanan klinik', to_char(jam_baru, 'HH24:MI')
+      using errcode = '22023';
+  end if;
+
+  -- Waktu baru harus di masa depan, dan tidak boleh lebih dekat dari ambang
+  -- berangkat: memindahkan sesi ke 30 menit lagi bukan jadwal ulang melainkan
+  -- cara memaksa bidan berangkat tanpa pemberitahuan.
+  if ((tanggal_baru + jam_baru) at time zone 'Asia/Jakarta') - now() < interval '2 hours' then
+    raise exception 'waktu baru terlalu dekat — pilih minimal 2 jam dari sekarang'
+      using errcode = '23514';
+  end if;
+
+  -- Bidan yang sama tidak bisa berada di dua tempat. Sesi yang sedang dipindah
+  -- dikecualikan supaya memindahkannya ke jamnya sendiri tidak menabrak diri
+  -- sendiri.
+  if exists (
+    select 1 from public.sessions x
+     where x.partner_id = s.partner_id
+       and x.tanggal = tanggal_baru
+       and x.jam_mulai = jam_baru
+       and x.status = 'terjadwal'
+       and x.id <> s.id
+  ) then
+    raise exception 'bidan sudah punya jadwal pada waktu itu — pilih waktu lain'
+      using errcode = '23505';
+  end if;
+
+  update public.sessions
+     set tanggal = tanggal_baru,
+         jam_mulai = jam_baru,
+         jadwal_ulang_terpakai = s.jadwal_ulang_terpakai or pakai_jatah
+   where id = sesi_id
+     and status = 'terjadwal';
+
+  if not found then
+    return null;
+  end if;
+
+  insert into public.jejak_jadwal (
+    sesi_id, tindakan, jenjang, dari_tanggal, dari_jam, ke_tanggal, ke_jam,
+    aktor_id, peran_aktor
+  ) values (
+    s.id, 'jadwal_ulang', jenjang, s.tanggal, s.jam_mulai, tanggal_baru, jam_baru,
+    auth.uid(), peran
+  );
+
+  return jsonb_build_object('jenjang', jenjang, 'jatah_terpakai', pakai_jatah);
+end;
+$$;
+
+revoke execute on function public.jadwal_ulang_sesi(uuid, date, time) from public, anon;
+grant execute on function public.jadwal_ulang_sesi(uuid, date, time) to authenticated;

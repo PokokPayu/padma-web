@@ -308,3 +308,164 @@ describe("idempotensi & jejak", () => {
     expect(sesudah!.status).toBe("dibatalkan_padma");
   });
 });
+
+describe("jadwal_ulang_sesi — baris yang SAMA berpindah", () => {
+  it("jenjang 1: berpindah tanpa memakai jatah", async () => {
+    // Poster memberi pilihan bebas di ≥24 jam: refund penuh ATAU jadwal ulang
+    // gratis. Jatah hanya relevan di jendela 2–24 jam.
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+
+    const { data } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "10:00",
+    });
+
+    expect(data.jenjang).toBe(1);
+    expect(data.jatah_terpakai).toBe(false);
+
+    const { data: s } = await admin
+      .from("sessions")
+      .select("id, tanggal, jam_mulai, status, jadwal_ulang_terpakai")
+      .eq("id", id)
+      .single();
+
+    expect(s!.id, "baris yang SAMA, bukan baris baru").toBe(id);
+    expect(s!.tanggal).toBe("2027-09-25");
+    expect(s!.jam_mulai).toBe("10:00:00");
+    expect(s!.status).toBe("terjadwal");
+    expect(s!.jadwal_ulang_terpakai).toBe(false);
+  });
+
+  it("jenjang 2: berpindah DAN jatahnya terpakai", async () => {
+    const { tanggal, jam } = jamRelatif(6);
+    const id = await buatSesi(tanggal, jam);
+
+    const { data } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "11:00",
+    });
+
+    expect(data.jenjang).toBe(2);
+    expect(data.jatah_terpakai).toBe(true);
+
+    const { data: s } = await admin
+      .from("sessions")
+      .select("jadwal_ulang_terpakai")
+      .eq("id", id)
+      .single();
+    expect(s!.jadwal_ulang_terpakai).toBe(true);
+  });
+
+  it("jatah HABIS: percobaan kedua di jendela 2–24 jam DITOLAK", async () => {
+    // Sesudah jatahnya habis, klien yang tetap ingin berubah harus MEMBATALKAN
+    // — dan pembatalan di jendela ini menerbitkan kredit 30 hari. Yang ditolak
+    // di sini adalah perpindahannya, bukan haknya untuk berubah.
+    const { tanggal, jam } = jamRelatif(6);
+    const id = await buatSesi(tanggal, jam);
+
+    await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "11:00",
+    });
+    // Sesi kini bertanggal jauh; digeser kembali ke jendela 2–24 jam supaya
+    // percobaan kedua benar-benar diuji pada jenjang yang sama.
+    const dekat = jamRelatif(6);
+    await admin
+      .from("sessions")
+      .update({ tanggal: dekat.tanggal, jam_mulai: dekat.jam })
+      .eq("id", id);
+
+    const { error } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-26",
+      jam_baru: "11:00",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("jenjang 3 (<2 jam): jadwal ulang DITOLAK — itu pemesanan baru", async () => {
+    const { tanggal, jam } = jamRelatif(1);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "12:00",
+    });
+    expect(error).not.toBeNull();
+  });
+});
+
+describe("jadwal ulang tunduk pada pagar yang sama dengan pemesanan", () => {
+  it("jam DI LUAR app_settings.jam_layanan DITOLAK", async () => {
+    // Pagar ini TIDAK diwarisi: `guard_booking_pembatas` adalah trigger
+    // `before insert on booking_requests` dan tidak pernah melihat `sessions`.
+    // Ia harus ditegakkan di dalam fungsi ini, membaca kunci `app_settings`
+    // yang sama supaya jam buka klinik tidak punya dua sumber.
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "03:00",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("pagar jam BEKERJA untuk sesi klien, bukan diam karena RLS", async () => {
+    // C1-a sudah menemukan jebakannya sekali: `guard_booking_pembatas` bersifat
+    // SECURITY INVOKER, sehingga ia membaca `app_settings` sebagai klien,
+    // mendapat NOL BARIS karena policy, lalu DIAM alih-alih menolak. Pagar yang
+    // membaca pengaturannya dengan hak pemanggil adalah pagar yang mati tanpa
+    // suara. Uji ini dijalankan dengan sesi KLIEN sungguhan — dijalankan dengan
+    // service role, ia lolos vakum.
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "23:00",
+    });
+    expect(error, "pagar jam DIAM di sesi klien — RLS menelan app_settings").not.toBeNull();
+  });
+
+  it("bidan yang sudah terisi pada jam itu DITOLAK", async () => {
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+    await buatSesi("2027-09-25", "10:00"); // bidan sama, slot terisi
+
+    const { error } = await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "10:00",
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("mencatat perpindahannya di jejak: dari mana, ke mana", async () => {
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+    await sesiKlien.rpc("jadwal_ulang_sesi", {
+      sesi_id: id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "13:00",
+    });
+
+    const { data: jejak } = await admin
+      .from("jejak_jadwal")
+      .select("tindakan, dari_tanggal, ke_tanggal, ke_jam")
+      .eq("sesi_id", id)
+      .single();
+
+    expect(jejak!.tindakan).toBe("jadwal_ulang");
+    expect(jejak!.dari_tanggal).toBe(tanggal);
+    expect(jejak!.ke_tanggal).toBe("2027-09-25");
+    expect(jejak!.ke_jam).toBe("13:00:00");
+  });
+});
