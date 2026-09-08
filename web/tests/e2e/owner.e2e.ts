@@ -448,17 +448,24 @@ async function main() {
         sebelum.includes(HARGA_LAMA.toLocaleString("id-ID")) &&
         sebelum.includes(HONOR_LAMA.toLocaleString("id-ID"));
 
-      // Tombolnya bernama "Tarif baru" karena layanan ini sudah bertarif.
-      await page
-        .getByRole("row", { name: new RegExp(NAMA_LAYANAN) })
-        .getByRole("button", { name: "Tarif baru" })
-        .click();
+      // DAFTAR → DETAIL. Sejak rencana 3B formulir tidak lagi hidup di dalam
+      // sel tabel: barisnya menaut ke `/owner/tarif/<variantId>`, dan formulir
+      // di sana sudah terbuka tanpa tombol pembuka. Mengklik tautannya (bukan
+      // langsung `buka()` ke URL detail) sekaligus membuktikan tautan barisnya
+      // memang ada dan menuju tempat yang benar.
+      await page.getByRole("link", { name: new RegExp(NAMA_LAYANAN) }).first().click();
+      await tungguIsi(page);
       await page.getByLabel(`Harga klien ${NAMA_LAYANAN}`).fill(String(HARGA_BARU));
       await page.getByLabel(`Honor mitra ${NAMA_LAYANAN}`).fill(String(HONOR_BARU));
       await page.getByLabel(`Tanggal berlaku tarif ${NAMA_LAYANAN}`).fill(HARI_INI);
       await page.getByRole("button", { name: "Simpan tarif" }).click();
       await tungguIsi(page);
-      await page.waitForTimeout(600);
+      // `useTransition` + server action: klik saja tidak menjamin mutasinya
+      // sudah mendarat. Menunggu pesan sukses (bukan jeda tetap) adalah bukti
+      // bahwa transisinya benar-benar selesai sebelum membaca basis data di
+      // bawah — jeda tetap yang lebih pendek pernah membaca terlalu dini di
+      // atas build produksi dan salah menuduh baris barunya tidak lahir.
+      await page.getByText(/tersimpan sebagai baris baru/).waitFor({ timeout: 10_000 });
 
       const { data: barisTarif } = await admin
         .from("variant_rates")
@@ -570,7 +577,10 @@ async function main() {
     // lebih dulu — bukan tersembunyi di balik sepuluh baris PASS.
     let pemindaiBekerja = false;
     {
-      const page = await buka(owner, "/owner/tarif");
+      // Keempat nominal (dua lama dari riwayat, dua baru dari tarif berlaku)
+      // hidup di HALAMAN DETAIL varian sejak rencana 3B — daftar rate card
+      // hanya menampilkan tarif yang berlaku hari ini.
+      const page = await buka(owner, `/owner/tarif/${idVarian}`);
       const html = await page.content();
       await page.close();
       const temuan = [HARGA_LAMA, HONOR_LAMA, HARGA_BARU, HONOR_BARU]
@@ -578,7 +588,7 @@ async function main() {
         .filter((t): t is string => t !== null);
       pemindaiBekerja = temuan.length === 4;
       catat(
-        "8. KONTROL POSITIF: pemindai nominal MENEMUKAN keempat angka di /owner/tarif",
+        "8. KONTROL POSITIF: pemindai nominal MENEMUKAN keempat angka di /owner/tarif/<varian>",
         pemindaiBekerja,
         `ditemukan: ${JSON.stringify(temuan)}`,
       );
