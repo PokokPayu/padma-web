@@ -11,7 +11,11 @@ import { periksaAlamat } from "./status";
 import { hariIniJakarta } from "./waktu";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
-import { PERMINTAAN_AWAL, STATUS_ANTRE } from "@/lib/jadwal/status";
+import {
+  PERMINTAAN_AWAL,
+  PERMINTAAN_DIBATALKAN_KLIEN,
+  STATUS_ANTRE,
+} from "@/lib/jadwal/status";
 
 /**
  * SATU-SATUNYA jalur tulis milik klien.
@@ -251,6 +255,46 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     status: PERMINTAAN_AWAL, // hardcoded; trigger DB menolak nilai lain dari klien
   });
   if (error) return { ok: false, pesan: "Gagal mengirim permintaan." };
+
+  revalidatePath("/passport");
+  return { ok: true };
+}
+
+/**
+ * Klien membatalkan pengajuannya sendiri (spec J8).
+ *
+ * Ada karena admin berhenti menolak pengajuan. Tanpa jalan keluar ini, klien
+ * yang mengajukan lima tanggal yang tidak bisa dilayani terkunci selamanya:
+ * `BATAS_PERMINTAAN_MENUNGGU` penuh, dan tidak seorang pun punya cara
+ * membereskannya. Kendali atas antrean berpindah ke pemiliknya.
+ *
+ * Penegaknya ada di basis data — policy "booking: klien membatalkan miliknya"
+ * plus tiga trigger yang mempersempitnya ke "barisnya sendiri, dari keadaan
+ * antrean, tanpa menyentuh medan apa pun". Yang dilakukan di sini hanyalah
+ * memulangkan KALIMAT yang bisa dibaca manusia; ia bukan pagar.
+ */
+export async function batalkanPengajuan(permintaanId: string): Promise<Berhasil | Gagal> {
+  const clientId = await klienSaatIni();
+  if (!clientId) return { ok: false, pesan: "Akun belum terhubung." };
+
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("booking_requests")
+    .update({ status: PERMINTAAN_DIBATALKAN_KLIEN })
+    .eq("id", permintaanId)
+    .eq("client_id", clientId) // pagar kedua; yang pertama policy RLS
+    .in("status", STATUS_ANTRE)
+    .select("id");
+
+  if (error) return { ok: false, pesan: "Gagal membatalkan. Coba lagi." };
+  // UPDATE yang tertahan menghasilkan 0 baris TANPA error — jangan melaporkan
+  // "berhasil" tanpa memeriksa jumlah barisnya.
+  if ((data ?? []).length === 0) {
+    return {
+      ok: false,
+      pesan: "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.",
+    };
+  }
 
   revalidatePath("/passport");
   return { ok: true };

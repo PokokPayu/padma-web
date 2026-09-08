@@ -6,7 +6,7 @@ import type { FormatVarian } from "@/lib/varian";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import { saringDaftarMateri } from "./materi-tampil";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
-import { STATUS_ANTRE } from "@/lib/jadwal/status";
+import { STATUS_ANTRE, type StatusPermintaan } from "@/lib/jadwal/status";
 
 export type KlienPassport = {
   id: string;
@@ -392,7 +392,7 @@ export type PermintaanRingkas = {
   /** 'HH:MM:SS' apa adanya dari Postgres — dipendekkan `jamDariDb()`. */
   jamMulai: string;
   preferensiWaktu: string;
-  status: string;
+  status: StatusPermintaan;
 };
 
 type BarisPermintaan = {
@@ -400,7 +400,7 @@ type BarisPermintaan = {
   tanggal: string;
   jam_mulai: string;
   preferensi_waktu: string;
-  status: string;
+  status: StatusPermintaan;
   services: { nama: string } | null;
 };
 

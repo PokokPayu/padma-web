@@ -208,7 +208,18 @@ export async function konfirmasiPermintaan(permintaanId: string): Promise<Berhas
 }
 
 /**
- * Menolak permintaan jadwal — hanya dari antrean.
+ * Menolak permintaan jadwal — TIDAK LAGI TERJANGKAU DARI LAYAR (spec C1 J8).
+ *
+ * Klien memutuskan admin untuk sementara tidak menolak pengajuan: yang
+ * membatalkan adalah kliennya sendiri, lewat `batalkanPengajuan` di Passport.
+ * Tombolnya sudah hilang dari `antrean-permintaan.tsx`, dan
+ * tests/pembatalan-klien.test.ts menjaga agar tidak ada berkas di `src/` yang
+ * memanggil fungsi ini.
+ *
+ * Fungsinya SENGAJA tidak dihapus, persis pola saklar paket
+ * (`lib/paket-tampil.ts`): nilai enum `ditolak` dan penjaganya tetap di
+ * tempatnya, hanya jalan menuju layar yang ditutup. Menghapusnya berarti
+ * membongkar sesuatu yang keadaannya SEMENTARA.
  *
  * Permintaan yang sudah dikonfirmasi TIDAK bisa dibatalkan lewat sini: sesinya
  * sudah lahir, dan memutar status permintaan hanya akan membuat sesi itu
