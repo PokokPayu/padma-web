@@ -36,6 +36,14 @@
  * server (fungsi biasa yang diteruskan sebagai prop JSX) belum pernah
  * ditemukan di proyek ini, dan longgarnya syarat itu berarti false-negative
  * yang tidak kelihatan sampai kejadian keempat.
+ *
+ * Klasifikasi klien/server sendiri bersandar pada `"use client"` sebagai
+ * BARIS PERTAMA berkas (sesudah `trimStart()`). Berkas yang menaruh
+ * direktif itu sesudah komentar atau baris kosong — sah secara JavaScript —
+ * akan salah digolongkan SERVER dan ikut dipindai, berpotensi melahirkan
+ * positif-palsu. Diperiksa 2026-09-08: nol dari 106 berkas `.tsx` di
+ * `src/app` berbentuk begitu hari ini — ini batas yang DIKETAHUI, bukan
+ * bug hidup.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
