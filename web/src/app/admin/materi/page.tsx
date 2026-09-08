@@ -216,7 +216,7 @@ export default async function MateriPage({
 
       {panelTerbuka && (
         <PanelGeser judul="Materi baru" hrefTutup={hrefTutup}>
-          <FormMateriBaru layanan={layananPilihan} />
+          <FormMateriBaru layanan={layananPilihan} hrefTutup={hrefTutup} />
         </PanelGeser>
       )}
     </main>
