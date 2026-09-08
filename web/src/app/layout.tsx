@@ -25,7 +25,7 @@ const plexMono = IBM_Plex_Mono({
 
 export { metadata };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang={HTML_LANG}
