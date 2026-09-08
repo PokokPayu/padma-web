@@ -1,7 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
+import type { User } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { buatPadmaId } from "@/lib/admin/padma-id";
 import { INVITE_TTL_DAYS, tautanAktivasi } from "@/lib/auth/pesan-undangan";
 import { normalizeEmail } from "@/lib/auth/normalisasi-email";
+import { rapikanNama, rapikanNoHp } from "@/lib/auth/daftar";
 
 /**
  * PENAUTAN AKUN KLIEN — WAJIB TOKEN UNDANGAN SEKALI-PAKAI.
@@ -252,4 +255,172 @@ export async function isClientLinked(userId: string): Promise<boolean> {
     .limit(1);
   if (error) throw error;
   return (data ?? []).length > 0;
+}
+
+/* =========================================================================
+ * JALUR KEDUA: PENDAFTARAN MANDIRI (spec 8 September 2026, K1–K3)
+ *
+ * Semua yang di ATAS baris ini adalah jalur undangan dan TIDAK berubah sedikit
+ * pun. Dua fungsi di bawah berdiri DI SAMPINGNYA, bukan menggantikannya.
+ * ========================================================================= */
+
+/**
+ * Menautkan akun ke baris klien yang emailnya sama — HANYA bila email itu
+ * sudah TERBUKTI milik penggunanya.
+ *
+ * Ini pembalikan sadar atas catatan di kepala berkas ini, dan alasannya harus
+ * ikut terbaca: dulu "email cocok" ditolak karena email TIDAK PERNAH
+ * dibuktikan — `enable_confirmations = false` membuat GoTrue meng-auto-confirm
+ * setiap pendaftaran mandiri, sehingga menebak alamat email klien sudah cukup
+ * untuk dianggap pemiliknya. Sejak 28 Agustus 2026 setelan itu menyala. Yang
+ * berubah bukan pendapat, melainkan fakta.
+ *
+ * Konsekuensinya dipikul terbuka: konfirmasi email naik pangkat dari lapis
+ * kedua menjadi PENOPANG UTAMA. Bila `enable_confirmations` di
+ * `supabase/config.toml` dimatikan, celah lama hidup kembali persis seperti
+ * semula — karena itu spec K7 menuntut setelan itu dijaga pagar fail-closed
+ * tersendiri. Setelan yang menopang keputusan keamanan tetapi tidak dijaga
+ * test adalah setelan yang suatu hari mati diam-diam.
+ *
+ * Catatan di kepala berkas tetap berlaku apa adanya. Yang tidak ada di sini
+ * adalah fungsi yang menautkan HANYA berdasarkan email; fungsi ini menuntut
+ * email DAN buktinya.
+ *
+ * Fungsi ini menerima objek User utuh dan memeriksa `email_confirmed_at`
+ * sendiri. Ia TIDAK boleh diubah menjadi menerima string email: bentuk itu
+ * adalah `linkClientByEmail` yang dulu dihapus, dan selama fungsi seperti itu
+ * ada, celahnya bisa kambuh hanya dengan satu pemanggilan dari rute baru.
+ * Pemeriksaan yang hidup di pemanggil terlihat setara, tetapi tidak: pemanggil
+ * BERIKUTNYA belum ditulis siapa pun, dan satu-satunya cara memastikan ia ikut
+ * memeriksa adalah dengan tidak memberinya pilihan.
+ */
+export async function tautkanKlienLewatEmailTerverifikasi(
+  user: User,
+): Promise<boolean> {
+  // `email_confirmed_at` diperiksa DI SINI, bukan dipercayakan ke pemanggil.
+  if (!user?.id || !user.email || !user.email_confirmed_at) return false;
+
+  const emailNormal = normalizeEmail(user.email);
+  if (!emailNormal) return false;
+
+  const admin = createAdminSupabase();
+
+  // Satu pernyataan, bukan SELECT lalu UPDATE. `is("user_id", null)` ikut di
+  // dalam pernyataan tulisnya sehingga tidak ada celah antara pemeriksaan dan
+  // penulisan: dua permintaan bersamaan hanya menghasilkan satu pemenang, yang
+  // kalah mendapat 0 baris. Baris klien yang SUDAH tertaut karena itu tidak
+  // pernah bisa direbut lewat jalur ini — sama seperti pada jalur undangan.
+  //
+  // `.eq()` atas email ternormalisasi, TIDAK PERNAH `.ilike()`: PostgREST
+  // menerjemahkan `ilike` ke SQL LIKE, dan `%`/`_` pada email penyerang menjadi
+  // wildcard (celah pertama di kepala berkas ini).
+  const { data, error } = await admin
+    .from("clients")
+    .update({ user_id: user.id, linked_at: new Date().toISOString() })
+    .eq("email", emailNormal)
+    .is("user_id", null)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length === 1;
+}
+
+/**
+ * Berapa kali nomor PADMA ID berikutnya dicoba saat dua pendaftaran mendarat
+ * pada detik yang sama. Sama alasannya dengan `PERCOBAAN_ID` di
+ * `src/app/admin/klien/aksi.ts`: nomor urut TIDAK datang dari sequence Postgres
+ * (dilarang migration `fail_closed_sequence_fungsi`), jadi bentroknya ditolak
+ * indeks unik `clients_padma_id_key` — bukan diam-diam menimpa klien lain.
+ * Angkanya dinyatakan tersendiri di sini karena `aksi.ts` bertanda `"use
+ * server"` dan berkas seperti itu hanya boleh mengekspor fungsi async.
+ */
+const PERCOBAAN_ID_MANDIRI = 5;
+
+/**
+ * Menerbitkan baris klien untuk akun yang mendaftar sendiri — sudah BERTUAN
+ * sejak INSERT.
+ *
+ * `user_id` dan `linked_at` ikut di dalam INSERT-nya, bukan diisi UPDATE
+ * sesudahnya. Bedanya bukan gaya: baris klien yang lahir menganggur, walau
+ * hanya sepersekian detik, adalah baris yang bisa diperebutkan permintaan lain
+ * yang kebetulan lewat pada jendela itu. Tidak ada jendela seperti itu di sini.
+ *
+ * Seperti `tautkanKlienLewatEmailTerverifikasi`, fungsi ini menerima User utuh
+ * dan memeriksa `email_confirmed_at` sendiri. Menerbitkan baris klien untuk
+ * email yang belum dibuktikan sama saja dengan memberi penebak alamat sebuah
+ * rekam medis kosong yang kelak diisi PADMA atas namanya.
+ *
+ * `nama` dan `no_hp` datang dari `user_metadata` — data yang SEPENUHNYA
+ * dikendalikan pengguna, jadi keduanya dirapikan di server dengan `rapikanNama`
+ * dan `rapikanNoHp` dari `@/lib/auth/daftar`: aturan yang sama persis dengan
+ * yang dipakai formulir `/daftar`, supaya nama klien tidak berbentuk beda
+ * tergantung jalur mana yang menuliskannya. Efek metadata di sini hanya pada
+ * baris miliknya sendiri — tidak ada hak yang bisa diraih dari sana (peran
+ * selalu `klien` lewat `handle_new_user`, dan `trg_guard_profile_role` menolak
+ * peran non-klien dari jalur non-service-role).
+ *
+ * `phase_id` sengaja NULL: fase datang dari skrining pertama yang tersambung,
+ * dan menanyakannya juga saat mendaftar berarti menyimpan dua jawaban yang bisa
+ * berbeda (migration `fase_klien_boleh_kosong`).
+ */
+export async function terbitkanKlienMandiri(user: User): Promise<boolean> {
+  // Penjaga yang sama, ditulis ulang di sini dengan sengaja: gerbang memang
+  // sudah memeriksanya lebih dulu, tetapi fungsi ini bisa dipanggil dari rute
+  // yang belum ditulis siapa pun.
+  if (!user?.id || !user.email || !user.email_confirmed_at) return false;
+
+  const email = normalizeEmail(user.email);
+  if (!email) return false;
+
+  const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
+  // `full_name` adalah kunci yang diisi formulir `/daftar` DAN yang dikirim
+  // Google OAuth; `name` hanya cadangan untuk penyedia yang memakai nama itu.
+  const namaMentah = String(metadata.full_name ?? metadata.name ?? "");
+  // Cadangan terakhir: bagian sebelum `@`. Bukan menambah informasi apa pun —
+  // emailnya sudah tersimpan di baris yang sama — tetapi baris klien bernama
+  // kosong terbaca sebagai data rusak di panel admin, dan admin tidak punya
+  // apa pun untuk mengenalinya sampai kliennya menghubungi mereka.
+  const nama = rapikanNama(namaMentah) || rapikanNama(email.split("@")[0]);
+  const noHp = rapikanNoHp(String(metadata.no_hp ?? ""));
+
+  const admin = createAdminSupabase();
+
+  for (let percobaan = 0; percobaan < PERCOBAAN_ID_MANDIRI; percobaan++) {
+    const padmaId = await buatPadmaId(admin);
+
+    const { error } = await admin.from("clients").insert({
+      padma_id: padmaId,
+      nama,
+      email,
+      no_hp: noHp,
+      phase_id: null,
+      user_id: user.id,
+      linked_at: new Date().toISOString(),
+    });
+
+    if (!error) return true;
+
+    if (error.code === "23505") {
+      // Dua sumber bentrok yang sangat berbeda artinya — pembedaan yang sama
+      // dengan `buatKlien` di panel admin, tetapi dengan akibat yang berbeda:
+      //
+      //  - `clients_email_key`: ADA YANG MENDAHULUI. Baris klien beremail ini
+      //    sudah ada — entah baru saja lahir dari permintaan kembar, entah
+      //    dibuat admin sedetik lalu. Jangan diulang di sini: pemanggil yang
+      //    harus kembali ke langkah 1 dan menilai ulang keadaan barunya.
+      //    Menautkannya dari sini akan melewati pemeriksaan yang ada di sana.
+      //  - `clients_padma_id_key`: nomor direbut permintaan lain pada detik
+      //    yang sama → coba nomor berikutnya.
+      if (error.message.includes("email")) return false;
+      continue;
+    }
+
+    // Sisanya (mis. 23503 fase tidak dikenal) dilempar: jalur ini berjalan di
+    // server tanpa formulir untuk menampilkan pesan, dan kegagalan tak terduga
+    // yang ditelan diam-diam akan terbaca sebagai "akun belum terhubung" —
+    // gejala yang sama persis dengan kegagalan yang memang wajar, sehingga
+    // bug sungguhan tidak pernah terlihat.
+    throw error;
+  }
+
+  return false;
 }

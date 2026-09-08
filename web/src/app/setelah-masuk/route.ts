@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
-import {
-  COOKIE_UNDANGAN,
-  isClientLinked,
-  linkClientByInvite,
-} from "@/lib/auth/link-client";
+import { COOKIE_UNDANGAN } from "@/lib/auth/link-client";
+import { pastikanKlien } from "@/lib/auth/pastikan-klien";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -20,22 +17,17 @@ export async function GET(request: Request) {
   if (role === "owner") return NextResponse.redirect(new URL("/owner", url.origin));
   if (role === "admin") return NextResponse.redirect(new URL("/admin", url.origin));
 
-  // Klien. Login kedua dan seterusnya tidak membawa token: yang menentukan
-  // adalah `clients.user_id` yang sudah terbukti lewat aktivasi bertoken.
-  // Penautan BARU hanya boleh terjadi dengan token undangan — mencocokkan email
-  // saja pernah membuat siapa pun yang menebak alamat email klien merebut rekam
-  // medisnya (lihat src/lib/auth/link-client.ts).
+  // Klien. Seluruh keputusan penautan — termasuk urutannya, yang justru
+  // merupakan keamanannya — hidup di SATU tempat: `pastikanKlien`. Rute ini
+  // sengaja tidak menyimpan cabang keamanannya sendiri; aturan yang disalin ke
+  // dua tempat adalah aturan yang bisa berpisah diam-diam, dan begitulah kedua
+  // celah penautan terdahulu lahir (lihat src/lib/auth/link-client.ts).
   const jar = await cookies();
   const token = jar.get(COOKIE_UNDANGAN)?.value ?? "";
 
-  let linked = await isClientLinked(user.id);
-  if (!linked && token) {
-    linked = await linkClientByInvite(user.id, user.email ?? "", token);
-  }
+  const tujuan = await pastikanKlien(user, token);
 
-  const response = NextResponse.redirect(
-    new URL(linked ? "/passport" : "/akun-belum-terhubung", url.origin),
-  );
+  const response = NextResponse.redirect(new URL(tujuan, url.origin));
   // Token dibuang apa pun hasilnya — sekali pakai berarti juga sekali coba.
   if (token) response.cookies.delete(COOKIE_UNDANGAN);
   return response;

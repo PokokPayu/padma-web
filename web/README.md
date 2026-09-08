@@ -100,6 +100,7 @@ sama-sama membuat `npm test` MERAH.
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
 | `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
 | `/akun-belum-terhubung` | Publik | Halaman ramah bagi akun klien yang belum ditautkan tautan aktivasi |
+| `/periksa-email` | Publik | Menunggu konfirmasi email + kirim ulang tautan; konfirmasi inilah satu-satunya alasan penautan lewat email menjadi sah (K1) |
 
 Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi
 didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
@@ -107,7 +108,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | Rute | Akses | Isi |
 |---|---|---|
 | `/aktivasi` | Publik | GET tautan undangan: token dipindahkan dari URL ke cookie httpOnly berumur 1 jam, lalu diarahkan ke login — token tidak pernah ikut ke riwayat browser/Referer |
-| `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → penautan bertoken lalu `/passport` |
+| `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → gerbang `pastikanKlien` (sudah tertaut → token undangan → email terbukti → baris klien baru) lalu `/passport`, `/periksa-email`, atau `/akun-belum-terhubung` |
 | `/auth/callback` | Publik | GET callback OAuth Google: menukar `code` menjadi sesi, lalu meneruskan ke `/setelah-masuk` |
 | `/auth/keluar` | Terautentikasi | POST logout (form, bukan tautan) lalu kembali ke `/masuk` |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
