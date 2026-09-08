@@ -5,12 +5,12 @@ import { tetapkanTarif } from "./aksi";
 import { NOMINAL_MAKS } from "./status";
 
 const KELAS_MEDAN =
-  "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
-const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
+  "mt-1 min-h-[42px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13.5px] text-panel-ink";
+const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 const KELAS_TOMBOL_KECIL =
-  "rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft disabled:opacity-60";
+  "rounded-lg border border-panel-border px-3 py-1.5 text-[12px] font-bold text-panel-muted disabled:opacity-60";
 const KELAS_TOMBOL_UTAMA =
-  "rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60";
+  "rounded-lg bg-panel-ink px-3 py-1.5 text-[12px] font-bold text-panel-surface disabled:opacity-60";
 
 /**
  * Formulir "Tetapkan tarif baru" untuk SATU varian.
@@ -44,26 +44,11 @@ export function FormTarif({
   honorSekarang: number | null;
   hargaCoretSekarang: number | null;
 }) {
-  const [terbuka, setTerbuka] = useState(false);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
+  const [sukses, setSukses] = useState(false);
   const hargaRef = useRef<HTMLInputElement>(null);
   const coretRef = useRef<HTMLInputElement>(null);
-
-  if (!terbuka) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setPesan(null);
-          setTerbuka(true);
-        }}
-        className={KELAS_TOMBOL_KECIL}
-      >
-        {hargaSekarang === null ? "Tetapkan tarif" : "Tarif baru"}
-      </button>
-    );
-  }
 
   return (
     <form
@@ -72,13 +57,14 @@ export function FormTarif({
           const r = await tetapkanTarif(fd);
           if (r.ok) {
             setPesan(null);
-            setTerbuka(false);
+            setSukses(true);
           } else {
+            setSukses(false);
             setPesan(r.pesan);
           }
         })
       }
-      className="grid w-full gap-2.5 rounded-xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-3"
+      className="grid w-full gap-2.5"
     >
       {/* `varian` terikat pada baris yang sedang dibuka — tarif tidak pernah
           bisa mendarat di varian lain lewat satu medan yang ditulis ulang di
@@ -186,19 +172,15 @@ export function FormTarif({
 
       {pesan && <p className="text-[12px] font-semibold text-clay">{pesan}</p>}
 
+      {sukses && (
+        <p className="text-[12px] font-semibold text-leaf">
+          Tarif baru tersimpan sebagai baris baru. Riwayat di bawah ikut bertambah.
+        </p>
+      )}
+
       <span className="flex gap-2">
         <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>
           {pending ? "Menyimpan…" : "Simpan tarif"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTerbuka(false);
-            setPesan(null);
-          }}
-          className={KELAS_TOMBOL_KECIL}
-        >
-          Batal
         </button>
       </span>
     </form>

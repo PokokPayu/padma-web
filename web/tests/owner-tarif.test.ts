@@ -171,6 +171,8 @@ const { tetapkanTarif } = await import("@/app/owner/tarif/aksi");
 const { simpanLayanan } = await import("@/app/admin/layanan/aksi");
 const { ambilRateCard, ambilRekap } = await import("@/lib/owner/data");
 const { default: TarifPage } = await import("@/app/owner/tarif/page");
+const { default: TarifVarianPage } = await import("@/app/owner/tarif/[variantId]/page");
+const sumberDetail = baca("src/app/owner/tarif/[variantId]/page.tsx");
 
 const sumberAksi = baca("src/app/owner/tarif/aksi.ts");
 const sumberHalaman = baca("src/app/owner/tarif/page.tsx");
@@ -953,6 +955,72 @@ describe("halaman rate card (/owner/tarif) — daftar datar", () => {
       .maybeSingle();
     expect(barisDihapus).not.toBeNull();
     expect(await tarifVarian(VARIAN_MUNDUR)).not.toHaveLength(0);
+  });
+});
+
+describe("halaman tarif varian (/owner/tarif/[variantId])", () => {
+  let markup = "";
+
+  beforeAll(async () => {
+    ref.sesi = sesiOwner;
+    markup = renderToStaticMarkup(
+      await TarifVarianPage({ params: Promise.resolve({ variantId: VARIAN_MUNDUR }) }),
+    );
+  });
+
+  it("menyediakan form penetapan tarif dengan medan tanggal berlaku", () => {
+    expect(markup).toContain('name="varian"');
+    expect(markup).toContain('name="harga"');
+    expect(markup).toContain('name="honor"');
+    expect(markup).toContain('name="mulai"');
+  });
+
+  it("formulir langsung terbuka — halaman ini memang dibuka untuk menetapkan tarif", () => {
+    // Sebelumnya formulir bersembunyi di balik tombol "Tarif baru" DI DALAM sel
+    // tabel. Di halaman sendiri, tombol itu hanya menambah satu klik ke
+    // satu-satunya hal yang bisa dilakukan di sini.
+    //
+    // Yang dijaga adalah lenyapnya state `terbuka` — BUKAN lenyapnya `useState`
+    // begitu saja: berkas ini masih memakai `useState` untuk `pesan` dan `sukses`.
+    expect(sumberForm).not.toMatch(/setTerbuka|\bterbuka\b/);
+    expect(markup).not.toMatch(/>\s*Tarif baru\s*</);
+  });
+
+  it("riwayat tarif TERENDER penuh, bukan terlipat di balik details", () => {
+    // Riwayat adalah bukti berapa honor yang seharusnya dibayarkan pada
+    // pekan-pekan yang sudah lewat. Bukti yang hanya muncul setelah seseorang
+    // mengklik adalah bukti yang bisa terlewat.
+    expect(markup).not.toContain("<details");
+    expect(markup).toMatch(/Riwayat/i);
+    expect(markup).toContain(`Rp ${HARGA_LAMA.toLocaleString("id-ID")}`);
+  });
+
+  it("memperingatkan bahwa tarif baru TIDAK mengubah rekap pekan lalu", () => {
+    const teks = markup + sumberForm;
+    expect(teks).toMatch(/pekan/i);
+    expect(teks).toMatch(/tidak (akan )?meng(ubah|geser)/i);
+  });
+
+  it("menaut kembali ke daftar rate card", () => {
+    expect(markup).toContain('href="/owner/tarif"');
+  });
+
+  it("varian yang tidak ada dijawab notFound(), bukan halaman kosong", async () => {
+    await expect(
+      TarifVarianPage({
+        params: Promise.resolve({ variantId: "00000000-0000-0000-0000-000000000000" }),
+      }),
+    ).rejects.toThrow("NOTFOUND");
+  });
+
+  it("halaman menjaga perannya sendiri dengan requireRole(['owner'])", () => {
+    expect(sumberDetail).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
+    expect(sumberDetail).not.toContain('"admin"');
+  });
+
+  it("TIDAK ada tombol/label Hapus — DELETE memang sudah dicabut", () => {
+    expect(sumberDetail).not.toMatch(/>\s*Hapus/);
+    expect(markup).not.toMatch(/>\s*Hapus/);
   });
 });
 
