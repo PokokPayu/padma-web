@@ -161,6 +161,13 @@ export function bolehPindahPermintaan(dari: StatusPermintaan, ke: StatusPerminta
  *
  * `batal` lama berganti nama menjadi `dibatalkan_padma` (spec J1): sesudah C3
  * ada dua pihak yang bisa membatalkan sesi, dan "batal" tidak menyebut siapa.
+ *
+ * `dibatalkan_klien` (C3) berdampingan dengan `dibatalkan_padma`, sengaja
+ * tidak disatukan: status adalah catatan tentang SIAPA yang membatalkan.
+ * Jenjang 4 (PADMA membatalkan) mengembalikan uang penuh; klien yang
+ * membatalkan sendiri tunduk pada jenjang waktu. Menumpangkan keduanya pada
+ * satu nilai membuat setiap layar dan setiap laporan salah menyebut apa yang
+ * terjadi.
  */
 export const STATUS_SESI = [
   "terjadwal",
@@ -168,6 +175,7 @@ export const STATUS_SESI = [
   "selesai",
   "tidak_hadir",
   "dibatalkan_padma",
+  "dibatalkan_klien",
 ] as const;
 
 export type StatusSesi = (typeof STATUS_SESI)[number];
@@ -178,6 +186,7 @@ export const LABEL_SESI: Record<StatusSesi, string> = {
   selesai: "Selesai",
   tidak_hadir: "Tidak hadir",
   dibatalkan_padma: "Dibatalkan PADMA",
+  dibatalkan_klien: "Dibatalkan klien",
 };
 
 /**
@@ -192,11 +201,12 @@ export const LABEL_SESI: Record<StatusSesi, string> = {
  * terjadi tidak pernah bisa ditandai selesai.
  */
 export const PERPINDAHAN_SESI: Record<StatusSesi, readonly StatusSesi[]> = {
-  terjadwal: ["berjalan", "selesai", "tidak_hadir", "dibatalkan_padma"],
+  terjadwal: ["berjalan", "selesai", "tidak_hadir", "dibatalkan_padma", "dibatalkan_klien"],
   berjalan: ["selesai", "tidak_hadir"],
   selesai: [],
   tidak_hadir: [],
   dibatalkan_padma: [],
+  dibatalkan_klien: [],
 };
 
 export function bolehPindahSesi(dari: StatusSesi, ke: StatusSesi): boolean {

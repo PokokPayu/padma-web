@@ -79,8 +79,11 @@ function jamRelatif(jamDariSekarang: number): { tanggal: string; jam: string } {
   // Digeser ke WIB lalu dipotong — kolomnya date + time menurut Jakarta.
   const wib = new Date(t.getTime() + 7 * 3_600_000);
   // Dibulatkan KE BAWAH ke kelipatan 30 menit: `sessions_jam_bulat` menolak
-  // menit selain :00/:30, dan membulatkan ke bawah hanya memperbesar jarak ke
-  // sekarang — tidak pernah mendorong sebuah kasus melewati ambang jenjangnya.
+  // menit selain :00/:30. Membulatkan ke bawah memundurkan jam sesi, sehingga
+  // justru memperKECIL jarak ke sekarang (maksimal 30 menit) — aman di sini
+  // hanya karena offset yang dipakai (48/6/1 jam) jauh dari ambang jenjang
+  // (24/2 jam). Siapa pun yang mempersempit offset mendekati ambang wajib
+  // menghitung ulang apakah pembulatan ini masih tidak melintasinya.
   wib.setUTCMinutes(wib.getUTCMinutes() < 30 ? 0 : 30, 0, 0);
   return {
     tanggal: wib.toISOString().slice(0, 10),
@@ -190,7 +193,10 @@ describe("darurat medis menaikkan ke perlakuan jenjang 1", () => {
       alasan: "   ",
       darurat: true,
     });
-    expect(error).not.toBeNull();
+    // Kode spesifik, bukan sekadar "ada galat": uji yang hanya menuntut
+    // kehadiran galat tetap hijau ketika galatnya datang dari sebab lain sama
+    // sekali.
+    expect(error?.code).toBe("23514");
   });
 
   it("KLIEN tidak bisa menyatakan dirinya darurat", async () => {
@@ -202,7 +208,7 @@ describe("darurat medis menaikkan ke perlakuan jenjang 1", () => {
       alasan: "darurat",
       darurat: true,
     });
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe("42501");
   });
 });
 

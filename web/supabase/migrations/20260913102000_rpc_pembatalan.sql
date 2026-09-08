@@ -55,7 +55,13 @@ revoke execute on function public.perpindahan_sesi_sah(session_status, session_s
 create or replace function public.jenjang_pembatalan(tanggal date, jam time)
 returns smallint
 language sql
-immutable
+-- `stable`, BUKAN `immutable`. Badannya membaca `now()`, dan Postgres
+-- mempercayai label ini tanpa memeriksa isinya: fungsi `immutable` boleh
+-- dilipat menjadi konstanta oleh perencana, dipakai di indeks fungsional, atau
+-- dibekukan dalam rencana yang di-cache. Jenjang yang membeku adalah jenjang
+-- yang berhenti mengikuti waktu — dan yang berhenti bersamanya adalah uang
+-- klien.
+stable
 set search_path = public, pg_temp
 as $$
   select case
