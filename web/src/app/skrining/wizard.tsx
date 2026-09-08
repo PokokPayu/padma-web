@@ -278,7 +278,7 @@ export function Wizard({
               href="/daftar"
               className="mt-5 block w-full rounded-xl bg-gold py-3.5 font-bold text-night"
             >
-              Buat akun &amp; pesan layanan
+              {"Buat akun & pesan layanan"}
             </a>
             <p className="mt-2.5 text-[12.5px] text-ink-soft">
               Sudah punya akun?{" "}
