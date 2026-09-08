@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Paginasi } from "@/app/_shell/panel/paginasi";
 import { PER_HAL, type ParamDaftar } from "@/app/_shell/panel/daftar";
@@ -42,7 +41,7 @@ describe("Paginasi", () => {
     const param = { cari: "", saring: {}, hal: 1 };
     // 9 baris, 8 per halaman => 2 halaman => "Berikutnya" harus ada.
     const markup = renderToStaticMarkup(
-      createElement(Paginasi, { basis: "/owner/rekap", param, total: 9, perHal: 8 }),
+      <Paginasi basis="/owner/rekap" param={param} total={9} perHal={8} />,
     );
     expect(markup).toContain("Halaman 1 dari 2");
     expect(markup).toContain("Berikutnya");
@@ -51,7 +50,7 @@ describe("Paginasi", () => {
     // merender apa pun. Ini yang membuktikan `perHal` sungguh dipakai, bukan
     // diabaikan diam-diam.
     const bawaan = renderToStaticMarkup(
-      createElement(Paginasi, { basis: "/owner/rekap", param, total: 9 }),
+      <Paginasi basis="/owner/rekap" param={param} total={9} />,
     );
     expect(bawaan).toBe("");
   });
