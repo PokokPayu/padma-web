@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Pilih Lokasi</title>
+
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 24px;
+            border-radius: 12px;
+        }
+
+        h2 {
+            margin-top: 0;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        textarea:focus,
+        input:focus {
+            border-color: #2563eb;
+        }
+
+        .address-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-search {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .btn-location {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .btn-save {
+            background: #16a34a;
+            color: #fff;
+        }
+
+        button:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 10px;
+            margin-top: 16px;
+        }
+
+        .coordinate-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .info {
+            margin-top: 16px;
+            padding: 12px;
+            background: #eff6ff;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .status {
+            display: none;
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .status.loading {
+            display: block;
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .status.success {
+            display: block;
+            background: #ecfdf5;
+            color: #166534;
+        }
+
+        .status.error {
+            display: block;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+        .result-address {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #374151;
+        }
+
+        .result-address strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .container {
+                padding: 16px;
+            }
+
+            .coordinate-wrapper {
+                grid-template-columns: 1fr;
+            }
+
+            #map {
+                height: 350px;
+            }
+
+            .address-actions,
+            .actions {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h2>📍 Pilih Lokasi</h2>
+
+    <!-- Alamat -->
+    <div class="form-group">
+
+        <label for="address">
+            Alamat Lengkap
+        </label>
+
+        <textarea
+            id="address"
+            placeholder="Contoh: Jl. Besar Ijen No. 77, Oro-oro Dowo, Klojen, Kota Malang"
+        ></textarea>
+
+        <div class="address-actions">
+
+            <button
+                type="button"
+                class="btn-search"
+                id="searchButton"
+                onclick="searchAddress()"
+            >
+                🔍 Cari Alamat
+            </button>
+
+            <button
+                type="button"
+                class="btn-location"
+                id="locationButton"
+                onclick="getCurrentLocation()"
+            >
+                📍 Gunakan Lokasi Saat Ini
+            </button>
+
+        </div>
+
+        <div
+            id="status"
+            class="status"
+        ></div>
+
+        <div
+            id="resultAddress"
+            class="result-address"
+        >
+            <strong>Lokasi ditemukan:</strong>
+            <span id="resultAddressText"></span>
+        </div>
+
+    </div>
+
+
+    <!-- Map -->
+    <div id="map"></div>
+
+
+    <!-- Coordinate -->
+    <div class="coordinate-wrapper">
+
+        <div class="form-group">
+
+            <label for="latitude">
+                Latitude
+            </label>
+
+            <input
+                type="text"
+                id="latitude"
+                readonly
+                placeholder="Belum dipilih"
+            >
+
+        </div>
+
+
+        <div class="form-group">
+
+            <label for="longitude">
+                Longitude
+            </label>
+
+            <input
+                type="text"
+                id="longitude"
+                readonly
+                placeholder="Belum dipilih"
+            >
+
+        </div>
+
+    </div>
+
+
+    <!-- Info -->
+    <div class="info">
+
+        <strong>Petunjuk:</strong>
+
+        <br>
+
+        1. Isi alamat lengkap kemudian klik
+        <strong>🔍 Cari Alamat</strong>.
+
+        <br>
+
+        2. Sistem akan mencari lokasi berdasarkan alamat.
+
+        <br>
+
+        3. Pastikan pin berada di lokasi yang benar.
+
+        <br>
+
+        4. Jika kurang tepat, klik lokasi lain pada peta
+        atau geser pin.
+
+    </div>
+
+
+    <!-- Save -->
+    <div class="actions">
+
+        <button
+            type="button"
+            class="btn-save"
+            onclick="saveLocation()"
+        >
+            💾 Simpan Lokasi
+        </button>
+
+    </div>
+
+</div>
+
+
+<!-- Leaflet JS -->
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+></script>
+
+
+<script>
+
+    /*
+    |--------------------------------------------------------------------------
+    | Configuration
+    |--------------------------------------------------------------------------
+    */
+
+    const defaultLatitude = -2.5489;
+    const defaultLongitude = 118.0149;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Initialize Map
+    |--------------------------------------------------------------------------
+    */
+
+    const map = L.map('map').setView(
+        [
+            defaultLatitude,
+            defaultLongitude
+        ],
+        5
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | OpenStreetMap
+    |--------------------------------------------------------------------------
+    */
+
+    L.tileLayer(
+        'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {
+            maxZoom: 19,
+
+            attribution:
+                '&copy; OpenStreetMap contributors'
+        }
+    ).addTo(map);
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Marker
+    |--------------------------------------------------------------------------
+    */
+
+    let marker = null;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Update Status
+    |--------------------------------------------------------------------------
+    */
+
+    function setStatus(
+        message,
+        type = 'loading'
+    ) {
+
+        const status =
+            document.getElementById('status');
+
+        status.className =
+            'status ' + type;
+
+        status.textContent =
+            message;
+
+    }
+
+
+    function clearStatus() {
+
+        const status =
+            document.getElementById('status');
+
+        status.className =
+            'status';
+
+        status.textContent =
+            '';
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Update Location
+    |--------------------------------------------------------------------------
+    */
+
+    function updateLocation(
+        latitude,
+        longitude
+    ) {
+
+        latitude =
+            Number(latitude);
+
+        longitude =
+            Number(longitude);
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Update Input
+        |--------------------------------------------------------------------------
+        */
+
+        document
+            .getElementById('latitude')
+            .value =
+            latitude.toFixed(7);
+
+
+        document
+            .getElementById('longitude')
+            .value =
+            longitude.toFixed(7);
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Create Marker
+        |--------------------------------------------------------------------------
+        */
+
+        if (!marker) {
+
+            marker =
+                L.marker(
+                    [
+                        latitude,
+                        longitude
+                    ],
+                    {
+                        draggable: true
+                    }
+                ).addTo(map);
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Marker Drag
+            |--------------------------------------------------------------------------
+            */
+
+            marker.on(
+                'dragend',
+                function(event) {
+
+                    const position =
+                        event.target.getLatLng();
+
+
+                    updateLocation(
+                        position.lat,
+                        position.lng
+                    );
+
+
+                    setStatus(
+                        'Lokasi diperbarui. Pastikan pin berada di lokasi yang benar.',
+                        'success'
+                    );
+
+                }
+            );
+
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Move Existing Marker
+        |--------------------------------------------------------------------------
+        */
+
+        else {
+
+            marker.setLatLng(
+                [
+                    latitude,
+                    longitude
+                ]
+            );
+
+        }
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Click Map
+    |--------------------------------------------------------------------------
+    */
+
+    map.on(
+        'click',
+        function(event) {
+
+            updateLocation(
+                event.latlng.lat,
+                event.latlng.lng
+            );
+
+
+            setStatus(
+                'Lokasi dipilih. Anda dapat menggeser pin untuk menyesuaikan posisi.',
+                'success'
+            );
+
+        }
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Search Address
+    |--------------------------------------------------------------------------
+    |
+    | Menggunakan Nominatim / OpenStreetMap
+    |
+    */
+
+    async function searchAddress() {
+
+        const address =
+            document
+                .getElementById('address')
+                .value
+                .trim();
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validation
+        |--------------------------------------------------------------------------
+        */
+
+        if (!address) {
+
+            setStatus(
+                'Silakan isi alamat lengkap terlebih dahulu.',
+                'error'
+            );
+
+            return;
+
+        }
+
+
+        const searchButton =
+            document.getElementById(
+                'searchButton'
+            );
+
+
+        const locationButton =
+            document.getElementById(
+                'locationButton'
+            );
+
+
+        searchButton.disabled = true;
+        locationButton.disabled = true;
+
+
+        setStatus(
+            'Sedang mencari lokasi...',
+            'loading'
+        );
+
+
+        try {
+
+            const params =
+                new URLSearchParams({
+
+                    q: address,
+
+                    format: 'json',
+
+                    limit: '5',
+
+                    countrycodes: 'id',
+
+                    addressdetails: '1'
+
+                });
+
+
+            const response =
+                await fetch(
+                    'https://nominatim.openstreetmap.org/search?' +
+                    params.toString(),
+                    {
+                        headers: {
+                            'Accept':
+                                'application/json'
+                        }
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    'Geocoding request failed'
+                );
+
+            }
+
+
+            const results =
+                await response.json();
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Not Found
+            |--------------------------------------------------------------------------
+            */
+
+            if (!results.length) {
+
+                setStatus(
+                    'Alamat tidak ditemukan. Coba tambahkan nama jalan, kelurahan, kecamatan, atau kota.',
+                    'error'
+                );
+
+                return;
+
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Use First Result
+            |--------------------------------------------------------------------------
+            */
+
+            const result =
+                results[0];
+
+
+            const latitude =
+                parseFloat(result.lat);
+
+
+            const longitude =
+                parseFloat(result.lon);
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Move Map
+            |--------------------------------------------------------------------------
+            */
+
+            map.setView(
+                [
+                    latitude,
+                    longitude
+                ],
+                17
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Update Marker
+            |--------------------------------------------------------------------------
+            */
+
+            updateLocation(
+                latitude,
+                longitude
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | Show Result
+            |--------------------------------------------------------------------------
+            */
+
+            const resultAddress =
+                document.getElementById(
+                    'resultAddress'
+                );
+
+
+            const resultAddressText =
+                document.getElementById(
+                    'resultAddressText'
+                );
+
+
+            resultAddressText.textContent =
+                result.display_name;
+
+
+            resultAddress.style.display =
+                'block';
+
+
+            setStatus(
+                'Lokasi berhasil ditemukan. Silakan periksa posisi pin.',
+                'success'
+            );
+
+        }
+
+        catch (error) {
+
+            console.error(error);
+
+            setStatus(
+                'Terjadi kesalahan saat mencari alamat. Silakan coba lagi.',
+                'error'
+            );
+
+        }
+
+        finally {
+
+            searchButton.disabled = false;
+            locationButton.disabled = false;
+
+        }
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Get Current Location
+    |--------------------------------------------------------------------------
+    */
+
+    function getCurrentLocation() {
+
+        if (!navigator.geolocation) {
+
+            setStatus(
+                'Browser Anda tidak mendukung fitur lokasi.',
+                'error'
+            );
+
+            return;
+
+        }
+
+
+        const searchButton =
+            document.getElementById(
+                'searchButton'
+            );
+
+
+        const locationButton =
+            document.getElementById(
+                'locationButton'
+            );
+
+
+        searchButton.disabled = true;
+        locationButton.disabled = true;
+
+
+        setStatus(
+            'Sedang mengambil lokasi Anda...',
+            'loading'
+        );
+
+
+        navigator.geolocation.getCurrentPosition(
+
+            function(position) {
+
+                const latitude =
+                    position.coords.latitude;
+
+
+                const longitude =
+                    position.coords.longitude;
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Move Map
+                |--------------------------------------------------------------------------
+                */
+
+                map.setView(
+                    [
+                        latitude,
+                        longitude
+                    ],
+                    17
+                );
+
+
+                /*
+                |--------------------------------------------------------------------------
+                | Update Marker
+                |--------------------------------------------------------------------------
+                */
+
+                updateLocation(
+                    latitude,
+                    longitude
+                );
+
+
+                setStatus(
+                    'Lokasi saat ini berhasil ditemukan.',
+                    'success'
+                );
+
+
+                searchButton.disabled = false;
+                locationButton.disabled = false;
+
+            },
+
+
+            function(error) {
+
+                console.error(error);
+
+
+                let message =
+                    'Gagal mendapatkan lokasi Anda.';
+
+
+                if (
+                    error.code ===
+                    error.PERMISSION_DENIED
+                ) {
+
+                    message =
+                        'Izin lokasi ditolak. Silakan izinkan akses lokasi pada browser.';
+
+                }
+
+
+                setStatus(
+                    message,
+                    'error'
+                );
+
+
+                searchButton.disabled = false;
+                locationButton.disabled = false;
+
+            },
+
+
+            {
+                enableHighAccuracy: true,
+
+                timeout: 10000,
+
+                maximumAge: 0
+
+            }
+
+        );
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Save Location
+    |--------------------------------------------------------------------------
+    */
+
+    function saveLocation() {
+
+        const address =
+            document
+                .getElementById('address')
+                .value
+                .trim();
+
+
+        const latitude =
+            document
+                .getElementById('latitude')
+                .value;
+
+
+        const longitude =
+            document
+                .getElementById('longitude')
+                .value;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Validation
+        |--------------------------------------------------------------------------
+        */
+
+        if (!address) {
+
+            setStatus(
+                'Silakan isi alamat lengkap.',
+                'error'
+            );
+
+            return;
+
+        }
+
+
+        if (!latitude || !longitude) {
+
+            setStatus(
+                'Silakan tentukan lokasi pada peta terlebih dahulu.',
+                'error'
+            );
+
+            return;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Data
+        |--------------------------------------------------------------------------
+        */
+
+        const data = {
+
+            address: address,
+
+            latitude:
+                parseFloat(latitude),
+
+            longitude:
+                parseFloat(longitude)
+
+        };
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Example
+        |--------------------------------------------------------------------------
+        */
+
+        console.log(
+            'Location Data:',
+            data
+        );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Example API Request
+        |--------------------------------------------------------------------------
+        |
+        | fetch('/api/location', {
+        |
+        |     method: 'POST',
+        |
+        |     headers: {
+        |         'Content-Type':
+        |             'application/json'
+        |     },
+        |
+        |     body: JSON.stringify(data)
+        |
+        | })
+        |
+        */
+
+
+        setStatus(
+            'Lokasi berhasil disimpan.',
+            'success'
+        );
+
+
+        alert(
+            'Lokasi berhasil disimpan!\n\n' +
+            'Latitude: ' +
+            data.latitude +
+            '\n' +
+            'Longitude: ' +
+            data.longitude
+        );
+
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Enter Shortcut
+    |--------------------------------------------------------------------------
+    |
+    | Ctrl + Enter pada textarea untuk mencari alamat.
+    |
+    */
+
+    document
+        .getElementById('address')
+        .addEventListener(
+            'keydown',
+            function(event) {
+
+                if (
+                    event.ctrlKey &&
+                    event.key === 'Enter'
+                ) {
+
+                    event.preventDefault();
+
+                    searchAddress();
+
+                }
+
+            }
+        );
+
+</script>
+
+</body>
+</html>
