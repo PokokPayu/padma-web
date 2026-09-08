@@ -171,3 +171,38 @@ layar hasil skrining wajib menulisnya ulang sampai ke pemesanan.
   yang kini dipakai pengurutan jarak mewarisi batas yang sama.
 - **Katalog produksi masih data karangan** dan honor mitra untuk jenjang transport di atas 0–5 km
   belum pernah diisi. Keduanya utang terbuka yang menunggu klien, bukan pekerjaan kode.
+
+---
+
+## Putaran review menyeluruh — enam temuan, semuanya ditambal
+
+Dijalankan sesudah seluruh tugas selesai dan suite hijau. Nol Kritis, enam Penting. Ditulis di sini
+karena empat di antaranya adalah pagar yang **saya klaim ada** tetapi sebenarnya tidak menjaga.
+
+1. **Jam hanya dijaga server action.** Klien memegang policy INSERT dan bisa menyisipkan pukul
+   03:00 lewat PostgREST. Ditambal trigger — dan menambalnya membuka masalah kedua yang lebih
+   halus: `guard_booking_pembatas` adalah `security invoker`, jadi membaca `app_settings`
+   langsung berjalan di bawah RLS klien, memulangkan nol baris, dan pagarnya diam. Sekarang lewat
+   fungsi `security definer` bersasaran satu kunci. Nilai bawaannya ikut ditanam, karena pagar yang
+   lahir tanpa data adalah pagar yang lahir mati.
+2. **`jenjang` masih dioper pemanggil**, lalu dicap `'otomatis'` oleh fungsi. Saya membuang
+   `jenjang_sumber` dari argumen dan mengklaim lubangnya tertutup; separuhnya masih terbuka.
+   Argumennya dihapus seluruhnya, jaraknya dihitung di dalam fungsi. Ongkosnya: haversine kini
+   hidup di dua bahasa, dijaga `tests/jarak-sql-vs-ts.test.ts`.
+3. **Tidak ada jalan mundur `mitra_siap → mencari_mitra`.** Peta perpindahan menyahkannya, layarnya
+   tidak menyediakannya — jadi permintaan yang bidannya dinonaktifkan tersangkut permanen sejak
+   admin kehilangan tombol tolak. Tombol "Ganti bidan" ditambahkan, dan ia melepas `partner_id`.
+4. **Staf bisa menulis `dibatalkan_klien`.** Itu catatan tentang siapa, dan tabel ini tidak punya
+   jejak aktor yang bisa meluruskannya. Kini ditolak basis data.
+5. **Pagar literal status hanya memeriksa nilai baru.** Diperlebar ke nilai yang BERGANTI NAMA.
+   Nilai yang stabil (`terjadwal`, `selesai`, `dikonfirmasi`, `ditolak`) sengaja TIDAK dilarang —
+   melarangnya menuntut menyunting tujuh modul di luar lingkup demi kerapian, bukan kebenaran.
+   **Ongkosnya ditulis di berkas ujinya:** bila C2/C3 mengganti nama salah satunya, pagar ini tidak
+   menangkapnya, dan pelakunya wajib menambahkan nilai lamanya ke `NILAI_MATI`.
+6. **Pagar pemindai VIEW tidak bisa merah.** Diprobe: `rename value` memperbarui definisi view
+   sendiri (view menyimpan OID), sementara badan fungsi plpgsql tidak (ia teks). Artinya view yang
+   saya "perbaiki" tidak pernah rusak, dan pagarnya menjaga sesuatu yang tidak mungkin terjadi.
+   Pagarnya dihapus dan klaim keliru di migrasi sebelumnya dikoreksi di tempatnya.
+
+**Verifikasi ulang sesudah tambalan:** `npm test` 149 berkas / 2.345 uji / 0 gagal; `npm run build`
+lolos; E2E passport 21/21, admin 26/26, pelengkap 26/26 dijalankan ulang.
