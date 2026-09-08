@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cariMitra, pilihMitra, konfirmasiPermintaan } from "./aksi";
+import { cariMitra, pilihMitra, konfirmasiPermintaan, terbitkanTagihan } from "./aksi";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
+  PERMINTAAN_MENUNGGU_BAYAR,
   PERMINTAAN_SIAP_KONFIRMASI,
   type StatusPermintaan,
 } from "@/lib/jadwal/status";
@@ -23,6 +24,12 @@ export type PermintaanAntre = {
   status: StatusPermintaan;
   /** Nama mitra yang sudah dipilih; null selama masih dicarikan. */
   namaMitra: string | null;
+  /** Keadaan pembayaran, sudah diformat untuk dibaca ("Belum dibayar · 20 jam lagi"). */
+  labelBayar: string;
+  /** Sudah diverifikasi lunas — hanya ini yang boleh dikonfirmasi. */
+  lunas: boolean;
+  /** Tautan WhatsApp siap tempel berisi pesan tagihan. Kosong bila belum ditagih. */
+  tautanWa: string;
 };
 
 /**
@@ -141,13 +148,17 @@ export function BlokPermintaan({
               <span className="text-[12.5px] font-semibold text-ink">
                 Bidan: {permintaan.namaMitra ?? "—"}
               </span>
+              {/* TERBITKAN TAGIHAN menggantikan konfirmasi langsung (spec C2).
+                  Tagihan terbit TEPAT di sini, tidak lebih awal: tarif transport
+                  berasal dari domisili bidan ke alamat klien, jadi totalnya baru
+                  bisa diketahui sesudah bidannya dipilih. */}
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => jalankan(() => konfirmasiPermintaan(permintaan.id))}
+                onClick={() => jalankan(() => terbitkanTagihan(permintaan.id))}
                 className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
               >
-                {pending ? "Memproses…" : "Konfirmasi"}
+                {pending ? "Memproses…" : "Terbitkan tagihan"}
               </button>
               {/* JALAN MUNDUR. Tanpa tombol ini, permintaan yang bidannya
                   berhalangan — atau dinonaktifkan sesudah ditetapkan —
@@ -167,6 +178,43 @@ export function BlokPermintaan({
           )}
         </div>
       </div>
+
+      {permintaan.status === PERMINTAAN_MENUNGGU_BAYAR && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12.5px] font-semibold text-ink">
+            Bidan: {permintaan.namaMitra ?? "—"} · {permintaan.labelBayar}
+          </span>
+          {/* Konfirmasi hanya muncul ketika pembayaran SUDAH diverifikasi.
+              Menampilkannya lebih awal berarti menawarkan tombol yang akan
+              ditolak basis data — dan tombol yang berbohong adalah cara
+              tercepat membuat admin berhenti memercayai layarnya. */}
+          {/* KANAL PERTAMA dari dua (spec C2 P7): pesan siap-salin, bukan
+              kiriman otomatis. PADMA belum punya jalur kirim WhatsApp, dan
+              menambahkannya berarti satu penyedia baru beserta jalur
+              kegagalannya — sementara admin memang sudah punya percakapan
+              berjalan dengan klien itu. */}
+          {permintaan.tautanWa && (
+            <a
+              href={permintaan.tautanWa}
+              target="_blank"
+              rel="noopener"
+              className="rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft"
+            >
+              Kirim tagihan via WA
+            </a>
+          )}
+          {permintaan.lunas && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => jalankan(() => konfirmasiPermintaan(permintaan.id))}
+              className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
+            >
+              {pending ? "Memproses…" : "Konfirmasi jadwal"}
+            </button>
+          )}
+        </div>
+      )}
 
       {permintaan.status === PERMINTAAN_DICARIKAN && tanpaMitra && (
         <p className="mt-2 text-[12px] font-semibold text-clay">

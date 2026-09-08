@@ -197,7 +197,11 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
     const statusBayar = semuaKolom.filter((k) => k.column_name === "status_bayar");
 
     // Prasyarat: kolom status memang ada di tabel operasional.
+    // `booking_requests` bergabung di C2: tagihan kini terbit SEBELUM sesi ada,
+    // jadi keadaan bayarnya menempel pada pengajuan. Nominalnya tetap tidak
+    // disimpan di mana pun — ia diturunkan dari tarif menurut tanggal sesi.
     expect(statusBayar.map((k) => k.table_name).sort()).toEqual([
+      "booking_requests",
       "client_packages",
       "sessions",
     ]);

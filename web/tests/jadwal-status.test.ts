@@ -13,25 +13,40 @@ import {
 } from "@/lib/jadwal/status";
 
 describe("daftar status permintaan", () => {
-  it("persis enum booking_status sesudah C1 — tidak lebih, tidak kurang", () => {
+  it("persis enum booking_status sesudah C2 — tidak lebih, tidak kurang", () => {
     expect([...STATUS_PERMINTAAN].sort()).toEqual(
       [
         "dibatalkan_klien",
+        "dibatalkan_tenggat",
         "dikonfirmasi",
         "diminta",
         "mencari_mitra",
+        "menunggu_bayar",
         "mitra_siap",
         "ditolak",
       ].sort(),
     );
   });
 
-  it("TIDAK memuat menunggu_bayar — itu milik C2 (spec J1)", () => {
-    expect(STATUS_PERMINTAAN).not.toContain("menunggu_bayar" as StatusPermintaan);
+  it("menunggu_bayar SEKARANG ada — C1 sengaja menundanya sampai jalan keluarnya lahir", () => {
+    // Uji ini dulu menegaskan yang SEBALIKNYA. C1 menolak membuat nilai enum
+    // yang belum dipakai ("keadaan mati yang tidak satu pun kode tahu cara
+    // keluar darinya"); C2 membuatnya BERSAMAAN dengan jalan masuk dan dua
+    // jalan keluarnya.
+    expect(STATUS_PERMINTAAN).toContain("menunggu_bayar" as StatusPermintaan);
+    expect(STATUS_PERMINTAAN).toContain("dibatalkan_tenggat" as StatusPermintaan);
   });
 
-  it("antrean = tiga keadaan sebelum konfirmasi, itulah yang mengisi kuota klien", () => {
-    expect([...STATUS_ANTRE]).toEqual(["diminta", "mencari_mitra", "mitra_siap"]);
+  it("antrean = EMPAT keadaan sebelum konfirmasi, termasuk menunggu_bayar", () => {
+    // `menunggu_bayar` ikut mengisi kuota: klien masih menunggu jadwalnya
+    // terkunci dan bidannya masih tertahan. Mengeluarkannya berarti klien bisa
+    // menumpuk tagihan tak terbayar tanpa pernah menabrak batas antrean.
+    expect([...STATUS_ANTRE]).toEqual([
+      "diminta",
+      "mencari_mitra",
+      "mitra_siap",
+      "menunggu_bayar",
+    ]);
   });
 
   it("setiap status punya label untuk manusia", () => {
@@ -42,15 +57,36 @@ describe("daftar status permintaan", () => {
 });
 
 describe("perpindahan status permintaan", () => {
-  it("jalur wajar: diminta -> mencari_mitra -> mitra_siap -> dikonfirmasi", () => {
+  it("jalur wajar C2: diminta -> mencari_mitra -> mitra_siap -> menunggu_bayar -> dikonfirmasi", () => {
     expect(bolehPindahPermintaan("diminta", "mencari_mitra")).toBe(true);
     expect(bolehPindahPermintaan("mencari_mitra", "mitra_siap")).toBe(true);
-    expect(bolehPindahPermintaan("mitra_siap", "dikonfirmasi")).toBe(true);
+    expect(bolehPindahPermintaan("mitra_siap", "menunggu_bayar")).toBe(true);
+    expect(bolehPindahPermintaan("menunggu_bayar", "dikonfirmasi")).toBe(true);
   });
 
-  it("MELOMPAT ditolak — diminta tidak boleh langsung dikonfirmasi", () => {
+  it("mitra_siap -> dikonfirmasi LANGSUNG kini DITUTUP — itu seluruh inti C2", () => {
+    // Sampai C1-c panah ini adalah jalur wajar. C2 menghapusnya: konfirmasi
+    // tidak lagi bisa terjadi tanpa uang berpindah dan diverifikasi.
+    expect(bolehPindahPermintaan("mitra_siap", "dikonfirmasi")).toBe(false);
+  });
+
+  it("tenggat lewat punya keadaan SENDIRI, bukan menumpang pembatalan klien", () => {
+    // Nilai status adalah catatan tentang SIAPA. Orang yang lupa membayar bukan
+    // orang yang memutuskan membatalkan — dan hanya yang PERTAMA yang
+    // mengembalikan skriningnya (spec C2 P5).
+    expect(bolehPindahPermintaan("menunggu_bayar", "dibatalkan_tenggat")).toBe(true);
+    expect(bolehPindahPermintaan("mitra_siap", "dibatalkan_tenggat")).toBe(false);
+    expect(bolehPindahPermintaan("diminta", "dibatalkan_tenggat")).toBe(false);
+  });
+
+  it("dari menunggu_bayar, bidan boleh dilepas tanpa membatalkan pengajuan klien", () => {
+    expect(bolehPindahPermintaan("menunggu_bayar", "mencari_mitra")).toBe(true);
+  });
+
+  it("MELOMPAT ditolak — tidak ada jalan pintas ke dikonfirmasi", () => {
     expect(bolehPindahPermintaan("diminta", "dikonfirmasi")).toBe(false);
     expect(bolehPindahPermintaan("mencari_mitra", "dikonfirmasi")).toBe(false);
+    expect(bolehPindahPermintaan("mitra_siap", "dikonfirmasi")).toBe(false);
   });
 
   it("mundur satu langkah boleh — mitra membatalkan, admin mencari lagi", () => {
@@ -85,6 +121,7 @@ describe("perpindahan status permintaan", () => {
   it("keadaan akhir benar-benar akhir", () => {
     expect(PERPINDAHAN_PERMINTAAN.dikonfirmasi).toEqual([]);
     expect(PERPINDAHAN_PERMINTAAN.dibatalkan_klien).toEqual([]);
+    expect(PERPINDAHAN_PERMINTAAN.dibatalkan_tenggat).toEqual([]);
     expect(PERPINDAHAN_PERMINTAAN.ditolak).toEqual([]);
   });
 

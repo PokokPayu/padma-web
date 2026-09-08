@@ -23,6 +23,10 @@ import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { STATUS_ANTRE, STATUS_SESI, LABEL_SESI } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
+import { pesanTagihan, tautanWaTagihan } from "@/lib/tagihan/pesan-tagihan";
+import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
+import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
 import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
 import { bacaPengaturan } from "@/lib/settings";
 import type { StatusPermintaan } from "@/lib/jadwal/status";
@@ -39,6 +43,8 @@ type BarisPermintaan = {
   catatan: string;
   jam_mulai: string;
   status: StatusPermintaan;
+  status_bayar: "belum" | "menunggu_verifikasi" | "lunas";
+  tenggat: string | null;
   alamat_lat: number | null;
   alamat_lon: number | null;
   clients: { nama: string } | null;
@@ -74,13 +80,14 @@ export default async function SesiPage({
   const hariIni = hariIniJakarta();
 
   const supabase = await createServerSupabase();
-  const [{ jamLayanan }, { baris, total }, { data: permintaan }] = await Promise.all([
+  const [{ jamLayanan, nomorWaLink }, { baris, total }, { data: permintaan }] = await Promise.all([
     bacaPengaturan(),
     ambilDaftarSesi(param, hariIni),
     supabase
       .from("booking_requests")
       .select(
-        "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, alamat_lat, alamat_lon, " +
+        "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, status_bayar, tenggat, " +
+          "alamat_lat, alamat_lon, " +
           "clients ( nama ), services ( nama ), partners ( nama )",
       )
       .in("status", STATUS_ANTRE)
@@ -125,6 +132,10 @@ export default async function SesiPage({
     butuhMitra ? pilihanMitra() : Promise.resolve([]),
   ]);
 
+  // Total per pengajuan dirakit sekali, dipakai dua kali (label & pesan WA).
+  const tagihanAdmin = await daftarTagihanPengajuanAdmin();
+  const totalPerPermintaan = new Map(tagihanAdmin.map((t) => [t.permintaanId, t.total]));
+
   const antre: PermintaanAntre[] = (permintaan ?? []).map((p) => ({
     id: p.id,
     // Nama, bukan UUID: antrean ini dibaca manusia yang akan menelepon orangnya.
@@ -137,6 +148,33 @@ export default async function SesiPage({
     catatan: p.catatan,
     status: p.status,
     namaMitra: p.partners?.nama ?? null,
+    // Keadaan pembayaran diformat DI SERVER: `BlokPermintaan` adalah komponen
+    // klien, dan sisa waktu yang dihitung di sana akan berbeda antara render
+    // server dan render peramban — ketidakcocokan hidrasi yang munculnya acak.
+    labelBayar:
+      p.status_bayar === "lunas"
+        ? "sudah dibayar & diverifikasi"
+        : p.status_bayar === "menunggu_verifikasi"
+          ? "bukti masuk, menunggu verifikasi"
+          : `belum dibayar · ${labelSisaWaktu(p.tenggat)}`,
+    lunas: p.status_bayar === "lunas",
+    // Pesannya dirakit DI SERVER: `pesanTagihan` murni, tetapi nominal dan
+    // sisa waktunya butuh tarif & jam server. Merakitnya di komponen klien
+    // berarti angka yang berbeda antara render server dan peramban.
+    tautanWa:
+      p.status === PERMINTAAN_MENUNGGU_BAYAR
+        ? tautanWaTagihan(
+            nomorWaLink,
+            pesanTagihan({
+              namaKlien: p.clients?.nama ?? "Ibu",
+              namaLayanan: p.services?.nama ?? "Layanan",
+              tanggal: formatTanggalID(p.tanggal),
+              jam: formatJam(jamDariDb(p.jam_mulai)),
+              total: totalPerPermintaan.get(p.id) ?? null,
+              sisaWaktu: labelSisaWaktu(p.tenggat),
+            }),
+          )
+        : "",
   }));
 
   // Mitra diurutkan PER PERMINTAAN, bukan sekali untuk seluruh antrean:

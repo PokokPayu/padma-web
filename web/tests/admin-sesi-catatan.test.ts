@@ -1129,7 +1129,9 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(7); // cariMitra, pilihMitra, konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
+    // + terbitkanTagihan (rantai C2): cariMitra, pilihMitra, terbitkanTagihan,
+    // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang.
+    expect(jumlahAction).toBe(8);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -1145,12 +1147,28 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     }
   });
 
-  it("tanggal tidak pernah dihitung dengan aritmatika Date", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
+  it("tanggal (kolom date) tidak pernah dihitung dengan aritmatika Date", () => {
+    // Larangan aslinya menyapu SELURUH pemakaian `toISOString`/`setDate(`/
+    // `getDay(` di `sumberAksi` karena satu-satunya pemakaiannya dulu adalah
+    // kolom `tanggal` (tipe `date`) — dan `new Date("2026-12-27").toISOString()`
+    // adalah tengah malam UTC, yang mundur sehari di zona mana pun sebelah
+    // barat (spec T6). Rantai C2 (`@/app/admin/sesi/aksi.ts`) menambahkan
+    // pemakaian YANG SAH: `terbitkanTagihan` menghitung `tenggat`, kolom
+    // `timestamptz` (bukan `date`) — "24 jam dari sekarang", bukan tanggal
+    // kalender, sehingga tidak kena bug zona waktu yang sama. Larangannya
+    // TIDAK dilonggarkan; ia dipersempit di `sumberAksi` supaya pemakaian sah
+    // ini tidak diam-diam membuka jalan bagi `toISOString` lain yang
+    // menyelinap pada kolom `tanggal`/`date`. Lihat pagar yang sama & lebih
+    // rinci di tests/admin-sesi-konfirmasi.test.ts.
+    for (const sumber of [sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
       expect(sumber).not.toContain("getDay(");
     }
+    expect(sumberAksi).not.toContain("setDate(");
+    expect(sumberAksi).not.toContain("getDay(");
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
   });
 
   it("tidak menuliskan data klien ke log", () => {

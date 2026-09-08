@@ -3,6 +3,11 @@ import { ambilKlien, ambilPaket, ambilSesi } from "@/lib/passport/data";
 import { susunTagihan, type PayStatus } from "@/lib/passport/turunan";
 import { bacaPengaturan } from "@/lib/settings";
 import { TombolKlaim } from "./tombol-klaim";
+import { ambilTagihanPengajuan } from "@/lib/tagihan/baca";
+import { KartuTagihan } from "./kartu-tagihan";
+import { formatTanggalID } from "@/lib/passport/waktu";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { formatRupiah } from "@/lib/rupiah-publik";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
@@ -23,16 +28,44 @@ export default async function HalamanBayar() {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
 
-  const [paket, sesi, pengaturan] = await Promise.all([
+  const [paket, sesi, pengaturan, tagihanPengajuan] = await Promise.all([
     ambilPaket(klien.id),
     ambilSesi(klien.id),
     bacaPengaturan(),
+    ambilTagihanPengajuan(klien.id),
   ]);
   const tagihan = susunTagihan({ paket, sesi });
   const { qrisGambar, qrisMerchant, qrisNmid } = pengaturan;
 
   return (
     <>
+      {/* TAGIHAN PENGAJUAN (spec C2) — di ATAS tagihan sesi, dan itu disengaja:
+          hanya yang ini punya tenggat, dan hanya yang ini menahan jadwal.
+          Menaruhnya di bawah daftar lain berarti hal paling mendesak di halaman
+          ini adalah hal yang terakhir terlihat. */}
+      {tagihanPengajuan.length > 0 && (
+        <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="mb-1 font-serif text-xl text-night">Menunggu pembayaran</h2>
+          <p className="mb-4 text-[12.5px] text-ink-soft">
+            Jadwal terkunci setelah pembayaran diverifikasi tim.
+          </p>
+          {tagihanPengajuan.map((t) => (
+            <KartuTagihan
+              key={t.permintaanId}
+              permintaanId={t.permintaanId}
+              namaLayanan={t.namaLayanan}
+              tanggal={formatTanggalID(t.tanggal)}
+              jam={formatJam(jamDariDb(t.jamMulai))}
+              total={t.rincian.total === null ? null : formatRupiah(t.rincian.total)}
+              menungguTarifKhusus={t.rincian.menungguTarifKhusus}
+              statusBayar={t.statusBayar}
+              tenggat={t.tenggat}
+              adaBukti={t.adaBukti}
+            />
+          ))}
+        </section>
+      )}
+
       <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
         <h1 className="mb-4 font-serif text-xl text-night">
           Tagihan Anda{" "}

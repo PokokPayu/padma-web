@@ -18,7 +18,8 @@
     "test:e2e:owner": "tsx tests/e2e/owner.e2e.ts",
     "test:e2e:materi": "tsx tests/e2e/materi-pdf.e2e.ts",
     "test:e2e:video": "tsx tests/e2e/materi-video.e2e.ts",
-    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:daftar && npm run test:e2e:funnel && npm run test:e2e:passport && npm run test:e2e:admin && npm run test:e2e:pelengkap && npm run test:e2e:owner && npm run test:e2e:materi && npm run test:e2e:video",
+    "test:e2e:bayar": "tsx tests/e2e/bayar-pengajuan.e2e.ts",
+    "test:e2e:semua": "npm run test:e2e && npm run test:e2e:daftar && npm run test:e2e:funnel && npm run test:e2e:passport && npm run test:e2e:admin && npm run test:e2e:pelengkap && npm run test:e2e:owner && npm run test:e2e:materi && npm run test:e2e:video && npm run test:e2e:bayar",
     "db:recover": "npx supabase stop && npx supabase start && npx supabase db reset",
     "seed:users": "tsx scripts/seed-users.ts"
   },
