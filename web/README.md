@@ -66,7 +66,7 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **32 rute** (26 halaman + 6 route handler), tanpa satu pun
+PADMA v1 lengkap: **38 rute** (30 halaman + 8 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.

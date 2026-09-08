@@ -235,7 +235,10 @@ describe("buatKlien — pendaftaran klien oleh admin", () => {
 
     expect(hasil.ok).toBe(false);
     if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/sudah dipakai/i);
+    // K17: kalimatnya menyebut kemungkinan pendaftaran mandiri, bukan lagi
+    // "sudah dipakai klien lain" — sejak /daftar hidup, penyebab paling
+    // mungkin adalah orangnya sudah membuat akun sendiri.
+    expect(hasil.pesan).toMatch(/sudah terdaftar/i);
 
     // Dan yang terpenting: tidak ada baris kedua.
     expect(await barisKlien("email", EMAIL_BARU)).toHaveLength(1);

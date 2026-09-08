@@ -104,8 +104,20 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
       // Dua sumber bentrok yang sangat berbeda artinya: alamat surel yang
       // sudah terpakai (kesalahan manusia — beri kalimat) versus nomor PADMA
       // yang direbut admin lain pada detik yang sama (coba nomor berikutnya).
+      //
+      // Sejak pendaftaran mandiri (K1) hidup, penyebab bentrok email yang
+      // PALING MUNGKIN berubah: bukan lagi admin mendaftarkan klien yang sama
+      // dua kali, melainkan orangnya sudah membuat akun sendiri lewat
+      // `/daftar` dengan email itu. Kalimatnya menyebut kemungkinan itu dan
+      // mengarahkan admin ke pencarian, bukan menutup pintu — tidak ada
+      // penggabungan otomatis (K17), admin melihat datanya lalu memutuskan
+      // sendiri.
       if (error.message.includes("email")) {
-        return { ok: false, pesan: "Alamat itu sudah dipakai klien lain." };
+        return {
+          ok: false,
+          pesan:
+            "Alamat itu sudah terdaftar — kemungkinan klien ini sudah membuat akun sendiri. Buka datanya lewat pencarian di daftar klien.",
+        };
       }
       continue;
     }

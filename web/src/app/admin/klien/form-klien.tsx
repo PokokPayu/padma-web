@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { buatKlien, perbaruiKlien } from "./aksi";
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
@@ -55,6 +56,11 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState<string | null>(null);
+  // Id klien yang baru tersimpan, dipakai untuk menaut ke halaman detailnya
+  // (K14) — bukan lewat `pesanBerikutnya`, yang sengaja tetap murni hanya
+  // mengurus invarian pesan sukses/galat dan diuji begitu di
+  // tests/admin-klien.test.ts.
+  const [idBaru, setIdBaru] = useState<string | null>(null);
 
   return (
     <form
@@ -67,6 +73,7 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           const { pesan: pesanBaru, berhasil: berhasilBaru } = pesanBerikutnya(r);
           setPesan(pesanBaru);
           setBerhasil(berhasilBaru);
+          setIdBaru(r.ok ? r.id : null);
           if (r.ok) {
             // Formulir tetap TERBUKA (tidak ada lagi state "tertutup" untuk
             // kembali ke sana) — medannya dikosongkan lewat reset native
@@ -78,9 +85,11 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
       }
       className="rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
     >
+      {/* K14: anjuran utama sesudah simpan adalah pendaftaran mandiri, bukan
+          lagi tautan aktivasi WhatsApp — lihat kotak sukses di bawah tombol. */}
       <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">
-        Klien baru — setelah disimpan, terbitkan tautan aktivasi dari halaman
-        detailnya
+        Klien baru — mendaftar sendiri dulu, tautan aktivasi WhatsApp untuk
+        cadangan
       </h2>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -156,9 +165,33 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
       </div>
 
       {berhasil && (
-        <p className="mt-3 text-[13px] text-leaf">
-          Tersimpan sebagai <b className="font-mono">{berhasil}</b>.
-        </p>
+        <div className="mt-3 text-[13px]">
+          <p className="text-leaf">
+            Tersimpan sebagai <b className="font-mono">{berhasil}</b>.
+          </p>
+          {/* K14: penautan lewat email terverifikasi (K1) membuat undangan
+              WhatsApp bukan lagi satu-satunya jalan — anjuran utama sekarang
+              minta klien mendaftar sendiri dengan email yang sama, undangan
+              turun jadi cadangan untuk klien yang perlu dituntun. Tidak ada
+              kode penautan yang dihapus; ini hanya urutan anjuran di layar. */}
+          <p className="mt-1.5 text-ink">
+            Minta klien mendaftar sendiri di halaman <b>Daftar</b> dengan email
+            ini — begitu emailnya terkonfirmasi, akunnya otomatis tertaut ke
+            data ini.
+          </p>
+          {idBaru && (
+            <p className="mt-1 text-ink-soft">
+              Atau kirimkan tautan aktivasi dari{" "}
+              <Link
+                href={`/admin/klien/${idBaru}`}
+                className="font-bold text-ink underline underline-offset-4"
+              >
+                halaman detail klien ini
+              </Link>
+              .
+            </p>
+          )}
+        </div>
       )}
     </form>
   );
