@@ -495,6 +495,24 @@ begin
       using errcode = '22023';
   end if;
 
+  -- WAKTU BARU HARUS DI MASA DEPAN — pagar yang setara dengan
+  -- `jadwal_ulang_sesi`, dan sebelumnya TIDAK ADA di sini.
+  --
+  -- Fungsi ini memvalidasi kepemilikan, keterpakaian, kedaluwarsa, keanggotaan
+  -- jam, dan bentrok bidan — tetapi tidak sekali pun bahwa tanggalnya belum
+  -- lewat. Satu salah ketik tahun sudah cukup: haknya TERMAKAN pada sesi di
+  -- masa lalu, `dipakai_sesi_id` terisi, dan indeks unik parsial menutup jalan
+  -- kembali. Tidak ada layar yang bisa memulihkannya — hanya UPDATE manual ke
+  -- basis data.
+  --
+  -- Ambangnya 2 jam, sama dengan `jadwal_ulang_sesi`, dan sebab yang sama:
+  -- menaruh sesi 30 menit lagi bukan penjadwalan melainkan cara memaksa bidan
+  -- berangkat tanpa pemberitahuan.
+  if ((tanggal_baru + jam_baru) at time zone 'Asia/Jakarta') - now() < interval '2 hours' then
+    raise exception 'waktu sesi pengganti terlalu dekat atau sudah lewat — pilih minimal 2 jam dari sekarang'
+      using errcode = '23514';
+  end if;
+
   if exists (
     select 1 from public.sessions x
      where x.partner_id = mitra

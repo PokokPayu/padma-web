@@ -802,6 +802,31 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
     expect(error?.code).toBe("23514");
   });
 
+  it("tanggal di MASA LALU ditolak — haknya tidak boleh termakan sesi lampau", async () => {
+    // `jadwal_ulang_sesi` sudah menegakkan minimal 2 jam dari sekarang; fungsi
+    // ini sebelumnya tidak punya padanannya. Satu salah ketik tahun sudah
+    // cukup: haknya termakan pada sesi di masa lalu, `dipakai_sesi_id` terisi,
+    // dan hanya UPDATE manual ke basis data yang bisa memulihkannya.
+    const hak = await terbitkanHak("2027-12-31");
+
+    const { data, error } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2020-09-25", // tahun salah ketik
+      jam_baru: "10:00",
+      mitra: MITRA,
+    });
+    catatSesi(data);
+    expect(error?.code).toBe("23514");
+
+    // Yang paling penting: haknya MASIH BISA DIPAKAI sesudah penolakan.
+    const { data: hakSesudah } = await admin
+      .from("hak_sesi")
+      .select("dipakai_sesi_id")
+      .eq("id", hak)
+      .single();
+    expect(hakSesudah!.dipakai_sesi_id, "hak tidak boleh termakan").toBeNull();
+  });
+
   it("hak yang sudah dipakai TIDAK bisa dipakai lagi", async () => {
     const hak = await terbitkanHak("2027-12-31");
     const { data: pertama } = await sesiAdmin.rpc("tukar_hak_sesi", {
