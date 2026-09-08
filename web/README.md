@@ -115,6 +115,7 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/klien/baru` | Admin, Owner | Formulir klien baru (PADMA ID otomatis) — halaman tersendiri, bukan formulir di header daftar |
 | `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp |
 | `/admin/sesi` | Admin, Owner | Antrean permintaan (cari bidan → tetapkan bidan → konfirmasi), jadwalkan sesi, tandai selesai + catatan bidan |
+| `/admin/penilaian` | Admin, Owner | Penilaian sesi: dua angka TERPISAH (sesi & bidan), saringan bintang ≤ 3, komentar klien sebagai teks biasa |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
 | `/admin/layanan` | Admin, Owner | Daftar layanan datar: cari, saring ketersediaan, paginasi; baris menaut ke detail |

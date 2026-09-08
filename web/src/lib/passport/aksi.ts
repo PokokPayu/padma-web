@@ -337,3 +337,63 @@ export async function batalkanPengajuan(permintaanId: string): Promise<Berhasil 
   revalidatePath("/passport");
   return { ok: true };
 }
+
+/**
+ * Klien menilai satu sesi yang sudah selesai (spec C1 J10).
+ *
+ * DUA angka, bukan satu: layanan dan bidan dinilai terpisah. Dilebur, layanan
+ * yang salah rancang akan terbaca sebagai bidan yang buruk — sesi 90 menit yang
+ * sebenarnya butuh 120 menit menghasilkan klien kecewa, dan bintangnya jatuh ke
+ * orang yang mengerjakannya dengan benar.
+ *
+ * `partner_id` dan `variant_id` TIDAK dikirim dari sini: trigger
+ * `guard_penilaian_sesi` menulis ulang keduanya dari baris sesi, sehingga
+ * "salinan keadaan saat itu" menjadi fakta basis data dan bukan janji kode.
+ * Yang dikirim hanyalah sesi mana, dua bintang, dan komentar.
+ *
+ * `upsert` pada `session_id`: orang berhak berubah pikiran tentang bintangnya,
+ * tetapi tidak boleh menggandakan penilaiannya. Indeks unik yang menegakkannya.
+ */
+export async function nilaiSesi(formData: FormData): Promise<Berhasil | Gagal> {
+  const clientId = await klienSaatIni();
+  if (!clientId) return { ok: false, pesan: "Akun belum terhubung." };
+
+  const sesiId = String(formData.get("sesi") ?? "").trim();
+  const layanan = Number(formData.get("bintang_layanan"));
+  const bidan = Number(formData.get("bintang_bidan"));
+  const komentar = String(formData.get("komentar") ?? "").trim().slice(0, 1000);
+
+  if (!sesiId) return { ok: false, pesan: "Sesi tidak dikenali." };
+
+  // Dua pemeriksaan terpisah supaya kalimatnya menyebut YANG MANA yang belum
+  // diisi. "Beri bintang dulu" untuk dua baris bintang adalah pesan yang
+  // menyuruh orang menebak.
+  const sah = (n: number) => Number.isInteger(n) && n >= 1 && n <= 5;
+  if (!sah(layanan)) return { ok: false, pesan: "Beri bintang untuk sesinya (1–5)." };
+  if (!sah(bidan)) return { ok: false, pesan: "Beri bintang untuk bidannya (1–5)." };
+
+  const supabase = await createServerSupabase();
+  const { error } = await supabase.from("session_ratings").upsert(
+    {
+      session_id: sesiId,
+      // Ketiganya ditulis ulang trigger dari baris sesi; dikirim di sini hanya
+      // karena kolomnya NOT NULL. Nilai apa pun yang lolos dari peramban tidak
+      // pernah sampai tersimpan.
+      client_id: clientId,
+      bintang_layanan: layanan,
+      bintang_bidan: bidan,
+      komentar,
+    },
+    { onConflict: "session_id" },
+  );
+
+  if (error) {
+    // Kalimat yang bisa ditindak, bukan kode Postgres. Penyebab yang paling
+    // mungkin: sesinya belum selesai, atau bukan miliknya — keduanya ditolak
+    // `guard_penilaian_sesi`.
+    return { ok: false, pesan: "Penilaian tidak bisa disimpan untuk sesi ini." };
+  }
+
+  revalidatePath("/passport");
+  return { ok: true };
+}

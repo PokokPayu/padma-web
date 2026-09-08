@@ -17,6 +17,10 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   // tujuan yang paling perlu dikenali. Judul halamannya tetap "Pembayaran".
   { href: "/admin/bayar", label: "Bayar", ikon: "bayar", badge: "klaimMenunggu" },
   { href: "/admin/mitra", label: "Mitra", ikon: "mitra" },
+  // Judul halamannya "Penilaian". Tanpa badge: penilaian bukan ANTREAN —
+  // tidak ada yang menunggu ditangani, dan angka merah di sidebar akan
+  // menyuruh admin "membereskan" sesuatu yang memang tidak untuk dibereskan.
+  { href: "/admin/penilaian", label: "Nilai", ikon: "mitra" },
   // Judul halamannya "Layanan" (atau "Layanan & Paket" bila `PAKET_TAMPIL`
   // dinyalakan kembali, lihat src/lib/paket-tampil.ts); labelnya dipendekkan
   // agar sidebar tidak memaksa satu tujuan menjadi dua baris — beda alasan

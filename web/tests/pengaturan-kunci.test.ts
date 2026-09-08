@@ -178,6 +178,9 @@ describe("registri tidak bisa ditulis staf (kalau tidak, FK-nya hiasan)", () => 
       "jam_layanan",
       "jam_operasional",
       "nomor_wa",
+      "qris_gambar",
+      "qris_merchant",
+      "qris_nmid",
     ]);
     for (const r of data!) {
       expect(r.keterangan.length, `kunci ${r.key} wajib punya keterangan`).toBeGreaterThan(0);

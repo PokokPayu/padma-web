@@ -8,12 +8,48 @@ import { StatTile } from "@/app/_shell/panel/stat-tile";
 import { Kartu } from "@/app/_shell/panel/kartu";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { GrafikPekan } from "./_shell/grafik-pekan";
+import { ambilTrenPenilaian } from "@/lib/admin/penilaian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Panel Owner" };
 
 const TAUTAN_KECIL =
   "text-[12px] font-bold text-leaf underline underline-offset-4 transition hover:text-night";
+
+/** Satu kolom tren. Dipisah supaya kedua kolom tidak pernah bisa berbeda bentuk. */
+function KolomTren({
+  judul,
+  baris,
+  kosong,
+}: {
+  judul: string;
+  baris: { nama: string; jumlah: number; rata: number }[];
+  kosong: string;
+}) {
+  return (
+    <div className="rounded-lg border border-panel-border bg-panel-surface p-3.5">
+      <h3 className="mb-2 text-[13px] font-bold text-panel-ink">{judul}</h3>
+      {baris.length === 0 ? (
+        <p className="text-[12.5px] italic text-panel-muted">{kosong}</p>
+      ) : (
+        <ul>
+          {baris.map((b) => (
+            <li
+              key={b.nama}
+              data-tren={b.nama}
+              className="flex items-center justify-between border-b border-dashed border-panel-border py-1.5 text-[12.5px] last:border-0"
+            >
+              <span className="min-w-0 truncate text-panel-ink">{b.nama}</span>
+              <span className="flex-none text-panel-muted">
+                <b className="text-panel-ink">{b.rata.toFixed(1)}</b> · {b.jumlah} penilaian
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export default async function OwnerPage() {
   const { nama } = await requireRole(["owner"]);
@@ -25,7 +61,10 @@ export default async function OwnerPage() {
   // jadi memakai keduanya berarti membaca seluruh sesi, tarif, dan tanda bayar
   // dua kali setiap beranda dibuka. Grafik pun tidak butuh query baru: rekap
   // ini sudah memuat SELURUH pekan lengkap dengan marginnya.
-  const rekap = await ambilRekap();
+  // Tren penilaian dibaca terpisah dari rekap: keduanya menjawab pertanyaan
+  // berbeda dan tidak berbagi satu baris pun. Digabung dalam satu query,
+  // penilaian akan ikut tertahan setiap kali rekap melambat.
+  const [rekap, tren] = await Promise.all([ambilRekap(), ambilTrenPenilaian()]);
 
   // Pekan sepi tidak punya ember sendiri di `hitungRekap()`; deretPekanTerakhir
   // mengisinya dengan nol supaya sumbu waktunya tidak berlubang.
@@ -159,6 +198,27 @@ export default async function OwnerPage() {
         menaikkan tarif hari ini tidak menggeser satu angka pun di pekan yang
         sudah lewat.
       </p>
+
+      {/* TREN PENILAIAN (spec C1 J10) — DUA kolom terpisah, sengaja.
+          Pertanyaan yang dijawab bagian ini adalah "orangnya atau layanannya?",
+          dan satu angka gabungan justru menghapus pertanyaan itu. Dua tuas
+          PADMA juga berbeda pemiliknya: katalog & durasi di tangan owner,
+          pembinaan tim di tangan admin. */}
+      <section aria-label="Tren penilaian" className="mt-8">
+        <h2 className="text-[15px] font-bold text-panel-ink">Tren penilaian</h2>
+        <p className="mb-3 text-[12px] text-panel-muted">
+          Diurutkan dari yang terendah. Angka ini bahan percakapan, bukan papan skor — ia tidak
+          memengaruhi honor dan tidak dipakai memilih bidan.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <KolomTren judul="Per bidan" baris={tren.perBidan} kosong="Belum ada penilaian bidan." />
+          <KolomTren
+            judul="Per layanan"
+            baris={tren.perLayanan}
+            kosong="Belum ada penilaian layanan."
+          />
+        </div>
+      </section>
     </main>
   );
 }

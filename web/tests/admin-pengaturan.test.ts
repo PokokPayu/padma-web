@@ -238,6 +238,9 @@ describe("daftarSetelanAdmin", () => {
       "jam_layanan",
       "jam_operasional",
       "nomor_wa",
+      "qris_gambar",
+      "qris_merchant",
+      "qris_nmid",
     ]);
     for (const s of daftar) {
       expect(s.keterangan.length, `kunci ${s.key} tanpa keterangan`).toBeGreaterThan(0);

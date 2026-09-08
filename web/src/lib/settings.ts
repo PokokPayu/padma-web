@@ -2,6 +2,9 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { uraikanDaftarJam } from "@/lib/jadwal/jam";
 import {
   ALAMAT_BAWAAN,
+  QRIS_GAMBAR_BAWAAN,
+  QRIS_MERCHANT_BAWAAN,
+  QRIS_NMID_BAWAAN,
   JAM_BAWAAN,
   keFormatLokal,
   nomorWaTerpakai,
@@ -42,7 +45,15 @@ import {
  * salah hanyalah SUMBERNYA. Satu query mengembalikan ketiganya: kunci yang
  * terpisah query akan terpisah pula umur cache-nya.
  */
-const KUNCI_PUBLIK = ["nomor_wa", "alamat_klinik", "jam_operasional", "jam_layanan"] as const;
+const KUNCI_PUBLIK = [
+  "nomor_wa",
+  "alamat_klinik",
+  "jam_operasional",
+  "jam_layanan",
+  "qris_gambar",
+  "qris_merchant",
+  "qris_nmid",
+] as const;
 
 export async function bacaPengaturan() {
   const admin = createAdminSupabase();
@@ -67,5 +78,11 @@ export async function bacaPengaturan() {
     // digabung: yang satu untuk dibaca manusia, yang satu untuk divalidasi
     // server sebelum sebuah janji dibuat.
     jamLayanan: uraikanDaftarJam(nilai.get("jam_layanan")),
+    // QRIS (spec J12). Ketiganya dibaca bersama karena ketiganya dipakai satu
+    // blok yang sama, dan kunci yang terpisah query akan terpisah pula umur
+    // cache-nya — halaman bisa menampilkan gambar baru dengan NMID lama.
+    qrisGambar: teksTerpakai(nilai.get("qris_gambar"), QRIS_GAMBAR_BAWAAN),
+    qrisMerchant: teksTerpakai(nilai.get("qris_merchant"), QRIS_MERCHANT_BAWAAN),
+    qrisNmid: teksTerpakai(nilai.get("qris_nmid"), QRIS_NMID_BAWAAN),
   };
 }

@@ -21,6 +21,8 @@ import { SampulPassport } from "./_komponen/sampul";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { LABEL_PERMINTAAN } from "@/lib/jadwal/status";
 import { TombolBatal } from "./_komponen/tombol-batal";
+import { KartuNilai } from "./_komponen/kartu-nilai";
+import { masihBisaDinilai } from "@/lib/passport/penilaian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout — jangan mengulang
 // nama aplikasi di sini.
@@ -34,7 +36,7 @@ export const metadata = { title: "Digital Care Passport" };
 export default async function BerandaPassport({
   searchParams,
 }: {
-  searchParams: Promise<{ skrining?: string }>;
+  searchParams: Promise<{ skrining?: string; pengajuan?: string }>;
 }) {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
@@ -71,6 +73,25 @@ export default async function BerandaPassport({
     ambilPermintaanJadwal(klien.id),
   ]);
 
+  // SESI YANG BELUM DINILAI (spec C1 J10) — paling banyak SATU kartu.
+  //
+  // Menampilkan semuanya sekaligus akan mengubah beranda menjadi daftar
+  // pekerjaan; yang paling baru juga yang paling diingat, dan sisanya bisa
+  // menunggu kunjungan berikutnya. Kartu ini bisa diabaikan dan hilang sendiri
+  // setelah 30 hari — lihat `masihBisaDinilai()`.
+  const sudahDinilai = new Set<string>();
+  {
+    const supabase = await createServerSupabase();
+    const { data } = await supabase.from("session_ratings").select("session_id");
+    for (const b of data ?? []) sudahDinilai.add(b.session_id as string);
+  }
+  const belumDinilai = sesi.find(
+    (s) =>
+      s.status === "selesai" &&
+      !sudahDinilai.has(s.id) &&
+      masihBisaDinilai(s.tanggal, hariIniJakarta()),
+  );
+
   // "Hari ini" menurut Jakarta, bukan menurut jam server (Vercel berjalan UTC).
   const sekarang = hariIniJakarta();
   const paketAktif = paket[0] ?? null;
@@ -106,6 +127,26 @@ export default async function BerandaPassport({
             jangan lanjutkan pemesanan.
           </span>
         </div>
+      )}
+      {sp.pengajuan === "terkirim" && (
+        <div
+          className="mb-3.5 rounded-2xl border-[1.6px] border-leaf/30 bg-leaf-soft p-4 text-[13px]"
+          data-pengajuan-terkirim
+        >
+          <b className="block text-sm text-night">Permintaan jadwal terkirim</b>
+          <span className="text-[#415247]">
+            Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan bidan yang
+            datang. Permintaannya tercantum di bawah.
+          </span>
+        </div>
+      )}
+      {belumDinilai && (
+        <KartuNilai
+          sesiId={belumDinilai.id}
+          namaLayanan={belumDinilai.namaLayanan}
+          namaMitra={belumDinilai.namaMitra}
+          tanggal={formatTanggalID(belumDinilai.tanggal)}
+        />
       )}
       <SampulPassport
         nama={klien.nama}

@@ -10,6 +10,27 @@ import { FormAjukan } from "./form";
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Ajukan Jadwal" };
 
+/**
+ * DIRENDER PER PERMINTAAN, TANPA PENGECUALIAN.
+ *
+ * Halaman ini memutuskan hal yang berubah dari detik ke detik: apakah klien
+ * punya skrining hijau yang belum terpakai. Skrining bisa lahir semenit yang
+ * lalu (dari corong publik lalu tersambung saat login, atau dari
+ * `/passport/skrining`), dan sebuah skrining HANGUS begitu dipakai.
+ *
+ * Ditemukan lewat E2E yang gagal BERSELANG-SELING: halaman menampilkan
+ * "Isi skrining keselamatan dulu" padahal skrining hijaunya ada di basis data.
+ * Bagi klien sungguhan kalimat itu berbohong — ia baru saja menyelesaikan
+ * skrining dan disuruh mengulanginya.
+ *
+ * Penandaan DINAMIS, bukan penandaan revalidasi maupun pembungkus cache manual:
+ * keduanya dilarang di seluruh `src/app/passport/**` (dijaga
+ * tests/passport-shell.test.ts) karena respons satu klien tidak boleh pernah
+ * dibagikan ke klien lain. Yang dipakai di sini justru kebalikannya — ia
+ * memastikan TIDAK ADA yang dibagikan.
+ */
+export const dynamic = "force-dynamic";
+
 type BarisVarian = {
   id: string;
   service_id: string;
