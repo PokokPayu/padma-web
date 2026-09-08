@@ -7,7 +7,7 @@ import { formatRupiah } from "@/lib/owner/rupiah";
 import { tandaiHonorDibayar } from "./aksi";
 
 const KELAS_TOMBOL =
-  "shrink-0 rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60";
+  "shrink-0 rounded-lg bg-panel-ink px-3 py-1.5 text-[12px] font-bold text-panel-surface disabled:opacity-60";
 const KELAS_LUNAS =
   "shrink-0 rounded-lg border border-leaf/40 bg-leaf-soft px-3 py-1.5 text-[12px] font-bold text-leaf";
 
@@ -46,11 +46,11 @@ export function BarisHonorMitra({
   const lunas = baris.sudahDibayar || baruDitandai;
 
   return (
-    <div className="border-b border-black/5 py-2.5 last:border-b-0">
+    <div className="border-b border-panel-border py-2.5 last:border-b-0">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <span className="min-w-0">
-          <b className="block text-[13.5px] text-night">{baris.nama}</b>
-          <span className="block text-[11.5px] text-ink-soft">
+          <b className="block text-[13.5px] text-panel-ink">{baris.nama}</b>
+          <span className="block text-[11.5px] text-panel-muted">
             {`${baris.jumlahSesi} sesi selesai`}
             {baris.jumlahTakBertarif > 0 &&
               ` · ${baris.jumlahTakBertarif} di antaranya belum bertarif`}
@@ -58,7 +58,7 @@ export function BarisHonorMitra({
         </span>
 
         <span className="flex items-center gap-3">
-          <span className="font-mono text-[14px] text-night">
+          <span className="font-mono text-[14px] text-panel-ink">
             {formatRupiah(baris.totalHonor)}
           </span>
           {lunas ? (
@@ -94,7 +94,7 @@ export function BarisHonorMitra({
       </div>
 
       {lunas && baris.adaSesiSesudahDitandai && (
-        <p className="mt-1.5 rounded-lg bg-[#FDFAF1] px-3 py-2 text-[11.5px] leading-relaxed text-clay">
+        <p className="mt-1.5 rounded-lg border border-clay/35 bg-panel-bg px-3 py-2 text-[11.5px] leading-relaxed text-clay">
           <b>Ada sesi yang berubah sesudah pekan ini ditandai dibayar.</b> Nominal
           di atas sudah ikut naik, tetapi selisihnya belum tentu sudah
           ditransfer — cocokkan dengan bukti transfer sebelum menutup pekan ini.
