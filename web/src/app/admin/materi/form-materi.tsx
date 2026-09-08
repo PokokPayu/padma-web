@@ -51,12 +51,21 @@ export type PilihanLayanan = { id: string; nama: string };
 export function CentangLayanan({
   layanan,
   terpilih,
-  labelUntuk,
+  labelAkhiran = "",
   disabled = false,
 }: {
   layanan: PilihanLayanan[];
   terpilih: string[];
-  labelUntuk: (nama: string) => string;
+  /**
+   * Akhiran label aksesibilitas per checkbox, mis. `"untuk materi X"` —
+   * STRING polos, bukan fungsi: komponen ini "use client", dan Kartu "Layanan
+   * tertaut" di halaman detail (`admin/materi/[id]/page.tsx`) memakainya dari
+   * SERVER Component. Fungsi tidak bisa menyeberang batas server/klien
+   * (bukan Server Action) — React melemparkan "Functions cannot be passed
+   * directly to Client Components" (digest 747457518) untuk SETIAP kunjungan
+   * ke halaman detail materi mana pun sebelum perbaikan ini.
+   */
+  labelAkhiran?: string;
   disabled?: boolean;
 }) {
   return (
@@ -70,7 +79,7 @@ export function CentangLayanan({
               name="service_id"
               value={l.id}
               defaultChecked={terpilih.includes(l.id)}
-              aria-label={labelUntuk(l.nama)}
+              aria-label={`Layanan ${l.nama}${labelAkhiran ? ` ${labelAkhiran}` : ""}`}
               disabled={disabled}
             />
             {l.nama}
@@ -193,7 +202,7 @@ export function FormMateriBaru({
         </label>
       </div>
 
-      <CentangLayanan layanan={layanan} terpilih={[]} labelUntuk={(nama) => `Layanan ${nama}`} />
+      <CentangLayanan layanan={layanan} terpilih={[]} />
 
       <label className="mt-3 block">
         <span className={KELAS_LABEL}>Deskripsi singkat (opsional)</span>
@@ -326,7 +335,7 @@ export function AksiMateri({
         <CentangLayanan
           layanan={layanan}
           terpilih={layananId}
-          labelUntuk={(nama) => `Layanan ${nama} untuk materi ${judul}`}
+          labelAkhiran={`untuk materi ${judul}`}
         />
         {tipeBaru !== tipe && (
           <>
