@@ -137,7 +137,7 @@ describe("susunTagihan", () => {
   it("sesi batal tidak ditagih", () => {
     const t = susunTagihan({
       paket: [],
-      sesi: [s({ id: "x", clientPackageId: null, status: "batal", statusBayar: "belum" })],
+      sesi: [s({ id: "x", clientPackageId: null, status: "dibatalkan_padma", statusBayar: "belum" })],
     });
     expect(t).toHaveLength(0);
   });
@@ -264,7 +264,7 @@ describe("susunTagihan", () => {
   it("sesi BATAL berjenjang tidak menghasilkan item sama sekali", () => {
     const t = susunTagihan({
       paket: [],
-      sesi: [s({ id: "x", clientPackageId: null, status: "batal", jenjang: "5_10" })],
+      sesi: [s({ id: "x", clientPackageId: null, status: "dibatalkan_padma", jenjang: "5_10" })],
     });
     expect(t).toHaveLength(0);
   });

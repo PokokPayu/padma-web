@@ -165,7 +165,7 @@ describe("hitungRekap — hanya sesi selesai", () => {
       sesi: [
         sesi({ id: "a", status: "selesai" }),
         sesi({ id: "b", status: "terjadwal" }),
-        sesi({ id: "c", status: "batal" }),
+        sesi({ id: "c", status: "dibatalkan_padma" }),
       ],
       tanda: [],
     });
@@ -177,7 +177,7 @@ describe("hitungRekap — hanya sesi selesai", () => {
   it("pekan yang HANYA berisi sesi belum selesai tidak muncul sama sekali", () => {
     const r = hitungRekap({
       tarif: [tarif({})],
-      sesi: [sesi({ id: "a", status: "terjadwal" }), sesi({ id: "b", status: "batal" })],
+      sesi: [sesi({ id: "a", status: "terjadwal" }), sesi({ id: "b", status: "dibatalkan_padma" })],
       tanda: [],
     });
     expect(r).toEqual([]);

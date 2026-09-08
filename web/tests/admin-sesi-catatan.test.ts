@@ -136,6 +136,10 @@ function fdJadwal(ubah: Record<string, string> = {}) {
   fd.set("variant_id", VARIAN_BARU);
   fd.set("partner_id", MITRA);
   fd.set("tanggal", TGL);
+  // `sessions.jam_mulai` NOT NULL sejak C1 (spec J2), dan `jadwalkanSesi`
+  // memvalidasinya terhadap `app_settings.jam_layanan`. '09:00' ada di daftar
+  // bawaan, jadi fixture ini tidak bergantung pada setelan yang disunting uji lain.
+  fd.set("jam", "09:00");
   for (const [k, v] of Object.entries(ubah)) {
     if (v === "") fd.delete(k);
     else fd.set(k, v);

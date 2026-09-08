@@ -103,19 +103,48 @@ describe("indeks antrean mengikuti rantai yang diperpanjang", () => {
   });
 });
 
-describe("tidak ada nilai status lama yang tertinggal di kode SQL", () => {
-  it("tak satu pun fungsi plpgsql masih menyebut 'menunggu' sebagai status permintaan", async () => {
-    // Fungsi plpgsql menyimpan literalnya sebagai TEKS. Sesudah RENAME VALUE,
-    // literal lama tidak lagi menjadi anggota enum — dan pemanggilannya gagal
-    // 22P02 saat dijalankan, bukan saat migrasi. Ini pagar yang menangkapnya
-    // lebih awal.
-    const baris = await querySql<{ nama: string }>(
-      `select p.proname as nama
-         from pg_proc p
-         join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public'
-          and p.prosrc like '%''menunggu''::booking_status%'`,
-    );
-    expect(baris.map((b) => b.nama)).toEqual([]);
+describe("tidak ada nilai status lama yang tertinggal di definisi SQL", () => {
+  /**
+   * Fungsi plpgsql dan view menyimpan literalnya sebagai TEKS. Sesudah RENAME
+   * VALUE, literal lama tidak lagi menjadi anggota enum — dan pemanggilannya
+   * gagal 22P02 SAAT DIJALANKAN, bukan saat migrasi. Pagar ini menangkapnya
+   * lebih awal.
+   *
+   * Versi pertama pagar ini hanya memeriksa `booking_status`, dan hanya
+   * mencocokkan bentuk bercast (`'menunggu'::booking_status`). Ia meloloskan
+   * dua definisi nyata yang menulis `s.status <> 'batal'` tanpa cast —
+   * fungsi `klaim_sudah_bayar` dan view `sesi_menunggu_tarif` — yang baru
+   * ketahuan lewat uji LAIN yang merah. Satu pagar yang memeriksa separuh enum
+   * yang berubah memberi rasa aman tanpa memberi keamanan; karena itu
+   * pemindaiannya kini menyasar KATA-nya, bukan bentuk cast-nya, dan mencakup
+   * kedua enum.
+   */
+  const NILAI_MATI = ["menunggu", "batal"];
+  const pola = (mati: string) => `status[^;]{0,40}'${mati}'`;
+
+  it("tak satu pun fungsi menyebut nilai status yang sudah berganti nama", async () => {
+    for (const mati of NILAI_MATI) {
+      const baris = await querySql<{ nama: string }>(
+        `select p.proname as nama
+           from pg_proc p
+           join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.prokind = 'f' and p.prosrc ~ $1`,
+        [pola(mati)],
+      );
+      expect(baris.map((b) => b.nama), `fungsi menyebut '${mati}'`).toEqual([]);
+    }
+  });
+
+  it("tak satu pun view menyebut nilai status yang sudah berganti nama", async () => {
+    for (const mati of NILAI_MATI) {
+      const baris = await querySql<{ nama: string }>(
+        `select c.relname as nama
+           from pg_class c
+           join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public' and c.relkind = 'v' and pg_get_viewdef(c.oid) ~ $1`,
+        [pola(mati)],
+      );
+      expect(baris.map((b) => b.nama), `view menyebut '${mati}'`).toEqual([]);
+    }
   });
 });

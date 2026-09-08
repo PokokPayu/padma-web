@@ -24,6 +24,7 @@ import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { STATUS_ANTRE, STATUS_SESI, LABEL_SESI } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
+import { bacaPengaturan } from "@/lib/settings";
 import type { StatusPermintaan } from "@/lib/jadwal/status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -73,7 +74,8 @@ export default async function SesiPage({
   const hariIni = hariIniJakarta();
 
   const supabase = await createServerSupabase();
-  const [{ baris, total }, { data: permintaan }] = await Promise.all([
+  const [{ jamLayanan }, { baris, total }, { data: permintaan }] = await Promise.all([
+    bacaPengaturan(),
     ambilDaftarSesi(param, hariIni),
     supabase
       .from("booking_requests")
@@ -330,6 +332,7 @@ export default async function SesiPage({
               // Tanggal awal = hari ini menurut kalender Jakarta, bukan jam
               // server: pada 17:00–24:00 UTC keduanya sudah berbeda tanggal.
               tanggalAwal={hariIni}
+              jamPilihan={jamLayanan}
               hrefTutup={hrefTutup}
             />
           )}

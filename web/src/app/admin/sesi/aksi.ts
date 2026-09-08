@@ -5,6 +5,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { JENJANG_SAH, periksaAlasanPenimpaan } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
+import { bentukJamSah } from "@/lib/jadwal/jam";
+import { bacaPengaturan } from "@/lib/settings";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import {
   PERMINTAAN_AWAL,
@@ -272,6 +274,10 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   const variantId = String(formData.get("variant_id") ?? "").trim();
   const partnerId = String(formData.get("partner_id") ?? "").trim();
   const tanggal = String(formData.get("tanggal") ?? "").trim();
+  // Jam WAJIB (spec J2). Dua pemeriksaan, sama seperti jalur klien: BENTUK
+  // lebih dulu, lalu KEANGGOTAAN pada daftar yang berlaku hari ini — dan
+  // daftar itu dibaca di server, bukan dipercaya dari FormData.
+  const jam = String(formData.get("jam") ?? "").trim();
   const pakaiPaket = formData.get("pakai_paket") !== null;
 
   if (!clientId || !serviceId || !variantId || !partnerId) {
@@ -279,6 +285,13 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   }
   if (!POLA_TANGGAL.test(tanggal)) {
     return { ok: false, pesan: "Tanggal harus berformat YYYY-MM-DD." };
+  }
+  if (!bentukJamSah(jam)) {
+    return { ok: false, pesan: "Pilih jam mulai sesi." };
+  }
+  const { jamLayanan } = await bacaPengaturan();
+  if (!jamLayanan.includes(jam)) {
+    return { ok: false, pesan: "Jam itu tidak tersedia. Pilih salah satu jam layanan." };
   }
 
   const supabase = await createServerSupabase();
@@ -398,6 +411,7 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
     variant_id: variantId,
     partner_id: partnerId,
     tanggal,
+    jam_mulai: jam,
     status: "terjadwal",
     catatan: "",
     rekomendasi: "",

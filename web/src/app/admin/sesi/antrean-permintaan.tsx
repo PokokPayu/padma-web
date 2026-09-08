@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { cariMitra, pilihMitra, konfirmasiPermintaan } from "./aksi";
-import type { StatusPermintaan } from "@/lib/jadwal/status";
+import {
+  PERMINTAAN_AWAL,
+  PERMINTAAN_DICARIKAN,
+  PERMINTAAN_SIAP_KONFIRMASI,
+  type StatusPermintaan,
+} from "@/lib/jadwal/status";
 
 export type PermintaanAntre = {
   id: string;
@@ -90,7 +95,7 @@ export function BlokPermintaan({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {permintaan.status === "diminta" && (
+          {permintaan.status === PERMINTAAN_AWAL && (
             <button
               type="button"
               disabled={pending}
@@ -101,7 +106,7 @@ export function BlokPermintaan({
             </button>
           )}
 
-          {permintaan.status === "mencari_mitra" && (
+          {permintaan.status === PERMINTAAN_DICARIKAN && (
             <>
               <label className="sr-only" htmlFor={`mitra-${permintaan.id}`}>
                 Bidan untuk permintaan {permintaan.namaKlien}
@@ -131,7 +136,7 @@ export function BlokPermintaan({
             </>
           )}
 
-          {permintaan.status === "mitra_siap" && (
+          {permintaan.status === PERMINTAAN_SIAP_KONFIRMASI && (
             <>
               <span className="text-[12.5px] font-semibold text-ink">
                 Bidan: {permintaan.namaMitra ?? "—"}
@@ -149,7 +154,7 @@ export function BlokPermintaan({
         </div>
       </div>
 
-      {permintaan.status === "mencari_mitra" && tanpaMitra && (
+      {permintaan.status === PERMINTAAN_DICARIKAN && tanpaMitra && (
         <p className="mt-2 text-[12px] font-semibold text-clay">
           Belum ada mitra aktif — daftarkan mitra dulu di menu Mitra.
         </p>
