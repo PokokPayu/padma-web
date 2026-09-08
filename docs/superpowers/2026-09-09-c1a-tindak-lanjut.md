@@ -72,10 +72,12 @@ rekap transport owner membacanya sebagai angka yang tidak pernah diperiksa siapa
 bersandar padanya berubah arti setiap kali ada nilai baru disisipkan.
 
 **4. Baris lama diberi `jam_mulai = '09:00'`.**
-Itu **bukan** jam sesi mereka yang sebenarnya — data itu memang tidak pernah ada, dan tidak ada
-nilai yang bisa membuatnya ada. **Bila di produksi sudah ada sesi atau pengajuan sungguhan, jamnya
-wajib dibenarkan manusia sesudah migrasi diterapkan.** Ini satu-satunya butir di dokumen ini yang
-menuntut tindakan di luar kode.
+Itu bukan jam sesi mereka yang sebenarnya — data itu memang tidak pernah ada.
+
+**TIDAK menuntut tindakan apa pun.** Keputusan pemilik repo 8 September 2026: aplikasi ini BELUM
+benar-benar rilis, jadi tidak ada data produksi yang perlu dijaga. Draf pertama catatan ini menuntut
+"jamnya wajib dibenarkan manusia sesudah migrasi diterapkan"; itu kehati-hatian yang tidak dibayar
+siapa pun. Backfill sekadar cara membuat kolom bisa NOT NULL, titik.
 
 **5. `terjadwal → selesai` tetap sah tanpa lewat `berjalan`.**
 Akun dan panel mitra belum ada, jadi `berjalan` ditandai admin dan akan sering dilewati. Memaksa
@@ -147,10 +149,18 @@ cacat kode — ia tipe yang di-generate Next. Hilang sendiri sesudah `npm run bu
 
 ## Yang perlu diketahui C1-b sebelum ia mulai
 
-**1. Migrasi `screening_id NOT NULL` wajib BERTAHAP.** C1-a menaruh baris `booking_requests` di
-seed dan di puluhan titik uji. `set not null` langsung akan menolak pada `db reset` karena baris
-lama tidak punya skrining, dan kegagalannya akan terlihat seperti masalah lain sama sekali.
-Urutannya: tambah kolom nullable → backfill (atau hapus baris uji lama) → baru `set not null`.
+**1. Migrasi `screening_id NOT NULL` boleh LANGSUNG.** Peringatan bertahap di draf pertama catatan
+ini KELIRU, dan mencabutnya menghemat waktu C1-b. Dua sebabnya:
+
+- `supabase db reset` menjalankan SELURUH migrasi lebih dulu, BARU `seed.sql`, dan `globalSetup`
+  vitest belakangan lagi. Saat migrasi berjalan, `booking_requests` KOSONG — tidak ada baris lama
+  yang bisa menolak `not null`.
+- Tidak ada data produksi yang perlu dijaga: aplikasi belum rilis (keputusan pemilik repo,
+  8 September 2026).
+
+Yang TETAP berlaku: ~30 berkas uji dan `seed.sql` menyisipkan `booking_requests`, jadi kolom wajib
+baru tetap menuntut sapuan fixture — sama seperti yang `jam_mulai` tuntut di C1-a. Itu ongkos uji,
+bukan ongkos migrasi.
 
 **2. Berkas uji yang sudah disentuh C1-a untuk `jam_mulai` akan disentuh lagi untuk
 `screening_id`** — 30 berkas, daftar lengkapnya ada di commit `de5daf7`.
