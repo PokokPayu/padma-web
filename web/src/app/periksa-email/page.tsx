@@ -1,15 +1,16 @@
 import { PanggungAuth } from "@/app/_auth/panggung";
 import { FormKirimUlang } from "./form-kirim-ulang";
 
-export const metadata = { title: "Periksa email Anda — PADMA" };
+export const metadata = { title: "Periksa email Anda" };
 
 /**
  * Halaman tunggu konfirmasi email.
  *
  * Kalimat panel kirinya SENGAJA berbeda dari `/akun-belum-terhubung`: dua
- * keadaan yang berbeda — di sana akunnya sudah bisa masuk tetapi belum tertaut
- * ke rekam klien dan yang dinanti adalah tautan aktivasi dari WhatsApp; di sini
- * yang dinanti adalah bukti bahwa alamat emailnya memang miliknya.
+ * keadaan yang berbeda — di sana akun sudah melewati konfirmasi tetapi rekam
+ * kliennya tidak bisa ditentukan tanpa campur tangan tim PADMA; di sini yang
+ * dinanti masih bukti bahwa alamat emailnya memang miliknya, dan pemakainya
+ * sendiri yang bisa menyelesaikannya.
  *
  * Konfirmasi email bukan formalitas di PADMA: ia SATU-SATUNYA hal yang membuat
  * penautan lewat email menjadi sah (lihat `@/lib/auth/pastikan-klien`). Karena

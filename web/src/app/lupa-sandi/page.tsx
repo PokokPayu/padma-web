@@ -1,7 +1,7 @@
 import { PanggungAuth } from "@/app/_auth/panggung";
 import { FormLupaSandi } from "./form-lupa-sandi";
 
-export const metadata = { title: "Lupa sandi — PADMA" };
+export const metadata = { title: "Lupa sandi" };
 
 export default function LupaSandiPage() {
   return (

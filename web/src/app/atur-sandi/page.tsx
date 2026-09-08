@@ -1,7 +1,7 @@
 import { PanggungAuth } from "@/app/_auth/panggung";
 import { FormAturSandi } from "./form-atur-sandi";
 
-export const metadata = { title: "Atur kata sandi — PADMA" };
+export const metadata = { title: "Atur kata sandi" };
 
 export default function AturSandiPage() {
   return (

@@ -15,7 +15,10 @@ type Klien = {
   nama: string;
   email: string;
   no_hp: string;
-  phase_id: string;
+  // NULLABLE sejak migration `fase_klien_boleh_kosong`: fase datang dari
+  // skrining pertama yang tersambung, dan baris klien yang lahir dari
+  // pendaftaran mandiri sampai ke layar ini tanpa fase sama sekali.
+  phase_id: string | null;
   user_id: string | null;
   alamat: string;
   alamat_lat: number | null;
@@ -70,8 +73,15 @@ export default async function DetailKlienPage({
   ]);
 
   const aktif = klien.user_id !== null;
-  const namaFase =
-    (fase ?? []).find((f) => f.id === klien.phase_id)?.nama ?? klien.phase_id;
+  // "—" untuk fase kosong, SAMA PERSIS dengan daftar klien
+  // (`src/lib/admin/klien.ts`). Sebelumnya cabang ini jatuh ke `klien.phase_id`
+  // yang bernilai null, sehingga <dd> Fase dirender BENAR-BENAR KOSONG — dua
+  // layar yang menampilkan keadaan yang sama dengan dua bentuk berbeda, dan
+  // yang satu terbaca sebagai data hilang, bukan sebagai fase yang memang
+  // belum ditentukan.
+  const namaFase = klien.phase_id
+    ? ((fase ?? []).find((f) => f.id === klien.phase_id)?.nama ?? "—")
+    : "—";
 
   return (
     <main>
