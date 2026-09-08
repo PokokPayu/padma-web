@@ -30,7 +30,20 @@ const KELAS_UTAMA =
  *
  * Nol rupiah: jenjang adalah data LOGISTIK, admin melihat "5–10 km".
  */
-export function PanelSesi({ sesi, hrefTutup }: { sesi: BarisSesiDaftar; hrefTutup: string }) {
+export function PanelSesi({
+  sesi,
+  hrefTutup,
+  jamPilihan,
+}: {
+  sesi: BarisSesiDaftar;
+  hrefTutup: string;
+  /**
+   * Daftar `app_settings.jam_layanan`, dibaca di SERVER oleh halaman dan
+   * dioper ke bawah. Panel ini komponen klien dan tidak boleh mengambil data
+   * sendiri (lihat dokblok di atas).
+   */
+  jamPilihan: string[];
+}) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [pesanJenjang, setPesanJenjang] = useState<string | null>(null);
@@ -154,6 +167,7 @@ export function PanelSesi({ sesi, hrefTutup }: { sesi: BarisSesiDaftar; hrefTutu
           tanggal={sesi.tanggal}
           jamMulai={sesi.jamMulai}
           jadwalUlangTerpakai={sesi.jadwalUlangTerpakai}
+          jamPilihan={jamPilihan}
         />
       )}
     </div>

@@ -71,6 +71,25 @@ export function kedaluwarsaHak(tanggalSesi: string): string {
   return t.toISOString().slice(0, 10);
 }
 
+/**
+ * SIAPA yang membatalkan. Eksplisit di seluruh rantai, tidak pernah
+ * disimpulkan dari isi kotak teks.
+ *
+ * Versi pertama `batalkan_sesi()` menyimpulkan jenjang 4 dari "staf DAN alasan
+ * tidak kosong", sementara panel merender alasan sebagai catatan biasa yang
+ * opsional. Akibatnya satu admin yang mengetik "klien minta batal" mengubah
+ * kredit 30 hari menjadi refund penuh atas nama PADMA, dan satu admin yang
+ * membiarkan alasan kosong saat bidannya sakit membuat klien kehilangan
+ * seluruh uangnya. Keduanya bisa dicapai dari layar yang sama.
+ */
+export const AKTOR_PEMBATALAN = ["klien", "padma"] as const;
+export type AktorPembatalan = (typeof AKTOR_PEMBATALAN)[number];
+
+export const LABEL_AKTOR_PEMBATALAN: Record<AktorPembatalan, string> = {
+  klien: "Klien yang meminta batal",
+  padma: "PADMA yang membatalkan",
+};
+
 export const LABEL_JENJANG_PEMBATALAN: Record<Jenjang, string> = {
   1: "24 jam atau lebih sebelum sesi",
   2: "2–24 jam sebelum sesi",

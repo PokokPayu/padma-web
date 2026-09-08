@@ -81,19 +81,48 @@ grant execute on function public.jenjang_pembatalan(date, time) to authenticated
 -- ---------------------------------------------------------------------------
 -- BATALKAN SESI
 -- ---------------------------------------------------------------------------
--- Aturan aktor, dan ini pembedaan yang paling mudah hilang saat kode dirapikan:
+-- AKTORNYA EKSPLISIT, TIDAK PERNAH DISIMPULKAN. Ini perbaikan atas versi
+-- pertama fungsi ini, dan sebabnya layak ditulis panjang karena ia menyangkut
+-- uang klien.
 --
---   staf + alasan terisi  → JENJANG 4, status `dibatalkan_padma`
---                            (PADMA yang berhalangan; refund penuh)
---   selain itu            → jenjang dari WAKTU, status `dibatalkan_klien`
+-- Versi pertama menentukan jenjang 4 dari `staf AND alasan tidak kosong AND
+-- bukan darurat`. `alasan` adalah kotak teks biasa di panel — opsional, tanpa
+-- satu isyarat pun bahwa mengetiknya mengubah hasil. Dua kegagalan uang yang
+-- keduanya bisa dicapai dari satu-satunya layar yang hidup:
 --
--- Keduanya sama-sama "batal", dan siapa pun yang menyatukannya akan merasa
--- sedang menyederhanakan. Yang hilang bila disatukan: setiap layar dan setiap
--- laporan berhenti bisa menyebut siapa yang membatalkan.
+--   • Klien menelepon 6 jam sebelum sesi. Admin mengetik "klien minta batal"
+--     di kolom alasan. Basis data mencatat jenjang 4, `dibatalkan_padma`,
+--     refund penuh — padahal kebijakannya kredit 30 hari — dan jejaknya
+--     menyebut PADMA yang membatalkan.
+--   • Bidan sakit, admin membatalkan 1 jam sebelum sesi dan membiarkan alasan
+--     kosong (memang opsional). Jatuh ke cabang waktu: jenjang 3, hangus,
+--     `dibatalkan_klien`. Klien sudah membayar, PADMA yang berhalangan, klien
+--     tidak menerima apa pun, dan catatannya menyalahkan klien.
+--
+-- Karena itu `oleh` kini ARGUMEN, dan tidak punya nilai bawaan: pemanggil
+-- WAJIB menyatakan siapa yang membatalkan. Aturannya sesudah perbaikan:
+--
+--   oleh = 'padma'  → JENJANG 4, status `dibatalkan_padma` (refund penuh).
+--                     Hanya staf. Alasan WAJIB.
+--   oleh = 'klien'  → jenjang dari WAKTU, status `dibatalkan_klien`.
+--                     Darurat medis (staf + alasan) menaikkannya ke jenjang 1.
+--
+-- KENAPA ALASAN WAJIB SAAT PADMA MEMBATALKAN — keputusan, bukan warisan.
+-- Tiga sebab: (1) jenjang 4 adalah satu-satunya jenjang yang uangnya keluar
+-- TANPA dituntut waktu, jadi ia butuh pembenaran yang bisa ditinjau
+-- setelahnya, persis seperti pengecualian darurat; (2) ini cabang yang
+-- SEBELUMNYA bisa terpicu tanpa sengaja, dan memaksa satu kalimat tertulis
+-- membuatnya tindakan yang disengaja, bukan efek samping; (3) klinik perlu
+-- tahu BERAPA SERING dan KENAPA ia sendiri membatalkan — angka yang tidak
+-- pernah bisa dibaca dari baris tanpa alasan. Untuk `oleh = 'klien'` alasan
+-- tetap OPSIONAL kecuali darurat: pembatalan klien adalah hak klien, dan
+-- menuntut alasan tertulis untuk sesuatu yang tidak mengubah akibat apa pun
+-- hanya melatih admin mengetik "batal" demi melewati pagar.
 create or replace function public.batalkan_sesi(
   sesi_id uuid,
   alasan text,
-  darurat boolean
+  darurat boolean,
+  oleh text
 )
 returns jsonb
 language plpgsql
@@ -109,9 +138,32 @@ declare
   hak uuid;
   status_baru session_status;
 begin
-  -- Darurat medis adalah pengecualian yang HARUS bisa ditinjau setelahnya, dan
-  -- pengecualian tanpa catatan tidak bisa ditinjau siapa pun. Diperiksa lebih
-  -- dulu supaya penolakannya tidak menyentuh baris apa pun.
+  if oleh is null or oleh not in ('klien', 'padma') then
+    raise exception 'aktor pembatalan wajib disebut: klien atau padma'
+      using errcode = '22023';
+  end if;
+
+  -- Diperiksa lebih dulu supaya penolakan tidak pernah menyentuh baris apa pun.
+  if oleh = 'padma' then
+    if not staf then
+      raise exception 'hanya staf yang boleh membatalkan atas nama PADMA'
+        using errcode = '42501';
+    end if;
+    if btrim(coalesce(alasan, '')) = '' then
+      raise exception 'pembatalan oleh PADMA menuntut alasan tertulis'
+        using errcode = '23514';
+    end if;
+    -- Darurat medis adalah pengecualian atas pembatalan KLIEN. Digabung dengan
+    -- `oleh = 'padma'` ia tidak punya arti — jenjang 4 sudah refund penuh —
+    -- dan menerimanya diam-diam berarti admin mengira ia menerapkan sesuatu
+    -- yang sebenarnya diabaikan. Ditolak supaya pilihannya diperbaiki.
+    if darurat then
+      raise exception 'pengecualian darurat berlaku untuk pembatalan klien; PADMA yang membatalkan sudah jenjang 4'
+        using errcode = '22023';
+    end if;
+  end if;
+
+  -- Pengecualian tanpa catatan tidak bisa ditinjau siapa pun setelahnya.
   if darurat then
     if not staf then
       raise exception 'hanya staf yang boleh menerapkan pengecualian darurat'
@@ -143,7 +195,7 @@ begin
     raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
   end if;
 
-  if staf and btrim(coalesce(alasan, '')) <> '' and not darurat then
+  if oleh = 'padma' then
     jenjang := 4;
     status_baru := 'dibatalkan_padma';
   else
@@ -186,12 +238,28 @@ begin
     coalesce(alasan, ''), darurat, auth.uid(), peran
   );
 
-  return jsonb_build_object('jenjang', jenjang, 'akibat', akibat, 'hak_id', hak);
+  -- `status` IKUT DIPULANGKAN. Layar memanggil fungsi ini lalu menampilkan
+  -- kembali apa yang BASIS DATA putuskan — bukan tebakan yang dihitung layar
+  -- sebelum tombol ditekan. Bila keduanya berselisih, yang terbaca admin
+  -- sesudah menekan adalah yang benar-benar tertulis.
+  return jsonb_build_object(
+    'jenjang', jenjang,
+    'akibat', akibat,
+    'hak_id', hak,
+    'status', status_baru,
+    'oleh', oleh
+  );
 end;
 $$;
 
-revoke execute on function public.batalkan_sesi(uuid, text, boolean) from public, anon;
-grant execute on function public.batalkan_sesi(uuid, text, boolean) to authenticated;
+-- Tanda tangan LAMA (tanpa `oleh`) DIBUANG, bukan dibiarkan berdampingan.
+-- Postgres meng-overload berdasarkan argumen: membiarkannya berarti setiap
+-- pemanggil yang belum diperbarui tetap berjalan — diam-diam memakai aturan
+-- aktor yang baru saja dinyatakan salah.
+drop function if exists public.batalkan_sesi(uuid, text, boolean);
+
+revoke execute on function public.batalkan_sesi(uuid, text, boolean, text) from public, anon;
+grant execute on function public.batalkan_sesi(uuid, text, boolean, text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- JADWAL ULANG

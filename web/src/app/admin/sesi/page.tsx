@@ -366,7 +366,7 @@ export default async function SesiPage({
           hrefTutup={hrefTutup}
         >
           {barisUbah ? (
-            <PanelSesi sesi={barisUbah} hrefTutup={hrefTutup} />
+            <PanelSesi sesi={barisUbah} hrefTutup={hrefTutup} jamPilihan={jamLayanan} />
           ) : (
             <FormJadwalSesi
               klien={pilihanKlien}

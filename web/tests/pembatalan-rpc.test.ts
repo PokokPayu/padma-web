@@ -162,6 +162,7 @@ describe("batalkan_sesi — jenjang menentukan akibat", () => {
       sesi_id: id,
       alasan: "",
       darurat: false,
+      oleh: "klien",
     });
 
     expect(data.jenjang).toBe(1);
@@ -183,6 +184,7 @@ describe("batalkan_sesi — jenjang menentukan akibat", () => {
       sesi_id: id,
       alasan: "",
       darurat: false,
+      oleh: "klien",
     });
 
     expect(data.jenjang).toBe(2);
@@ -209,6 +211,7 @@ describe("batalkan_sesi — jenjang menentukan akibat", () => {
       sesi_id: id,
       alasan: "",
       darurat: false,
+      oleh: "klien",
     });
 
     expect(data.jenjang).toBe(3);
@@ -228,6 +231,7 @@ describe("darurat medis menaikkan ke perlakuan jenjang 1", () => {
       sesi_id: id,
       alasan: "Klien masuk rumah sakit, konfirmasi via WA 09.15",
       darurat: true,
+      oleh: "klien",
     });
 
     expect(data.jenjang).toBe(1);
@@ -244,6 +248,7 @@ describe("darurat medis menaikkan ke perlakuan jenjang 1", () => {
       sesi_id: id,
       alasan: "   ",
       darurat: true,
+      oleh: "klien",
     });
     // Kode spesifik, bukan sekadar "ada galat": uji yang hanya menuntut
     // kehadiran galat tetap hijau ketika galatnya datang dari sebab lain sama
@@ -259,6 +264,7 @@ describe("darurat medis menaikkan ke perlakuan jenjang 1", () => {
       sesi_id: id,
       alasan: "darurat",
       darurat: true,
+      oleh: "klien",
     });
     expect(error?.code).toBe("42501");
   });
@@ -276,6 +282,7 @@ describe("hak & kepemilikan", () => {
       sesi_id: id,
       alasan: "",
       darurat: false,
+      oleh: "klien",
     });
     expect(data === null || error !== null).toBe(true);
 
@@ -290,7 +297,7 @@ describe("hak & kepemilikan", () => {
   it("anon tidak bisa mengeksekusinya sama sekali", async () => {
     const baris = await querySql<{ ada: boolean }>(
       `select has_function_privilege('anon',
-         'public.batalkan_sesi(uuid, text, boolean)', 'execute') as ada`,
+         'public.batalkan_sesi(uuid, text, boolean, text)', 'execute') as ada`,
     );
     expect(baris[0].ada).toBe(false);
   });
@@ -303,11 +310,12 @@ describe("idempotensi & jejak", () => {
     const { tanggal, jam } = jamRelatif(6);
     const id = await buatSesi(tanggal, jam);
 
-    await sesiAdmin.rpc("batalkan_sesi", { sesi_id: id, alasan: "", darurat: false });
+    await sesiAdmin.rpc("batalkan_sesi", { sesi_id: id, alasan: "", darurat: false, oleh: "klien" });
     const { data: kedua } = await sesiAdmin.rpc("batalkan_sesi", {
       sesi_id: id,
       alasan: "",
       darurat: false,
+      oleh: "klien",
     });
 
     expect(kedua, "panggilan kedua mengenai baris yang sudah batal").toBeNull();
@@ -322,7 +330,7 @@ describe("idempotensi & jejak", () => {
   it("mencatat jejak beraktor, berjenjang, dan bertanggal sesi asal", async () => {
     const { tanggal, jam } = jamRelatif(6);
     const id = await buatSesi(tanggal, jam);
-    await sesiAdmin.rpc("batalkan_sesi", { sesi_id: id, alasan: "", darurat: false });
+    await sesiAdmin.rpc("batalkan_sesi", { sesi_id: id, alasan: "", darurat: false, oleh: "klien" });
 
     const { data: jejak } = await admin
       .from("jejak_jadwal")
@@ -337,11 +345,12 @@ describe("idempotensi & jejak", () => {
     expect(jejak!.aktor_id, "jejak tanpa aktor tidak bisa ditinjau").not.toBeNull();
   });
 
-  it("STAF yang membatalkan mencatat jenjang 4, bukan jenjang waktu", async () => {
+  it("oleh='padma' mencatat jenjang 4, bukan jenjang waktu", async () => {
     // Ini pembedaan yang paling mudah hilang: admin membatalkan sesi H-3 hari
     // BUKAN karena kliennya minta, melainkan karena PADMA berhalangan. Yang
     // membedakan bukan waktu melainkan siapa — dan hanya `dibatalkan_padma`
-    // yang menyebutnya benar.
+    // yang menyebutnya benar. Sejak perbaikan aktor, yang menyatakannya adalah
+    // ARGUMEN `oleh`, bukan kehadiran teks di kotak alasan.
     const { tanggal, jam } = jamRelatif(48);
     const id = await buatSesi(tanggal, jam);
 
@@ -349,6 +358,7 @@ describe("idempotensi & jejak", () => {
       sesi_id: id,
       alasan: "Bidan sakit mendadak",
       darurat: false,
+      oleh: "padma",
     });
     expect(data.jenjang).toBe(4);
 
@@ -358,6 +368,123 @@ describe("idempotensi & jejak", () => {
       .eq("id", id)
       .single();
     expect(sesudah!.status).toBe("dibatalkan_padma");
+  });
+});
+
+describe("aktor pembatalan — dinyatakan, tidak disimpulkan", () => {
+  // Dua uji pertama di bawah adalah DUA KEGAGALAN UANG yang versi pertama
+  // fungsi ini benar-benar bisa hasilkan dari satu-satunya layar yang hidup.
+  // Keduanya berangkat dari aturan lama "staf DAN alasan tidak kosong DAN
+  // bukan darurat → jenjang 4", sementara panel merender `alasan` sebagai
+  // catatan biasa yang opsional.
+
+  it("alasan yang diketik untuk pembatalan KLIEN tidak menjadikannya jenjang 4", async () => {
+    // Skenario nyata: klien menelepon 6 jam sebelum sesi. Layar berkata
+    // "jenjang 2 — dana menjadi hak sesi 30 hari". Admin mengetik "klien minta
+    // batal" di kolom alasan. Di aturan LAMA basis data mencatat jenjang 4,
+    // `dibatalkan_padma`, refund penuh, tanpa hak — dan jejaknya menyebut
+    // PADMA yang membatalkan. Klien kehilangan kreditnya, klinik mengeluarkan
+    // uang yang tidak seharusnya, dan catatannya salah menyebut siapa.
+    const { tanggal, jam } = jamRelatif(6);
+    const id = await buatSesi(tanggal, jam);
+
+    const { data } = await sesiAdmin.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "klien minta batal",
+      darurat: false,
+      oleh: "klien",
+    });
+
+    expect(data.jenjang, "alasan bukan pernyataan aktor").toBe(2);
+    expect(data.akibat).toBe("hak");
+    expect(data.hak_id).not.toBeNull();
+    expect(data.status).toBe("dibatalkan_klien");
+  });
+
+  it("PADMA membatalkan 1 jam sebelum sesi tetap jenjang 4, bukan hangus", async () => {
+    // Skenario nyata: bidan sakit, admin membatalkan 1 jam sebelum sesi. Di
+    // aturan LAMA, alasan yang dibiarkan kosong (memang opsional) menjatuhkan
+    // panggilan ini ke cabang waktu: jenjang 3, hangus, `dibatalkan_klien`.
+    // Klien sudah membayar, PADMA yang berhalangan, klien tidak menerima apa
+    // pun, dan catatannya menyalahkan klien.
+    const { tanggal, jam } = jamRelatif(1);
+    const id = await buatSesi(tanggal, jam);
+
+    const { data } = await sesiAdmin.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "Bidan sakit mendadak, dikabari 08.40",
+      darurat: false,
+      oleh: "padma",
+    });
+
+    expect(data.jenjang, "PADMA membatalkan SELALU jenjang 4").toBe(4);
+    expect(data.akibat).toBe("refund");
+    expect(data.status).toBe("dibatalkan_padma");
+  });
+
+  it("PADMA membatalkan TANPA alasan DITOLAK", async () => {
+    // Jenjang 4 adalah satu-satunya jenjang yang uangnya keluar tanpa dituntut
+    // waktu. Ia butuh pembenaran yang bisa ditinjau, persis seperti
+    // pengecualian darurat.
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiAdmin.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "  ",
+      darurat: false,
+      oleh: "padma",
+    });
+    expect(error?.code).toBe("23514");
+  });
+
+  it("KLIEN tidak bisa membatalkan atas nama PADMA", async () => {
+    // Kalau bisa, setiap klien punya tombol refund penuh sendiri.
+    const { tanggal, jam } = jamRelatif(1);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiKlien.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "PADMA batal",
+      darurat: false,
+      oleh: "padma",
+    });
+    expect(error?.code).toBe("42501");
+  });
+
+  it("aktor yang tidak dikenal DITOLAK, bukan jatuh ke salah satu cabang", async () => {
+    const { tanggal, jam } = jamRelatif(48);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiAdmin.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "",
+      darurat: false,
+      oleh: "entah",
+    });
+    expect(error?.code).toBe("22023");
+
+    const { data: sesudah } = await admin
+      .from("sessions")
+      .select("status")
+      .eq("id", id)
+      .single();
+    expect(sesudah!.status, "penolakan tidak menyentuh baris").toBe("terjadwal");
+  });
+
+  it("darurat + oleh='padma' DITOLAK — pengecualian itu milik pembatalan klien", async () => {
+    // Jenjang 4 sudah refund penuh; menerima `darurat` di sini diam-diam
+    // berarti admin mengira ia menerapkan sesuatu yang sebenarnya diabaikan.
+    const { tanggal, jam } = jamRelatif(1);
+    const id = await buatSesi(tanggal, jam);
+
+    const { error } = await sesiAdmin.rpc("batalkan_sesi", {
+      sesi_id: id,
+      alasan: "Bidan masuk IGD",
+      darurat: true,
+      oleh: "padma",
+    });
+    expect(error?.code).toBe("22023");
   });
 });
 
