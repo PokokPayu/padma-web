@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { buatKlien, perbaruiKlien } from "./aksi";
+import { buatKlien, perbaruiKlien, type KlienBentrok } from "./aksi";
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 
 export type PilihanFase = { id: string; nama: string };
@@ -61,6 +61,10 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
   // mengurus invarian pesan sukses/galat dan diuji begitu di
   // tests/admin-klien.test.ts.
   const [idBaru, setIdBaru] = useState<string | null>(null);
+  // K17: identitas baris klien yang bentrok emailnya, kalau `buatKlien`
+  // menyertakannya. Dipisah dari `pesanBerikutnya` dengan alasan yang sama
+  // dengan `idBaru` — fungsi itu murni untuk invarian pesan sukses/galat.
+  const [klienBentrok, setKlienBentrok] = useState<KlienBentrok | null>(null);
 
   return (
     <form
@@ -74,6 +78,7 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           setPesan(pesanBaru);
           setBerhasil(berhasilBaru);
           setIdBaru(r.ok ? r.id : null);
+          setKlienBentrok(!r.ok ? (r.klienBentrok ?? null) : null);
           if (r.ok) {
             // Formulir tetap TERBUKA (tidak ada lagi state "tertutup" untuk
             // kembali ke sana) — medannya dikosongkan lewat reset native
@@ -143,7 +148,27 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         </label>
       </div>
 
-      {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
+      {pesan && (
+        <div className="mt-3 text-[13px] font-semibold text-clay">
+          <p>{pesan}</p>
+          {/* K17: bentrok email TIDAK BISA dibereskan lewat pencarian daftar
+              klien (`ambilDaftarKlien` hanya mencocokkan nama & PADMA ID,
+              bukan email) — jadi tautan LANGSUNG ke baris yang sudah ada,
+              memuat nama & PADMA ID-nya supaya admin tahu ia menuju ke mana
+              sebelum mengklik. Tidak ada penggabungan otomatis; admin melihat
+              datanya lalu memutuskan sendiri. */}
+          {klienBentrok && (
+            <p className="mt-1 font-normal">
+              <Link
+                href={`/admin/klien/${klienBentrok.id}`}
+                className="font-bold underline underline-offset-4"
+              >
+                Buka data {klienBentrok.nama} ({klienBentrok.padmaId})
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex gap-2.5">
         <button
@@ -157,7 +182,10 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
             form native, bukan lewat state "tertutup" yang sudah tidak ada. */}
         <button
           type="reset"
-          onClick={() => setPesan(null)}
+          onClick={() => {
+            setPesan(null);
+            setKlienBentrok(null);
+          }}
           className="rounded-xl border border-black/15 px-4 py-2.5 text-[13px] font-bold text-ink-soft"
         >
           Batal

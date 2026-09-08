@@ -32,7 +32,16 @@ import { bersihkanAlamat } from "./status";
  * Berkas `"use server"` hanya boleh mengekspor fungsi async. Konstanta apa pun
  * yang perlu dibagi ke UI wajib tinggal di modul lain.
  */
-type Gagal = { ok: false; pesan: string };
+/**
+ * Identitas baris klien yang sudah ada, dikembalikan saat `buatKlien` gagal
+ * karena bentrok email (K17). Admin berhak melihat SELURUH baris klien lewat
+ * RLS `clients: staf`, jadi meneruskan identitas ini bukan kebocoran —
+ * tanpanya, satu-satunya pilihan admin adalah mencari lewat nama/PADMA ID
+ * (`ambilDaftarKlien`), yang justru tidak berguna sama sekali di sini karena
+ * skenarionya SELALU "admin tidak tahu apa-apa selain email yang bentrok".
+ */
+export type KlienBentrok = { id: string; padmaId: string; nama: string };
+type Gagal = { ok: false; pesan: string; klienBentrok?: KlienBentrok };
 type Dibuat = { ok: true; id: string; padmaId: string };
 type Diperbarui = { ok: true };
 type Diterbitkan = { ok: true; token: string; nama: string; email: string };
@@ -108,15 +117,32 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
       // Sejak pendaftaran mandiri (K1) hidup, penyebab bentrok email yang
       // PALING MUNGKIN berubah: bukan lagi admin mendaftarkan klien yang sama
       // dua kali, melainkan orangnya sudah membuat akun sendiri lewat
-      // `/daftar` dengan email itu. Kalimatnya menyebut kemungkinan itu dan
-      // mengarahkan admin ke pencarian, bukan menutup pintu — tidak ada
-      // penggabungan otomatis (K17), admin melihat datanya lalu memutuskan
-      // sendiri.
+      // `/daftar` dengan email itu. Tidak ada penggabungan otomatis (K17) —
+      // admin melihat datanya lalu memutuskan sendiri.
+      //
+      // Kalimatnya TIDAK menyuruh "cari di daftar klien": pencarian daftar
+      // klien (`ambilDaftarKlien`) hanya mencocokkan nama & PADMA ID, tidak
+      // pernah email — dan email bentrok inilah SATU-SATUNYA data yang
+      // dipegang admin di sini. Sebagai gantinya identitas baris yang sudah
+      // ada diambil di sini (RLS `clients: staf` sudah mengizinkan admin
+      // melihat baris siapa pun, jadi ini bukan kebocoran) dan diteruskan
+      // lewat `klienBentrok` supaya pemanggil UI bisa menautkan LANGSUNG ke
+      // halaman detailnya — bukan menyuruh admin mencari sesuatu yang tidak
+      // bisa ditemukan lewat pencarian.
       if (error.message.includes("email")) {
+        const { data: existing } = await supabase
+          .from("clients")
+          .select("id, padma_id, nama")
+          .eq("email", alamatSurel)
+          .maybeSingle<{ id: string; padma_id: string; nama: string }>();
+
         return {
           ok: false,
           pesan:
-            "Alamat itu sudah terdaftar — kemungkinan klien ini sudah membuat akun sendiri. Buka datanya lewat pencarian di daftar klien.",
+            "Alamat itu sudah terdaftar — kemungkinan klien ini sudah membuat akun sendiri.",
+          klienBentrok: existing
+            ? { id: existing.id, padmaId: existing.padma_id, nama: existing.nama }
+            : undefined,
         };
       }
       continue;
