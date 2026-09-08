@@ -22,6 +22,41 @@ config({ path: [".env.local", ".env"] });
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const PASSWORD = "padma-dev-123";
 const NAMA_UJI = "Uji E2E Funnel";
+/** Skrining hijau skenario 6 memakai nama sendiri supaya bersih-bersihnya presisi. */
+const NAMA_HIJAU = "Uji E2E Corong Hijau";
+const KOTAK_SURAT = process.env.E2E_MAILPIT_URL ?? "http://localhost:54324";
+
+type PesanMailpit = { ID: string; To: { Address: string }[] };
+
+/**
+ * Menunggu tautan konfirmasi email di Mailpit (stack Supabase lokal).
+ *
+ * `[auth.email] enable_confirmations = true` sejak 28 Agustus 2026, jadi
+ * pendaftaran mandiri BELUM menghasilkan sesi sampai kotak suratnya dibuka —
+ * dan skenario 6 menuntut akun yang benar-benar berdiri.
+ */
+async function tungguTautanKonfirmasi(email: string): Promise<string> {
+  const batas = Date.now() + 20_000;
+  while (Date.now() < batas) {
+    const res = await fetch(`${KOTAK_SURAT}/api/v1/messages?limit=100`);
+    if (res.ok) {
+      const { messages } = (await res.json()) as { messages: PesanMailpit[] };
+      const pesan = messages.find((m) =>
+        m.To.some((t) => t.Address.toLowerCase() === email.toLowerCase()),
+      );
+      if (pesan) {
+        const isiRes = await fetch(`${KOTAK_SURAT}/api/v1/message/${pesan.ID}`);
+        const isi = (await isiRes.json()) as { Text?: string; HTML?: string };
+        const badan = `${isi.Text ?? ""}\n${isi.HTML ?? ""}`;
+        const cocok = badan.match(/https?:\/\/[^\s"'<>()]*\/auth\/v1\/verify\?[^\s"'<>()]+/);
+        if (cocok) return cocok[0].replace(/&amp;/g, "&");
+        throw new Error(`pesan untuk ${email} tidak memuat tautan verifikasi`);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`tidak ada pesan untuk ${email} di ${KOTAK_SURAT} dalam 20 detik`);
+}
 
 type Hasil = { nama: string; lolos: boolean; bukti: string };
 const hasil: Hasil[] = [];
@@ -242,12 +277,167 @@ async function main() {
     "tidak ada kode di layar (benar — tidak ada yang tersimpan)",
   );
 
+
+  // ---- 6. CORONG PENUH (spec C1 J3–J5): skrining hijau -> akun -> pesan ----
+  //
+  // Inilah yang C1-b tambahkan, dan yang sebelumnya TIDAK ADA: sebelum ini
+  // corong berakhir di WhatsApp, dan pemesanan tidak pernah menuntut skrining.
+  // Skenario ini membuktikan keduanya bersambung lewat peramban sungguhan —
+  // termasuk cookie klaim `httpOnly` yang tidak bisa dilihat JavaScript mana
+  // pun, jadi satu-satunya cara mengujinya memang begini.
+  const emailHijau = `corong.${Date.now()}@padma.test`;
+  const ctxHijau = await browser.newContext();
+  const hijauPage = await ctxHijau.newPage();
+
+  await hijauPage.goto(`${BASE}/skrining`, { waitUntil: "networkidle" });
+  await hijauPage.getByLabel("Nama panggilan").fill(NAMA_HIJAU);
+  await hijauPage.getByLabel("No. WhatsApp").fill("0812-0000-7788");
+  await hijauPage.getByRole("button", { name: "Menopause", exact: true }).click();
+  await hijauPage.getByRole("checkbox").check();
+  await hijauPage.getByRole("button", { name: "Mulai Skrining" }).click();
+
+  // Menopause: 7 soal umum + 4 soal fase, semuanya "Tidak" -> hijau.
+  for (let nomor = 1; nomor <= 11; nomor++) {
+    await hijauPage.getByText(`Pertanyaan ${nomor} dari`).waitFor({ timeout: 10_000 });
+    await hijauPage.getByRole("button", { name: "Tidak", exact: true }).click();
+  }
+  await munculDalam(hijauPage, "Hasil ini adalah pra-skrining");
+
+  const adaTombolAkun = await hijauPage
+    .getByRole("link", { name: "Buat akun & pesan layanan" })
+    .count();
+  catat(
+    "6a. hasil HIJAU menawarkan jalan ke aplikasi, bukan hanya WhatsApp",
+    adaTombolAkun > 0,
+    `${adaTombolAkun} tautan "Buat akun & pesan layanan"`,
+  );
+
+  // Cookie klaim httpOnly — tidak terlihat `document.cookie`, hanya dari
+  // konteks peramban. Inilah yang menyambungkan skrining anonim ke akun.
+  const kuki = await ctxHijau.cookies();
+  const kukiKlaim = kuki.find((c) => c.name === "padma_klaim_skrining");
+  catat(
+    "6b. token klaim dititipkan sebagai cookie httpOnly",
+    Boolean(kukiKlaim?.httpOnly),
+    kukiKlaim ? `httpOnly=${kukiKlaim.httpOnly}, umur=${kukiKlaim.expires > 0}` : "cookie TIDAK ADA",
+  );
+
+  // Mendaftar DI KONTEKS YANG SAMA — cookie klaim ikut terbawa.
+  await hijauPage.goto(`${BASE}/daftar`, { waitUntil: "networkidle" });
+  await hijauPage.getByLabel("Nama lengkap").fill("Corong Hijau Uji");
+  await hijauPage.getByLabel("Email").fill(emailHijau);
+  await hijauPage.getByLabel("No. WhatsApp").fill("0812-0000-7788");
+  await hijauPage.getByLabel("Kata sandi").fill(PASSWORD);
+  await Promise.all([
+    hijauPage.waitForURL((u) => !u.pathname.startsWith("/daftar"), { timeout: 20_000 }),
+    hijauPage.getByRole("button", { name: "Daftar", exact: true }).click(),
+  ]);
+
+  const tautan = await tungguTautanKonfirmasi(emailHijau);
+  await hijauPage.goto(tautan, { waitUntil: "networkidle" });
+  await tungguIsi(hijauPage);
+
+  const teksPassport = await teksTerlihat(hijauPage);
+  catat(
+    "6c. skrining anonim TERSAMBUNG, dan namanya disebut terbuka",
+    teksPassport.includes("telah disambungkan") && teksPassport.includes(NAMA_HIJAU),
+    teksPassport.includes(NAMA_HIJAU)
+      ? `sapaan menyebut "${NAMA_HIJAU}"`
+      : "sapaan bernama TIDAK muncul",
+  );
+
+  // Fase terisi dari skrining (spec J11) — Menopause -> Purnama.
+  const { data: klienBaru } = await svc()
+    .from("clients")
+    .select("id, phase_id")
+    .eq("email", emailHijau)
+    .maybeSingle();
+  catat(
+    "6d. fase klien terisi dari skrining pertama (J11)",
+    klienBaru?.phase_id === "menopause",
+    `phase_id=${klienBaru?.phase_id ?? "(kosong)"}`,
+  );
+
+  // Formulir pemesanan TERBUKA — bukan ajakan skrining.
+  await hijauPage.goto(`${BASE}/passport/ajukan`, { waitUntil: "networkidle" });
+  await tungguIsi(hijauPage);
+  const teksAjukan = await teksTerlihat(hijauPage);
+  catat(
+    "6e. dengan skrining hijau, /passport/ajukan menampilkan FORMULIR",
+    teksAjukan.includes("Jam mulai") && !teksAjukan.includes("Isi skrining keselamatan dulu"),
+    teksAjukan.includes("Isi skrining keselamatan dulu")
+      ? "masih menampilkan ajakan skrining"
+      : "formulir terbuka, medan Jam mulai ada",
+  );
+
+  // Mengajukan jadwal sungguhan.
+  //
+  // ALAMAT diisi manual, dan itu bukan kelalaian skrip: klien yang BARU
+  // mendaftar belum punya alamat profil, jadi medan ini terbit kosong dan
+  // `periksaAlamat()` menuntut minimal 10 karakter. Skenario ini sengaja
+  // menempuh jalur orang baru — kalau alamatnya diisi otomatis, yang teruji
+  // adalah klien lama.
+  await hijauPage.getByLabel("Tanggal yang diinginkan").fill("2027-05-20");
+  await hijauPage
+    .getByLabel("Alamat kunjungan")
+    .fill("Jl. Corong Uji No. 12, Klojen, Malang");
+  await Promise.all([
+    munculDalam(hijauPage, "Permintaan terkirim"),
+    hijauPage.getByRole("button", { name: "Kirim Permintaan Jadwal" }).click(),
+  ]);
+
+  const { data: pengajuan } = await svc()
+    .from("booking_requests")
+    .select("id, status, jam_mulai, screening_id")
+    .eq("client_id", klienBaru?.id ?? "")
+    .limit(1);
+  const barisAjuan = (pengajuan ?? [])[0];
+  catat(
+    "6f. pengajuan tersimpan, berstatus diminta, dan MEMBAWA skrining",
+    Boolean(barisAjuan) &&
+      barisAjuan.status === "diminta" &&
+      Boolean(barisAjuan.screening_id) &&
+      Boolean(barisAjuan.jam_mulai),
+    barisAjuan
+      ? `status=${barisAjuan.status}, jam=${barisAjuan.jam_mulai}, skrining=${Boolean(barisAjuan.screening_id)}`
+      : "tidak ada baris pengajuan",
+  );
+
+  // Skrining itu HANGUS: formulir tertutup lagi tanpa skrining baru.
+  await hijauPage.goto(`${BASE}/passport/ajukan`, { waitUntil: "networkidle" });
+  await tungguIsi(hijauPage);
+  const teksAjukan2 = await teksTerlihat(hijauPage);
+  catat(
+    "6g. skrining HANGUS sesudah dipakai — formulir tertutup lagi",
+    teksAjukan2.includes("Isi skrining keselamatan dulu"),
+    teksAjukan2.includes("Isi skrining keselamatan dulu")
+      ? "ajakan skrining kembali muncul (benar)"
+      : "formulir MASIH terbuka — skrining tidak hangus",
+  );
+
+  await ctxHijau.close();
+
   await browser.close();
 
   // Idempoten: bersihkan entri yang dibuat run ini (lewat service role —
   // `anon` memang tidak punya hak tabel pada `screenings`).
   const { error } = await svc().from("screenings").delete().eq("nama", NAMA_UJI);
   if (error) console.warn(`      [bersih-bersih] gagal menghapus entri uji: ${error.message}`);
+
+  // Skenario 6 meninggalkan akun + klien + pengajuan. Urutannya penting:
+  // pengajuan menunjuk skrining (FK), dan klien menahan keduanya.
+  const admin = svc();
+  const { data: klienUji } = await admin
+    .from("clients")
+    .select("id, user_id")
+    .like("email", "corong.%@padma.test");
+  for (const k of klienUji ?? []) {
+    await admin.from("booking_requests").delete().eq("client_id", k.id);
+    await admin.from("screenings").delete().eq("client_id", k.id);
+    await admin.from("clients").delete().eq("id", k.id);
+    if (k.user_id) await admin.auth.admin.deleteUser(k.user_id).catch(() => {});
+  }
+  await admin.from("screenings").delete().eq("nama", NAMA_HIJAU);
 
   const gagal = hasil.filter((h) => !h.lolos);
   console.log(
