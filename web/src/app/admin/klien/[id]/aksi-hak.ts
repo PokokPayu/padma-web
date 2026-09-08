@@ -41,7 +41,13 @@ export async function tukarHakAdmin(formData: FormData): Promise<Hasil> {
     };
   }
 
-  revalidatePath(`/admin/klien`);
+  // Rute DINAMIS-nya, bukan halaman daftar: kartu "Kredit sesi (hak)" hidup di
+  // `/admin/klien/[id]`, dan menyegarkan `/admin/klien` (daftar) meninggalkan
+  // kartu itu menampilkan hak yang baru saja ditukar sampai halamannya dimuat
+  // ulang dengan tangan. Bentuk `("/admin/klien/[id]", "page")` menyegarkan
+  // SELURUH baris rute itu — Next tidak menerima path konkret berisi id untuk
+  // rute dinamis tanpa memberitahunya bahwa itu memang rute, bukan berkas.
+  revalidatePath("/admin/klien/[id]", "page");
   revalidatePath("/admin/sesi");
   revalidatePath("/passport");
   return { ok: true, pesan: "Hak ditukar — sesi pengganti sudah terjadwal dan tercatat lunas." };
