@@ -41,7 +41,8 @@ export type TujuanKlien = "/passport" | "/akun-belum-terhubung" | "/periksa-emai
  *   2. Token undangan, bila ada. Jalur lama, tidak disentuh sama sekali.
  *   3. EMAIL BELUM TERBUKTI → berhenti di sini.
  *   4. Tautkan ke baris klien beremail sama.
- *   5. Terbitkan baris klien baru.
+ *   5. Terbitkan baris klien baru — KECUALI ia datang membawa token undangan
+ *      yang gagal ditukarkan.
  *
  * Langkah 3 dinaikkan ke atas 4 dan 5 karena IA YANG MENJAGA KEDUANYA. Kalau ia
  * turun ke bawah — atau hilang — maka "email cocok" kembali menjadi cukup, dan
@@ -68,11 +69,14 @@ export async function pastikanKlien(
   //    terverifikasi karena ia bukti yang LEBIH kuat: ia membuktikan bahwa tim
   //    PADMA memang bermaksud menautkan akun ini ke baris klien itu, bukan
   //    sekadar bahwa alamat emailnya benar milik pemakainya.
-  if (
-    tokenUndangan &&
-    (await linkClientByInvite(user.id, user.email ?? "", tokenUndangan))
-  ) {
-    return "/passport";
+  //
+  //    Kegagalannya DIINGAT (bukan sekadar dilewati) — lihat langkah 5.
+  let undanganGagal = false;
+  if (tokenUndangan) {
+    if (await linkClientByInvite(user.id, user.email ?? "", tokenUndangan)) {
+      return "/passport";
+    }
+    undanganGagal = true;
   }
 
   // 3. PENJAGA LANGKAH 4 & 5 — jangan pindahkan ke bawah keduanya.
@@ -80,10 +84,26 @@ export async function pastikanKlien(
 
   // 4. Baris klien beremail sama yang belum tertaut (mis. dibuat admin lebih
   //    dulu, lalu kliennya mendaftar sendiri tanpa membuka tautan WhatsApp).
+  //
+  //    SENGAJA TIDAK digerbangi `undanganGagal`. Token kedaluwarsa ditambah
+  //    email terkonfirmasi yang cocok adalah persis cadangan yang diminta K14:
+  //    tautan WhatsApp basi, kliennya toh pemilik alamat itu, dan barisnya
+  //    memang menunggunya. Menutup langkah ini akan membuat undangan yang
+  //    lewat masa berlakunya berubah menjadi jalan buntu.
   if (await tautkanKlienLewatEmailTerverifikasi(user)) return "/passport";
 
   // 5. Belum ada baris klien sama sekali: terbitkan, sudah bertuan sejak INSERT.
-  if (await terbitkanKlienMandiri(user)) return "/passport";
+  //
+  //    KECUALI ia datang membawa token undangan yang GAGAL. Token yang ada di
+  //    tangannya berarti PADMA sudah punya baris untuk orang ini — sinyal
+  //    terkuat yang mungkin bahwa baris BARU adalah jawaban yang salah. Kalau
+  //    langkah 4 pun tidak menemukan barisnya, yang terjadi hampir pasti
+  //    emailnya meleset dari yang diketik admin (`rina@` vs `rina.hapsari@`),
+  //    dan menerbitkan baris kedua di sini berarti ia mendapat Passport kosong
+  //    sementara rekam medisnya yang sebenarnya tetap tak terlihat olehnya —
+  //    tanpa seorang pun diberi tahu. Lebih baik ia mendarat di halaman yang
+  //    menyuruhnya menghubungi PADMA.
+  if (!undanganGagal && (await terbitkanKlienMandiri(user))) return "/passport";
 
   // Kalah balapan: baris klien lahir atau tertaut oleh permintaan lain
   // sepersekian detik lalu (langkah 5 memulangkan `false` justru untuk itu —

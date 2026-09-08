@@ -27,6 +27,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import type { User } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import {
+  createClientInvite,
   tautkanKlienLewatEmailTerverifikasi,
   terbitkanKlienMandiri,
 } from "@/lib/auth/link-client";
@@ -286,6 +287,47 @@ describe("gerbang pastikanKlien: urutan keputusan", () => {
     expect(await pastikanKlien(user, "")).toBe("/passport");
     expect(await barisKlienBeremail(email)).toHaveLength(1);
     expect((await barisKlien(clientId)).linked_at).toBe(sebelum.linked_at);
+  });
+
+  it("token undangan GAGAL + tidak ada baris beremail sama -> TIDAK menerbitkan baris baru", async () => {
+    // Sinyalnya bertabrakan, dan gerbang harus memihak yang lebih kuat: token
+    // di tangan pengguna berarti PADMA sudah punya baris untuk orang ini,
+    // sementara langkah 4 tidak menemukan baris beremail itu. Yang hampir
+    // pasti terjadi: emailnya meleset dari yang diketik admin. Menerbitkan
+    // baris kedua di sini memberi klien Passport KOSONG sementara rekam
+    // medisnya yang sebenarnya tetap tak terlihat olehnya — diam-diam, tanpa
+    // seorang pun tahu. Karena itu langkah 5 dilewati.
+    const email = emailUji("gerbang-token-gagal");
+    const user = await buatUser(email, true);
+
+    expect(await pastikanKlien(user, "token-yang-tidak-pernah-ada")).toBe(
+      "/akun-belum-terhubung",
+    );
+    expect(await barisKlienBeremail(email)).toHaveLength(0);
+  });
+
+  it("token undangan KEDALUWARSA + baris beremail sama -> tetap tertaut (cadangan K14)", async () => {
+    // Sisi lain dari perkara di atas, dan justru sisi yang mudah dirusak
+    // sekalian: langkah 4 TIDAK boleh ikut digerbangi kegagalan token.
+    // Tautan WhatsApp yang lewat masa berlakunya + email yang sudah
+    // dikonfirmasi + baris yang memang menunggunya adalah persis cadangan
+    // yang diminta K14. Menutupnya mengubah undangan basi menjadi jalan buntu.
+    const email = emailUji("gerbang-token-basi");
+    const user = await buatUser(email, true);
+    const clientId = await buatKlien(email);
+
+    const undangan = await createClientInvite(clientId, {
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    if (!undangan.ok) throw new Error(`penerbitan undangan ditolak: ${undangan.alasan}`);
+
+    expect(await pastikanKlien(user, undangan.token)).toBe("/passport");
+
+    const klien = await barisKlien(clientId);
+    expect(klien.user_id).toBe(user.id);
+    expect(klien.linked_at).not.toBeNull();
+    // Dan tidak ada baris KEDUA yang lahir di sepanjang jalan.
+    expect(await barisKlienBeremail(email)).toHaveLength(1);
   });
 
   it("baris klien milik orang lain: email terverifikasi TIDAK merebutnya", async () => {
