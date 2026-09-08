@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ambilKlien } from "@/lib/passport/data";
 import { hariIniJakarta } from "@/lib/passport/waktu";
@@ -55,6 +56,46 @@ export default async function HalamanAjukan() {
       .eq("id", klien.id) // operator setara, tidak pernah pola
       .maybeSingle<{ alamat: string }>(),
   ]);
+
+  // LAPIS PERTAMA GERBANG SKRINING (spec J3, K5).
+  //
+  // Tanpa skrining hijau yang belum terpakai, yang tampil adalah AJAKAN, bukan
+  // formulir. Ini lapis pertama dari tiga — server action menolak dengan
+  // kalimat, dan `guard_booking_skrining` menolak barisnya. Lapis ini yang
+  // paling ramah dan paling mudah dilewati; dua lainnya yang mengikat.
+  //
+  // Perhitungan "belum terpakai" sama persis dengan yang dipakai `ajukanJadwal`
+  // — disengaja: layar yang menawarkan formulir lalu ditolak server adalah
+  // layar yang berbohong.
+  const [{ data: skriningKlien }, { data: pengajuanKlien }] = await Promise.all([
+    supabase
+      .from("screenings")
+      .select("id")
+      .eq("client_id", klien.id)
+      .eq("hasil", "hijau"),
+    supabase.from("booking_requests").select("screening_id").eq("client_id", klien.id),
+  ]);
+
+  const terpakai = new Set((pengajuanKlien ?? []).map((b) => b.screening_id as string));
+  const punyaSkriningHijau = (skriningKlien ?? []).some((s) => !terpakai.has(s.id as string));
+
+  if (!punyaSkriningHijau) {
+    return (
+      <section className="rounded-2xl border border-black/10 bg-white p-7 text-center">
+        <h1 className="font-serif text-xl text-night">Isi skrining keselamatan dulu</h1>
+        <p className="mx-auto mt-2 max-w-sm text-[13.5px] text-[#415247]">
+          Setiap pemesanan berdiri di atas satu skrining. Isinya singkat, dan jawabannya membantu
+          tim menyiapkan layanan yang aman untuk kondisi Anda hari ini.
+        </p>
+        <Link
+          href="/passport/skrining"
+          className="mt-5 inline-block rounded-xl bg-gold px-6 py-3 font-bold text-night"
+        >
+          Mulai skrining
+        </Link>
+      </section>
+    );
+  }
 
   // Label dirangkai lewat `labelVarian()` — SATU-SATUNYA perangkai label
   // varian di proyek ini — supaya pilihan di wizard klien terbaca sama persis

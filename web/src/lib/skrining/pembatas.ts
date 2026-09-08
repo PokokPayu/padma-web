@@ -84,8 +84,46 @@ export function terlaluSering(kunci: string): boolean {
   return riwayat.length > MAKS_PER_JENDELA || JEJAK_GLOBAL.length > MAKS_GLOBAL_PER_JENDELA;
 }
 
-/** Hanya untuk test — mengosongkan kedua lapis jejak. */
+/** Hanya untuk test — mengosongkan kedua lapis jejak ember ANONIM. */
 export function resetPembatas(): void {
   JEJAK.clear();
   JEJAK_GLOBAL = [];
+}
+
+/**
+ * ===== EMBER TERPISAH UNTUK RUTE TERAUTENTIKASI (spec C1 J6) =====
+ *
+ * Pembatas di atas dirancang untuk CORONG ANONIM: 5/menit per kunci IP, dan
+ * langit-langit global 30/menit untuk seluruh aplikasi. Langit-langit itu masuk
+ * akal ketika skrining adalah peristiwa sekali seumur corong.
+ *
+ * Ia BERHENTI masuk akal begitu skrining menjadi langkah wajib pada SETIAP
+ * pemesanan (J3): 30 per menit menjadi batas seluruh klinik, dan satu jam sibuk
+ * akan menabraknya — pemesanan berhenti untuk semua orang karena orang lain
+ * sedang memesan.
+ *
+ * Rute terautentikasi karena itu memakai ember sendiri, berkunci `client_id`:
+ * identitas yang SUDAH TERBUKTI lewat JWT, bukan header kiriman peramban yang
+ * bisa diputar. Karena kuncinya tidak bisa dipilih penyerang, ia tidak butuh
+ * langit-langit global — yang justru menjadi alat penolakan layanan terhadap
+ * klien lain.
+ *
+ * Ember anonim di atas TIDAK disentuh sama sekali.
+ */
+export const MAKS_KLIEN_PER_JENDELA = 5;
+
+const JEJAK_KLIEN = new Map<string, number[]>();
+
+/** true = permintaan harus ditolak (429). */
+export function terlaluSeringKlien(clientId: string): boolean {
+  const sekarang = Date.now();
+  const riwayat = saring(JEJAK_KLIEN.get(clientId) ?? [], sekarang);
+  riwayat.push(sekarang);
+  JEJAK_KLIEN.set(clientId, riwayat);
+  return riwayat.length > MAKS_KLIEN_PER_JENDELA;
+}
+
+/** Hanya untuk test. */
+export function resetPembatasKlien(): void {
+  JEJAK_KLIEN.clear();
 }

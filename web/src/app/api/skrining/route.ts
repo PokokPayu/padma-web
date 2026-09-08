@@ -5,6 +5,7 @@ import { saringJawaban } from "@/lib/skrining/bank-soal";
 import { buatKodeSkrining } from "@/lib/skrining/kode";
 import { SkemaSkriningPublik } from "@/lib/skrining/skema";
 import { kunciPembatas, terlaluSering } from "@/lib/skrining/pembatas";
+import { terbitkanTokenKlaim, COOKIE_KLAIM, KLAIM_TTL_JAM } from "@/lib/skrining/klaim";
 
 // Rute ini PUBLIK (tanpa auth) tetapi menulis dengan SERVICE ROLE. Karena itu
 // urutan pemeriksaan penting: yang paling murah dan paling membatasi dulu.
@@ -91,16 +92,51 @@ export async function POST(request: Request) {
   // `kode` UNIQUE — coba ulang bila bentrok, jangan crash.
   for (let percobaan = 0; percobaan < 5; percobaan++) {
     const kode = buatKodeSkrining();
-    const { error } = await admin.from("screenings").insert({
-      kode,
-      nama,
-      no_hp,
-      fase,
-      jawaban: { ...jawabanBersih, dihentikan_pada: penilaian.dihentikanPada },
-      hasil: penilaian.hasil,
-      flags: penilaian.flags,
-    });
-    if (!error) return NextResponse.json({ kode }, { status: 201 });
+    const { data: baris, error } = await admin
+      .from("screenings")
+      .insert({
+        kode,
+        nama,
+        no_hp,
+        fase,
+        jawaban: { ...jawabanBersih, dihentikan_pada: penilaian.dihentikanPada },
+        hasil: penilaian.hasil,
+        flags: penilaian.flags,
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+    if (!error) {
+      const jawab = NextResponse.json({ kode }, { status: 201 });
+
+      // TOKEN KLAIM (spec J4) — hanya untuk hasil HIJAU.
+      //
+      // Merah tidak menerbitkan token karena tidak ada yang perlu disambungkan:
+      // yang dibutuhkan orang itu adalah bicara dengan tim, bukan membuat akun.
+      // Menerbitkannya juga berarti menyimpan cookie berisi kunci menuju data
+      // kesehatan untuk alur yang tidak akan memakainya.
+      //
+      // Kegagalan menerbitkan token TIDAK PERNAH menggagalkan corong (spec §8):
+      // skriningnya sudah tersimpan, kodenya sudah dipulangkan, dan yang hilang
+      // hanyalah kenyamanan menyambungkan otomatis. Klien masih bisa mendaftar
+      // lalu skrining ulang dari dalam Passport.
+      if (penilaian.hasil === "hijau") {
+        try {
+          const token = await terbitkanTokenKlaim(baris!.id);
+          jawab.cookies.set(COOKIE_KLAIM, token, {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            path: "/",
+            maxAge: KLAIM_TTL_JAM * 3600,
+          });
+        } catch {
+          // Sengaja ditelan — lihat alasan di atas.
+        }
+      }
+
+      return jawab;
+    }
     if (error.code !== "23505") {
       return NextResponse.json({ pesan: "Gagal menyimpan." }, { status: 500 });
     }

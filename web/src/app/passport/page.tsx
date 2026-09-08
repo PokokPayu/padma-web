@@ -15,6 +15,7 @@ import {
 } from "@/lib/passport/turunan";
 import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { GridStempel } from "./_komponen/grid-stempel";
+import { createServerSupabase } from "@/lib/supabase/server";
 import { KartuInfo } from "./_komponen/kartu-info";
 import { SampulPassport } from "./_komponen/sampul";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
@@ -30,9 +31,39 @@ export const metadata = { title: "Digital Care Passport" };
 // berkas ini apa adanya): pengaturan itu menghapus `private` dari Cache-Control
 // sehingga respons satu klien boleh disimpan CDN dan disajikan ke klien lain.
 
-export default async function BerandaPassport() {
+export default async function BerandaPassport({
+  searchParams,
+}: {
+  searchParams: Promise<{ skrining?: string }>;
+}) {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
+
+  // SAPAAN BERNAMA SESUDAH SKRINING TERSAMBUNG (spec C1 J4).
+  //
+  // Yang datang lewat URL hanyalah ID; NAMANYA dibaca dari basis data lewat
+  // sesi pengguna, sehingga policy "screenings: klien baca miliknya" yang
+  // memutuskan boleh-tidaknya. Id karangan memulangkan nol baris dan tidak ada
+  // sapaan yang terbit — bukan galat, karena ini kabar baik yang gagal tampil,
+  // bukan pintu yang tertutup.
+  //
+  // Kenapa namanya disebut TERBUKA: umur token 2 jam menjaga perangkat bersama
+  // dari sisi waktu, tetapi tidak ada yang menjaganya dari sisi manusia. Satu
+  // HP di ruang tunggu bisa saja dipakai dua orang dalam sepuluh menit.
+  // Menyebut nama membuat salah sambung TERLIHAT oleh satu-satunya pihak yang
+  // pasti mengenalinya: pemilik akun.
+  const sp = await searchParams;
+  const idSkrining = typeof sp.skrining === "string" ? sp.skrining : "";
+  let namaSkrining: string | null = null;
+  if (idSkrining) {
+    const supabase = await createServerSupabase();
+    const { data } = await supabase
+      .from("screenings")
+      .select("nama")
+      .eq("id", idSkrining)
+      .maybeSingle<{ nama: string }>();
+    namaSkrining = data?.nama ?? null;
+  }
 
   const [sesi, paket, permintaan] = await Promise.all([
     ambilSesi(klien.id),
@@ -62,6 +93,20 @@ export default async function BerandaPassport() {
 
   return (
     <>
+      {namaSkrining && (
+        <div
+          className="mb-3.5 rounded-2xl border-[1.6px] border-leaf/30 bg-leaf-soft p-4 text-[13px]"
+          data-skrining-tersambung
+        >
+          <b className="block text-sm text-night">
+            Skrining atas nama {namaSkrining} telah disambungkan
+          </b>
+          <span className="text-[#415247]">
+            Anda sudah bisa mengajukan jadwal. Bila nama di atas bukan Anda, hubungi tim PADMA —
+            jangan lanjutkan pemesanan.
+          </span>
+        </div>
+      )}
       <SampulPassport
         nama={klien.nama}
         padmaId={klien.padmaId}

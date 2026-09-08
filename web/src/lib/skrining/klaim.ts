@@ -68,7 +68,7 @@ export async function terbitkanTokenKlaim(screeningId: string): Promise<string> 
 }
 
 export type HasilKlaim =
-  | { ok: true; nama: string; fase: string | null }
+  | { ok: true; screeningId: string; nama: string; fase: string | null }
   | { ok: false };
 
 /**
@@ -142,6 +142,7 @@ export async function klaimSkrining(token: string, clientId: string): Promise<Ha
 
   return {
     ok: true,
+    screeningId,
     nama: skrining.nama,
     fase: (faseTerisi ?? []).length > 0 ? skrining.fase : null,
   };
