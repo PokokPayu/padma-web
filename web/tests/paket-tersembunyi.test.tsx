@@ -310,6 +310,22 @@ describe("saklar paket: tidak ada kata 'paket' di layar", () => {
     const { default: Home } = await import("@/app/page");
     expect(await render(Home)).not.toMatch(/paket/i);
   });
+
+  // HALAMAN AUTH — celah yang sempat lolos sampai penggabungan dengan sapuan
+  // panel. Sapuan ini semula menyisir sembilan halaman panel dan klien, tetapi
+  // tidak satu pun halaman auth; padahal kalimat panel kiri /masuk berbunyi
+  // "…dan progres paket Anda", yaitu janji paket di layar yang dilihat SETIAP
+  // pengunjung yang belum masuk. Keempatnya tidak butuh sesi: semuanya komponen
+  // sinkron tanpa pembacaan basis data.
+  it.each([
+    ["/masuk", () => import("@/app/masuk/page")],
+    ["/daftar", () => import("@/app/daftar/page")],
+    ["/lupa-sandi", () => import("@/app/lupa-sandi/page")],
+    ["/akun-belum-terhubung", () => import("@/app/akun-belum-terhubung/page")],
+  ])("halaman auth %s tidak menyebut paket", async (_nama, muat) => {
+    const { default: Halaman } = await muat();
+    expect(await render(Halaman)).not.toMatch(/paket/i);
+  });
 });
 
 // Sesi KLIEN (Ananda) untuk kedua halaman /passport — beda dari sesi admin di

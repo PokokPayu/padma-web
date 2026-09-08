@@ -7,7 +7,7 @@ export default function MasukPage() {
   return (
     <PanggungAuth
       judul="Passport Anda menunggu."
-      kalimat="Riwayat sesi, catatan bidan, materi panduan, dan progres paket Anda — semua di satu tempat yang aman."
+      kalimat="Riwayat sesi, catatan bidan, materi panduan, dan progres perawatan Anda — semua di satu tempat yang aman."
     >
       {/* h2, bukan h1 — panel kiri panggung memegang h1 karena datang lebih
           dulu di DOM. Lihat komentar hierarki judul di panggung.tsx. */}
