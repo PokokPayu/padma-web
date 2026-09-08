@@ -5,15 +5,37 @@
 **Ledger tugas:** `.superpowers/sdd/2026-09-09-padma-panel-owner/progress.md`
 **Runbook rencana sebelumnya (bentuk yang ditiru berkas ini):**
 `docs/superpowers/2026-09-08-panel-sapuan-tindak-lanjut.md`
+**Gelombang perbaikan penutup:**
+`.superpowers/sdd/2026-09-09-padma-panel-owner/fix-wave-report.md`
 
-Berkas ini menutup rencana 3B (panel owner). Task 10 ini **tidak memperbaiki kode** — bila
-sebuah verifikasi merah, temuannya dicatat apa adanya di sini, bukan ditambal diam-diam.
-Dijalankan 2026-09-09 dari `web/`, di atas commit `0544877dd9f2b0a9cec9128f159392ce7d7cbaa2`
-(HEAD Task 9 — tidak ada satu baris kode pun disentuh Task 10).
+Berkas ini menutup rencana 3B (panel owner). Task 10 (dijalankan 2026-09-09, commit
+`0544877dd9f2b0a9cec9128f159392ce7d7cbaa2`) **tidak memperbaiki kode** — hanya melapor apa
+adanya. Ia menemukan **dua regresi lintas-tugas** yang lolos dari sepuluh review per-tugas
+(karena tidak satu tugas pun berwenang menyentuh berkas tempat regresinya berada) DAN satu
+kesenjangan verifikasi (`/owner/transport` belum pernah dibuka di peramban sungguhan).
+
+**STATUS SEKARANG: KETIGANYA DITUTUP.** Sebuah gelombang perbaikan terpisah, dijalankan
+sesudah Task 10 di atas HEAD yang sama, memperbaiki README, memperbaiki cara berkas uji
+memanggil `RekapPage`, dan menambah dua pemeriksaan E2E baru yang membuktikan
+`/owner/transport` dan `PanelGeser`-nya hidup di peramban sungguhan. Isi "Perhatian mendesak"
+dan "Tabel utang" di bawah **SENGAJA TIDAK dihapus** — ia catatan bahwa `npm test` PENUH
+menemukan dua regresi yang sepuluh review per-tugas lewatkan, dan itu pelajaran paling
+berharga dari rencana ini: alasan kenapa suite penuh WAJIB dijalankan, bukan hanya uji
+per-berkas. Status penutupan tiap baris ditandai inline di bawah, dengan rujukan ke
+angka verifikasi terbaru di bagian "Verifikasi menyeluruh — gelombang perbaikan penutup".
 
 ---
 
 ## Perhatian mendesak — dua kegagalan BARU ditemukan di suite penuh, bukan dari Task 9
+
+> **[DITUTUP oleh gelombang perbaikan penutup, 2026-09-09]** — kedua kegagalan di bawah ini
+> SUDAH diperbaiki: baris tabel README ditambahkan, dan helper `render()` di
+> `paket-tersembunyi.test.tsx` sekarang memanggil `RekapPage({ searchParams: Promise.resolve({}) })`
+> persis seperti pola `SP()` yang sudah dipakai berkas itu untuk halaman lain. `npm test`
+> PENUH sesudah perbaikan: **165 berkas lolos, 2502 uji lolos, 0 merah** — lihat "Verifikasi
+> menyeluruh — gelombang perbaikan penutup" di bawah untuk keluaran lengkapnya. Narasi asli di
+> bawah ini dipertahankan UTUH sebagai bukti bahwa keduanya BENAR pernah merah, dan bahwa
+> `npm test` penuh-lah yang menangkapnya — bukan satu pun dari sepuluh review per-tugas.
 
 Task 9 melaporkan E2E owner 10/10 lolos. `npm test` PENUH belum pernah dijalankan sejak
 Task 1 dimulai (Global Constraint koordinasi Supabase lokal). Saat dijalankan di sini untuk
@@ -274,7 +296,17 @@ ada. Verifikasi `/owner/transport` sejauh ini terbatas pada: `renderToStaticMark
 terbuka dan berfungsi di peramban sungguhan sebagai owner.** Ini concern nyata, bukan
 formalitas — dicatat sebagai baris pertama tabel utang di bawah.
 
-### Sepuluh baris keluaran `catat()` E2E dari Task 9 — disalin apa adanya
+> **[DITUTUP oleh gelombang perbaikan penutup, 2026-09-09]** — dua pemeriksaan baru
+> (`10.` dan `11.`) ditambahkan ke `tests/e2e/owner.e2e.ts`: `10.` membuka `/owner/transport`
+> sungguhan sebagai owner dan membuktikan label jenjang + tabel rate card tampil tanpa crash;
+> `11.` membuka `/owner/transport?ubah=<jenjang pertama>` dan membuktikan `PanelGeser`
+> (`role="dialog"`) benar-benar TERLIHAT sesudah hidrasi peramban, lengkap dengan ketiga medan
+> formulirnya (`getByLabel` untuk tarif klien, honor mitra, tanggal berlaku) — bukti langsung
+> bahwa `useRouter()` di badan komponen `PanelGeser` TIDAK melempar "Functions cannot be
+> passed directly to Client Components" saat dihidrasi sungguhan. Keluaran lengkapnya ada di
+> "Verifikasi menyeluruh — gelombang perbaikan penutup" di bawah: **12/12 pemeriksaan lolos**.
+
+### Sepuluh baris keluaran `catat()` E2E dari Task 9 — disalin apa adanya (SEBELUM gelombang perbaikan)
 
 ```
 PASS  1. /owner menampilkan 'Panel Owner' dan ringkasan pekan berjalan
@@ -310,14 +342,103 @@ ada di antaranya — lihat kesenjangan Langkah 3 di atas.)
 
 ---
 
+## Verifikasi menyeluruh — gelombang perbaikan penutup (2026-09-09, sesudah Task 10)
+
+Dijalankan dari `web/`, sesudah menambahkan baris README, memperbaiki helper `render()` di
+`tests/paket-tersembunyi.test.tsx`, dan menambah pemeriksaan `10.`/`11.` ke
+`tests/e2e/owner.e2e.ts`. Angka disalin persis dari terminal.
+
+### Langkah 1 — dua berkas yang tadinya merah
+
+```
+$ npx vitest run tests/inventaris-rute.test.ts tests/paket-tersembunyi.test.tsx
+ Test Files  2 passed (2)
+      Tests  37 passed (37)
+```
+
+### Langkah 2 — suite penuh
+
+```
+$ npm test
+ Test Files  165 passed (165)
+      Tests  2502 passed (2502)
+   Duration  555.15s
+```
+
+**0 merah** — kedua kegagalan yang dicatat di "Perhatian mendesak" di atas sudah tertutup.
+
+### Langkah 3 — build, tipe, lint
+
+```
+$ npm run build
+✓ Compiled successfully
+✓ Generating static pages using 11 workers (41/41)
+```
+
+```
+$ npx tsc --noEmit
+(tidak ada keluaran — nol galat tipe)
+```
+
+```
+$ npm run lint
+✖ 11 problems (0 errors, 11 warnings)
+```
+Sebelas peringatan sama persis dengan yang dicatat Task 10 di atas — seluruhnya pre-existing,
+tidak satu pun berasal dari berkas yang disentuh gelombang perbaikan ini.
+
+### Langkah 4 — E2E owner, di peramban sungguhan (`npm run build` + `npm run start` + Playwright)
+
+```
+$ npm run test:e2e:owner
+PASS  1. /owner menampilkan 'Panel Owner' dan ringkasan pekan berjalan
+      PADMA Panel Owner Beranda Rekap Tarif Transport Buka Panel Admin Beranda P Pemilik PADMA Panel Owner Halo, Pemilik PADMA. Ringkasan pekan berjalan · 9 September 2026 SESI SELESAI PEKAN INI 0 Selesaika
+PASS  2. /owner/rekap menampilkan honor mitra uji dengan tarif pada tanggal sesi
+      mencari "E2E-OWNR Bidan 1788894483970" & Rp 666.000
+PASS  3. /owner/tarif menampilkan nominal, dan tarif baru lahir sebagai BARIS BARU
+      nominal lama tampil: true; baris: [{"harga_klien":777000,"honor_mitra":333000,"berlaku_sejak":"2020-01-06"},{"harga_klien":999000,"honor_mitra":555000,"berlaku_sejak":"2026-09-09"}]
+PASS  4. rekap pekan yang sudah lewat TIDAK bergeser sesudah tarif naik
+      masih Rp 666.000, bukan Rp 1.110.000
+PASS  5. 'Tandai dibayar' melahirkan satu tanda Senin ber-ditandai_oleh uid OWNER
+      tanda [{"week_start":"2026-08-31","ditandai_oleh":"69fbffb0-5e31-4327-a980-77cc772e45b2","dibayar_pada":"2026-09-08T19:08:24.615222+00:00"}]; week_start diharapkan 2026-08-31; tombol lenyap: true
+PASS  6. owner punya jalan pulang yang bisa DIKLIK dari /owner ke /admin
+      mendarat di /admin
+PASS  8. KONTROL POSITIF: pemindai nominal MENEMUKAN keempat angka di /owner/tarif/<varian>
+      ditemukan: ["777.000","333.000","999000","555000"]
+PASS  7a. admin yang login DITOLAK di /owner
+      mendarat di /admin
+PASS  7b. nol nominal rate card di 11 rute /admin + 6 rute /passport
+      17 rute diperiksa terhadap 22 nominal, nol temuan
+PASS  10. /owner/transport terbuka tanpa crash dan menampilkan label jenjang + tabel rate card
+      PADMA Panel Owner Beranda Rekap Tarif Transport Buka Panel Admin Transport P Pemilik PADMA Transport Tentang halaman ini JENJANG JARAK TARIF KLIEN HONOR MITRA SUBSIDI PADMA BERLAKU SEJAK TETAPKAN 0–5 
+PASS  11. /owner/transport?ubah=<jenjang> membuka PanelGeser sungguhan di peramban (hidrasi tidak crash) dengan medan formulirnya
+      dialog terlihat: true; medan terlihat: true
+PASS  9. seluruh data uji terhapus dan rate card klinik tidak ikut tersentuh
+      layanan 0, mitra 0, klien 0, tarif uji 0
+
+12/12 pemeriksaan lolos.
+Panel owner terbukti utuh: rate card insert-only, rekap berriwayat tarif, tanda bayar beridentitas owner, dan nol nominal di seluruh rute admin & passport.
+```
+
+**12/12**, termasuk `10.` dan `11.` yang baru — inilah bukti peramban-sungguhan yang tadinya
+hilang: `/owner/transport` terbuka tanpa crash, dan `PanelGeser`-nya (Client Component yang
+memanggil `useRouter()` di badan komponen) terbukti hidrasi dengan benar (`role="dialog"`
+terlihat, ketiga medan formulir terlihat) alih-alih melempar "Functions cannot be passed
+directly to Client Components".
+
+---
+
 ## Tabel utang
 
-Diurutkan menurut nilai/urgensi.
+Diurutkan menurut nilai/urgensi. Baris 1 dan 2 berstatus **DITUTUP** oleh gelombang perbaikan
+penutup (2026-09-09) — dipertahankan di sini, bukan dihapus, sebagai catatan bahwa keduanya
+BENAR pernah ada dan hanya ditangkap oleh `npm test` PENUH, bukan oleh sepuluh review
+per-tugas.
 
 | # | Utang | Kenapa ditunda |
 |---|---|---|
-| 1 | **`/owner/transport` tidak pernah dibuka di peramban sungguhan.** E2E Task 9 sengaja tidak menyentuhnya (dicatat eksplisit di `progress.md`). `PanelGeser` (Client Component, `useRouter()` di badan komponen — dicatat Task 7) adalah persis kelas risiko Server→Client yang jadi alasan Step 3 verifikasi ini wajib ada, tapi belum ada bukti peramban-sungguhan untuknya di rencana 3B manapun. `curl` tanpa sesi hanya membuktikan tidak crash 500 sebelum redirect login; tidak membuktikan panel geser terbuka & berfungsi. | Task 10 tidak berwenang menjalankan `npm run test:e2e:owner` dengan skenario baru (di luar cakupan brief), dan tidak punya alat automasi peramban di sesi ini. Menutupnya berarti menambah pemeriksaan `/owner/transport` ke `tests/e2e/owner.e2e.ts` — pekerjaan tugas tersendiri, bukan verifikasi. |
-| 2 | **Dua kegagalan `npm test` baru** — `tests/inventaris-rute.test.ts` (README belum menyebut `/owner/tarif/[variantId]`) dan `tests/paket-tersembunyi.test.tsx` (`RekapPage` dipanggil tanpa `searchParams` oleh helper `render()` berkas itu sendiri, sisa dari Task 6 mengubah tanda tangan `RekapPage`). Lihat "Perhatian mendesak" di atas untuk analisis lengkap. Bukan cacat produksi (build sukses membuktikannya), tapi BENAR merah di suite. | Task 10 tidak memperbaiki kode — kedua ini ditemukan justru oleh Task 10 sendiri (baru pertama kali `npm test` PENUH dijalankan sejak Task 1). Perbaikannya kecil (satu baris README; satu prop default di helper `render()`) tapi di luar cakupan brief Task 10. |
+| 1 | **[DITUTUP]** ~~`/owner/transport` tidak pernah dibuka di peramban sungguhan.~~ E2E Task 9 sengaja tidak menyentuhnya (dicatat eksplisit di `progress.md`). `PanelGeser` (Client Component, `useRouter()` di badan komponen — dicatat Task 7) adalah persis kelas risiko Server→Client yang jadi alasan Step 3 verifikasi ini wajib ada, tapi belum ada bukti peramban-sungguhan untuknya di rencana 3B manapun. `curl` tanpa sesi hanya membuktikan tidak crash 500 sebelum redirect login; tidak membuktikan panel geser terbuka & berfungsi. | Task 10 tidak berwenang menjalankan `npm run test:e2e:owner` dengan skenario baru (di luar cakupan brief), dan tidak punya alat automasi peramban di sesi ini. **Ditutup oleh gelombang perbaikan penutup**: pemeriksaan `10.`/`11.` ditambahkan ke `tests/e2e/owner.e2e.ts`, dijalankan lewat `npm run test:e2e:owner` di peramban sungguhan — 12/12 lolos, lihat "Verifikasi menyeluruh — gelombang perbaikan penutup". |
+| 2 | **[DITUTUP]** ~~Dua kegagalan `npm test` baru~~ — `tests/inventaris-rute.test.ts` (README belum menyebut `/owner/tarif/[variantId]`) dan `tests/paket-tersembunyi.test.tsx` (`RekapPage` dipanggil tanpa `searchParams` oleh helper `render()` berkas itu sendiri, sisa dari Task 6 mengubah tanda tangan `RekapPage`). Lihat "Perhatian mendesak" di atas untuk analisis lengkap. Bukan cacat produksi (build sukses membuktikannya), tapi BENAR merah di suite. | Task 10 tidak memperbaiki kode — kedua ini ditemukan justru oleh Task 10 sendiri (baru pertama kali `npm test` PENUH dijalankan sejak Task 1). **Ditutup oleh gelombang perbaikan penutup**: baris README ditambahkan, helper `render()` diperbaiki untuk memanggil `RekapPage(SP())` — `npm test` PENUH sesudahnya: 165 berkas lolos, 2502 uji lolos, 0 merah. |
 | 3 | **Paginasi JS di atas daftar yang SUDAH terbaca seluruhnya** — tiga tempat baru di rencana ini: `saringRateCard()` (`src/lib/owner/daftar-tarif.ts:60`, `cocok.slice(dari, sampai + 1)` di atas `ambilRateCard()` yang membaca `phases`/`services`/`service_variants`/SELURUH `variant_rates` tanpa `.range()`), `saringRekap()` (`src/lib/owner/daftar-rekap.ts:50`, sama, di atas `ambilRekap()` yang menghitung SELURUH pekan di TypeScript), dan potongan daftar sesi transport (`src/app/owner/transport/page.tsx:55`, `menunggu.slice(dari, sampai + 1)`). Ketiganya memperbaiki LAYAR dan biaya render — `max_rows = 1000` di `supabase/config.toml` **tetap terbuka** untuk bacaan yang mendasarinya. Komentar di kedua berkas `lib/owner/*` sudah menyalin peringatan ini secara eksplisit dan merujuk `daftarTagihanAdmin()` (`src/lib/admin/tagihan.ts:293-300`) sebagai pola yang sama. | Sama seperti utang #1 kedua runbook sebelumnya (rencana fondasi & sapuan modul) — obatnya view SQL atau RPC hitung-per-grup, di luar bobot rencana ini. Untuk rekap khususnya, menutupnya lebih rumit: tarif harus dicocokkan ke TANGGAL SESI, jadi seluruh riwayat tarif memang harus terbaca apa pun caranya. |
 | 4 | **Label `KelompokSaring` yang tidak pernah dirender (utang #5 runbook sapuan modul) kini menyentuh dua halaman owner juga.** `/owner/tarif` memakai `<BilahDaftar kelompok={[...]}>` dengan DUA kelompok chip berdampingan (`tarif`, `aktif`) tanpa penanda batas visual; `/owner/rekap` memakai satu kelompok (`honor`) — lebih ringan, tapi masih mewarisi primitif yang sama tanpa label kelompok terlihat. Total halaman yang kena utang ini di seluruh repo sekarang: tujuh (`admin`) + dua (`owner`) = sembilan. | Sama seperti sebelumnya: menampilkannya mengubah tata letak bilah di sembilan halaman sekaligus — keputusan visual yang butuh persetujuan sebelum disentuh, bukan cacat yang bisa diperbaiki sepintas. |
 | 5 | **Warisan rencana fondasi & sapuan modul yang masih terbuka**, tidak disentuh rencana ini: `max_rows = 1000` untuk `ambilDaftarLayanan()`/`ambilLayanan()`/`daftarTagihanAdmin()` (utang #1 runbook sapuan), saringan `isi=belum` Materi menyaring halaman-yang-sudah-diambil bukan seluruh daftar (utang #2), enam berkas `/admin` masih berpalet klien lama (utang #4), `text-panel-muted` di atas `bg-panel-bg` ~4,4:1 sedikit di bawah ambang AA (utang #8), serta seluruh warisan dari rencana fondasi (money firewall nominal telanjang — **sudah ditutup**; seed klien tanpa alamat; `hal` dijepit dua tempat; dst.). | Di luar cakupan rencana panel owner — dicatat di sini hanya supaya pembaca tidak mengira semuanya sudah tuntas karena tidak disebut ulang penuh. |
@@ -384,3 +505,15 @@ berwenang menangkap karena keduanya hidup di luar cakupan "Files" setiap brief. 
 tambahan untuk melakukan `npm test` PENUH lebih sering di sepanjang rencana multi-tugas —
 bukan hanya di ujungnya — meskipun Global Constraint koordinasi Supabase lokal proyek ini
 membuat itu mahal untuk dilakukan di setiap tugas.
+
+**Gelombang perbaikan penutup (2026-09-09)** menutup ketiga temuan Task 10 dalam satu
+gelombang, tanpa melonggarkan satu assertion pun: baris README ditambahkan mengikuti gaya
+baris yang sudah ada; helper `render()` di `paket-tersembunyi.test.tsx` diperbaiki untuk
+memanggil `RekapPage` dengan `searchParams` (yang diuji — pagar saklar `PAKET_TAMPIL` — tidak
+disentuh sama sekali, hanya cara memanggilnya); dan dua pemeriksaan baru ditambahkan ke
+`tests/e2e/owner.e2e.ts` yang membuktikan `/owner/transport` beserta `PanelGeser`-nya hidup di
+peramban sungguhan. Pelajaran yang paling penting untuk diingat justru pelajaran yang
+mendahului perbaikan ini: **dua regresi nyata lolos dari sepuluh review per-tugas dan hanya
+tertangkap saat `npm test` PENUH dijalankan untuk pertama kalinya** — itulah sebabnya seluruh
+narasi "Perhatian mendesak" dan baris tabel utang di atas dipertahankan apa adanya, bukan
+dihapus, meski keduanya kini sudah ditutup.

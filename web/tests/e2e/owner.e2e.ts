@@ -34,6 +34,16 @@
  *      Tanpa langkah ini, "nol nominal" di langkah 7 bisa hijau palsu hanya
  *      karena pemindainya rusak — kelas kegagalan yang paling berbahaya di
  *      seluruh berkas ini, karena ia hijau justru saat tidak menguji apa pun.
+ *   10. `/owner/transport` terbuka tanpa crash dan menampilkan label jenjang
+ *       serta tabel rate card transport-nya.
+ *   11. `/owner/transport?ubah=<jenjang>` membuka `PanelGeser` SUNGGUHAN di
+ *       peramban (`role="dialog"` terlihat) dengan medan formulirnya —
+ *       kesenjangan verifikasi (review akhir cabang, temuan 3): sampai
+ *       langkah ini ditulis, tidak ada satu pun mata manusia atau otomatis
+ *       yang pernah membuka halaman ini di peramban sungguhan, dan
+ *       `PanelGeser` memanggil `useRouter()` di BADAN komponennya — cacat
+ *       "Functions cannot be passed directly to Client Components" yang
+ *       hanya terlihat saat DIHIDRASI sudah menggigit repo ini tiga kali.
  *
  * Prasyarat: `npx supabase start`, `npm run seed:users`, `npm run dev`.
  * Jalankan: `npm run test:e2e:owner`.
@@ -52,6 +62,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { createClient } from "@supabase/supabase-js";
 import { awalPekan, geserHari } from "../../src/lib/owner/pekan";
 import { hariIniJakarta } from "../../src/lib/passport/waktu";
+import { JENJANG_TARIF_RATE_CARD } from "../../src/lib/transport/tarif";
+import { LABEL_JENJANG } from "../../src/lib/transport/jarak";
 import { tungguIsi } from "./_tunggu";
 
 config({ path: [".env.local", ".env"] });
@@ -657,6 +669,59 @@ async function main() {
 
       await adminCtx.close();
       await klienCtx.close();
+    }
+
+    // ================= 10. /owner/transport terbuka tanpa crash ==========
+    // Kesenjangan verifikasi (review akhir cabang, temuan 3): sampai
+    // pemeriksaan ini ditulis, TIDAK ADA satu pun mata manusia atau otomatis
+    // yang pernah membuka `/owner/transport` di peramban sungguhan.
+    // `renderToStaticMarkup` (dipakai suite vitest) tidak punya batas
+    // server/klien — ia tidak akan pernah menangkap `PanelGeser` yang
+    // memanggil `useRouter()` di badan komponennya melempar "Functions cannot
+    // be passed directly to Client Components" saat DIHIDRASI sungguhan, kelas
+    // cacat yang sudah menggigit repo ini tiga kali.
+    {
+      const page = await buka(owner, "/owner/transport");
+      const teks = await teksTerlihat(page);
+      const labelJenjangTampil = JENJANG_TARIF_RATE_CARD.every((j) =>
+        teks.includes(LABEL_JENJANG[j]),
+      );
+      catat(
+        "10. /owner/transport terbuka tanpa crash dan menampilkan label jenjang + tabel rate card",
+        teks.includes("Transport") && labelJenjangTampil,
+        teks.slice(0, 200),
+      );
+      await page.close();
+    }
+
+    // ================= 11. Panel geser /owner/transport terbukti hidrasi ==
+    // Membuktikan `PanelGeser` benar-benar HIDUP di peramban (bukan cuma
+    // dirender di server): `role="dialog"` yang terlihat adalah bukti bahwa
+    // `useRouter()` di badan komponennya tidak melempar saat dihidrasi.
+    {
+      const jenjangPertama = JENJANG_TARIF_RATE_CARD[0];
+      const page = await buka(owner, `/owner/transport?ubah=${jenjangPertama}`);
+      const dialog = page.getByRole("dialog", { name: new RegExp(LABEL_JENJANG[jenjangPertama]) });
+      let dialogTerlihat = false;
+      let medanTerlihat = false;
+      try {
+        await dialog.waitFor({ state: "visible", timeout: 10_000 });
+        dialogTerlihat = true;
+        medanTerlihat =
+          (await page.getByLabel(`Tarif klien jenjang ${LABEL_JENJANG[jenjangPertama]}`).count()) > 0 &&
+          (await page.getByLabel(`Honor mitra jenjang ${LABEL_JENJANG[jenjangPertama]}`).count()) > 0 &&
+          (await page
+            .getByLabel(`Tanggal berlaku tarif jenjang ${LABEL_JENJANG[jenjangPertama]}`)
+            .count()) > 0;
+      } catch {
+        dialogTerlihat = false;
+      }
+      catat(
+        "11. /owner/transport?ubah=<jenjang> membuka PanelGeser sungguhan di peramban (hidrasi tidak crash) dengan medan formulirnya",
+        dialogTerlihat && medanTerlihat,
+        `dialog terlihat: ${dialogTerlihat}; medan terlihat: ${medanTerlihat}`,
+      );
+      await page.close();
     }
 
     await owner.close();
