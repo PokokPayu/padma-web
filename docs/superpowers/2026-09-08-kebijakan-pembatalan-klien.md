@@ -18,7 +18,7 @@ diargumentasikan oleh spec C3.
 |---|---|---|
 | 1 | Klien membatalkan **≥ 24 jam** sebelum sesi | **Uang kembali** |
 | 2 | Klien membatalkan **2–24 jam** sebelum sesi | **Kredit** — hak satu sesi, bukan uang |
-| 3 | Klien membatalkan **< 2 jam** sebelum sesi | **Hangus penuh** |
+| 3 | Klien membatalkan **< 2 jam** sebelum sesi, **atau no-show** | **Hangus penuh** |
 | 4 | **PADMA atau mitra** yang membatalkan | **Uang kembali penuh** |
 
 ## Dua hal yang membentuk implementasinya
@@ -34,16 +34,19 @@ sudah ada. Vercel berjalan UTC; menghitungnya dengan kalender mesin akan mengges
 dan pergeseran itu berbentuk uang klien yang hangus sehari lebih awal. Inilah alasan struktural
 mengapa jam mulai sesi (J2) harus mendarat di C1 sebelum C3 bisa dimulai sama sekali.
 
+**No-show diperlakukan sama dengan jenjang 3** — keputusan pemilik 8 September 2026. Klien yang
+tidak ada di tempat ketika mitra sudah datang kehilangan seluruh pembayarannya, sama seperti
+pembatalan di bawah dua jam. Dicatat sebagai keputusan, bukan sebagai kelalaian: konsekuensinya
+bagi mitra — yang sudah menempuh perjalanan dan honornya sudah timbul — ditanggung dari sisi
+PADMA, bukan dibebankan lagi ke klien.
+
 ## Yang MASIH terbuka — jangan dikira sudah dijawab
 
-1. **No-show.** Klien tidak ada di tempat ketika mitra sudah datang. Apakah ia jenjang tersendiri,
-   atau diperlakukan sama dengan jenjang 3 (hangus penuh)? Bedanya nyata: pada no-show, mitra sudah
-   menempuh perjalanan dan honornya sudah timbul.
-2. **Separuh poster yang lain: JADWAL ULANG.** Poster klien berjudul "Pembatalan **& Jadwal
+1. **Separuh poster yang lain: JADWAL ULANG.** Poster klien berjudul "Pembatalan **& Jadwal
    Ulang**", tetapi hanya sisi pembatalannya yang tercatat di sini. Aturan jadwal ulang — berapa kali
    boleh, sampai berapa jam sebelum sesi, apakah berbiaya — belum pernah dibicarakan dan belum
    tertulis di mana pun.
-3. **Mekanisme pengembalian uang.** Pembayaran masuk manual lewat QRIS; pengembaliannya juga manual,
+2. **Mekanisme pengembalian uang.** Pembayaran masuk manual lewat QRIS; pengembaliannya juga manual,
    dan belum diputuskan siapa yang mengeksekusi, dalam berapa lama, serta apa yang dicatat sistem
    sebagai buktinya. Ini urusan C2/C3, bukan C1.
 
