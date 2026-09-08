@@ -187,3 +187,6 @@ export function bolehPindahSesi(dari: StatusSesi, ke: StatusSesi): boolean {
  * diam-diam di sini akan mendahului keputusan itu.
  */
 export const SESI_DIBATALKAN = "dibatalkan_padma" satisfies StatusSesi;
+
+/** Keadaan "sedang dicarikan bidan" — dipakai server action admin (spec J7). */
+export const PERMINTAAN_DICARIKAN = "mencari_mitra" satisfies StatusPermintaan;

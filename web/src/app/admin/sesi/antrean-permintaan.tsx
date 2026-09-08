@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { konfirmasiPermintaan, tolakPermintaan } from "./aksi";
+import { cariMitra, pilihMitra, konfirmasiPermintaan } from "./aksi";
+import type { StatusPermintaan } from "@/lib/jadwal/status";
 
 export type PermintaanAntre = {
   id: string;
@@ -14,20 +15,43 @@ export type PermintaanAntre = {
   // karena itu ia dirender di belakang jam, bukan menggantikannya.
   waktu: string;
   catatan: string;
+  status: StatusPermintaan;
+  /** Nama mitra yang sudah dipilih; null selama masih dicarikan. */
+  namaMitra: string | null;
 };
 
-export type MitraPilihan = { id: string; nama: string };
+/**
+ * Satu pilihan mitra, LENGKAP dengan jaraknya ke alamat permintaan ini.
+ *
+ * `jarak` sudah diformat di server ("4,2 km" atau "domisili belum diisi") —
+ * komponen ini tidak menghitung apa pun. Bukan sekadar pembagian tugas:
+ * `urutkanMitraMenurutJarak()` dan `formatKm()` adalah fungsi yang diuji tanpa
+ * DOM, dan memindahkannya ke sini akan menukar uji murni dengan uji render.
+ */
+export type MitraPilihan = { id: string; nama: string; jarak: string };
 
 /**
- * Satu blok permintaan jadwal yang menunggu keputusan.
+ * Satu blok permintaan jadwal di antrean admin.
  *
- * Tombolnya dua, bukan satu tombol bernilai status: keadaan tujuan tidak pernah
- * menyeberang batas server sebagai data. Yang dikirim hanyalah "permintaan yang
- * mana" dan — untuk konfirmasi — "mitra yang mana".
+ * TIGA LANGKAH, bukan satu (spec C1 J7):
+ *   diminta       -> tombol "Cari bidan"
+ *   mencari_mitra -> daftar mitra terurut jarak + "Tetapkan bidan"
+ *   mitra_siap    -> nama bidan terpilih + "Konfirmasi"
  *
- * Mitra dipilih di sini dan bukan setelahnya karena sesi wajib punya
- * `partner_id`: konfirmasi tanpa mitra akan melahirkan sesi tanpa siapa pun
- * yang datang.
+ * Langkahnya dipisah karena tarif transport berasal dari domisili MITRA ke
+ * alamat KLIEN: transport tidak bisa dihitung sebelum mitranya diketahui, dan
+ * itulah alasan struktural C2 kelak menyisipkan pembayaran SESUDAH mitra_siap.
+ *
+ * Keadaan tujuan tidak pernah menyeberang batas server sebagai data — tiap
+ * langkah punya action sendiri dengan status tertulis mati di dalamnya. Yang
+ * dikirim hanyalah "permintaan yang mana" dan, untuk satu langkah, "mitra yang
+ * mana".
+ *
+ * TOMBOL "TOLAK" SENGAJA TIDAK ADA (spec J8). Admin tidak menolak pengajuan;
+ * klien yang membatalkan miliknya sendiri dari Passport. Action
+ * `tolakPermintaan` masih hidup di aksi.ts — nilai enum `ditolak` dan
+ * penjaganya tetap di tempatnya, hanya tidak lagi terjangkau dari layar, persis
+ * pola saklar paket.
  */
 export function BlokPermintaan({
   permintaan,
@@ -40,15 +64,24 @@ export function BlokPermintaan({
   const [pesan, setPesan] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState(mitra[0]?.id ?? "");
 
-  const nonaktif = pending || mitra.length === 0;
+  const tanpaMitra = mitra.length === 0;
+
+  function jalankan(aksi: () => Promise<{ ok: true } | { ok: false; pesan: string }>) {
+    mulai(async () => {
+      const r = await aksi();
+      setPesan(r.ok ? null : r.pesan);
+    });
+  }
 
   return (
-    <article className="mb-3 rounded-2xl border-[1.6px] border-dashed border-gold bg-[#FDFAF1] px-4 py-3.5">
+    <article
+      className="mb-3 rounded-2xl border-[1.6px] border-dashed border-gold bg-[#FDFAF1] px-4 py-3.5"
+      data-permintaan={permintaan.id}
+      data-status={permintaan.status}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <b className="text-[13.5px] text-ink">
-            Permintaan jadwal — {permintaan.namaKlien}
-          </b>
+          <b className="text-[13.5px] text-ink">Permintaan jadwal — {permintaan.namaKlien}</b>
           <span className="mt-0.5 block text-[11.5px] text-ink-soft">
             {permintaan.namaLayanan} · {permintaan.tanggal} · <b>{permintaan.jam}</b> · alternatif{" "}
             {permintaan.waktu}
@@ -57,53 +90,66 @@ export function BlokPermintaan({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="sr-only" htmlFor={`mitra-${permintaan.id}`}>
-            Mitra untuk permintaan {permintaan.namaKlien}
-          </label>
-          <select
-            id={`mitra-${permintaan.id}`}
-            value={partnerId}
-            onChange={(e) => setPartnerId(e.target.value)}
-            className="min-h-[38px] rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-[12.5px]"
-          >
-            {mitra.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nama}
-              </option>
-            ))}
-          </select>
+          {permintaan.status === "diminta" && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => jalankan(() => cariMitra(permintaan.id))}
+              className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
+            >
+              {pending ? "Memproses…" : "Cari bidan"}
+            </button>
+          )}
 
-          <button
-            type="button"
-            disabled={nonaktif}
-            onClick={() =>
-              mulai(async () => {
-                const r = await konfirmasiPermintaan(permintaan.id, partnerId);
-                setPesan(r.ok ? null : r.pesan);
-              })
-            }
-            className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
-          >
-            {pending ? "Memproses…" : "Konfirmasi"}
-          </button>
+          {permintaan.status === "mencari_mitra" && (
+            <>
+              <label className="sr-only" htmlFor={`mitra-${permintaan.id}`}>
+                Bidan untuk permintaan {permintaan.namaKlien}
+              </label>
+              <select
+                id={`mitra-${permintaan.id}`}
+                value={partnerId}
+                onChange={(e) => setPartnerId(e.target.value)}
+                className="min-h-[38px] rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-[12.5px]"
+              >
+                {/* Terurut jarak ke alamat permintaan INI — daftar yang sama
+                    untuk seluruh antrean akan salah untuk semua kecuali satu. */}
+                {mitra.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nama} · {m.jarak}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={pending || tanpaMitra}
+                onClick={() => jalankan(() => pilihMitra(permintaan.id, partnerId))}
+                className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
+              >
+                {pending ? "Memproses…" : "Tetapkan bidan"}
+              </button>
+            </>
+          )}
 
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              mulai(async () => {
-                const r = await tolakPermintaan(permintaan.id);
-                setPesan(r.ok ? null : r.pesan);
-              })
-            }
-            className="rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft disabled:opacity-60"
-          >
-            Tolak
-          </button>
+          {permintaan.status === "mitra_siap" && (
+            <>
+              <span className="text-[12.5px] font-semibold text-ink">
+                Bidan: {permintaan.namaMitra ?? "—"}
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => jalankan(() => konfirmasiPermintaan(permintaan.id))}
+                className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
+              >
+                {pending ? "Memproses…" : "Konfirmasi"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {mitra.length === 0 && (
+      {permintaan.status === "mencari_mitra" && tanpaMitra && (
         <p className="mt-2 text-[12px] font-semibold text-clay">
           Belum ada mitra aktif — daftarkan mitra dulu di menu Mitra.
         </p>

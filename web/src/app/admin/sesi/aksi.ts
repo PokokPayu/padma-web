@@ -6,7 +6,12 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { JENJANG_SAH, periksaAlasanPenimpaan } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
 import type { JenjangTransport } from "@/lib/transport/jarak";
-import { PERMINTAAN_SIAP_KONFIRMASI, STATUS_ANTRE } from "@/lib/jadwal/status";
+import {
+  PERMINTAAN_AWAL,
+  PERMINTAAN_DICARIKAN,
+  PERMINTAAN_SIAP_KONFIRMASI,
+  STATUS_ANTRE,
+} from "@/lib/jadwal/status";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -50,31 +55,57 @@ const POLA_TANGGAL = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const BATAS_CATATAN = 2000;
 
 /**
- * Mengubah satu permintaan jadwal menjadi sesi terjadwal.
+ * `diminta` -> `mencari_mitra`. Menandai bahwa permintaan ini sedang ditangani.
  *
- * Hanya DUA nilai yang boleh datang dari luar: permintaan mana, dan mitra siapa
- * yang ditugaskan. Tanggal, klien, dan layanan dibaca dari baris permintaannya.
+ * Keadaannya berarti sesuatu bagi klien: passport menampilkan "sedang
+ * dicarikan bidan" alih-alih diam. Itulah alasan ia keadaan tersendiri dan
+ * bukan sekadar layar yang terbuka di sisi admin.
  */
-export async function konfirmasiPermintaan(
+export async function cariMitra(permintaanId: string): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+  const supabase = await createServerSupabase();
+
+  const { data } = await supabase
+    .from("booking_requests")
+    .update({ status: PERMINTAAN_DICARIKAN })
+    .eq("id", permintaanId)
+    .eq("status", PERMINTAAN_AWAL)
+    .select("id");
+
+  // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
+  // — melaporkan "berhasil" tanpa memeriksa jumlah barisnya adalah kebohongan
+  // senyap.
+  if ((data ?? []).length === 0) {
+    return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
+  }
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
+  revalidatePath("/passport");
+  return { ok: true };
+}
+
+/**
+ * `mencari_mitra` -> `mitra_siap`, sekaligus mencatat SIAPA mitranya.
+ *
+ * Status dan `partner_id` ditulis dalam SATU update, bukan dua: dua update
+ * terpisah bisa meninggalkan 'mitra_siap' tanpa mitra bila yang kedua gagal,
+ * dan itulah keadaan yang dicegah CHECK `booking_requests_mitra_siap_bermitra`.
+ * Menulis keduanya sekaligus membuat CHECK itu tidak pernah perlu menyala.
+ */
+export async function pilihMitra(
   permintaanId: string,
   partnerId: string,
 ): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
-  // Mitra diperiksa SEBELUM permintaan diklaim. Dua alasan: (a) foreign key
-  // hanya menolak partner_id yang TIDAK ADA, bukan mitra yang sudah pensiun,
-  // sedangkan daftar pilihan di UI menyaring `aktif` — dan action ini tidak
-  // pernah melewati UI itu; (b) memeriksanya belakangan berarti permintaan
-  // sudah terlanjur keluar dari antrean untuk sesuatu yang pasti gagal.
-  // `lat`/`lon` ikut dibaca di sini (Ruling 11): inilah jalur KEDUA yang
-  // menugaskan mitra ke sebuah sesi, dan booking_requests sudah punya
-  // koordinatnya sendiri (Task 6) — saran jenjang dihitung & disimpan
-  // langsung bersama sesi yang terbit, bukan menunggu action terpisah yang
-  // tidak akan pernah dipanggil siapa pun untuk sesi yang lahir dari sini.
+  // Mitra diperiksa SEBELUM permintaan digeser. Foreign key hanya menolak
+  // partner_id yang TIDAK ADA, bukan mitra yang sudah pensiun — sedangkan
+  // daftar pilihan di UI menyaring `aktif`, dan action ini tidak pernah
+  // melewati UI itu.
   const { data: mitra } = await supabase
     .from("partners")
-    .select("id, lat, lon")
+    .select("id")
     .eq("id", partnerId)
     .eq("aktif", true)
     .maybeSingle();
@@ -83,83 +114,95 @@ export async function konfirmasiPermintaan(
     return { ok: false, pesan: "Mitra tidak tersedia. Pilih mitra yang aktif." };
   }
 
-  // KLAIM DULU, baru buat sesi. Urutan ini penting: bila sesi dibuat lebih dulu
-  // lalu klaim gagal, tertinggal sesi yatim sementara permintaannya tetap di
-  // antrean menunggu dikonfirmasi untuk kedua kalinya.
-  //
-  // `eq("status", PERMINTAAN_SIAP_KONFIRMASI)` bukan sekadar validasi: ia yang menyerialkan dua
-  // konfirmasi paralel. Transaksi kedua menunggu kunci baris, lalu menilai
-  // ulang syaratnya terhadap baris yang sudah berubah — dan tidak mengenai apa
-  // pun. Index unik `sessions_booking_request_unik` adalah jaring keduanya.
-  const { data: klaim } = await supabase
+  const { data } = await supabase
     .from("booking_requests")
-    .update({ status: "dikonfirmasi" })
+    .update({ status: PERMINTAAN_SIAP_KONFIRMASI, partner_id: partnerId })
     .eq("id", permintaanId)
-    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
-    .select("id, client_id, service_id, variant_id, tanggal, alamat, alamat_lat, alamat_lon");
+    .eq("status", PERMINTAAN_DICARIKAN)
+    .select("id");
 
-  // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
-  // — melaporkan "berhasil" tanpa memeriksa jumlah barisnya adalah kebohongan
-  // senyap, dan di sini kebohongannya berbentuk sesi yang tidak pernah lahir.
-  if ((klaim ?? []).length === 0) {
+  if ((data ?? []).length === 0) {
     return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
   }
-  const p = klaim![0];
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
+  revalidatePath("/passport");
+  return { ok: true };
+}
 
-  // Saran jenjang dihitung dari koordinat yang SUDAH ada di baris ini —
-  // tidak ada pemilih untuk ditimpa admin di jalur konfirmasi (spec §5.2
-  // hanya menyebut penimpaan di layar memilih mitra; di sini keputusan
-  // "mitra mana" dan "jenjang berapa" jatuh bersamaan pada klik yang sama).
-  // Koordinat kosong bukan galat — `saranJenjang()` memulangkan `null`, dan
-  // jenjangnya tetap NULL: admin menetapkannya belakangan lewat
-  // `tetapkanJenjang`.
-  const koordinatMitra =
-    mitra.lat != null && mitra.lon != null ? { lat: mitra.lat, lon: mitra.lon } : null;
-  const koordinatSesi =
+/**
+ * Mengubah satu permintaan jadwal menjadi sesi terjadwal.
+ *
+ * SATU nilai yang boleh datang dari luar: permintaan mana. Mitra dibaca dari
+ * baris permintaan (dipilih lebih dulu lewat `pilihMitra`), dan tanggal, jam,
+ * klien, layanan, serta alamat ikut dari sana.
+ *
+ * ===== KENAPA LEWAT RPC, BUKAN DUA TULISAN DARI SINI =====
+ * Konfirmasi adalah dua tulisan yang harus berlaku sebagai satu keputusan:
+ * status permintaan, lalu baris sesi. Dikerjakan dari sini keduanya adalah dua
+ * round-trip terpisah, dan kegagalan di antaranya meninggalkan permintaan
+ * terkonfirmasi tanpa sesi — hilang dari antrean admin sekaligus dari passport
+ * klien, tanpa satu pun error. Versi sebelumnya menambal itu dengan
+ * mengembalikan status secara manual; kompensasi seperti itu bisa gagal juga.
+ *
+ * `konfirmasi_permintaan()` menjadikannya satu transaksi, sehingga kegagalan
+ * parsial lenyap sebagai KELAS masalah. Yang tinggal di sini adalah bagian yang
+ * memang milik TypeScript: menghitung saran jenjang (rumus jaraknya hidup di
+ * satu bahasa saja) dan menerjemahkan hasil menjadi kalimat untuk manusia.
+ */
+export async function konfirmasiPermintaan(permintaanId: string): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+  const supabase = await createServerSupabase();
+
+  // Koordinat dibaca lebih dulu supaya saran jenjang bisa dihitung di sini.
+  // `partners` di-embed lewat `partner_id` pada baris permintaan — mitranya
+  // sudah dipilih di langkah sebelumnya.
+  const { data: p } = await supabase
+    .from("booking_requests")
+    .select("id, alamat_lat, alamat_lon, partner_id, partners ( id, aktif, lat, lon )")
+    .eq("id", permintaanId)
+    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
+    .maybeSingle<{
+      id: string;
+      alamat_lat: number | null;
+      alamat_lon: number | null;
+      partner_id: string | null;
+      partners: { id: string; aktif: boolean; lat: number | null; lon: number | null } | null;
+    }>();
+
+  if (!p) return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
+
+  // Mitra bisa dinonaktifkan di sela-sela antara "tetapkan bidan" dan
+  // "konfirmasi". Menolak di sini memberi admin kalimat yang bisa ditindak
+  // ("pilih mitra lain"), bukan sesi yang lahir untuk orang yang sudah pensiun.
+  if (!p.partners?.aktif) {
+    return { ok: false, pesan: "Mitra sudah tidak aktif. Pilih mitra lain lebih dulu." };
+  }
+
+  const saran = saranJenjang(
+    p.partners.lat != null && p.partners.lon != null
+      ? { lat: p.partners.lat, lon: p.partners.lon }
+      : null,
     p.alamat_lat != null && p.alamat_lon != null
       ? { lat: p.alamat_lat, lon: p.alamat_lon }
-      : null;
-  const saran = saranJenjang(koordinatMitra, koordinatSesi);
+      : null,
+  );
 
-  const { error } = await supabase.from("sessions").insert({
-    client_id: p.client_id,
-    service_id: p.service_id,
-    variant_id: p.variant_id,
-    partner_id: partnerId,
-    tanggal: p.tanggal,
-    // Alamat & koordinat DISALIN dari baris permintaan ini, bukan diambil
-    // ulang dari profil klien (spec T6) — persis pola `variant_id` di atas.
-    // Klien boleh memesan untuk alamat lain; mengambil ulang dari profil akan
-    // diam-diam mengubah ke mana mitra dikirim.
-    alamat: p.alamat,
-    alamat_lat: p.alamat_lat,
-    alamat_lon: p.alamat_lon,
-    // `jenjang_sumber` ditulis MATI sebagai 'otomatis' — atau `null` bersama
-    // `jenjang` bila tidak ada saran — tidak pernah 'admin': jalur ini tidak
-    // membaca FormData sama sekali (lihat dokblok atas), jadi tidak ada
-    // klaim pemanggil untuk dipercaya atau ditolak.
-    jenjang: saran?.jenjang ?? null,
-    jenjang_sumber: saran ? "otomatis" : null,
-    jenjang_alasan: "",
-    status: "terjadwal",
-    booking_request_id: p.id,
+  const { data: sesiId, error } = await supabase.rpc("konfirmasi_permintaan", {
+    permintaan_id: permintaanId,
+    jenjang_saran: saran?.jenjang ?? null,
+    // TIDAK ada argumen `jenjang_sumber` — fungsinya yang menuliskannya, supaya
+    // jenjang pilihan tangan tidak bisa dicatat sebagai hasil hitungan otomatis.
   });
 
-  if (error) {
-    // Kembalikan ke antrean supaya permintaan tidak hilang diam-diam. Syarat
-    // `eq("status","dikonfirmasi")` menjaga agar pengembalian ini tidak pernah
-    // menimpa keputusan orang lain yang sempat masuk di sela-selanya.
-    await supabase
-      .from("booking_requests")
-      .update({ status: PERMINTAAN_SIAP_KONFIRMASI })
-      .eq("id", p.id)
-      .eq("status", "dikonfirmasi");
-    return { ok: false, pesan: "Gagal membuat sesi. Coba lagi." };
-  }
+  if (error) return { ok: false, pesan: "Gagal mengonfirmasi. Coba lagi." };
+  // Fungsi memulangkan NULL ketika klaimnya tidak mengenai baris mana pun —
+  // itu BUKAN galat, dan melaporkannya sebagai keberhasilan adalah kebohongan
+  // senyap yang berbentuk sesi yang tidak pernah lahir.
+  if (!sesiId) return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
 
   revalidatePath("/admin/sesi");
   revalidatePath("/admin");
-  // Sesi baru langsung tampil di passport klien sebagai jadwal berikutnya.
   revalidatePath("/passport");
   return { ok: true };
 }
