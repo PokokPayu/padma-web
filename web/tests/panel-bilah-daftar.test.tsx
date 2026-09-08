@@ -68,6 +68,24 @@ describe("BilahDaftar", () => {
     expect(render(KOSONG)).toContain("+ Sesi baru");
   });
 
+  it('chip aktif ber-aria-current="true", bukan aria-pressed — Link bukan role button/switch', () => {
+    // aria-pressed hanya sah pada role="button" atau role="switch"; chip ini
+    // adalah <Link> navigasi. Tanpa aria-current, "chip ini menyala" hanya
+    // tersampaikan lewat warna, jadi pembaca layar mendengar tujuh halaman
+    // tautan tanpa satu pun tanda mana yang sedang aktif.
+    const m = render({ cari: "", saring: { status: "selesai" }, hal: 1 });
+    expect(m).toContain('aria-current="true"');
+    expect(m).not.toContain("aria-pressed");
+  });
+
+  it("chip TIDAK aktif tidak membawa aria-current sama sekali", () => {
+    // Menyamai sidebar.tsx & bottom-bar.tsx: aria-current hanya dirender saat
+    // aktif, bukan aria-current="false" untuk yang tidak aktif.
+    const m = render({ cari: "", saring: {}, hal: 1 });
+    expect(m).not.toContain("aria-current");
+    expect(m).not.toContain("aria-pressed");
+  });
+
   it("menandai chip menuntut secara berbeda", () => {
     const kelompok: KelompokSaring[] = [{
       nama: "jenjang", label: "Jenjang",
