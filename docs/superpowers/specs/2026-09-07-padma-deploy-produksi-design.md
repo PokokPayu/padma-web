@@ -182,33 +182,85 @@ Dua jebakan:
 `NOMINATIM_USER_AGENT` dan `NOMINATIM_JEDA_MINIMAL_MS` belum terdaftar di
 `.env.example` dan ditambahkan sebagai bagian pekerjaan ini.
 
-## 7. Auth, Google, dan CORS
+## 7. Auth, Google, SMTP, dan CORS
 
-Aplikasi **tidak punya `signUp` maupun reset password**. `form-masuk.tsx`
-hanya memanggil `signInWithPassword` dan `signInWithOAuth`. Klien masuk lewat
-tautan undangan yang dibuat admin (`createClientInvite`), lalu login.
+> **Direvisi 8 September 2026.** Bagian ini ditulis ulang seluruhnya. Versi 7
+> September menyimpulkan bahwa SMTP tidak menghalangi rilis dan Google adalah
+> satu-satunya jalur akun klien. **Kedua kesimpulan itu sudah tidak benar**
+> sejak pendaftaran mandiri mendarat (spec `2026-09-08-padma-daftar-mandiri`,
+> keputusan K1–K7, merge `9cccba6`).
 
-Dua akibatnya:
+Aplikasi kini punya **dua jalur akun klien**:
 
-- Tidak ada email yang dikirim Supabase di jalur kritis, jadi SMTP bawaan free
-  tier — yang dibatasi ketat dan bukan untuk produksi — tidak menghalangi
-  rilis.
-- Karena tidak ada `signUp`, **Google OAuth adalah satu-satunya cara klien
-  nyata memperoleh akun.** Tanpa itu tidak ada klien yang bisa masuk sama
-  sekali. Akun admin dan owner dibuat tangan lewat dashboard Supabase.
+- **pendaftaran mandiri** di `/daftar` — email+sandi, atau Google;
+- **pembuatan oleh admin** lalu aktivasi lewat tautan undangan sekali-pakai
+  yang dikirim via WhatsApp (jalur lama, tidak berubah).
 
-Setelan, semuanya baru bisa dikerjakan **setelah URL Vercel lahir**:
+Ditambah pemulihan kata sandi mandiri di `/lupa-sandi`.
 
-- **Supabase → Auth → URL Configuration:** Site URL `https://<app>.vercel.app`,
-  Redirect URLs `https://<app>.vercel.app/**`. Wildcard preview sengaja tidak
-  ditambahkan, konsisten dengan §6. `inviteLink()` memakai `origin` permintaan,
-  jadi tautan undangan otomatis benar begitu Site URL betul.
+Dua akibat yang membalik dokumen ini:
+
+**(a) SMTP sendiri kini PENGHALANG RILIS.** Konfirmasi email berdiri di jalur
+utama setiap pendaftaran mandiri — `enable_confirmations = true`, dan itulah
+satu-satunya hal yang membuat penautan lewat email terverifikasi sah (K1).
+Reset sandi mustahil tanpanya. Layanan email bawaan Supabase dibatasi beberapa
+email per jam dan pada dasarnya hanya untuk menguji. Tanpa SMTP sendiri: orang
+mendaftar, emailnya tidak pernah datang, dan gejalanya terlihat seperti
+aplikasi rusak.
+
+**(b) Google bukan lagi satu-satunya jalur akun.** Ia tetap harus dinyalakan,
+tetapi ketiadaannya tidak lagi mematikan pendaftaran klien.
+
+### 7.1 SMTP — Resend
+
+**Dipilih Resend, bukan SMTP Gmail.** Alasan yang menentukan bukan kuota,
+melainkan **jejak**. Ketika klien berkata emailnya tidak datang, Gmail tidak
+memberi apa pun untuk dilihat: tidak ada log pengiriman, tidak ada status
+bounce, tidak ada cara tahu apakah ia masuk spam, ditolak, atau memang tidak
+pernah terkirim. Untuk satu-satunya hal yang berdiri antara calon klien dan
+akunnya, kebutaan seperti itu tidak bisa diterima. Alasan kedua: pengirimnya
+menjadi alamat domain PADMA, bukan alamat Gmail — pada email yang justru
+meminta orang mengklik tautan.
+
+Domain produksi: **`padmawellnessid.com`**.
+
+Langkah:
+
+1. Daftar Resend, tambahkan domain `padmawellnessid.com`, pasang record DNS
+   yang diberikan (SPF/DKIM), tunggu verifikasi.
+2. Terbitkan API key.
+3. **Supabase → Project Settings → Auth → SMTP Settings:**
+   - Host `smtp.resend.com`, Port `465`, Username `resend`
+   - Password: API key Resend
+   - Sender email `noreply@padmawellnessid.com`, Sender name `PADMA`
+4. Naikkan batas `email_sent` di dashboard hosted; nilai lokal `2` per jam ada
+   untuk menahan penyalahgunaan corong skrining, bukan untuk produksi.
+
+Kuota gratis Resend 3.000 email/bulan — jauh di atas skala klinik ini.
+
+**Alternatif yang juga sah** bila kelak deliverability jadi kritis: Postmark
+(berbayar, terbaik di kelasnya untuk transaksional). Yang **tidak cukup**:
+layanan bawaan Supabase, dan SMTP Gmail.
+
+### 7.2 URL, Google, dan R2
+
+Semuanya baru bisa dikerjakan **setelah URL produksi lahir**. Selama domain
+belum tertempel, pakai URL `.vercel.app`; ulangi langkah ini setelah domain
+dipasang — Site URL dan origin OAuth **harus** menunjuk domain final, bukan URL
+sementara.
+
+- **Supabase → Auth → URL Configuration:** Site URL
+  `https://padmawellnessid.com`, Redirect URLs `https://padmawellnessid.com/**`.
+  Wildcard preview sengaja tidak ditambahkan, konsisten dengan §6.
+  `inviteLink()` memakai `origin` permintaan, jadi tautan undangan otomatis
+  benar begitu Site URL betul. Tautan konfirmasi email dan reset sandi ikut
+  memakai Site URL yang sama.
 - **Google Cloud Console:** authorized JavaScript origin
-  `https://<app>.vercel.app`; authorized redirect URI
+  `https://padmawellnessid.com`; authorized redirect URI
   `https://<ref-baru>.supabase.co/auth/v1/callback`. Redirect-nya ke Supabase,
   **bukan** ke Vercel — ini kesalahan paling umum. Client ID dan secret
   ditempel ke Supabase → Auth → Providers → Google.
-- **Cloudflare R2:** tambahkan `https://<app>.vercel.app` ke `AllowedOrigins`
+- **Cloudflare R2:** tambahkan `https://padmawellnessid.com` ke `AllowedOrigins`
   bucket `padma`. Verifikasinya lewat preflight, tidak menuntut kredensial.
 
 ## 8. Urutan operasi
@@ -235,14 +287,23 @@ Setelan, semuanya baru bisa dikerjakan **setelah URL Vercel lahir**:
 
 **Fase 2 — sesudah URL produksi lahir**
 
-12. R2 `AllowedOrigins`, Supabase Auth URL Configuration, Google OAuth (§7).
-13. Isi data lewat panel: `nomor_wa`, empat baris tarif transport di
+12. **Tempelkan domain `padmawellnessid.com` ke proyek Vercel** dan tunggu
+    sertifikatnya terbit. Langkah-langkah berikutnya memakai domain final,
+    bukan URL `.vercel.app` — menyetelnya dua kali berarti setiap tautan yang
+    sudah terkirim menunjuk alamat yang salah.
+13. **Resend (§7.1):** verifikasi domain, terbitkan API key, pasang SMTP di
+    Supabase, naikkan batas `email_sent`. **Ini penghalang rilis** — tanpanya
+    tidak seorang pun bisa menyelesaikan pendaftaran.
+14. R2 `AllowedOrigins`, Supabase Auth URL Configuration, Google OAuth (§7.2).
+15. Isi data lewat panel: `nomor_wa`, empat baris tarif transport di
     `/owner/transport`, katalog layanan sungguhan. **Jangan** jalankan
     `npm run seed:users` — sandi seragam `padma-dev-123` dan email
     `@padma.test`; ia membaca `.env.local` secara hardcoded sehingga tidak bisa
     nyasar, tapi jangan diakali.
-14. Asap manual di ponsel sungguhan: buat undangan → login Google → buat sesi
-    → unggah satu video kecil → tonton → cari alamat.
+16. Asap manual di ponsel sungguhan, **dua jalur akun**: (a) daftar sendiri di
+    `/daftar` dengan alamat email di luar tim → terima emailnya → klik
+    tautannya → akun terbuka; (b) buat undangan → login Google. Lalu: buat
+    sesi → unggah satu video kecil → tonton → cari alamat → coba lupa sandi.
 
 ## 9. Verifikasi
 
@@ -254,8 +315,10 @@ Yang membuktikan rilis berhasil:
 
 | Bukti | Menutup risiko |
 |---|---|
+| Pendaftaran mandiri dari alamat di luar tim: email tiba, tautannya membuka akun | §7.1, SMTP — kaki yang tidak pernah bisa diuji otomatis |
+| Reset sandi dari perangkat baru berhasil sampai bisa masuk | §7.1, SMTP |
 | Katalog layanan merender kelima fase | §5, `phases` kosong |
-| Login Google berhasil dari perangkat baru | §7, satu-satunya jalur akun klien |
+| Login Google berhasil dari perangkat baru | §7.2, satu dari dua jalur akun |
 | Klien membuka materinya sendiri | §3, hak bawaan tabel |
 | Unggah video kecil berhasil dari peramban | R2 CORS |
 | Pencarian alamat mengembalikan koordinat | §6, User-Agent Nominatim |

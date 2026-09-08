@@ -311,6 +311,46 @@ yang sama di semua pertanyaan, sehingga dua klik di frame yang sama memakai
 
 ## Deploy
 
-Vercel (root directory: `web/`) + Supabase hosted. Tautkan project:
-`npx supabase link --project-ref <ref>` lalu `npx supabase db push`.
-Google OAuth diaktifkan di Supabase Dashboard → Auth → Providers.
+Runbook lengkap beserta alasan tiap keputusan ada di
+`docs/superpowers/specs/2026-09-07-padma-deploy-produksi-design.md` (direvisi
+8 September 2026). Ringkasannya di sini supaya urutannya tidak perlu diingat.
+
+Domain produksi: **`padmawellnessid.com`**. Vercel dengan **root directory
+`web/`** — akar repo tidak berisi `package.json`. Fungsi di region `sin1`,
+Supabase di Singapore.
+
+**Fase 0 — basis data, sebelum menyentuh Vercel**
+
+```bash
+npx supabase link --project-ref <ref-proyek-baru>
+npx supabase db push          # seluruh migrasi, termasuk penanam `phases`
+```
+
+`db push` **tidak** menjalankan `seed.sql`. Itu memang benar untuk katalog —
+klien mengisinya sendiri lewat panel — tetapi `phases` bukan katalog melainkan
+data acuan yang dirujuk kode, jadi ia ditanam lewat migrasi
+`20260908120000_tanam_fase_acuan.sql`. Jangan mengembalikannya ke `seed.sql`.
+
+**Fase 1 — Vercel:** import repo, pasang env produksi (lihat §6 spec), deploy.
+
+**Fase 2 — sesudah domain tertempel dan sertifikatnya terbit**
+
+1. **SMTP — penghalang rilis.** Tanpa ini tidak seorang pun bisa menyelesaikan
+   pendaftaran: konfirmasi email berdiri di jalur utama, dan layanan bawaan
+   Supabase hanya cukup untuk mencoba. Resend: verifikasi domain, terbitkan API
+   key, isi Supabase → Auth → SMTP Settings (`smtp.resend.com`, port 465, user
+   `resend`, sender `noreply@padmawellnessid.com`), lalu naikkan batas
+   `email_sent`.
+2. Supabase → Auth → URL Configuration: Site URL dan Redirect URLs menunjuk
+   **domain final**, bukan URL `.vercel.app`.
+3. Google OAuth: origin ke domain, redirect URI ke
+   `https://<ref>.supabase.co/auth/v1/callback` — **bukan** ke Vercel.
+4. Cloudflare R2: tambahkan domain ke `AllowedOrigins` bucket `padma`.
+5. Isi data lewat panel: `nomor_wa`, tarif transport, katalog layanan asli.
+   **Jangan** jalankan `npm run seed:users` — itu akun dev bersandi seragam.
+
+**Verifikasi rilis** adalah uji asap manual, bukan E2E: skrip E2E menulis lewat
+service role, dan mengarahkannya ke produksi berarti skrip uji memegang basis
+data pasien. Yang membuktikan rilis berhasil ada di §9 spec — termasuk satu
+pendaftaran sungguhan ke alamat di luar tim yang emailnya benar-benar tiba dan
+tautannya benar-benar membuka akun. Kaki itu tidak pernah bisa diuji otomatis.

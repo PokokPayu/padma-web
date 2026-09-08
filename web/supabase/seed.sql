@@ -1,9 +1,8 @@
-insert into phases (id, nama_sanskrit, nama, urutan) values
-  ('prekonsepsi','Sankalpa','Prekonsepsi / Promil',1),
-  ('kehamilan','Garbha','Kehamilan',2),
-  ('nifas','Purnama','Nifas & Menyusui',3),
-  ('menopause','Sandhya','Menopause',4),
-  ('newborn','Shishu','Newborn Care',5);
+-- FASE tidak lagi ditanam di sini. Ia data ACUAN, bukan katalog dummy: id
+-- teksnya dirujuk kode dan tabelnya hanya dibaca, sehingga produksi — yang
+-- lahir lewat `db push` dan tidak pernah menjalankan berkas ini — akan rusak
+-- tanpanya. Pindah ke migration 20260908120000_tanam_fase_acuan.sql; satu
+-- sumber kebenaran, bukan dua.
 
 -- Katalog DUMMY (keputusan #12) — client mengganti sendiri lewat panel saat live.
 insert into services (id, phase_id, nama) values
