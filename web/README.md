@@ -66,7 +66,7 @@ menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **30 rute** (24 halaman + 6 route handler), tanpa satu pun
+PADMA v1 lengkap: **32 rute** (26 halaman + 6 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.
@@ -77,6 +77,8 @@ sama-sama membuat `npm test` MERAH.
 | `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
 | `/masuk` | Publik | Login email+password & Google |
 | `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |
+| `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
+| `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
 | `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
 | `/passport/sesi` | Klien | Riwayat sesi + catatan & rekomendasi bidan (tertutup sampai diketuk) |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
@@ -109,7 +111,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 |---|---|---|
 | `/aktivasi` | Publik | GET tautan undangan: token dipindahkan dari URL ke cookie httpOnly berumur 1 jam, lalu diarahkan ke login — token tidak pernah ikut ke riwayat browser/Referer |
 | `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → gerbang `pastikanKlien` (sudah tertaut → token undangan → email terbukti → baris klien baru) lalu `/passport`, `/periksa-email`, atau `/akun-belum-terhubung` |
-| `/auth/callback` | Publik | GET callback OAuth Google: menukar `code` menjadi sesi, lalu meneruskan ke `/setelah-masuk` |
+| `/auth/callback` | Publik | GET callback OAuth Google & tautan pemulihan sandi: menukar `code` menjadi sesi, lalu meneruskan ke tujuan `next` — dibatasi daftar putih `tujuanAman` (K6), bukan dipakai mentah |
 | `/auth/keluar` | Terautentikasi | POST logout (form, bukan tautan) lalu kembali ke `/masuk` |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
 | `/api/geocode` | Admin/Owner | POST alamat → koordinat untuk pemilih lokasi di peta panel staf. Ada supaya geocoding tetap di SERVER: `lib/transport/geocode.ts` memasang `server-only`, browser tidak bisa menyetel `User-Agent` yang dituntut Nominatim, dan cache serta jeda 1 permintaan/detik hidup di sisi server. Hasilnya hanya menggeser peta — tidak ada apa pun yang tersimpan dari rute ini |
