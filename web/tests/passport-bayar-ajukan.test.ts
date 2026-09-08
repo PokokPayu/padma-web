@@ -595,12 +595,15 @@ describe("halaman bayar — status tanpa nominal", () => {
     ref.sesi = sesiAnanda;
   });
 
-  it("menampilkan tagihan paket dan sesi lepas dengan statusnya", async () => {
+  it("menampilkan tagihan sesi lepas dengan statusnya (paket hilang dari layar — saklar K11)", async () => {
+    // Sebelum saklar K11, halaman ini juga menyebut "Sankalpa Prima" & "Lunas"
+    // untuk item paket. `ambilPaket()` sekarang selalu [] (Task 1), jadi
+    // `susunTagihan()` hanya menerima sesi — yang dijaga di sini adalah
+    // tagihan sesi lepas tetap tampil benar, dan paket TIDAK bocor ke layar.
     await setStatusBayar("client_packages", PAKET_ANANDA, "lunas");
     await setStatusBayar("sessions", SESI_LEPAS, "belum");
     const m = await markup();
-    expect(m).toContain("Sankalpa Prima");
-    expect(m).toContain("Lunas");
+    expect(m).not.toContain("Sankalpa Prima");
     expect(m).toContain("Belum dibayar");
     expect(m).toContain("Saya sudah bayar");
   });
@@ -627,15 +630,21 @@ describe("halaman bayar — status tanpa nominal", () => {
   });
 
   it("sesi berpaket tidak melahirkan tagihan hantu", async () => {
-    // Seed sengaja kontradiktif (paket lunas, sesi anggotanya 'belum'),
-    // jadi tagihan hanya boleh berisi paket + sesi lepas.
+    // Seed sengaja kontradiktif (paket lunas, sesi anggotanya 'belum'), jadi
+    // dulu tagihan berisi paket + sesi lepas = 2 item. Saklar K11 membuat
+    // `ambilPaket()` selalu [] (Task 1), jadi item paket ikut hilang dari
+    // tagihan — itu bukan regresi, lihat tests/paket-tersembunyi.test.tsx.
+    // Yang TETAP dijaga di sini: sesi ANGGOTA paket tidak pernah muncul
+    // sebagai baris tagihannya sendiri (tagihan hantu) — hanya sesi lepas
+    // yang boleh tersisa.
     const { ambilPaket, ambilSesi } = await import("@/lib/passport/data");
     const { susunTagihan } = await import("@/lib/passport/turunan");
     const tagihan = susunTagihan({
       paket: await ambilPaket(ANANDA),
       sesi: await ambilSesi(ANANDA),
     });
-    expect(tagihan).toHaveLength(2);
+    expect(tagihan).toHaveLength(1);
+    expect(tagihan[0]).toMatchObject({ jenis: "sesi", id: SESI_LEPAS });
   });
 });
 

@@ -308,7 +308,13 @@ describe("jadikanKlien — konversi skrining menjadi klien", () => {
     const kedua = await jadikanKlien(SKR_KEDUA, formulir({ email: EMAIL_KONVERSI }));
     expect(kedua.ok).toBe(false);
     if (kedua.ok) return;
-    expect(kedua.pesan).toMatch(/sudah dipakai/i);
+    // `jadikanKlien` meneruskan pesan galat `buatKlien` APA ADANYA (lihat
+    // docstring di src/app/admin/skrining/aksi.ts) — jadi kalimatnya ikut
+    // berubah sejak K17: bukan lagi "sudah dipakai klien lain", melainkan
+    // kalimat yang menyebut kemungkinan pendaftaran mandiri. Yang dijaga di
+    // sini TETAP SAMA: konversi skrining yang bentrok email gagal dengan
+    // kalimat yang bisa dibaca manusia, bukan dengan galat 23505 mentah.
+    expect(kedua.pesan).toMatch(/sudah terdaftar/i);
 
     expect(await klienBerEmail(EMAIL_KONVERSI)).toHaveLength(1);
     expect((await barisSkrining(SKR_KEDUA))!.client_id).toBeNull();

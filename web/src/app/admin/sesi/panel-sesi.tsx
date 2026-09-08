@@ -5,6 +5,7 @@ import { selesaikanSesi, tetapkanJenjang } from "./aksi";
 import { JENJANG_SAH, LABEL_STATUS_SESI } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { BarisSesiDaftar } from "@/lib/admin/sesi";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 const KELAS_MEDAN =
@@ -44,7 +45,16 @@ export function PanelSesi({ sesi, hrefTutup }: { sesi: BarisSesiDaftar; hrefTutu
         <p className="font-bold">{sesi.namaLayanan}</p>
         <p className="text-[12px] text-panel-muted">
           {sesi.namaKlien} · {sesi.padmaId} · {sesi.tanggal}
-          {sesi.dalamPaket ? " · paket" : ""}
+          {/* GERBANG SAKLAR (K11). Literal " · paket" ini datang dari
+              `form-selesai.tsx` — berkas yang sapuan panel hapus dan isinya
+              pindah ke sini — dan di sana ia SUDAH digerbang. Gerbangnya ikut
+              dibawa: sesi lama yang `client_package_id`-nya sungguh terisi
+              (mis. seed Ananda) akan membocorkan kata "paket" lewat literal
+              ini terlepas dari empat gerbang data K11, karena `lib/admin/sesi.ts`
+              membaca `client_package_id` LANGSUNG dari tabel `sessions`, bukan
+              lewat salah satu fungsi yang digerbang. `dalamPaket` sendiri
+              (data) TIDAK diubah — hanya tampilannya yang dicabut. */}
+          {PAKET_TAMPIL && sesi.dalamPaket ? " · paket" : ""}
         </p>
         <p className="text-[12px] text-panel-muted">
           Mitra: {sesi.namaMitra} · Status: {LABEL_STATUS_SESI[sesi.status]}

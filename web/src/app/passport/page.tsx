@@ -62,6 +62,7 @@ export default async function BerandaPassport() {
       <SampulPassport
         nama={klien.nama}
         padmaId={klien.padmaId}
+        faseId={klien.faseId}
         faseSanskrit={klien.faseSanskrit}
         faseNama={klien.faseNama}
         sejak={sejak}

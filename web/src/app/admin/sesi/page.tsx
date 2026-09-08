@@ -16,6 +16,7 @@ import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
 import { PanelSesi } from "./panel-sesi";
 import { LABEL_WAKTU, LABEL_STATUS_SESI, type PreferensiWaktu, type StatusSesi } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Sesi" };
@@ -228,7 +229,16 @@ export default async function SesiPage({
                     {s.namaLayanan}
                     <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                       {formatTanggalID(s.tanggal)}
-                      {s.dalamPaket ? " · paket" : ""}
+                      {/* GERBANG SAKLAR (K11). Baris tabel ini dulu hidup di
+                          `form-selesai.tsx`, tempat literalnya SUDAH digerbang;
+                          sapuan panel memindahkannya ke tabel halaman ini.
+                          Gerbangnya ikut pindah — `ambilDaftarSesi()`
+                          (lib/admin/sesi.ts) membaca `client_package_id`
+                          LANGSUNG dari `sessions`, jadi empat gerbang data K11
+                          tidak menyentuhnya sama sekali. Datanya
+                          (`dalamPaket`) tetap utuh; hanya tampilannya
+                          dicabut. */}
+                      {PAKET_TAMPIL && s.dalamPaket ? " · paket" : ""}
                     </span>
                   </Td>
                   <Td>{s.namaMitra}</Td>

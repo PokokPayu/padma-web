@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ambilSesiMenungguTarif } from "@/lib/owner/data";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 export type Antrean = {
   skriningBaru: number;
@@ -60,7 +61,12 @@ export async function hitungKlaimMenunggu(): Promise<number> {
       .eq("status", "aktif"),
   ]);
 
-  return (sesi.count ?? 0) + (paket.count ?? 0);
+  // GERBANG SAKLAR (K11): badge angka harus cocok dengan jumlah baris yang
+  // benar-benar tampil di tabel. Menghitung klaim paket yang barisnya
+  // disembunyikan akan memunculkan angka yang tidak bisa ditemukan admin di
+  // layar mana pun — bentuk kesalahan yang paling melelahkan untuk dilacak.
+  const jumlahPaket = PAKET_TAMPIL ? (paket.count ?? 0) : 0;
+  return (sesi.count ?? 0) + jumlahPaket;
 }
 
 /**

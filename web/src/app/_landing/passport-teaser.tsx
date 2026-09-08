@@ -1,18 +1,33 @@
 import Link from "next/link";
 
+// GERBANG SAKLAR (K11): halaman PUBLIK, jadi kalimatnya tidak sekadar
+// mencoret kata "paket" — ia diganti janji yang tetap benar tanpa paket.
+// "Progres paket yang terlihat" diganti "Riwayat sesi yang terlihat":
+// keduanya sama-sama benar dijanjikan (Passport SELALU mencatat riwayat sesi,
+// dengan atau tanpa paket), tapi hanya yang kedua yang tetap ada di produk
+// selagi saklar mati.
 const MANFAAT = [
   "Riwayat semua sesi & layanan Anda, rapi di satu tempat",
   "Catatan dan rekomendasi dari bidan setelah setiap kunjungan",
   "E-book & video panduan yang terbuka sesuai layanan Anda",
-  "Progres paket yang terlihat — seperti stempel di paspor",
+  "Riwayat sesi yang terlihat — seperti stempel di paspor",
 ];
 
 // Kartu di kanan adalah ILUSTRASI tampilan passport (data contoh, bukan klien
-// nyata) — sama seperti prototipe yang disetujui klien.
+// nyata) — sama seperti prototipe yang disetujui klien. Baris "Paket aktif"
+// diganti "Sesi berikutnya": ilustrasi tidak boleh menjanjikan sesuatu (kolom
+// paket) yang sedang tidak ada di produk sungguhan.
+//
+// Baris ketiga sebelumnya berbunyi "Progres · 6 dari 8 sesi" — bentuk "x dari
+// y" yang menjanjikan PERSIS hal yang sama dengan "Paket aktif" lewat rupa
+// berbeda: rangkaian sesi berbatas. Diganti "Sejak", field nyata yang memang
+// selalu ada di sampul sungguhan (`SampulPassport`, src/app/passport/
+// _komponen/sampul.tsx) dengan atau tanpa paket — supaya kartu ini tidak lagi
+// membawa dua promise "x dari y sesi" (di sini DAN di strip mono bawah).
 const CONTOH_ISI: Array<[string, string]> = [
   ["Fase perjalanan", "Sankalpa · Promil"],
-  ["Paket aktif", "Sankalpa Prima · 8 sesi"],
-  ["Progres", "6 dari 8 sesi"],
+  ["Sesi berikutnya", "Garbha Relief · 90 menit"],
+  ["Sejak", "Juli 2026"],
 ];
 
 export function PassportTeaser() {
@@ -63,8 +78,15 @@ export function PassportTeaser() {
             </div>
           ))}
         </dl>
+        {/* Sebelum gerbang: "Sankalpa Prima · Sesi 6/8" — nama paket seed
+            berdampingan dengan progres "x dari y". Dicabut bukan karena
+            memuat kata "paket" (tidak ada), tapi karena "6/8" ATAS NAMA satu
+            paket menjanjikan hal yang sama persis dengan baris "Paket aktif"
+            di atas lewat rupa berbeda: rangkaian sesi berbatas yang sedang
+            tidak ada di produk. "6 sesi tercatat" tetap jujur tanpa itu —
+            riwayat sesi memang selalu bertambah, dengan atau tanpa paket. */}
         <p className="mt-4 rounded-lg bg-black/25 px-3 py-2.5 text-center font-mono text-[10.5px] uppercase tracking-[0.2em] text-[#C9BE9A]">
-          PAD-2607-0012 · Sankalpa Prima · Sesi 6/8
+          PAD-2607-0012 · 6 sesi tercatat
         </p>
         <p className="mt-3 text-center text-[10.5px] uppercase tracking-[0.18em] text-[#8FA391]">
           Ilustrasi tampilan — data contoh

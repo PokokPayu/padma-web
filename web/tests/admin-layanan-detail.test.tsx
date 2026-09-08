@@ -86,6 +86,33 @@ async function markup(id: string, sp: Record<string, string> = {}) {
 const { baris } = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
 const LAYANAN = baris[0];
 
+/**
+ * Merender halaman detail dengan saklar paket K11 DINYALAKAN sementara.
+ *
+ * Pola yang sama dengan "kontrol positif" di tests/paket-tersembunyi.test.tsx:
+ * modul di-reset, `@/lib/paket-tampil` di-mock bernilai true, halamannya
+ * diimpor ULANG supaya gerbang di dalamnya (dan di `daftarKatalogAdmin`) ikut
+ * terbuka, lalu semuanya dikembalikan. Tanpa ini, uji "paket muncul" hanya
+ * bisa ditulis dengan MELEPAS gerbangnya — dan itu berarti menukar satu
+ * jaminan dengan jaminan lain, bukan menyimpan keduanya.
+ */
+async function markupSaklarHidup(id: string, sp: Record<string, string> = {}) {
+  vi.resetModules();
+  vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+  try {
+    const { default: Halaman } = await import("@/app/admin/layanan/[id]/page");
+    return renderToStaticMarkup(
+      await (Halaman as never as (p: unknown) => Promise<ReactElement>)({
+        params: Promise.resolve({ id }),
+        searchParams: Promise.resolve(sp),
+      }),
+    );
+  } finally {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  }
+}
+
 describe("halaman detail layanan", () => {
   it("menampilkan nama layanan sebagai judul", async () => {
     expect(await markup(LAYANAN.id)).toContain(LAYANAN.nama);
@@ -100,8 +127,15 @@ describe("halaman detail layanan", () => {
     expect(m).toContain("Varian");
   });
 
-  it("memuat daftar PAKET", async () => {
-    expect(await markup(LAYANAN.id)).toContain("Paket");
+  // GERBANG SAKLAR (K11) — kartu Paket. Halaman ini adalah tempat pengelolaan
+  // paket per layanan MENDARAT sesudah sapuan panel memindahkannya dari
+  // /admin/layanan (tempat ia sudah digerbang). Uji Tugas 8 aslinya berbunyi
+  // `toContain("Paket")` tanpa syarat; ia tidak dilemahkan, melainkan
+  // DIPASANGKAN — kartunya wajib ada saat saklar menyala, dan wajib tidak ada
+  // (tidak satu pun kata "paket") saat saklar mati.
+  it("kartu PAKET tunduk pada saklar K11: hilang saat mati, utuh saat menyala", async () => {
+    expect(await markup(LAYANAN.id)).not.toMatch(/paket/i);
+    expect(await markupSaklarHidup(LAYANAN.id)).toContain("Paket");
   });
 
   it("memuat materi terkait sebagai BACAAN saja", async () => {
@@ -297,11 +331,20 @@ describe("detail layanan — guarantee yang pindah dari Tugas 7", () => {
     expect(await markup(SVC_DETAIL)).toContain("Aktifkan");
   });
 
-  it("menampilkan paket beserta jumlah sesinya", async () => {
-    const m = await markup(SVC_DETAIL);
-    expect(m).toContain("PAD-UJI Paket Detail");
-    expect(m).toMatch(/6 sesi/);
-    expect(nominalDalam(m)).toEqual([]);
+  it("menampilkan paket beserta jumlah sesinya — hanya saat saklar K11 menyala", async () => {
+    // Sisi MATI: fixture `PAD-UJI Paket Detail` sungguh ada di basis data
+    // (disisipkan `beforeAll` di atas), jadi asersi ini bukan hijau karena
+    // datanya kosong — ia hijau karena gerbangnya bekerja.
+    const mati = await markup(SVC_DETAIL);
+    expect(mati).not.toContain("PAD-UJI Paket Detail");
+    expect(mati).not.toMatch(/paket/i);
+
+    // Sisi MENYALA: jaminan Tugas 8 yang asli, utuh — nama paket, jumlah
+    // sesinya, dan pagar uang (tidak satu nominal pun ikut ke layar staf).
+    const hidup = await markupSaklarHidup(SVC_DETAIL);
+    expect(hidup).toContain("PAD-UJI Paket Detail");
+    expect(hidup).toMatch(/6 sesi/);
+    expect(nominalDalam(hidup)).toEqual([]);
   });
 
   it("menampilkan varian nonaktif apa adanya, varian baku tampil sebagai \"Standar\"", async () => {

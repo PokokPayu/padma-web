@@ -120,6 +120,66 @@ async function unggahHalamanMateriDemo(admin: SupabaseClient) {
  */
 export const TOKEN_UNDANGAN_RINA = "undangan-dev-rina-KxN7pQ2sVt4bZ9mLwR3hJf";
 
+/** Alamat email fixture "klien yang belum mengaktifkan akunnya". */
+export const EMAIL_RINA = "rina@padma.test";
+
+/**
+ * Mengembalikan fixture Rina ke keadaan "BELUM DIAKTIFKAN" — dan sejak K1
+ * (spec 8 September 2026) keadaan itu menuntut SATU syarat lagi.
+ *
+ * Dulu cukup `clients.user_id IS NULL`: penautan hanya mungkin lewat token
+ * undangan, jadi baris tanpa `user_id` memang baris yang belum diaktifkan
+ * siapa pun. Sejak jalur kedua hidup, EMAIL TERKONFIRMASI juga menautkan.
+ * Artinya "belum diaktifkan" sekarang berarti dua hal sekaligus:
+ *
+ *   (1) barisnya belum bertuan          — dijamin upsert di `seedUsers()`;
+ *   (2) TIDAK ADA akun auth yang sudah membuktikan alamat email itu miliknya
+ *       — dijamin fungsi ini.
+ *
+ * Tanpa (2) fixture-nya rusak SENYAP, dan itu bukan kemungkinan teoretis:
+ * beberapa berkas test membuat `rina@padma.test` terkonfirmasi lewat service
+ * role, dan satu run yang mati di tengah (atau sesi lain yang memakai stack
+ * lokal yang sama) meninggalkannya hidup. Sesudah itu `npm run seed:users`
+ * lalu login biasa sebagai Rina membuka Passport-nya tanpa pernah menyentuh
+ * tautan aktivasi — perilaku yang BENAR menurut K1, tetapi menghapus seluruh
+ * guna fixture ini. Berkas seed lain di repo ini sudah memegang prinsip yang
+ * sama: keadaan awal dev/test dijamin, bukan diharapkan.
+ *
+ * Menghapus akun auth hanya sah karena ini seed DEV atas alamat fixture
+ * `@padma.test` yang tidak pernah ada di produksi.
+ */
+async function pastikanRinaBelumDiaktifkan(admin: SupabaseClient) {
+  const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  if (error) throw error;
+  for (const u of data.users) {
+    if (u.email?.toLowerCase() !== EMAIL_RINA) continue;
+
+    // `client_invites.used_by` menunjuk `auth.users(id)` tanpa ON DELETE, jadi
+    // akun yang PERNAH menukarkan undangan tidak bisa dihapus selama jejaknya
+    // masih menunjuk padanya. Inilah yang membuat `auth.admin.deleteUser`
+    // gagal DIAM-DIAM di beberapa berkas test (nilai baliknya tidak dibaca) —
+    // dan karena itulah akun sisa yang terkonfirmasi bisa menumpuk di stack
+    // lokal. Jejaknya dilepas di sini; `createClientInvite` tepat sesudah
+    // pemanggil fungsi ini toh menerbitkan ulang undangan Rina dengan
+    // `used_at`/`used_by` kosong.
+    const { error: jejakErr } = await admin
+      .from("client_invites")
+      .update({ used_by: null })
+      .eq("used_by", u.id);
+    if (jejakErr) throw jejakErr;
+
+    const { error: hapusErr } = await admin.auth.admin.deleteUser(u.id);
+    // Dilempar, tidak ditelan: kalau akun sisa itu tidak bisa dibuang, fixture
+    // "belum diaktifkan" tidak berlaku lagi dan test yang bersandar padanya
+    // akan lulus karena alasan yang salah.
+    if (hapusErr) {
+      throw new Error(
+        `akun auth sisa ${EMAIL_RINA} tidak bisa dihapus: ${hapusErr.message}`,
+      );
+    }
+  }
+}
+
 /**
  * Peta service_id → id varian BAKU, dibaca dari basis data alih-alih ditulis
  * literal: id varian dibuat `gen_random_uuid()` oleh migrasi Task 1, jadi
@@ -221,11 +281,13 @@ export async function seedUsers() {
         id: RINA_CLIENT_ID,
         padma_id: "PAD-2608-0019",
         nama: "Rina Hapsari",
-        email: "rina@padma.test",
+        email: EMAIL_RINA,
         no_hp: "0857-0000-1111",
         phase_id: "kehamilan",
         // SENGAJA belum tertaut: inilah keadaan klien nyata sesudah admin
-        // membuat datanya dan sebelum ia membuka tautan aktivasi.
+        // membuat datanya dan sebelum ia membuka tautan aktivasi. Syarat
+        // KEDUANYA (tidak ada akun auth atas alamat ini) ditegakkan
+        // `pastikanRinaBelumDiaktifkan` tepat di bawah — lihat dokblok-nya.
         user_id: null,
         linked_at: null,
       },
@@ -233,6 +295,11 @@ export async function seedUsers() {
     { onConflict: "padma_id" },
   );
   if (cErr) throw cErr;
+
+  // Dijalankan SESUDAH upsert di atas, bukan sebelumnya: upsert itulah yang
+  // melepas `clients.user_id` Rina, dan `clients.user_id -> auth.users(id)`
+  // tidak punya ON DELETE — menghapus akunnya lebih dulu akan ditolak FK.
+  await pastikanRinaBelumDiaktifkan(admin);
 
   // Undangan aktivasi Rina — token yang nilainya diketahui test, diterbitkan
   // ulang setiap seed (upsert) sehingga `npm test` idempoten walau run

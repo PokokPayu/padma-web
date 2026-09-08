@@ -51,22 +51,44 @@ Akun demo (password semua `padma-dev-123`):
 - admin@padma.test → /admin
 - ananda@padma.test → /passport (klien yang sudah diaktifkan)
 
-Klien `Rina Hapsari` sengaja **belum** diaktifkan — ia bahan uji alur aktivasi.
-Akun klien tidak bisa lagi tertaut hanya karena emailnya cocok (celah yang
-membocorkan rekam medis; lihat spec bagian 7): penautan wajib lewat tautan
-undangan sekali-pakai yang di produksi dikirim admin via WhatsApp. Untuk dev,
-`npm run seed:users` mencetak tautannya:
+Klien `Rina Hapsari` sengaja **belum** diaktifkan — ia bahan uji alur penautan.
+`npm run seed:users` menjamin dua hal sekaligus untuknya: barisnya belum
+bertuan, **dan** tidak ada akun auth yang sudah membuktikan alamat
+`rina@padma.test` miliknya (akun sisa dari run test sebelumnya dihapus). Sejak
+pendaftaran mandiri hidup, syarat kedua itu bagian dari fixture-nya — tanpa ia,
+sebuah akun sisa yang terkonfirmasi akan menautkan barisnya pada login pertama.
 
-```
-http://localhost:3000/aktivasi?token=undangan-dev-rina-...
-```
+**Ada DUA jalur penautan yang sah, dan keduanya menuntut bukti** (spec 8 Sep
+2026, K1/K14). Yang tidak pernah cukup, dulu maupun sekarang, adalah email yang
+sekadar *cocok* — itulah celah yang pernah membocorkan rekam medis (lihat spec
+bagian 7 dan kepala `src/lib/auth/link-client.ts`):
 
-Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
-menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
+1. **Tautan undangan sekali-pakai.** Di produksi dikirim admin via WhatsApp.
+   Untuk dev, `npm run seed:users` mencetak tautannya:
+
+   ```
+   http://localhost:3000/aktivasi?token=undangan-dev-rina-...
+   ```
+
+   Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
+   menampilkan datanya.
+
+2. **Email yang sudah terbukti.** Daftar sendiri di `/daftar` dengan email yang
+   sama seperti yang terdaftar di PADMA, lalu **buka tautan konfirmasinya**
+   (di dev, kotak surat lokal Mailpit: <http://localhost:54324>). Sesudah
+   `email_confirmed_at` terisi, baris klien beremail sama ikut tertaut. Jalur
+   ini sah **semata-mata** karena `[auth.email] enable_confirmations = true` di
+   `supabase/config.toml`; mematikannya menghidupkan celah lama utuh seperti
+   semula, dan `tests/konfirmasi-email-wajib.test.ts` memerahkan `npm test`
+   bila ia berubah.
+
+Masuk tanpa salah satu dari keduanya tidak membuka data siapa pun: email yang
+belum dikonfirmasi berakhir di `/periksa-email`, dan akun yang tidak berhak atas
+baris klien mana pun berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **30 rute** (24 halaman + 6 route handler), tanpa satu pun
+PADMA v1 lengkap: **38 rute** (30 halaman + 8 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.
@@ -76,6 +98,9 @@ sama-sama membuat `npm test` MERAH.
 | `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
 | `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
 | `/masuk` | Publik | Login email+password & Google |
+| `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |
+| `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
+| `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
 | `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
 | `/passport/sesi` | Klien | Riwayat sesi + catatan & rekomendasi bidan (tertutup sampai diketuk) |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
@@ -100,7 +125,8 @@ sama-sama membuat `npm test` MERAH.
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
 | `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
-| `/akun-belum-terhubung` | Publik | Halaman ramah bagi akun klien yang belum ditautkan tautan aktivasi |
+| `/akun-belum-terhubung` | Publik | Jalan buntu jujur: akun sah yang rekam kliennya tidak bisa ditentukan tanpa tim PADMA (alamat email sudah dimiliki akun lain, atau token undangan gagal dan tak ada baris beremail sama) — sebabnya sengaja tidak dibedakan di layar |
+| `/periksa-email` | Publik | Menunggu konfirmasi email + kirim ulang tautan; konfirmasi inilah satu-satunya alasan penautan lewat email menjadi sah (K1) |
 
 Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi
 didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
@@ -108,8 +134,8 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | Rute | Akses | Isi |
 |---|---|---|
 | `/aktivasi` | Publik | GET tautan undangan: token dipindahkan dari URL ke cookie httpOnly berumur 1 jam, lalu diarahkan ke login — token tidak pernah ikut ke riwayat browser/Referer |
-| `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → penautan bertoken lalu `/passport` |
-| `/auth/callback` | Publik | GET callback OAuth Google: menukar `code` menjadi sesi, lalu meneruskan ke `/setelah-masuk` |
+| `/setelah-masuk` | Terautentikasi | GET penyalur pasca-login menurut peran: owner → `/owner`, admin → `/admin`, klien → gerbang `pastikanKlien` (sudah tertaut → token undangan → email terbukti → baris klien baru) lalu `/passport`, `/periksa-email`, atau `/akun-belum-terhubung` |
+| `/auth/callback` | Publik | GET callback OAuth Google & tautan pemulihan sandi: menukar `code` menjadi sesi, lalu meneruskan ke tujuan `next` — dibatasi daftar putih `tujuanAman` (K6), bukan dipakai mentah |
 | `/auth/keluar` | Terautentikasi | POST logout (form, bukan tautan) lalu kembali ke `/masuk` |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
 | `/api/geocode` | Admin/Owner | POST alamat → koordinat untuk pemilih lokasi di peta panel staf. Ada supaya geocoding tetap di SERVER: `lib/transport/geocode.ts` memasang `server-only`, browser tidak bisa menyetel `User-Agent` yang dituntut Nominatim, dan cache serta jeda 1 permintaan/detik hidup di sisi server. Hasilnya hanya menggeser peta — tidak ada apa pun yang tersimpan dari rute ini |
@@ -183,8 +209,8 @@ Test yang menjaga keamanan:
   dengan `src/app`. Rute yang tidak terdaftar adalah rute yang luput dari audit
   permukaan serang — persis nasib `/aktivasi` (penukar token undangan) dan
   `/api/skrining` (penulis ber-service-role) sebelum test ini ada. Sekaligus
-  menjaga keenam skrip E2E tetap terangkai ke `test:e2e:semua`: skrip yang ada
-  tetapi tidak terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
+  menjaga skrip E2E tetap terangkai ke `test:e2e:semua`: skrip yang ada tetapi
+  tidak terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,
@@ -196,10 +222,23 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # keenam skrip di bawah, berurutan
+npm run test:e2e:semua    # seluruh skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
+  Skenario 5-nya menguji penautan akun klien dari KEDUA sisinya: penyamar yang
+  mendaftar sendiri dengan menebak alamat email seorang klien tertahan tanpa
+  sesi, sementara pemilik sah — lewat email terkonfirmasi maupun lewat tautan
+  undangan — masuk ke Passport-nya. Tanpa paruh kedua, "tidak melihat data"
+  bisa berarti tembok yang menolak semua orang.
+- `npm run test:e2e:daftar` — pendaftaran mandiri utuh: formulir `/daftar` →
+  `/periksa-email` → **tautan konfirmasi diambil dari kotak surat lokal**
+  (Mailpit, <http://localhost:54324>) dan dibuka di browser yang sama →
+  `/passport`. Termasuk paruh negatifnya pada akun yang sama: sebelum tautan itu
+  dibuka, tidak ada baris klien yang lahir dan Passport tidak terbuka. Skenario
+  keduanya jalur K14 — klien yang datanya sudah dibuat admin mendaftar sendiri
+  dan tertaut ke barisnya yang SUDAH ADA, bukan mendapat baris kedua. Akun &
+  baris yang dibuatnya dihapus lagi di akhir run, jadi aman diulang.
 - `npm run test:e2e:funnel` — funnel calon klien: landing (katalog dari DB) →
   wizard skrining → hasil tersimpan → muncul di inbox admin. Termasuk pagar
   keselamatan: demam pada fase **kehamilan** wajib memicu merah-urgent + blok

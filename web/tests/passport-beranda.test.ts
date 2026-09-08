@@ -23,6 +23,15 @@
  * Perbandingan tanggal memakai `hariIniJakarta()` yang sama dengan halaman,
  * bukan literal tanggal — test tidak boleh mulai merah sendiri saat jadwal
  * seed terlewat (lihat Pagar Waktu).
+ *
+ * Saklar K11 (`PAKET_TAMPIL`, Task 1): `ambilPaket()` memulangkan [] secara
+ * default, jadi `paketAktif` di page.tsx selalu null selama saklar mati.
+ * Describe "paket & stempel" di bawah karena itu tidak lagi menguji ANGKA
+ * stempel/progres (paket klien seed memang aktif, tapi tidak pernah sampai ke
+ * halaman) — ia menguji bahwa beranda jatuh bersih ke kartu fallback
+ * "Perjalanan Anda", bukan diam-diam menampilkan section kosong atau setengah
+ * jadi. Pagar saklarnya sendiri (data-level) diuji di
+ * tests/paket-tersembunyi.test.tsx.
  */
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -78,9 +87,15 @@ describe("beranda passport — sampul", () => {
     expect(m).toContain("Prekonsepsi / Promil");
   });
 
-  it("baris ringkas menyebut paket dan progres sesi (bentuk MRZ prototipe)", async () => {
+  it("baris ringkas TIDAK lagi menyebut paket (saklar K11) — hanya PADMA ID", async () => {
+    // Sebelum saklar K11 baris ini menyambung "<nama paket> · Sesi X/Y".
+    // `ringkasProgres` sekarang selalu null (paketAktif tidak pernah terisi),
+    // dan SampulPassport (_komponen/sampul.tsx) sengaja menyembunyikan seluruh
+    // ekor " · ..." saat null — yang dijaga di sini adalah TIDAK adanya sisa
+    // teks paket di sampul, bukan angka progresnya.
     const m = await markupBeranda();
-    expect(m).toMatch(/Sankalpa Prima[\s\S]{0,120}Sesi 6\/8/);
+    expect(m).not.toContain("Sankalpa Prima");
+    expect(m).not.toMatch(/Sesi \d+\/\d+/);
   });
 
   it('"Sejak" diambil dari sesi terawal, bukan tanggal pembuatan baris klien', async () => {
@@ -92,32 +107,30 @@ describe("beranda passport — sampul", () => {
 });
 
 describe("beranda passport — paket & stempel", () => {
-  it("enam stempel terisi, satu penanda terjadwal, satu kosong", async () => {
-    const { ambilSesi } = await import("@/lib/passport/data");
-    const { sesiBerikutnya } = await import("@/lib/passport/turunan");
-    const { hariIniJakarta } = await import("@/lib/passport/waktu");
-
+  it("tanpa paket aktif, seluruh grid stempel hilang dan digantikan kartu 'Perjalanan Anda'", async () => {
+    // Klien seed (Ananda) MEMANG punya paket aktif — kalau grid stempel masih
+    // muncul di sini, saklar K11 bocor di jalur tampilan beranda walau
+    // `ambilPaket()` sendiri sudah terpagar.
     const m = await markupBeranda();
-    expect(hitung(m, /data-stempel="terisi"/g)).toBe(6);
-    expect(hitung(m, /data-stempel="[a-z]+"/g)).toBe(8);
-
-    // Penanda "berikutnya" hanya sah selama jadwal seed belum terlewat.
-    const adaJadwal =
-      sesiBerikutnya(await ambilSesi(ANANDA), hariIniJakarta()) !== null;
-    expect(hitung(m, /data-stempel="berikutnya"/g)).toBe(adaJadwal ? 1 : 0);
-    expect(hitung(m, /data-stempel="kosong"/g)).toBe(adaJadwal ? 1 : 2);
+    expect(hitung(m, /data-stempel="[a-z]+"/g)).toBe(0);
+    expect(m).toContain("Perjalanan Anda");
+    expect(m).toContain("Anda mengambil layanan per sesi. Riwayat lengkapnya ada di halaman Sesi.");
+    expect(m).not.toContain("Paket Aktif");
   });
 
-  it("stempel terisi membawa tanggal sesinya", async () => {
+  it("tanggal stempel paket (8 JUL, 19 AGU) tidak lagi muncul di beranda", async () => {
     const m = await markupBeranda();
-    expect(m).toContain("8 JUL"); // sesi pertama 2026-07-08
-    expect(m).toContain("19 AGU"); // sesi keenam 2026-08-19
+    expect(m).not.toContain("8 JUL"); // sesi pertama 2026-07-08, dulu stempel #1
+    expect(m).not.toContain("19 AGU"); // sesi keenam 2026-08-19, dulu stempel #6
   });
 
-  it("progres tertulis 6 dari 8 sesi dan 75%", async () => {
+  it("teks progres paket ('sesi selesai', persentase) tidak lagi tertulis", async () => {
     const m = await markupBeranda();
-    expect(m).toContain("6 dari 8 sesi selesai");
-    expect(m).toContain("75%");
+    expect(m).not.toContain("sesi selesai");
+    // Angka persen progres dirender lewat kelas unik ini (lihat page.tsx) —
+    // dicari lewat kelasnya, bukan pola "\d+%" mentah, karena gradasi latar
+    // sampul (_komponen/sampul.tsx) sendiri memakai literal "%" (mis. "60%").
+    expect(m).not.toMatch(/text-\[15px\] text-night">\d+%/);
   });
 });
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { ambilDaftarLayanan, SARING_LAYANAN } from "@/lib/admin/layanan";
 import { daftarKatalogAdmin } from "@/lib/admin/katalog-admin";
 import { uraikanParamDaftar, bangunQuery, type ParamMentah } from "@/app/_shell/panel/daftar";
@@ -11,7 +12,10 @@ import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { FormLayananBaru, type PilihanFase } from "./form-layanan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
-export const metadata = { title: "Layanan & Paket" };
+// GERBANG SAKLAR (K11): judul tab ikut kehilangan kata "Paket" selagi saklar
+// mati — nav-admin.tsx sudah memendekkan labelnya ke "Layanan" dengan alasan
+// yang sama.
+export const metadata = { title: PAKET_TAMPIL ? "Layanan & Paket" : "Layanan" };
 
 const BASIS = "/admin/layanan";
 
@@ -63,10 +67,20 @@ export default async function LayananPage({
   return (
     <main>
       <header className="mb-4">
-        <h1 className="text-[18px] font-bold text-panel-ink">Layanan &amp; Paket</h1>
+        {/* GERBANG SAKLAR (K11). Judul dan kalimat bantuan ini digerbang di
+            header lama halaman ini sebelum sapuan panel menulis ulang
+            headernya dan melipat penjelasannya ke <Bantuan>; gerbangnya ikut
+            pindah, tidak ditinggal di bentuk lama. Yang berubah cuma DAFTAR
+            benda yang disebut kalimatnya — bukan janji "tidak pernah dihapus,
+            hanya dinonaktifkan" itu sendiri, yang tetap berlaku bagi layanan
+            dan varian. */}
+        <h1 className="text-[18px] font-bold text-panel-ink">
+          {PAKET_TAMPIL ? <>Layanan &amp; Paket</> : "Layanan"}
+        </h1>
         <Bantuan judul="Tentang halaman ini">
           Katalog yang dibaca beranda dan wizard pengajuan jadwal klien. Tidak ada satu pun angka
-          harga di sini — tarif adalah wilayah Owner. Layanan, paket, dan varian tidak pernah
+          harga di sini — tarif adalah wilayah Owner.{" "}
+          {PAKET_TAMPIL ? "Layanan, paket, dan varian" : "Layanan dan varian"} tidak pernah
           dihapus, hanya <b>dinonaktifkan</b>: yang nonaktif berhenti muncul di beranda dan berhenti
           ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b> menempel pada riwayat sesi klien
           yang sudah berjalan. Satu layanan tidak bisa kehilangan varian aktif terakhirnya —
@@ -114,7 +128,10 @@ export default async function LayananPage({
           <Tabel label="Daftar layanan">
             <thead>
               <tr>
-                <Th>Nama</Th><Th>Fase</Th><Th>Varian</Th><Th>Paket</Th>
+                {/* GERBANG SAKLAR (K11): kolom Paket dicabut BERPASANGAN
+                    dengan selnya di bawah — sebuah <Th> yang tertinggal tanpa
+                    <Td> menggeser seluruh kolom sesudahnya satu langkah. */}
+                <Th>Nama</Th><Th>Fase</Th><Th>Varian</Th>{PAKET_TAMPIL && <Th>Paket</Th>}
                 <Th>Sesi tercatat</Th><Th>Status</Th>
               </tr>
             </thead>
@@ -124,8 +141,8 @@ export default async function LayananPage({
                   <Td>
                     {/* Barisnya sendiri yang menaut — pola B. Tidak ada kolom
                         "Aksi" berisi tombol Ubah: yang dibuka adalah halaman
-                        layanan itu beserta varian dan paketnya, bukan
-                        formulirnya saja. */}
+                        layanan itu beserta varian (dan paketnya, bila saklar
+                        K11 menyala), bukan formulirnya saja. */}
                     <Link href={`${BASIS}/${l.id}`} className="font-bold text-panel-ink underline">
                       {l.nama}
                     </Link>
@@ -135,7 +152,8 @@ export default async function LayananPage({
                   </Td>
                   <Td>{l.namaFase}</Td>
                   <Td className="font-mono text-[12.5px]">{l.jumlahVarian}</Td>
-                  <Td className="font-mono text-[12.5px]">{l.jumlahPaket}</Td>
+                  {/* Pasangan <Th>Paket</Th> di atas — lihat gerbang di sana. */}
+                  {PAKET_TAMPIL && <Td className="font-mono text-[12.5px]">{l.jumlahPaket}</Td>}
                   {/* Angka ini menjelaskan mengapa baris tidak boleh dihapus:
                       setiap sesi menunjuk layanan ini. */}
                   <Td className="font-mono text-[12.5px]">{l.sesiTercatat}</Td>

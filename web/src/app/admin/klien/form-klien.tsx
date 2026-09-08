@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { buatKlien, perbaruiKlien } from "./aksi";
+import { buatKlien, perbaruiKlien, type KlienBentrok } from "./aksi";
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 
 export type PilihanFase = { id: string; nama: string };
@@ -55,6 +56,15 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState<string | null>(null);
+  // Id klien yang baru tersimpan, dipakai untuk menaut ke halaman detailnya
+  // (K14) — bukan lewat `pesanBerikutnya`, yang sengaja tetap murni hanya
+  // mengurus invarian pesan sukses/galat dan diuji begitu di
+  // tests/admin-klien.test.ts.
+  const [idBaru, setIdBaru] = useState<string | null>(null);
+  // K17: identitas baris klien yang bentrok emailnya, kalau `buatKlien`
+  // menyertakannya. Dipisah dari `pesanBerikutnya` dengan alasan yang sama
+  // dengan `idBaru` — fungsi itu murni untuk invarian pesan sukses/galat.
+  const [klienBentrok, setKlienBentrok] = useState<KlienBentrok | null>(null);
 
   return (
     <form
@@ -67,6 +77,8 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           const { pesan: pesanBaru, berhasil: berhasilBaru } = pesanBerikutnya(r);
           setPesan(pesanBaru);
           setBerhasil(berhasilBaru);
+          setIdBaru(r.ok ? r.id : null);
+          setKlienBentrok(!r.ok ? (r.klienBentrok ?? null) : null);
           if (r.ok) {
             // Formulir tetap TERBUKA (tidak ada lagi state "tertutup" untuk
             // kembali ke sana) — medannya dikosongkan lewat reset native
@@ -78,9 +90,15 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
       }
       className="rounded-lg border-[1.5px] border-panel-border bg-panel-bg p-4"
     >
+      {/* K14: anjuran utama sesudah simpan adalah pendaftaran mandiri, bukan
+          lagi tautan aktivasi WhatsApp — lihat kotak sukses di bawah tombol.
+          (Kalimat lama "terbitkan tautan aktivasi dari halaman detailnya"
+          sengaja tidak dipulihkan saat merge: urutan anjurannya yang berubah,
+          bukan cuma katanya. Token warnanya mengikuti palet panel staf yang
+          dipasang sapuan panel — `text-panel-ink`, bukan `text-ink`.) */}
       <h2 className="mb-3 text-[13.5px] font-extrabold text-panel-ink">
-        Klien baru — setelah disimpan, terbitkan tautan aktivasi dari halaman
-        detailnya
+        Klien baru — mendaftar sendiri dulu, tautan aktivasi WhatsApp untuk
+        cadangan
       </h2>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -134,7 +152,27 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         </label>
       </div>
 
-      {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
+      {pesan && (
+        <div className="mt-3 text-[13px] font-semibold text-clay">
+          <p>{pesan}</p>
+          {/* K17: bentrok email TIDAK BISA dibereskan lewat pencarian daftar
+              klien (`ambilDaftarKlien` hanya mencocokkan nama & PADMA ID,
+              bukan email) — jadi tautan LANGSUNG ke baris yang sudah ada,
+              memuat nama & PADMA ID-nya supaya admin tahu ia menuju ke mana
+              sebelum mengklik. Tidak ada penggabungan otomatis; admin melihat
+              datanya lalu memutuskan sendiri. */}
+          {klienBentrok && (
+            <p className="mt-1 font-normal">
+              <Link
+                href={`/admin/klien/${klienBentrok.id}`}
+                className="font-bold underline underline-offset-4"
+              >
+                Buka data {klienBentrok.nama} ({klienBentrok.padmaId})
+              </Link>
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 flex gap-2.5">
         <button
@@ -148,7 +186,14 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
             form native, bukan lewat state "tertutup" yang sudah tidak ada. */}
         <button
           type="reset"
-          onClick={() => setPesan(null)}
+          // `setKlienBentrok(null)` ikut dibersihkan (cabang auth): tanpa itu
+          // kartu "email ini sudah dipakai klien lain" tertinggal di layar
+          // sesudah formulirnya dikosongkan. Kelasnya memakai token panel staf
+          // dari sapuan panel.
+          onClick={() => {
+            setPesan(null);
+            setKlienBentrok(null);
+          }}
           className="rounded-xl border border-panel-border px-4 py-2.5 text-[13px] font-bold text-panel-muted"
         >
           Batal
@@ -156,9 +201,33 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
       </div>
 
       {berhasil && (
-        <p className="mt-3 text-[13px] text-leaf">
-          Tersimpan sebagai <b className="font-mono">{berhasil}</b>.
-        </p>
+        <div className="mt-3 text-[13px]">
+          <p className="text-leaf">
+            Tersimpan sebagai <b className="font-mono">{berhasil}</b>.
+          </p>
+          {/* K14: penautan lewat email terverifikasi (K1) membuat undangan
+              WhatsApp bukan lagi satu-satunya jalan — anjuran utama sekarang
+              minta klien mendaftar sendiri dengan email yang sama, undangan
+              turun jadi cadangan untuk klien yang perlu dituntun. Tidak ada
+              kode penautan yang dihapus; ini hanya urutan anjuran di layar. */}
+          <p className="mt-1.5 text-ink">
+            Minta klien mendaftar sendiri di halaman <b>Daftar</b> dengan email
+            ini — begitu emailnya terkonfirmasi, akunnya otomatis tertaut ke
+            data ini.
+          </p>
+          {idBaru && (
+            <p className="mt-1 text-ink-soft">
+              Atau kirimkan tautan aktivasi dari{" "}
+              <Link
+                href={`/admin/klien/${idBaru}`}
+                className="font-bold text-ink underline underline-offset-4"
+              >
+                halaman detail klien ini
+              </Link>
+              .
+            </p>
+          )}
+        </div>
       )}
     </form>
   );
@@ -180,7 +249,8 @@ export function FormEditKlien({
   awal: {
     nama: string;
     noHp: string;
-    faseId: string;
+    /** NULL = belum ditentukan — lihat penjelasan di medan Fase di bawah. */
+    faseId: string | null;
     alamat: string;
     lat: number | null;
     lon: number | null;
@@ -222,7 +292,30 @@ export function FormEditKlien({
         </label>
         <label>
           <span className={KELAS_LABEL}>Fase</span>
-          <select name="fase" required defaultValue={awal.faseId} className={KELAS_MEDAN}>
+          {/* PILIHAN KOSONG YANG SAH — bukan kerapian, dan bukan `required`.
+              Sejak `clients.phase_id` boleh NULL (migration
+              `fase_klien_boleh_kosong`), baris klien yang lahir dari
+              pendaftaran mandiri datang ke layar ini TANPA fase, karena fasenya
+              memang belum ditanyakan siapa pun — ia datang dari skrining.
+
+              Sebelum opsi ini ada, `defaultValue` bernilai null membuat
+              peramban diam-diam memilih OPSI PERTAMA, dan `required` merasa
+              puas. Akibatnya admin yang membuka halaman ini untuk menyunting
+              ALAMAT saja ikut menetapkan fase yang tidak pernah dipilih
+              siapa pun — data klinis berubah tanpa ada yang memutuskan, dan
+              tanpa satu pun jejak bahwa itu terjadi.
+
+              Karena itu keadaan kosong harus BISA disimpan apa adanya: memaksa
+              admin menebak fase hanya supaya formulirnya lolos adalah bentuk
+              lain dari kesalahan yang sama. Mengisinya tetap boleh, dan
+              mengosongkannya kembali juga — keduanya kini pilihan sadar.
+              `perbaruiKlien` menerjemahkan "" menjadi NULL. */}
+          <select
+            name="fase"
+            defaultValue={awal.faseId ?? ""}
+            className={KELAS_MEDAN}
+          >
+            <option value="">— Belum ditentukan —</option>
             {fase.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.nama}

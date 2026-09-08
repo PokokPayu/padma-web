@@ -248,24 +248,6 @@ describe("badge antrean sinkron dengan daftar", () => {
     expect(await hitungKlaimMenunggu()).toBe(sebelum);
   });
 
-  it("paket yang tidak lagi aktif tidak masuk hitungan", async () => {
-    const sebelum = await hitungKlaimMenunggu();
-    await admin
-      .from("client_packages")
-      .update({ status: "selesai", status_bayar: "menunggu_verifikasi" })
-      .eq("id", PAKET_UJI);
-    expect(await hitungKlaimMenunggu()).toBe(sebelum);
-  });
-
-  it("paket aktif yang menunggu verifikasi masuk hitungan", async () => {
-    const sebelum = await hitungKlaimMenunggu();
-    await admin
-      .from("client_packages")
-      .update({ status_bayar: "menunggu_verifikasi" })
-      .eq("id", PAKET_UJI);
-    expect(await hitungKlaimMenunggu()).toBe(sebelum + 1);
-  });
-
   it("hitungAntrean().klaimMenunggu memakai hitungan yang sama, bukan salinannya", async () => {
     // Dua sasaran sekaligus (sesi lepas + paket aktif) supaya kedua cabang
     // hitungan ikut terbukti, bukan hanya salah satunya.
@@ -281,6 +263,49 @@ describe("badge antrean sinkron dengan daftar", () => {
       .eq("id", PAKET_UJI);
     const antrean = await hitungAntrean();
     expect(antrean.klaimMenunggu).toBe(await hitungKlaimMenunggu());
+  });
+});
+
+// GERBANG SAKLAR (K11, Task 2): `hitungKlaimMenunggu()` mengabaikan
+// `client_packages` secara default sejak `PAKET_TAMPIL = false` — badge
+// produksi memang tidak lagi menghitungnya (gerbangnya sendiri diuji
+// tests/paket-tersembunyi.test.tsx). Filter di DALAM kueri paketnya sendiri
+// (hanya status 'aktif' & 'menunggu_verifikasi') tidak dihapus, jadi kedua
+// uji di bawah menyalakan saklar sementara supaya filter itu tetap terbukti
+// benar selagi saklar produksi mati — pola yang sama dengan
+// tests/passport-data.test.ts.
+describe("badge antrean — paket klien (cakupan dipertahankan lewat saklar sementara)", () => {
+  let hitungKlaimMenungguSementara: typeof hitungKlaimMenunggu;
+
+  beforeAll(async () => {
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    ({ hitungKlaimMenunggu: hitungKlaimMenungguSementara } = await import(
+      "@/lib/admin/antrean"
+    ));
+  });
+
+  afterAll(() => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  });
+
+  it("paket yang tidak lagi aktif tidak masuk hitungan", async () => {
+    const sebelum = await hitungKlaimMenungguSementara();
+    await admin
+      .from("client_packages")
+      .update({ status: "selesai", status_bayar: "menunggu_verifikasi" })
+      .eq("id", PAKET_UJI);
+    expect(await hitungKlaimMenungguSementara()).toBe(sebelum);
+  });
+
+  it("paket aktif yang menunggu verifikasi masuk hitungan", async () => {
+    const sebelum = await hitungKlaimMenungguSementara();
+    await admin
+      .from("client_packages")
+      .update({ status_bayar: "menunggu_verifikasi" })
+      .eq("id", PAKET_UJI);
+    expect(await hitungKlaimMenungguSementara()).toBe(sebelum + 1);
   });
 });
 

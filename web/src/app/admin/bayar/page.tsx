@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { daftarTagihanAdmin, SARING_BAYAR } from "@/lib/admin/tagihan";
 import { uraikanParamDaftar, type ParamMentah } from "@/app/_shell/panel/daftar";
 import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
@@ -34,7 +35,16 @@ export default async function BayarPage({
           <b>Tolak klaim</b> supaya klien bisa mengklaim ulang. Setiap keputusan tercatat beserta
           nama Anda dan tidak bisa dihapus. Item yang sudah <b>Lunas</b> tidak bisa diputar mundur
           dari sini — koreksi setelah rekap pekan berjalan adalah rekonsiliasi, bukan satu klik.
-          Sesi yang tercakup paket tidak muncul sendiri: status bayarnya mengikuti paketnya.
+          {/* GERBANG SAKLAR (K11). Kalimat ini digerbang di paragraf kaki
+              halaman sebelum sapuan panel memindahkannya ke <Bantuan>;
+              gerbangnya ikut pindah, tidak ditinggal. DIHAPUS seluruhnya saat
+              saklar mati — bukan diganti kata lain: baris paket sudah
+              digerbang di `daftarTagihanAdmin()`, jadi perilaku yang
+              dijelaskannya tidak bisa diamati siapa pun, dan menerangkan hal
+              yang tak terlihat hanya membingungkan. */}
+          {PAKET_TAMPIL && (
+            <> Sesi yang tercakup paket tidak muncul sendiri: status bayarnya mengikuti paketnya.</>
+          )}{" "}
           Nominal tidak ditampilkan — besarannya disampaikan tim PADMA lewat WhatsApp.
         </Bantuan>
       </header>

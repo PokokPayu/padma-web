@@ -195,7 +195,22 @@ describe("ambilSesi", () => {
 });
 
 describe("ambilPaket", () => {
-  beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
+  // Saklar K11 (PAKET_TAMPIL, Task 1) membuat ambilPaket() memulangkan []
+  // secara default — pagar itu sendiri diuji di tests/paket-tersembunyi.test.tsx.
+  // Yang diuji DI SINI bukan tampilan, melainkan pemetaan kolom packages ->
+  // PaketRingkas dan isolasi antar-klien di baliknya, dan logika itu SENGAJA
+  // tidak dihapus (hanya dipagari) — jadi saklarnya dinyalakan sementara di
+  // sini supaya pemetaannya tetap terbukti benar selama saklar mati.
+  beforeAll(async () => {
+    await pakaiSesi("ananda@padma.test");
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+  });
+
+  afterAll(() => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  });
 
   it("memetakan paket aktif beserta nama & jumlah sesi dari packages", async () => {
     const { ambilPaket } = await import("@/lib/passport/data");

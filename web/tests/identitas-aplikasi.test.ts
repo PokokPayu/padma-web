@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { metadata, HTML_LANG } from "@/lib/metadata";
 import { APP_NAME } from "@/lib/constants";
@@ -10,6 +10,38 @@ const baca = (rel: string) => readFileSync(path.join(webRoot, rel), "utf8");
 const layout = baca("src/app/layout.tsx");
 const globals = baca("src/app/globals.css");
 const halamanMasuk = baca("src/app/masuk/page.tsx");
+
+/**
+ * Setiap `page.tsx` di bawah `src/app`, beserta judul yang dideklarasikannya.
+ *
+ * Dipungut dari sistem berkas, BUKAN dari daftar yang ditulis tangan. Versi
+ * lama perkara "halaman anak mengandalkan template judul" hanya memeriksa
+ * `/masuk`, dan akibatnya terlihat begitu lima halaman auth lahir sekaligus:
+ * masing-masing penulisnya menebak sendiri, tiga dari empat menebak salah, dan
+ * `%s · PADMA` menjadikannya "Lupa sandi — PADMA · PADMA" di tab peramban.
+ * Daftar yang ditulis tangan akan mengulang persis kegagalan itu pada halaman
+ * BERIKUTNYA — yang belum ditulis siapa pun. Karena itu daftarnya dipungut.
+ */
+function halamanBerjudul(): { rel: string; judul: string }[] {
+  const hasil: { rel: string; judul: string }[] = [];
+  const telusur = (abs: string, rel: string) => {
+    for (const e of readdirSync(abs, { withFileTypes: true })) {
+      if (e.isDirectory()) telusur(path.join(abs, e.name), `${rel}/${e.name}`);
+      else if (e.name === "page.tsx") {
+        const isi = readFileSync(path.join(abs, e.name), "utf8");
+        // Hanya judul berupa literal string; `title: PAKET_TAMPIL ? ... : ...`
+        // (src/app/admin/layanan/page.tsx) sengaja tidak ikut terpungut —
+        // aturan yang sama berlaku untuknya, tetapi nilainya tidak bisa dibaca
+        // tanpa mengeksekusi berkasnya.
+        for (const m of isi.matchAll(/title:\s*"([^"]*)"/g)) {
+          hasil.push({ rel: `${rel}/${e.name}`, judul: m[1] });
+        }
+      }
+    }
+  };
+  telusur(path.join(webRoot, "src", "app"), "src/app");
+  return hasil;
+}
 
 describe("identitas aplikasi", () => {
   it("dokumen berbahasa Indonesia", () => {
@@ -36,6 +68,41 @@ describe("identitas aplikasi", () => {
   it("halaman anak mengandalkan template judul", () => {
     expect(halamanMasuk).toMatch(/title:\s*"Masuk"/);
     expect(halamanMasuk).not.toMatch(/title:\s*"Masuk[^"]*PADMA"/);
+  });
+
+  it("TIDAK ADA satu halaman pun yang menempelkan sendiri nama brand ke judulnya", () => {
+    // `title.template` sudah menambahkan " · PADMA". Halaman yang menyebut
+    // brand-nya lagi menghasilkan "… — PADMA · PADMA" di tab peramban.
+    const dobel = halamanBerjudul().filter((h) =>
+      h.judul.toLowerCase().includes(APP_NAME.toLowerCase()),
+    );
+    expect(
+      dobel.map((h) => `${h.rel}: "${h.judul}"`),
+      "judul halaman ini menempelkan nama brand sendiri padahal template sudah",
+    ).toEqual([]);
+  });
+
+  it("keenam halaman auth punya judulnya sendiri (bukan mewarisi judul baku)", () => {
+    // Lima halaman panggung + /akun-belum-terhubung. Halaman tanpa `title`
+    // sendiri jatuh ke `title.default`, sehingga enam tab berbeda tampil
+    // dengan nama yang sama persis.
+    const berjudul = new Map(
+      halamanBerjudul().map((h) => [h.rel.replace(/^src\/app|\/page\.tsx$/g, ""), h.judul]),
+    );
+    for (const rute of [
+      "/masuk",
+      "/daftar",
+      "/lupa-sandi",
+      "/atur-sandi",
+      "/periksa-email",
+      "/akun-belum-terhubung",
+    ]) {
+      const judul = berjudul.get(rute);
+      expect(judul, `halaman ${rute} tidak mendeklarasikan title sendiri`).toBeTypeOf(
+        "string",
+      );
+      expect(judul!.length, `judul ${rute} kosong`).toBeGreaterThan(0);
+    }
   });
 
   it("tiga font brand didaftarkan lewat next/font/google", () => {

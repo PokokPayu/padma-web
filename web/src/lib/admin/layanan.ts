@@ -1,6 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
 import { daftarKatalogAdmin, type LayananKelola } from "@/lib/admin/katalog-admin";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 /**
  * Lapisan data DAFTAR layanan.
@@ -88,7 +89,15 @@ export async function ambilDaftarLayanan(
       namaFase: labelFase.get(l.phase_id) ?? "—",
       aktif: l.aktif,
       jumlahVarian: nVarian.get(l.id) ?? 0,
-      jumlahPaket: nPaket.get(l.id) ?? 0,
+      // GERBANG SAKLAR (K11). Lapisan data ini lahir SESUDAH saklar ditulis,
+      // jadi ia belum pernah lewat gerbangnya — dipasang di sini supaya ia
+      // sejalan dengan tiga saudaranya (`ambilDaftarKlien` → `paketAktif`,
+      // `daftarKatalogAdmin` → `paket: []`, `daftarTagihanAdmin` → baris
+      // paket): begitu saklar mati, angka paket tidak ikut ke layar mana pun,
+      // bukan hanya tidak dipasang kolomnya. Kuerinya SENGAJA tetap berjalan
+      // (pola yang sama dengan `daftarTagihanAdmin`) — yang dilewati cuma
+      // perakitannya, supaya bentuk fungsi ini tidak berubah bagi pembaca lain.
+      jumlahPaket: PAKET_TAMPIL ? (nPaket.get(l.id) ?? 0) : 0,
       sesiTercatat: nSesi.get(l.id) ?? 0,
     })),
     total: count ?? 0,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { ambilLayanan } from "@/lib/admin/layanan";
 import { pilihanFase } from "@/lib/admin/katalog-admin";
 import { daftarMateriAdmin } from "@/lib/admin/materi-admin";
@@ -146,37 +147,52 @@ export default async function DetailLayananPage({
           )}
         </Kartu>
 
-        <Kartu judul="Paket">
-          {layanan.paket.length === 0 ? (
-            <p className="text-[12.5px] italic text-panel-muted">Belum ada paket.</p>
-          ) : (
-            <ul className="grid gap-2">
-              {layanan.paket.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2.5">
-                  <span className="min-w-[180px] flex-1">
-                    <b className="text-[13px] text-panel-ink">{p.nama}</b>
-                    <span className="ml-2 font-mono text-[12px] text-panel-muted">
-                      {p.jumlahSesi} sesi
+        {/* GERBANG SAKLAR (K11). Seluruh pengelolaan paket per layanan
+            dulu duduk di `/admin/layanan` dan SUDAH digerbang di sana
+            (`{PAKET_TAMPIL && l.paket.length > 0 && ...}`); sapuan panel
+            memindahkannya ke halaman detail ini (pola B) dan gerbangnya ikut
+            pindah. Bukan sekadar kosmetik: `AksiPaket` memuat tombol yang
+            MENULIS — ubah nama, ubah jumlah sesi, aktif/nonaktif — dan
+            `perbaruiPaket`/`nonaktifkanPaket` (aksi.ts) sengaja TIDAK
+            disentuh saklar ini, jadi blok inilah satu-satunya pagar antara
+            saklar mati dan paket yang masih bisa diubah dari layar staf.
+            Catatan: dengan saklar mati `layanan.paket` juga selalu kosong
+            (gerbang `daftarKatalogAdmin`), tapi kartu ini tetap akan
+            menuliskan judul "Paket" dan kalimat "Belum ada paket." — dua
+            kebocoran kata yang gerbang data tidak bisa tutup. */}
+        {PAKET_TAMPIL && (
+          <Kartu judul="Paket">
+            {layanan.paket.length === 0 ? (
+              <p className="text-[12.5px] italic text-panel-muted">Belum ada paket.</p>
+            ) : (
+              <ul className="grid gap-2">
+                {layanan.paket.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2.5">
+                    <span className="min-w-[180px] flex-1">
+                      <b className="text-[13px] text-panel-ink">{p.nama}</b>
+                      <span className="ml-2 font-mono text-[12px] text-panel-muted">
+                        {p.jumlahSesi} sesi
+                      </span>
+                      <span className="block text-[11.5px] text-panel-muted">
+                        {p.dipakai > 0
+                          ? `${p.dipakai} klien sedang menjalani paket ini — mengubah jumlah sesi menggeser progres passport mereka.`
+                          : "Belum dipakai klien mana pun."}
+                      </span>
                     </span>
-                    <span className="block text-[11.5px] text-panel-muted">
-                      {p.dipakai > 0
-                        ? `${p.dipakai} klien sedang menjalani paket ini — mengubah jumlah sesi menggeser progres passport mereka.`
-                        : "Belum dipakai klien mana pun."}
-                    </span>
-                  </span>
-                  <PillAktif aktif={p.aktif} />
-                  <AksiPaket
-                    id={p.id}
-                    nama={p.nama}
-                    jumlahSesi={p.jumlahSesi}
-                    aktif={p.aktif}
-                    dipakai={p.dipakai}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Kartu>
+                    <PillAktif aktif={p.aktif} />
+                    <AksiPaket
+                      id={p.id}
+                      nama={p.nama}
+                      jumlahSesi={p.jumlahSesi}
+                      aktif={p.aktif}
+                      dipakai={p.dipakai}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Kartu>
+        )}
 
         {/*
           Bacaan saja, sengaja. Keterkaitan materi<->layanan

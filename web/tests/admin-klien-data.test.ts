@@ -54,9 +54,34 @@ describe("ambilDaftarKlien", () => {
     expect(total).toBeGreaterThanOrEqual(baris.length);
   });
 
+});
+
+// GERBANG SAKLAR (K11, Task 2): `ambilDaftarKlien()` memaksa `paketAktif`
+// menjadi `null` untuk SETIAP baris begitu `PAKET_TAMPIL` mati (gerbangnya
+// sendiri diuji tests/paket-tersembunyi.test.tsx). Kedua uji di bawah bukan
+// tentang tampilan — mereka menjaga properti KUERI (`.eq("status", "aktif")`
+// di klien.ts) yang tidak punya penjaga lain di repo ini begitu `paketAktif`
+// selalu null: badan `for`/asersi Rp-nya akan berjalan atas himpunan kosong
+// tanpa saklar dinyalakan sementara, hijau tanpa membuktikan apa pun. Pola
+// sama dengan tests/klaim-sesi-lepas.test.ts (describe "badge antrean —
+// paket klien").
+describe("ambilDaftarKlien — data paket (saklar K11 dinyalakan sementara)", () => {
+  let ambilDaftarKlienSementara: typeof ambilDaftarKlien;
+
+  beforeAll(async () => {
+    vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
+    vi.resetModules();
+    ({ ambilDaftarKlien: ambilDaftarKlienSementara } = await import("@/lib/admin/klien"));
+  });
+
+  afterAll(() => {
+    vi.doUnmock("@/lib/paket-tampil");
+    vi.resetModules();
+  });
+
   it("hanya paket BERSTATUS AKTIF yang menjadi identitas baris", async () => {
     // Paket lama tidak menggantikan gambaran "sedang menjalani apa".
-    const { baris } = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
+    const { baris } = await ambilDaftarKlienSementara({ cari: "", saring: {}, hal: 1 });
     for (const k of baris.filter((b) => b.paketAktif !== null)) {
       const { data } = await admin
         .from("client_packages")
@@ -76,7 +101,14 @@ describe("ambilDaftarKlien", () => {
     // lolos hijau karena tidak satu kata terlarang pun disebut. Menguji pola
     // ANGKA RUPIAH (samakan dengan `admin-klien-halaman.test.tsx`) menjaga
     // NILAI yang dilarang, bukan ejaan namanya.
-    const { baris } = await ambilDaftarKlien({ cari: "", saring: {}, hal: 1 });
+    //
+    // Dua sisi digabung saat merge: PENEMPATAN dari cabang saklar (dipanggil
+    // lewat `ambilDaftarKlienSementara`, yaitu dengan saklar K11 dinyalakan
+    // sementara — tanpa itu `paketAktif` selalu null dan uji ini hijau atas
+    // himpunan kosong, tidak membuktikan apa pun), dan ASERSI dari sapuan
+    // panel (`nominalDalam`, yang menangkap pola angka rupiah lebih luas
+    // daripada `/Rp\s?\d/` — mis. "3.500.000" tanpa awalan "Rp").
+    const { baris } = await ambilDaftarKlienSementara({ cari: "", saring: {}, hal: 1 });
     expect(nominalDalam(JSON.stringify(baris)), "nominal bocor").toEqual([]);
   });
 });

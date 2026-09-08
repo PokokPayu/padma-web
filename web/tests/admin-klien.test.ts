@@ -236,7 +236,10 @@ describe("buatKlien — pendaftaran klien oleh admin", () => {
 
     expect(hasil.ok).toBe(false);
     if (hasil.ok) return;
-    expect(hasil.pesan).toMatch(/sudah dipakai/i);
+    // K17: kalimatnya menyebut kemungkinan pendaftaran mandiri, bukan lagi
+    // "sudah dipakai klien lain" — sejak /daftar hidup, penyebab paling
+    // mungkin adalah orangnya sudah membuat akun sendiri.
+    expect(hasil.pesan).toMatch(/sudah terdaftar/i);
 
     // Dan yang terpenting: tidak ada baris kedua.
     expect(await barisKlien("email", EMAIL_BARU)).toHaveLength(1);
@@ -564,13 +567,22 @@ describe("halaman daftar klien (/admin/klien)", () => {
     expect(markup).toContain("Prekonsepsi / Promil");
   });
 
-  it("menampilkan paket aktif sebagai 'nama · N sesi', dan '—' bila tidak ada", () => {
-    // Ananda memegang paket Sankalpa Prima 8 sesi di seed.
-    expect(markup).toContain("Sankalpa Prima · 8 sesi");
-    // Klien fixture tidak punya paket sama sekali — placeholder daftar
-    // (Task 9) memakai em dash yang sama dengan kolom Fase, bukan lagi
-    // "Sesi lepas".
-    expect(markup).toMatch(/>—<\/td>/);
+  it("kolom Paket tidak lagi dirender sama sekali — gerbang data (Task 2) + kontrol (Task 3)", () => {
+    // Sejarah pagar ini bertingkat:
+    //  - Sebelum Task 2: baris ini menegaskan "Sankalpa Prima · 8 sesi" untuk
+    //    Ananda (yang benar-benar memegang paket itu di seed).
+    //  - Sesudah Task 2, sebelum Task 3: `ambilDaftarKlien()` memaksa
+    //    `paketAktif: null` untuk SETIAP klien, jadi kolomnya TETAP ADA tapi
+    //    selalu berisi "—" — baris ini dulu menegaskan itu lewat
+    //    `toMatch(/>—<\/td>/)`.
+    //  - Task 3 mencabut KONTROLNYA juga (`<Th>`/`<Td>` dibungkus
+    //    `PAKET_TAMPIL &&`, lihat page.tsx), jaminan yang lebih kuat: bukan
+    //    cuma isinya kosong, tapi kolomnya sendiri tidak pernah dirender.
+    //    `/>—<\/td>/` sudah tidak lagi membuktikan apa pun spesifik (kolom
+    //    lain pun bisa kebetulan berisi "—"), jadi diganti pemeriksaan
+    //    ketiadaan header "Paket" secara langsung.
+    expect(markup).not.toContain("Sankalpa Prima");
+    expect(markup).not.toContain(">Paket<");
   });
 
   it("menampilkan jumlah sesi selesai apa adanya dari basis data", async () => {

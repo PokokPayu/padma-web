@@ -17,8 +17,10 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   // tujuan yang paling perlu dikenali. Judul halamannya tetap "Pembayaran".
   { href: "/admin/bayar", label: "Bayar", ikon: "bayar", badge: "klaimMenunggu" },
   { href: "/admin/mitra", label: "Mitra", ikon: "mitra" },
-  // Judul halamannya "Layanan & Paket"; labelnya dipendekkan agar sidebar
-  // tidak memaksa satu tujuan menjadi dua baris.
+  // Judul halamannya "Layanan" (atau "Layanan & Paket" bila `PAKET_TAMPIL`
+  // dinyalakan kembali, lihat src/lib/paket-tampil.ts); labelnya dipendekkan
+  // agar sidebar tidak memaksa satu tujuan menjadi dua baris — beda alasan
+  // dari saklar itu, jadi tidak ikut berubah bersamanya.
   { href: "/admin/layanan", label: "Layanan", ikon: "katalog" },
   // Judul halamannya "Materi Panduan".
   { href: "/admin/materi", label: "Materi", ikon: "materi" },

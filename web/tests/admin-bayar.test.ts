@@ -248,11 +248,15 @@ afterAll(bersihkan);
 // ---------------------------------------------------------------------------
 
 describe("daftar tagihan admin", () => {
-  it("memuat sesi lepas dan paket klien yang menunggu verifikasi", async () => {
+  it("memuat sesi lepas yang menunggu verifikasi; paket digerbang (K11, Task 2)", async () => {
     const daftar = await semuaTagihan();
     const kunci = daftar.map((t) => `${t.jenis}:${t.id}`);
     expect(kunci).toContain(`sesi:${SESI_MENUNGGU}`);
-    expect(kunci).toContain(`paket:${PAKET_UJI}`);
+    // Sebelum gerbang R4 (Task 2): baris ini menegaskan `paket:${PAKET_UJI}`
+    // ikut di daftar. `daftarTagihanAdmin()` kini digerbang sejalan dengan
+    // `ambilPaket()` sisi klien (Task 1) — yang tetap dijaga adalah sesi
+    // lepas di atas, TIDAK berubah oleh gerbang paket.
+    expect(kunci).not.toContain(`paket:${PAKET_UJI}`);
   });
 
   it("membawa nama klien dan PADMA ID — antrean ini dibaca manusia", async () => {
@@ -292,12 +296,26 @@ describe("daftar tagihan admin", () => {
     }
   });
 
-  it("saringan IDENTIK dengan susunTagihan() yang dilihat klien", async () => {
-    // Bukti terkuat bahwa admin dan klien melihat daftar yang sama: item milik
-    // Ananda di daftar admin harus persis sama dengan tagihan yang tersusun
-    // dari sisi Ananda sendiri.
-    const milikAdmin = (await semuaTagihan())
-      .filter((t) => t.padmaId === PADMA_ID)
+  it("saringan sesi IDENTIK dengan susunTagihan() yang dilihat klien", async () => {
+    // Bukti terkuat bahwa admin dan klien melihat daftar SESI yang sama: item
+    // milik Ananda di daftar admin harus persis sama dengan tagihan yang
+    // tersusun dari sisi Ananda sendiri.
+    //
+    // Perbandingan ini disempitkan ke jenis "sesi": sejak saklar K11 (Task 1
+    // gerbang sisi klien, Task 2/R4 gerbang sisi staf) KEDUA jalur —
+    // `ambilPaket()` klien dan `daftarTagihanAdmin()` admin — sama-sama tidak
+    // lagi membawa baris paket (lihat tests/paket-tersembunyi.test.tsx).
+    // Yang tetap dijaga: parity SESI antara admin dan klien di baris terakhir
+    // sebelumnya; baris terakhir SEKARANG membuktikan gerbang staf benar-benar
+    // menutup jalan paket juga, bukan cuma jalan klien.
+    //
+    // Dipanggil lewat `semuaTagihan()` (adapter halaman-1 di puncak berkas)
+    // sesudah sapuan panel memberi `daftarTagihanAdmin()` parameter
+    // `ParamDaftar` — yang diuji tetap daftar yang sama, bukan versi yang
+    // dilonggarkan.
+    const daftarAdmin = (await semuaTagihan()).filter((t) => t.padmaId === PADMA_ID);
+    const milikAdmin = daftarAdmin
+      .filter((t) => t.jenis === "sesi")
       .map((t) => `${t.jenis}:${t.id}`)
       .sort();
 
@@ -305,10 +323,12 @@ describe("daftar tagihan admin", () => {
     const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
     ref.sesi = sesiAdmin;
     const milikKlien = susunTagihan({ paket, sesi })
+      .filter((t) => t.jenis === "sesi")
       .map((t) => `${t.jenis}:${t.id}`)
       .sort();
 
     expect(milikAdmin).toEqual(milikKlien);
+    expect(daftarAdmin.some((t) => t.jenis === "paket")).toBe(false);
   });
 
   it("terurut menurut kemendesakan: menunggu verifikasi, belum, lunas", async () => {

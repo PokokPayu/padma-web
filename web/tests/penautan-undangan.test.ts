@@ -1,5 +1,13 @@
 /**
- * PENAUTAN AKUN KLIEN WAJIB TOKEN UNDANGAN SEKALI-PAKAI.
+ * JALUR UNDANGAN: TOKEN SEKALI-PAKAI + EMAIL COCOK.
+ *
+ * BACA INI DULU KALAU YANG ANDA CARI ADALAH "apakah perebutan rekam medis
+ * masih tertutup?". Berkas ini menjaga jalur PERTAMA dari dua jalur penautan
+ * yang sah, dan sejak spec 8 September 2026 ia BUKAN LAGI satu-satunya. Jalur
+ * kedua — penautan lewat email yang sudah TERBUKTI (terkonfirmasi) — dijaga
+ * `tests/penautan-email-terverifikasi.test.ts`, dan setelan yang menopangnya
+ * dijaga `tests/konfirmasi-email-wajib.test.ts`. Ketiganya harus dibaca
+ * bersama; tidak satu pun dari mereka menjaga keseluruhannya sendirian.
  *
  * Eksploit yang direproduksi (bukan teori) sebelum perbaikan ini:
  *   1. penyerang self-signup dengan email klien yang belum tertaut
@@ -16,12 +24,19 @@
  * perbaikan sebelumnya sudah benar), melainkan ASUMSI bahwa email yang dipakai
  * login benar-benar milik orang itu. Menebak alamat email bukan otentikasi.
  *
- * Karena itu penautan sekarang digerbangi TOKEN UNDANGAN: rahasia acak
- * kriptografis yang dibuat server saat admin membuat data klien, dikirim lewat
- * kanal terpisah (pesan sambutan WhatsApp — sudah ada di spec bagian 4),
+ * Karena itu jalur yang dijaga berkas ini digerbangi TOKEN UNDANGAN: rahasia
+ * acak kriptografis yang dibuat server saat admin membuat data klien, dikirim
+ * lewat kanal terpisah (pesan sambutan WhatsApp — sudah ada di spec bagian 4),
  * berumur terbatas, dan sekali pakai. Pencocokan email tetap dipertahankan
  * sebagai syarat KEDUA (token DAN email harus sepakat), tetapi email saja tidak
- * pernah cukup.
+ * pernah cukup di jalur ini.
+ *
+ * APA YANG BERUBAH DI JALUR KEDUA, supaya kalimat di atas tidak dibaca sebagai
+ * bantahan atasnya: pendaftaran mandiri KINI memang bisa menautkan — tetapi
+ * bukan karena emailnya cocok, melainkan karena emailnya DIBUKTIKAN lebih dulu
+ * (`enable_confirmations = true` sejak 28 Agustus 2026). Menebak alamat email
+ * tetap bukan otentikasi; yang bertambah adalah cara membuktikan alamat itu
+ * memang milik pemakainya.
  *
  * Bukti di test ini ditarik sampai LAPISAN DATA (query PostgREST sebagai user
  * penyerang), bukan hanya nilai balik fungsi penautan.
@@ -37,6 +52,7 @@ import {
   type OpsiUndangan,
 } from "@/lib/auth/link-client";
 import * as modulPenautan from "@/lib/auth/link-client";
+import { pastikanKlien } from "@/lib/auth/pastikan-klien";
 import { TOKEN_UNDANGAN_RINA } from "../scripts/seed-users";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
@@ -77,6 +93,14 @@ const EMAIL_UJI = [
 const KLIEN_UJI_IDS = [KLIEN_UJI_ID, KLIEN_KADALUARSA_ID];
 
 const ids: Record<string, string> = {};
+
+/**
+ * Sampah dari perkara yang emailnya dibuat unik per-run (`Date.now()`), jadi
+ * tidak bisa dituliskan sebagai konstanta di `EMAIL_UJI` di atas. Dibereskan
+ * `bersihkan()` bersama sisanya — stack lokal ini dipakai bersama sesi lain.
+ */
+const idsSampah: string[] = [];
+const emailSampah: string[] = [];
 
 async function buatUserTerkonfirmasi(email: string): Promise<string> {
   const { data, error } = await svc.auth.admin.createUser({
@@ -151,6 +175,12 @@ async function bersihkan() {
     .update({ user_id: null, linked_at: null })
     .eq("id", RINA_CLIENT_ID);
   await svc.from("clients").delete().in("id", KLIEN_UJI_IDS);
+  // Baris klien lebih dulu, lalu akunnya: `clients.user_id` menunjuk
+  // `auth.users(id)` tanpa ON DELETE.
+  for (const email of emailSampah) await svc.from("clients").delete().eq("email", email);
+  for (const id of idsSampah) await svc.auth.admin.deleteUser(id);
+  idsSampah.length = 0;
+  emailSampah.length = 0;
   for (const email of EMAIL_UJI) await hapusUser(email);
   // Undangan yang diterbitkan paksa untuk Ananda (baris yang SUDAH tertaut)
   // dibuang: klien aktif tidak boleh meninggalkan undangan hidup di basis data
@@ -204,17 +234,33 @@ beforeAll(async () => {
 
 afterAll(bersihkan);
 
-describe("EKSPLOIT — self-signup dengan email klien tidak lagi merebut rekam medis", () => {
-  it("penyerang self-signup memakai email klien: akun terbuat, rekam klien TIDAK tertaut", async () => {
-    // Langkah 1 eksploit, apa adanya: pendaftaran mandiri lewat anon key.
+describe("EKSPLOIT — self-signup dengan email klien tidak lagi merebut rekam medis (gerbang sungguhan dijalankan, bukan hanya barisnya dilihat)", () => {
+  it("penyerang self-signup memakai email klien: GERBANG memulangkannya ke /periksa-email, rekam klien TIDAK tertaut", async () => {
+    // Langkah 1 eksploit, apa adanya: pendaftaran mandiri lewat anon key —
+    // jalur GoTrue yang sungguhan, bukan `createUser` service role.
     const anon = anonClient();
     const { data: daftar, error: errDaftar } = await anon.auth.signUp({
       email: RINA_EMAIL,
       password: SANDI,
     });
     expect(errDaftar).toBeNull();
-    const penyerangId = daftar.user!.id;
-    ids.penyerang = penyerangId;
+    const penyerang = daftar.user!;
+    ids.penyerang = penyerang.id;
+
+    // Kaki pertama: GoTrue TIDAK boleh mengaku emailnya sudah terbukti. Kalau
+    // `enable_confirmations` mati, baris ini yang pertama merah — dan itu
+    // memang tugasnya (pagar berkasnya ada di konfirmasi-email-wajib.test.ts;
+    // yang ini menguji PERILAKU GoTrue yang sedang berjalan, bukan teksnya).
+    expect(penyerang.email_confirmed_at ?? null).toBeNull();
+    expect(daftar.session).toBeNull();
+
+    // Kaki kedua — INI yang dulu hilang. Versi sebelumnya berhenti pada
+    // "barisnya tidak berubah" tanpa pernah MEMANGGIL apa pun: ia lulus juga
+    // seandainya seluruh gerbang dicopot, karena memang tidak ada yang
+    // menautkan sampai sesuatu memanggilnya. Sekarang gerbang sungguhan
+    // dijalankan atas user hasil signUp itu, dan jawabannya harus "buktikan
+    // dulu emailmu".
+    expect(await pastikanKlien(penyerang, "")).toBe("/periksa-email");
 
     // Langkah 2 eksploit HARUS mati: tidak ada satu pun jalur di aplikasi yang
     // menautkan hanya karena emailnya cocok.
@@ -225,8 +271,31 @@ describe("EKSPLOIT — self-signup dengan email klien tidak lagi merebut rekam m
     const { data: tertaut } = await svc
       .from("clients")
       .select("id")
-      .eq("user_id", penyerangId);
+      .eq("user_id", penyerang.id);
     expect(tertaut ?? []).toEqual([]);
+  });
+
+  it("gerbang TIDAK menerbitkan baris klien baru untuk email yang belum dibuktikan", async () => {
+    // Sisi lain dari perkara di atas, dan yang paling mudah luput: langkah 5
+    // gerbang menerbitkan baris `clients` BARU bila tidak ada yang cocok.
+    // Kalau penjaga `email_confirmed_at` turun ke bawahnya, penyerang tidak
+    // merebut rekam Rina — ia mendapat rekam KOSONG atas nama alamat email
+    // orang lain, yang kelak diisi PADMA untuk orang yang salah.
+    const email = `penyusup.mandiri.${Date.now()}@padma.test`;
+    const anon = anonClient();
+    const { data: daftar, error } = await anon.auth.signUp({
+      email,
+      password: SANDI,
+    });
+    expect(error).toBeNull();
+    const user = daftar.user!;
+    idsSampah.push(user.id);
+    emailSampah.push(email);
+
+    expect(await pastikanKlien(user, "")).toBe("/periksa-email");
+
+    const { data: baris } = await svc.from("clients").select("id").eq("email", email);
+    expect(baris ?? []).toEqual([]);
   });
 
   it("langkah 3 & 4 eksploit mati di lapisan data: PII & rekam medis tidak terbaca", async () => {

@@ -23,10 +23,19 @@ export default async function HalamanProfil() {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
 
+  // Fase HANYA muncul bila memang sudah ditentukan. Tanpa penjaga ini, klien
+  // yang mendaftar sendiri (fasenya belum ditanyakan — datang dari skrining,
+  // migration `fase_klien_boleh_kosong`) melihat baris "Fase perjalanan" berisi
+  // titik-tengah telanjang: bentuk yang terbaca sebagai data rusak, bukan
+  // sebagai keadaan yang memang belum diisi.
   const bacaan: Array<[string, string]> = [
     ["PADMA ID", klien.padmaId],
     ["Email", klien.email],
-    ["Fase perjalanan", `${klien.faseSanskrit} · ${klien.faseNama}`],
+    ...(klien.faseId
+      ? ([["Fase perjalanan", `${klien.faseSanskrit} · ${klien.faseNama}`]] as Array<
+          [string, string]
+        >)
+      : []),
   ];
 
   return (

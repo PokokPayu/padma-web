@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import type { FormatVarian } from "@/lib/varian";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import { saringDaftarMateri } from "./materi-tampil";
@@ -17,7 +18,14 @@ export type KlienPassport = {
   // sengaja TIDAK ikut — layar klien tidak pernah memerlukannya, dan yang
   // tidak dikirim tidak bisa bocor.
   alamat: string;
-  faseId: string;
+  // Ketiganya boleh KOSONG, dan kosongnya berarti "belum ditentukan" — bukan
+  // data hilang. Baris klien yang lahir dari pendaftaran mandiri belum punya
+  // fase karena fase datang dari skrining pertama yang tersambung (migration
+  // `fase_klien_boleh_kosong`). `faseId` dibuat `string | null` supaya
+  // kompilator memaksa setiap layar memutuskan apa yang ditampilkannya;
+  // `faseNama`/`faseSanskrit` tetap string karena embed-nya sudah diratakan
+  // ke "" di bawah — yang menandakan kosong adalah `faseId`.
+  faseId: string | null;
   faseNama: string;
   faseSanskrit: string;
 };
@@ -29,7 +37,9 @@ type BarisKlien = {
   email: string;
   no_hp: string;
   alamat: string;
-  phase_id: string;
+  // Nullable sejak migration `fase_klien_boleh_kosong`: klien yang mendaftar
+  // sendiri belum punya fase sampai skrining pertamanya tersambung.
+  phase_id: string | null;
   // Embed many-to-one PostgREST = OBJEK (atau null), bukan array.
   phases: { nama: string; nama_sanskrit: string } | null;
 };
@@ -164,6 +174,14 @@ type BarisPaket = {
 };
 
 export async function ambilPaket(clientId: string): Promise<PaketRingkas[]> {
+  // GERBANG SAKLAR (K11). Dipasang di batas data, bukan di tiap tempat render:
+  // kedua pemanggilnya — beranda Passport dan halaman Bayar klien — adalah
+  // jalur TAMPILAN, dan keduanya sudah punya cabang "klien tanpa paket" yang
+  // benar. Beranda jatuh ke kartu "Perjalanan Anda" (page.tsx), tagihan hanya
+  // berisi sesi lepas. Menggerbang di sini menghemat dua belas suntingan
+  // tampilan dan menutup jalur yang mungkin ditambahkan kemudian.
+  if (!PAKET_TAMPIL) return [];
+
   const supabase = await createServerSupabase();
   const { data } = await supabase
     .from("client_packages")

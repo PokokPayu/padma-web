@@ -8,6 +8,7 @@ import { Lotus } from "@/app/_landing/lotus";
 export function SampulPassport({
   nama,
   padmaId,
+  faseId,
   faseSanskrit,
   faseNama,
   sejak,
@@ -15,6 +16,15 @@ export function SampulPassport({
 }: {
   nama: string;
   padmaId: string;
+  /**
+   * NULL = fase belum ditentukan, dan itu keadaan yang SAH: klien yang
+   * mendaftar sendiri belum punya fase sampai skrining pertamanya tersambung
+   * (migration `fase_klien_boleh_kosong`). `faseId` — bukan kedua string di
+   * bawahnya — yang menjadi penanda, karena keduanya juga bernilai "" ketika
+   * embed `phases` gagal dimuat, dan dua sebab berbeda tidak boleh dibedakan
+   * dengan tanda yang sama.
+   */
+  faseId: string | null;
   faseSanskrit: string;
   faseNama: string;
   sejak: string;
@@ -45,12 +55,20 @@ export function SampulPassport({
         <span>
           PADMA ID <b className="font-mono font-medium text-gold-pale">{padmaId}</b>
         </span>
-        <span>
-          Fase{" "}
-          <b className="font-mono font-medium uppercase text-gold-pale">
-            {faseSanskrit} · {faseNama}
-          </b>
-        </span>
+        {/* Baris fase DIHILANGKAN seluruhnya saat belum ditentukan, bukan
+            diisi "—". Ini sampul paspor, hal pertama yang dilihat klien
+            tentang dirinya sendiri; sebuah medan kosong di sana terbaca
+            sebagai "PADMA kehilangan data saya", padahal yang benar adalah
+            "PADMA belum bertanya". Fasenya terisi sendiri begitu skrining
+            pertamanya tersambung. */}
+        {faseId && (
+          <span>
+            Fase{" "}
+            <b className="font-mono font-medium uppercase text-gold-pale">
+              {faseSanskrit} · {faseNama}
+            </b>
+          </span>
+        )}
         <span>
           Sejak <b className="font-mono font-medium uppercase text-gold-pale">{sejak}</b>
         </span>

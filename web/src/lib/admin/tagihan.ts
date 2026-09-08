@@ -4,6 +4,7 @@ import { labelVarian, type FormatVarian } from "@/lib/varian";
 import type { PayStatus } from "@/lib/passport/turunan";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 import { PER_HAL, hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 /** Nilai saringan yang sah untuk daftar tagihan — dipakai halaman DAN uji. */
 export const SARING_BAYAR = {
@@ -198,19 +199,27 @@ export async function daftarTagihanAdmin(
 
   const item: ItemTagihanAdmin[] = [];
 
-  for (const p of paket ?? []) {
-    item.push({
-      jenis: "paket",
-      id: p.id,
-      namaKlien: p.clients?.nama ?? "—",
-      padmaId: p.clients?.padma_id ?? "—",
-      label: `${p.packages?.nama ?? "Paket"} · ${p.packages?.jumlah_sesi ?? 0} sesi`,
-      // Paket tidak pernah punya rincian transport sendiri: harganya tetap/
-      // pre-paid per paket, bukan per sesi — lihat Ruling 18 di `hitungRekap()`
-      // (lib/owner/rekap.ts) untuk keputusan uang yang sama pada sisi owner.
-      rincianTransport: null,
-      status: p.status_bayar,
-    });
+  // GERBANG SAKLAR (K11, Task 2 — R4): /admin/bayar tidak lagi menampilkan
+  // baris tagihan paket, sejalan dengan klien yang sudah tidak melihatnya
+  // sejak `ambilPaket()` digerbang (Task 1). Kueri `client_packages` di atas
+  // dibiarkan berjalan apa adanya — hanya perakitan ITEM-nya yang dilewati —
+  // supaya bentuk fungsi ini (dan pagar "TIDAK ADA nominal uang" di atas)
+  // tidak berubah bagi pembaca lain berkas ini.
+  if (PAKET_TAMPIL) {
+    for (const p of paket ?? []) {
+      item.push({
+        jenis: "paket",
+        id: p.id,
+        namaKlien: p.clients?.nama ?? "—",
+        padmaId: p.clients?.padma_id ?? "—",
+        label: `${p.packages?.nama ?? "Paket"} · ${p.packages?.jumlah_sesi ?? 0} sesi`,
+        // Paket tidak pernah punya rincian transport sendiri: harganya tetap/
+        // pre-paid per paket, bukan per sesi — lihat Ruling 18 di `hitungRekap()`
+        // (lib/owner/rekap.ts) untuk keputusan uang yang sama pada sisi owner.
+        rincianTransport: null,
+        status: p.status_bayar,
+      });
+    }
   }
 
   for (const s of sesi ?? []) {

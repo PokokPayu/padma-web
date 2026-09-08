@@ -56,6 +56,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
 import { varianBaku } from "../helpers/varian";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 config({ path: [".env.local", ".env"] });
 
@@ -425,12 +426,29 @@ async function main() {
     // Sisi klien dari pagar yang sama: passport memuat PAKETNYA, bukan sesi
     // anggotanya. Dua item, bukan tiga — kalau sesi berpaket ikut terdaftar,
     // klien akan ditagih untuk sesuatu yang paketnya sudah melunasi.
-    catat(
-      "1a2. sesi anggota paket tidak menjadi tagihan terpisah di passport klien",
-      (await barisPassport.count()) === 2 &&
-        (await barisPassport.filter({ hasText: NAMA_PAKET }).count()) === 1,
-      `${await barisPassport.count()} baris tagihan (paket + sesi lepas)`,
-    );
+    //
+    // Saklar K11: `ambilPaket()` memulangkan [] selama PAKET_TAMPIL mati
+    // (src/lib/passport/data.ts), jadi `susunTagihan()` tidak pernah menerima
+    // baris paket sama sekali — bukan cuma "paket tidak dobel dengan sesinya"
+    // (pagar di atas berlaku saat saklar menyala), tapi paket TIDAK ADA di
+    // layar ini. Sesi anggota paket tetap dikecualikan lewat `clientPackageId`
+    // (lihat `susunTagihan()`, src/lib/passport/turunan.ts) terlepas dari
+    // saklar, jadi yang tersisa cuma sesi lepas.
+    if (PAKET_TAMPIL) {
+      catat(
+        "1a2. sesi anggota paket tidak menjadi tagihan terpisah di passport klien",
+        (await barisPassport.count()) === 2 &&
+          (await barisPassport.filter({ hasText: NAMA_PAKET }).count()) === 1,
+        `${await barisPassport.count()} baris tagihan (paket + sesi lepas)`,
+      );
+    } else {
+      catat(
+        "1a2. paket tersembunyi dari passport klien; sesi anggotanya tetap bukan tagihan sendiri (saklar K11)",
+        (await barisPassport.count()) === 1 &&
+          (await barisPassport.filter({ hasText: NAMA_PAKET }).count()) === 0,
+        `${await barisPassport.count()} baris tagihan (harus cuma sesi lepas)`,
+      );
+    }
 
     await halamanKlien
       .getByRole("button", { name: /Saya sudah bayar/i })
@@ -506,16 +524,35 @@ async function main() {
     // sendiri, sementara PAKETNYA memang punya. Keduanya diperiksa bersama —
     // memeriksa ketidakhadiran saja akan hijau juga bila seluruh fixture gagal
     // terbaca.
-    catat(
-      "2c. sesi anggota paket TIDAK punya baris tagihan sendiri (tanpa hantu)",
-      (await kerja.locator(`[data-item="sesi:${idSesiPaket}"]`).count()) === 0 &&
-        (await kerja.locator(`[data-item="paket:${paketKlien.id}"]`).count()) === 1,
-      `baris sesi berpaket: ${await kerja
-        .locator(`[data-item="sesi:${idSesiPaket}"]`)
-        .count()}; baris paketnya: ${await kerja
-        .locator(`[data-item="paket:${paketKlien.id}"]`)
-        .count()}`,
-    );
+    //
+    // Saklar K11 (Task 2 — R4): `daftarTagihanAdmin()` melewati SELURUH
+    // perakitan item "paket" selama PAKET_TAMPIL mati (gerbang di
+    // src/lib/admin/tagihan.ts) — bukan cuma menyaring sesi anggotanya seperti
+    // pagar "tanpa hantu" di atas. Baris sesi hantu tetap wajib nol; baris
+    // paket itu sendiri sekarang JUGA wajib nol, bukan satu.
+    if (PAKET_TAMPIL) {
+      catat(
+        "2c. sesi anggota paket TIDAK punya baris tagihan sendiri (tanpa hantu)",
+        (await kerja.locator(`[data-item="sesi:${idSesiPaket}"]`).count()) === 0 &&
+          (await kerja.locator(`[data-item="paket:${paketKlien.id}"]`).count()) === 1,
+        `baris sesi berpaket: ${await kerja
+          .locator(`[data-item="sesi:${idSesiPaket}"]`)
+          .count()}; baris paketnya: ${await kerja
+          .locator(`[data-item="paket:${paketKlien.id}"]`)
+          .count()}`,
+      );
+    } else {
+      catat(
+        "2c. sesi anggota paket TIDAK punya baris sendiri, dan paketnya sendiri juga tersembunyi (saklar K11)",
+        (await kerja.locator(`[data-item="sesi:${idSesiPaket}"]`).count()) === 0 &&
+          (await kerja.locator(`[data-item="paket:${paketKlien.id}"]`).count()) === 0,
+        `baris sesi berpaket: ${await kerja
+          .locator(`[data-item="sesi:${idSesiPaket}"]`)
+          .count()}; baris paketnya: ${await kerja
+          .locator(`[data-item="paket:${paketKlien.id}"]`)
+          .count()}`,
+      );
+    }
 
     // Badge yang tidak sama dengan daftarnya adalah alarm yang tidak bisa
     // dibersihkan: admin menekan setiap tombol yang ada lalu angkanya tetap

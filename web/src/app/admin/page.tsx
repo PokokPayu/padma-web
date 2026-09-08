@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { hitungAntrean } from "@/lib/admin/antrean";
 import { trenSesiSelesai } from "@/lib/admin/tren";
 import { agendaHariIni, aktivitasTerbaru } from "@/lib/admin/agenda";
@@ -89,7 +90,7 @@ export default async function AdminPage() {
         <StatTile
           label="Klaim pembayaran"
           nilai={String(antrean.klaimMenunggu)}
-          keterangan="Sesi & paket menunggu verifikasi"
+          keterangan={PAKET_TAMPIL ? "Sesi & paket menunggu verifikasi" : "Sesi menunggu verifikasi"}
           href="/admin/bayar"
           menuntut={antrean.klaimMenunggu > 0}
         />

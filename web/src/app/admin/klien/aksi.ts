@@ -32,7 +32,16 @@ import { bersihkanAlamat } from "./status";
  * Berkas `"use server"` hanya boleh mengekspor fungsi async. Konstanta apa pun
  * yang perlu dibagi ke UI wajib tinggal di modul lain.
  */
-type Gagal = { ok: false; pesan: string };
+/**
+ * Identitas baris klien yang sudah ada, dikembalikan saat `buatKlien` gagal
+ * karena bentrok email (K17). Admin berhak melihat SELURUH baris klien lewat
+ * RLS `clients: staf`, jadi meneruskan identitas ini bukan kebocoran —
+ * tanpanya, satu-satunya pilihan admin adalah mencari lewat nama/PADMA ID
+ * (`ambilDaftarKlien`), yang justru tidak berguna sama sekali di sini karena
+ * skenarionya SELALU "admin tidak tahu apa-apa selain email yang bentrok".
+ */
+export type KlienBentrok = { id: string; padmaId: string; nama: string };
+type Gagal = { ok: false; pesan: string; klienBentrok?: KlienBentrok };
 type Dibuat = { ok: true; id: string; padmaId: string };
 type Diperbarui = { ok: true };
 type Diterbitkan = { ok: true; token: string; nama: string; email: string };
@@ -104,8 +113,37 @@ export async function buatKlien(formData: FormData): Promise<Dibuat | Gagal> {
       // Dua sumber bentrok yang sangat berbeda artinya: alamat surel yang
       // sudah terpakai (kesalahan manusia — beri kalimat) versus nomor PADMA
       // yang direbut admin lain pada detik yang sama (coba nomor berikutnya).
+      //
+      // Sejak pendaftaran mandiri (K1) hidup, penyebab bentrok email yang
+      // PALING MUNGKIN berubah: bukan lagi admin mendaftarkan klien yang sama
+      // dua kali, melainkan orangnya sudah membuat akun sendiri lewat
+      // `/daftar` dengan email itu. Tidak ada penggabungan otomatis (K17) —
+      // admin melihat datanya lalu memutuskan sendiri.
+      //
+      // Kalimatnya TIDAK menyuruh "cari di daftar klien": pencarian daftar
+      // klien (`ambilDaftarKlien`) hanya mencocokkan nama & PADMA ID, tidak
+      // pernah email — dan email bentrok inilah SATU-SATUNYA data yang
+      // dipegang admin di sini. Sebagai gantinya identitas baris yang sudah
+      // ada diambil di sini (RLS `clients: staf` sudah mengizinkan admin
+      // melihat baris siapa pun, jadi ini bukan kebocoran) dan diteruskan
+      // lewat `klienBentrok` supaya pemanggil UI bisa menautkan LANGSUNG ke
+      // halaman detailnya — bukan menyuruh admin mencari sesuatu yang tidak
+      // bisa ditemukan lewat pencarian.
       if (error.message.includes("email")) {
-        return { ok: false, pesan: "Alamat itu sudah dipakai klien lain." };
+        const { data: existing } = await supabase
+          .from("clients")
+          .select("id, padma_id, nama")
+          .eq("email", alamatSurel)
+          .maybeSingle<{ id: string; padma_id: string; nama: string }>();
+
+        return {
+          ok: false,
+          pesan:
+            "Alamat itu sudah terdaftar — kemungkinan klien ini sudah membuat akun sendiri.",
+          klienBentrok: existing
+            ? { id: existing.id, padmaId: existing.padma_id, nama: existing.nama }
+            : undefined,
+        };
       }
       continue;
     }
@@ -130,7 +168,14 @@ export async function perbaruiKlien(
   const alamat = bersihkanAlamat(String(formData.get("alamat") ?? ""));
 
   if (nama.length < 2) return { ok: false, pesan: "Nama terlalu pendek." };
-  if (!faseId) return { ok: false, pesan: "Fase wajib dipilih." };
+  // Fase BOLEH kosong di sini — dan hanya di sini, bukan di `buatKlien`.
+  // Klien yang mendaftar sendiri tiba dengan `phase_id` NULL karena fasenya
+  // datang dari skrining, bukan dari pendaftaran (migration
+  // `fase_klien_boleh_kosong`). Menolak simpanan hanya karena medan itu kosong
+  // akan memaksa admin MENEBAK fase seseorang supaya bisa membetulkan
+  // alamatnya — tepat kesalahan yang penjaga ini seharusnya cegah.
+  // "" menjadi NULL, bukan string kosong: `phase_id` menunjuk `phases(id)`.
+  const faseBaru = faseId === "" ? null : faseId;
 
   const supabase = await createServerSupabase();
 
@@ -147,7 +192,7 @@ export async function perbaruiKlien(
     .update({
       nama,
       no_hp: noHp,
-      phase_id: faseId,
+      phase_id: faseBaru,
       alamat,
       alamat_lat: koordinat?.lat ?? null,
       alamat_lon: koordinat?.lon ?? null,

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import {
   aktifkanLayanan,
   aktifkanPaket,
@@ -245,19 +246,30 @@ export function AksiLayanan({
       >
         {aktif ? "Nonaktifkan" : "Aktifkan"}
       </button>
-      <button
-        type="button"
-        onClick={() => setTambahPaket((t) => !t)}
-        className={KELAS_TOMBOL_KECIL}
-      >
-        + Paket
-      </button>
-      {tambahPaket && (
-        <FormPaketBaru
-          serviceId={id}
-          namaLayanan={nama}
-          selesai={() => setTambahPaket(false)}
-        />
+      {/* GERBANG SAKLAR (K11, ditemukan Task 3 lewat test render
+          /admin/layanan): tidak ada di brief awal berkas ini, tapi tombol
+          ini membuka jalan MENULIS paket baru — kontrol yang lebih tajam
+          dari sekadar menampilkan yang sudah ada, dan tetap sepenuhnya
+          berfungsi terlepas dari gerbang data Task 1/2 karena `simpanPaket`
+          (server action, aksi.ts) tidak disentuh saklar ini. Dicabut di
+          sini; `simpanPaket` sendiri TIDAK diubah. */}
+      {PAKET_TAMPIL && (
+        <>
+          <button
+            type="button"
+            onClick={() => setTambahPaket((t) => !t)}
+            className={KELAS_TOMBOL_KECIL}
+          >
+            + Paket
+          </button>
+          {tambahPaket && (
+            <FormPaketBaru
+              serviceId={id}
+              namaLayanan={nama}
+              selesai={() => setTambahPaket(false)}
+            />
+          )}
+        </>
       )}
       {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
     </span>
