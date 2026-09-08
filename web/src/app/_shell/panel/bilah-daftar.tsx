@@ -75,7 +75,7 @@ export function BilahDaftar({
               <Link
                 key={`${k.nama}:${p.nilai}`}
                 href={href}
-                aria-pressed={menyala}
+                aria-current={menyala ? "true" : undefined}
                 className={`rounded-full border px-3 py-1.5 text-[12px] font-bold ${
                   menyala
                     ? "border-panel-ink bg-panel-ink text-panel-surface"
