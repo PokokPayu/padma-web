@@ -212,6 +212,14 @@ grant execute on function public.batalkan_sesi(uuid, text, boolean) to authentic
 -- langsung dari `app_settings` di sini akan mengulang jebakan C1-a: pembacaan
 -- dengan hak pemanggil memulangkan nol baris karena policy, dan pagarnya DIAM
 -- alih-alih menolak.
+--
+-- Barisnya DIKUNCI (`for update`) sebelum `jadwal_ulang_terpakai` dibaca. Dua
+-- panggilan bersamaan di jenjang 2 atas sesi yang sama, tanpa kunci, sama-sama
+-- membaca "jatah belum terpakai" dan sama-sama lolos — yang kedua menimpa
+-- tanggal/jam yang pertama, dan kedua panggilan menulis `jejak_jadwal` dengan
+-- `dari_tanggal`/`dari_jam` identik seolah dua perpindahan mandiri terjadi.
+-- `for update` membuat panggilan kedua MENUNGGU sampai yang pertama commit,
+-- lalu membaca `jadwal_ulang_terpakai` yang sudah terbaru.
 create or replace function public.jadwal_ulang_sesi(
   sesi_id uuid,
   tanggal_baru date,
@@ -230,7 +238,10 @@ declare
   pakai_jatah boolean := false;
   daftar_jam text;
 begin
-  select * into s from public.sessions where id = sesi_id;
+  -- `for update`: lihat komentar panjang di atas fungsi ini soal balapan
+  -- jenjang 2. Kunci dipegang sampai transaksi ini selesai, jadi panggilan
+  -- bersamaan atas sesi yang sama menunggu di sini.
+  select * into s from public.sessions where id = sesi_id for update;
   if not found then
     return null;
   end if;
@@ -253,6 +264,9 @@ begin
   end if;
 
   if jenjang = 2 then
+    -- `s.jadwal_ulang_terpakai` dibaca dari baris yang SUDAH terkunci di atas:
+    -- panggilan bersamaan yang lolos kunci belakangan melihat nilai yang
+    -- ditulis panggilan pertama, bukan nilai basi dari sebelum keduanya mulai.
     if s.jadwal_ulang_terpakai then
       raise exception 'jatah jadwal ulang gratis untuk pemesanan ini sudah terpakai'
         using errcode = '23514';
@@ -335,6 +349,17 @@ grant execute on function public.jadwal_ulang_sesi(uuid, date, time) to authenti
 -- `varian` sengaja TIDAK diminta pemanggil: ia diwarisi dari sesi asal bila
 -- ada, karena hak menjanjikan "satu sesi untuk layanan yang sama", dan varian
 -- yang berbeda adalah harga yang berbeda.
+--
+-- Barisnya DIKUNCI (`for update`) sebelum diperiksa dan sebelum sesi baru
+-- disisipkan. Tanpa kunci ini, dua panggilan bersamaan atas `hak_id` yang sama
+-- sama-sama membaca `dipakai_sesi_id is null`, sama-sama lolos, dan sama-sama
+-- menyisipkan sesi `lunas` — melahirkan dua sesi berbayar dari satu hak, salah
+-- satunya yatim. Indeks unik parsial `hak_sesi_dipakai_sekali` TIDAK mencegah
+-- ini: ia unik atas NILAI `dipakai_sesi_id`, jadi yang dijaminnya adalah satu
+-- SESI tidak bisa diklaim dua hak — bukan satu HAK tidak bisa dipakai dua
+-- kali. `for update` membuat panggilan kedua MENUNGGU sampai yang pertama
+-- commit, lalu memeriksa ulang `dipakai_sesi_id` dengan nilai yang sudah
+-- terbaru.
 create or replace function public.tukar_hak_sesi(
   hak_id uuid,
   tanggal_baru date,
@@ -354,7 +379,10 @@ declare
   daftar_jam text;
   sesi_baru uuid;
 begin
-  select * into h from public.hak_sesi where id = hak_id;
+  -- `for update` MENGUNCI baris hak sampai transaksi ini selesai. Panggilan
+  -- bersamaan atas `hak_id` yang sama akan menunggu di sini, bukan membaca
+  -- `dipakai_sesi_id` yang sama-sama masih null lalu sama-sama lolos.
+  select * into h from public.hak_sesi where id = hak_id for update;
   if not found then
     return null;
   end if;
@@ -368,6 +396,10 @@ begin
     raise exception 'hak ini bukan milik Anda' using errcode = '42501';
   end if;
 
+  -- Diperiksa SESUDAH kunci didapat, dan SEBELUM sesi baru disisipkan — supaya
+  -- panggilan kedua yang menunggu di atas melihat nilai yang sudah terbaru
+  -- (ditulis oleh panggilan pertama yang sudah commit) dan berhenti di sini,
+  -- bukan sesudah telanjur melahirkan baris `sessions` yatim.
   if h.dipakai_sesi_id is not null then
     return null;
   end if;
@@ -405,9 +437,10 @@ begin
    where s.id = h.sesi_asal_id;
 
   -- Hak yang diterbitkan tanpa sesi asal (mis. staf menerbitkannya langsung)
-  -- tidak punya varian untuk diwarisi. Jatuh ke varian BAKU layanan — pola
-  -- backfill yang SAMA dipakai migration `varian_wajib` dan helper uji
-  -- `varianBaku()` (`order by urutan, created_at, id`, hanya yang `aktif`).
+  -- tidak punya varian untuk diwarisi. Jatuh ke varian BAKU layanan — bentuk
+  -- query backfill yang sama dipakai migration `varian_wajib`, ditambah
+  -- filter `aktif` seperti helper uji `varianBaku()` (`varian_wajib.sql`
+  -- sendiri TIDAK memfilter `aktif`; hanya helper uji itu yang memfilternya).
   if varian is null then
     select v.id into varian
       from public.service_variants v
@@ -426,10 +459,20 @@ begin
   )
   returning id into sesi_baru;
 
-  -- Indeks unik parsial `hak_sesi_dipakai_sekali` menjamin dua penukaran
-  -- serentak tidak bisa melahirkan dua sesi dari satu hak: yang kedua gagal di
-  -- indeks, dan seluruh transaksinya ikut batal bersama sesinya.
-  update public.hak_sesi set dipakai_sesi_id = sesi_baru where id = hak_id;
+  -- Pagar kedua: `and dipakai_sesi_id is null` mengulang pemeriksaan yang
+  -- sudah dilakukan sesudah `for update` di atas. Dalam alur normal klausa ini
+  -- tidak pernah gagal — kuncinya sudah menutup celahnya — tapi bila ada jalur
+  -- lain yang suatu hari menulis `dipakai_sesi_id` tanpa mengunci baris ini
+  -- lebih dulu, `if not found` di bawah menolaknya dengan galat, bukan diam
+  -- menimpa penukaran yang sudah ada.
+  update public.hak_sesi
+     set dipakai_sesi_id = sesi_baru
+   where id = hak_id
+     and dipakai_sesi_id is null;
+
+  if not found then
+    raise exception 'hak ini sudah dipakai oleh penukaran lain' using errcode = '23514';
+  end if;
 
   insert into public.jejak_jadwal (
     sesi_id, tindakan, jenjang, ke_tanggal, ke_jam, aktor_id, peran_aktor

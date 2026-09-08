@@ -32,11 +32,39 @@ let sesiAdmin: SupabaseClient;
 const TGL_JAUH = "2027-09-20"; // jenjang 1
 const TGL_DEKAT = "2027-09-21"; // dipakai dengan jam yang digeser
 
+/**
+ * Satu jam layanan sah (seed: 08–11, 13–16) yang jaraknya dari SEKARANG jatuh
+ * ketat di dalam jendela jenjang 2 (2–24 jam) — dipakai uji balapan
+ * `jadwal_ulang_sesi` supaya sasaran perpindahannya sendiri tidak melompat ke
+ * jenjang 1 begitu baris sudah dipindah oleh panggilan pertama.
+ */
+function slotDekatJenjang2(): { tanggal: string; jam: string } {
+  const JAM_LAYANAN = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
+  const sekarang = Date.now();
+  for (let hariOffset = 0; hariOffset <= 2; hariOffset++) {
+    const wib = new Date(sekarang + 7 * 3_600_000 + hariOffset * 24 * 3_600_000);
+    const tanggal = wib.toISOString().slice(0, 10);
+    for (const jam of JAM_LAYANAN) {
+      const sasaran = new Date(`${tanggal}T${jam}:00+07:00`).getTime();
+      const jarakJam = (sasaran - sekarang) / 3_600_000;
+      if (jarakJam > 2.5 && jarakJam < 23.5) {
+        return { tanggal, jam };
+      }
+    }
+  }
+  throw new Error("tidak menemukan slot jam layanan di jendela jenjang 2");
+}
+
+// Dihitung SEKALI saat berkas dimuat, bukan di dalam tiap `it`: `bersihkan()`
+// perlu tahu tanggalnya lebih dulu supaya baris peninggalan dari eksekusi
+// SEBELUMNYA (mis. uji balapan yang berhasil lalu menaruh sesi tepat di slot
+// ini) ikut tersapu. Dua panggilan RPC di uji balapan memakai KONSTANTA yang
+// sama ini, bukan memanggil `slotDekatJenjang2()` lagi masing-masing.
+const SLOT_BALAPAN = slotDekatJenjang2();
+
 async function bersihkan() {
-  const { data } = await admin
-    .from("sessions")
-    .select("id")
-    .in("tanggal", [TGL_JAUH, TGL_DEKAT, "2027-09-25", "2027-09-26"]);
+  const tanggalTersapu = [TGL_JAUH, TGL_DEKAT, "2027-09-25", "2027-09-26", SLOT_BALAPAN.tanggal];
+  const { data } = await admin.from("sessions").select("id").in("tanggal", tanggalTersapu);
   const ids = (data ?? []).map((s) => s.id as string);
   if (ids.length > 0) {
     // Jejak DULU: tabelnya tanpa foreign key, jadi tidak ada cascade yang
@@ -45,7 +73,7 @@ async function bersihkan() {
     await admin.from("jejak_status_bayar").delete().in("sesi_id", ids);
   }
   await admin.from("hak_sesi").delete().in("client_id", [ANANDA, RINA]);
-  await admin.from("sessions").delete().in("tanggal", [TGL_JAUH, TGL_DEKAT, "2027-09-25", "2027-09-26"]);
+  await admin.from("sessions").delete().in("tanggal", tanggalTersapu);
 }
 
 /** Satu sesi terjadwal & lunas milik klien yang disebut. */
@@ -560,5 +588,87 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
       mitra: MITRA,
     });
     expect(data === null || error !== null).toBe(true);
+  });
+});
+
+describe("balapan — dua panggilan bersamaan tidak boleh melahirkan dua akibat", () => {
+  it("10 tukar_hak_sesi SERENTAK atas SATU hak → tepat satu sesi lahir", async () => {
+    const { data: h, error: eh } = await admin
+      .from("hak_sesi")
+      .insert({ client_id: ANANDA, service_id: SVC, kedaluwarsa: "2027-12-31" })
+      .select("id")
+      .single<{ id: string }>();
+    if (eh) throw eh;
+    const hak = h.id;
+
+    // Sepuluh percobaan, jam berbeda-beda supaya kegagalan bidan-bentrok tidak
+    // ikut campur — satu-satunya yang boleh menggagalkan sembilan lainnya
+    // adalah hak yang sudah terpakai.
+    const jamPilihan = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "08:00", "09:00"];
+    await Promise.all(
+      jamPilihan.map((jam, i) =>
+        sesiAdmin.rpc("tukar_hak_sesi", {
+          hak_id: hak,
+          tanggal_baru: i < 8 ? "2027-09-25" : "2027-09-26",
+          jam_baru: jam,
+          mitra: MITRA,
+        }),
+      ),
+    );
+
+    // Basis data yang membuktikan, bukan nilai kembalian RPC: hitung sesi yang
+    // benar-benar lahir dari klien ini di tanggal-tanggal percobaan.
+    const { data: sesiLahir } = await admin
+      .from("sessions")
+      .select("id")
+      .eq("client_id", ANANDA)
+      .in("tanggal", ["2027-09-25", "2027-09-26"]);
+    expect(sesiLahir).toHaveLength(1);
+
+    const { data: hakSesudah } = await admin
+      .from("hak_sesi")
+      .select("dipakai_sesi_id")
+      .eq("id", hak)
+      .single();
+    expect(hakSesudah!.dipakai_sesi_id).toBe(sesiLahir![0].id);
+  });
+
+  it("2 jadwal_ulang_sesi SERENTAK atas satu sesi jenjang 2 → tepat satu berhasil", async () => {
+    const { tanggal, jam } = jamRelatif(6);
+    const id = await buatSesi(tanggal, jam);
+
+    // Sasaran perpindahan sengaja dekat (jendela 2–24 jam), BUKAN tanggal jauh
+    // tetap ("2027-09-25" dst): jika sasarannya jauh, panggilan kedua yang
+    // menunggu kunci lalu membaca baris yang SUDAH dipindah pertama akan
+    // menghitung jenjangnya sendiri sebagai 1 (≥24 jam dari sekarang) dan lolos
+    // sebagai perpindahan gratis kedua — bukan balapan yang gagal ditangkap,
+    // melainkan aturan jenjang yang memang berbeda untuk sesi yang sudah jauh.
+    // Sasaran yang tetap berada di jendela jenjang 2 menjaga uji ini benar-benar
+    // menguji jatah, bukan menguji sesuatu yang lain.
+    const hasil = await Promise.all([
+      sesiKlien.rpc("jadwal_ulang_sesi", {
+        sesi_id: id,
+        tanggal_baru: SLOT_BALAPAN.tanggal,
+        jam_baru: SLOT_BALAPAN.jam,
+      }),
+      sesiKlien.rpc("jadwal_ulang_sesi", {
+        sesi_id: id,
+        tanggal_baru: SLOT_BALAPAN.tanggal,
+        jam_baru: SLOT_BALAPAN.jam,
+      }),
+    ]);
+
+    const berhasil = hasil.filter((r) => r.error === null && r.data !== null);
+    expect(berhasil).toHaveLength(1);
+
+    const { data: s } = await admin
+      .from("sessions")
+      .select("jadwal_ulang_terpakai")
+      .eq("id", id)
+      .single();
+    expect(s!.jadwal_ulang_terpakai).toBe(true);
+
+    const { data: jejak } = await admin.from("jejak_jadwal").select("id").eq("sesi_id", id);
+    expect(jejak).toHaveLength(1);
   });
 });
