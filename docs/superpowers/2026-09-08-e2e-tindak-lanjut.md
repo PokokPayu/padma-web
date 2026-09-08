@@ -83,6 +83,9 @@ menyentuh R2 produksi:
 ```bash
 # prasyarat: kredensial R2 produksi lengkap di .env.local, server hidup di
 # localhost:3000, npx supabase start, npm run seed:users
+# JANGAN JALANKAN TANPA PERSETUJUAN EKSPLISIT PEMILIK REPO — perintah di bawah
+# ini MENULIS (mengunggah lalu menghapus objek sungguhan) ke bucket Cloudflare
+# R2 PRODUKSI milik klien. Ini bukan skrip uji yang aman disalin-tempel.
 cd web
 npm run test:e2e:video
 ```
@@ -99,35 +102,86 @@ menjalankannya ada di pemilik repo, bukan di implementer rencana ini.
 Skrip E2E tidak ikut `npm test` — ia butuh server hidup. Akibatnya sapuan panel bisa mengganti label
 tombol jadi tautan (atau menghapusnya) dan seluruh suite unit tetap hijau selama berminggu-minggu,
 sampai seseorang kebetulan menjalankan E2E. Pagar ini menutup sebagian kelas itu dengan biaya
-nyaris nol: ia mengekstrak setiap literal string dari pola
-`getByRole("button"|"link", { name: "…" })` di `tests/e2e/*.e2e.ts`, dan memeriksa bahwa literal itu
-masih ada di suatu tempat di `src/app/` (pencocokan substring atas gabungan seluruh isi berkas
-`.ts`/`.tsx`, bukan parsing AST).
+nyaris nol — tapi cakupannya sempit, dan harus dikatakan tepat, bukan "setiap label": ia
+mengekstrak literal string bertanda kutip ganda pada argumen `name:` dari pola TEPAT
+`getByRole("button"|"link", { name: "…" })` di `tests/e2e/*.e2e.ts` — **34 literal unik dari 64
+pemanggilan `getByRole` total** (diukur 2026-09-08) — dan memeriksa bahwa tiap literal itu masih
+ada di suatu tempat di `src/app/` (pencocokan substring atas gabungan seluruh isi berkas
+`.ts`/`.tsx` sesudah komentar dilucuti — lihat "Diperkuat" di bawah — bukan parsing AST).
+`getByLabel` dan `getByText` **tidak dipindai sama sekali**: dua selektor rencana ini sendiri lolos
+dari pagar ini justru karena memakai keduanya —
+`getByLabel("Judul materi")` (`materi-pdf.e2e.ts:271`) dan
+`getByText("Video tersimpan.")` (`materi-video.e2e.ts:366`).
 
 ### Apa yang TIDAK dijaga — batasnya, diukur bukan diperkirakan
 
 Regex ini dijalankan atas keadaan `main` sebelum rencana ini: **38 label diperiksa, 4 tidak
-ditemukan di `src/app`**. Dari ketiga skrip yang benar-benar patah saat itu, pagar ini hanya akan
-menangkap **satu**:
+ditemukan di `src/app`**. Dari ketiga skrip yang benar-benar patah saat itu, pagar ini (bentuk
+aslinya, sebelum "Diperkuat" di bawah) hanya menangkap **satu**:
 
 | Kepatahan | Tertangkap pagar ini? | Sebab |
 |---|---|---|
 | `admin-operasional`: `+ Jadwalkan sesi`, `Tandai selesai` | **ya** | labelnya lenyap sama sekali dari `src/` |
 | `materi-pdf`: `Materi baru` | **tidak** | `src/` memuat `+ Materi baru`; pencocokan substring lolos |
+| `materi-pdf`: `Kelola isi` | **tidak** | bertahan lewat COPY BASI (bukan komentar) — teks pengguna di `form-materi.tsx:111,121` masih menyuruh admin membuka tombol yang sapuan sudah hapus, plus dua pesan galat sungguhan di `aksi.ts:314,320` |
+| `materi-pdf`: `Kelola penugasan` | **tidak** (pagar asli) / **ya** (sesudah "Diperkuat" di bawah) | bertahan lewat KOMENTAR — dokblok `AksiMateri` (`form-materi.tsx:258`) mengutip label itu verbatim untuk menjelaskan kenapa tombolnya dihapus |
 | `admin-pelengkap`: `Nonaktifkan` | **tidak** | labelnya utuh, ia hanya PINDAH halaman |
 
-Jadi ini **pagar ejaan** yang menangkap label yang **lenyap total** dari sumber, bukan label yang
-berganti bentuk (mis. tombol jadi tautan dengan teks sedikit berbeda) atau berpindah tempat
-(mis. tombol yang sama tetap ada tapi kini di halaman lain). **Satu dari tiga kelas kepatahan nyata
-di proyek ini.** Tetap lebih baik daripada nol — kelas "label dihapus total" itu nyata dan murah
-dijaga dengan cara ini — tetapi jangan membaca bagian ini seolah pagar ini menutup seluruh kelas
-kepatahan E2E. Pagar alur yang sesungguhnya menuntut E2E berjalan sungguhan (di CI dengan server
-dan basis datanya sendiri, atau manual seperti runbook ini), bukan analisis statis atas teks
-sumber.
+Jadi ini **pagar ejaan** yang (pada bentuk aslinya) hanya menangkap label yang **lenyap total** dari
+sumber. Tiga mekanisme berbeda membuatnya lolos padahal tombolnya sungguh hilang dari UI: label
+bertahan sebagai SUBSTRING bentuk lain (`Materi baru` di dalam `+ Materi baru`), label PINDAH
+HALAMAN tanpa berubah nama (`Nonaktifkan`), dan label bertahan di TEKS BASI atau KOMENTAR yang
+mengutipnya verbatim (`Kelola isi`, `Kelola penugasan`). Yang terakhir ini layak satu catatan
+sendiri: copy basi di `form-materi.tsx:111,121` bukan cuma cacat UX yang membingungkan admin klinik
+(menyuruhnya membuka tombol yang sudah tidak ada) — ia AKTIF membutakan pagar ini, karena substring
+"Kelola isi" itu membuat pagar mengira labelnya "masih ada" padahal tombolnya sudah tidak ada di UI
+mana pun.
+
+**Satu dari tiga kelas kepatahan nyata di proyek ini** tertangkap pagar dasar. Tetap lebih baik
+daripada nol — kelas "label dihapus total" itu nyata dan murah dijaga dengan cara ini — tetapi
+jangan membaca bagian ini seolah pagar ini menutup seluruh kelas kepatahan E2E. Pagar alur yang
+sesungguhnya menuntut E2E berjalan sungguhan (di CI dengan server dan basis datanya sendiri, atau
+manual seperti runbook ini), bukan analisis statis atas teks sumber.
 
 Konkretnya: kepatahan `admin-pelengkap.e2e.ts` (`Nonaktifkan` pindah dari daftar ke halaman detail)
 **tidak akan tertangkap ulang** oleh pagar ini seandainya ia patah lagi dengan cara yang sama —
 labelnya tetap ada di `src/app/`, hanya lokasinya yang berubah, dan pagar ini buta terhadap lokasi.
+
+### Diperkuat: pelucutan komentar sebelum pencocokan
+
+Mekanisme KOMENTAR di atas (`Kelola penugasan`) sekarang ditutup: `SUMBER_APP` melucuti komentar
+baris (`//`) DAN komentar blok gaya JSDoc dari tiap berkas sebelum digabung, jadi label yang cuma
+disebut ulang di komentar tidak lagi dianggap "masih ada" (lihat `lucutiKomentar` di
+`web/tests/e2e-selektor.test.ts`, dan kasus ujinya di describe `lucutiKomentar — bergigi`).
+Tinjauan yang meminta perbaikan ini awalnya menyarankan regex `//`-saja; DIUKUR dan ternyata TIDAK
+cukup — dokblok `AksiMateri` yang menyembunyikan `Kelola penugasan` memakai gaya blok `/** … */`,
+bukan `//`, jadi regex `//`-saja tidak menyentuhnya sama sekali. Kedua gaya komentar dilucuti di
+sini.
+
+**Diukur, bukan diperkirakan** (tujuh label historis di atas, dicocokkan langsung ke isi
+`src/app/` sungguhan, 2026-09-08): sebelum pelucutan komentar, **2 dari 7** label historis itu
+dianggap hilang (kedua label `admin-operasional`, yang memang lenyap total). Sesudah pelucutan,
+**3 dari 7** — `Kelola penugasan` berbalik dari "ditemukan" menjadi "tidak ditemukan", persis
+klaim di atas. `Materi baru` dan `Kelola isi` TETAP ditemukan sesudah pelucutan (keduanya bertahan
+lewat teks NYATA, bukan komentar, sehingga pelucutan komentar tidak menyentuhnya).
+`Aktifkan`/`Nonaktifkan` juga tetap ditemukan (label itu real di halaman detail; mekanismenya
+PINDAH HALAMAN, bukan komentar, dan pelucutan komentar tidak dirancang untuk itu).
+
+**Ini TIDAK mengubah klaim "satu dari tiga skrip"** di atas. Representatif tiap skrip yang dipakai
+untuk klaim itu tidak tersentuh pelucutan komentar: `materi-pdf` tetap luput lewat substring
+`Materi baru`, dan `admin-pelengkap` tetap luput lewat `Nonaktifkan` yang pindah halaman. Yang
+berubah hanya satu sub-mekanisme yang sebelumnya tidak disebut sama sekali di dokumen ini
+(`Kelola penugasan`), bukan hasil akhir tingkat-skrip — angka itu SENGAJA tidak dinaikkan di sini
+meski kelihatannya "pagar diperkuat", karena hasil sungguhannya memang tidak naik.
+
+Pada korpus E2E SAAT INI (sesudah rencana ini menulis ulang keempat skrip), `Kelola isi` dan
+`Kelola penugasan` sudah tidak lagi dicari sebagai `name:` `getByRole` — Tugas 1 & 2 menggantinya
+dengan navigasi ke halaman detail. Jadi pelucutan komentar tidak mengubah hasil pagar HARI INI:
+baik sebelum maupun sesudah, `npx vitest run tests/e2e-selektor.test.ts` sama-sama 0 label hilang
+di luar dua pengecualian `DIKECUALIKAN` (8/8 pemeriksaan lolos). Nilai perbaikan ini untuk MASA
+DEPAN — proyek ini berpola komentar padat yang mengutip label yang dihapus verbatim (lihat gaya
+dokblok `AksiMateri`), dan mekanisme luput jenis ini kemungkinan akan makin sering terjadi seiring
+kebiasaan itu, bukan makin jarang.
 
 ### `DIKECUALIKAN` — dua false-positive yang diketahui, bukan diperbaiki
 
