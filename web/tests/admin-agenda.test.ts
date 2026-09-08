@@ -37,6 +37,8 @@ const MITRA = "33333333-3333-3333-3333-333333333301";
 const SESI = {
   hariIni: "66666666-6666-6666-6666-6666666681f8",
   batalHariIni: "66666666-6666-6666-6666-6666666682f8",
+  // Pembatalan oleh KLIEN — nilai enum kedua yang berarti "batal" (C3-a).
+  batalKlienHariIni: "66666666-6666-6666-6666-6666666684f8",
   besok: "66666666-6666-6666-6666-6666666683f8",
 };
 const KODE_SKRINING = "PDM-UJI-AGENDA-0008";
@@ -83,6 +85,12 @@ beforeAll(async () => {
   await admin.from("sessions").insert([
     { ...dasarSesi, id: SESI.hariIni, tanggal: HARI_INI, status: "terjadwal" },
     { ...dasarSesi, id: SESI.batalHariIni, tanggal: HARI_INI, status: "dibatalkan_padma" },
+    {
+      ...dasarSesi,
+      id: SESI.batalKlienHariIni,
+      tanggal: HARI_INI,
+      status: "dibatalkan_klien",
+    },
     { ...dasarSesi, id: SESI.besok, tanggal: "2027-12-24", status: "terjadwal" },
   ]);
   // Dipakai SEKALIGUS sebagai skrining yang menopang PERMINTAAN_UJI di bawah
@@ -134,6 +142,15 @@ describe("agendaHariIni", () => {
   it("sesi BATAL tidak muncul", async () => {
     const agenda = await agendaHariIni(HARI_INI);
     expect(agenda.some((s) => s.id === SESI.batalHariIni)).toBe(false);
+  });
+
+  it("sesi yang dibatalkan KLIEN juga tidak muncul", async () => {
+    // C3-a menambah nilai enum KEDUA yang berarti "batal". Saringan yang
+    // hanya menyebut `dibatalkan_padma` membiarkan separuh pembatalan lolos ke
+    // agenda — dan bidan berangkat ke rumah klien untuk kunjungan yang sudah
+    // dibatalkan. Kerugian nyata, tanpa satu pun galat.
+    const agenda = await agendaHariIni(HARI_INI);
+    expect(agenda.some((s) => s.id === SESI.batalKlienHariIni)).toBe(false);
   });
 
   it("sesi hari lain tidak muncul", async () => {

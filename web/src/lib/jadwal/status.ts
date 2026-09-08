@@ -214,15 +214,54 @@ export function bolehPindahSesi(dari: StatusSesi, ke: StatusSesi): boolean {
 }
 
 /**
- * Satu-satunya keadaan sesi yang berarti "tidak jadi terjadi karena PADMA".
+ * Keadaan sesi yang berarti "tidak jadi terjadi" — HIMPUNAN, bukan satu nilai.
  *
- * Dipakai query yang selama ini menulis `.neq("status", "batal")` — mengecualikan
- * sesi yang dibatalkan dari agenda, tagihan, dan hitungan antrean. Sengaja TIDAK
- * ikut mengecualikan `tidak_hadir`: apakah sesi yang kliennya tidak hadir tetap
- * ditagih adalah keputusan C3 yang belum diambil, dan mengubah perilakunya
- * diam-diam di sini akan mendahului keputusan itu.
+ * ===== KENAPA INI BERUBAH DARI SATU NILAI MENJADI PETA =====
+ * Sampai C3-a berkas ini mengekspor `SESI_DIBATALKAN = "dibatalkan_padma"`,
+ * satu literal yang dipakai LIMA query untuk berarti "kecualikan sesi yang
+ * batal". Begitu `dibatalkan_klien` lahir, kelimanya diam-diam berhenti benar:
+ * separuh pembatalan dianggap sesi hidup. Bentuk kegagalannya bukan galat —
+ * bidan berangkat ke rumah klien untuk kunjungan yang sudah dibatalkan, dan
+ * klien yang dijanjikan refund tetap melihat tagihannya di Passport.
+ *
+ * Karena itu sumbernya kini `Record<StatusSesi, boolean>` yang MENYELURUH:
+ * anggota enum berikutnya tidak bisa ikut terlewat diam-diam, karena
+ * TypeScript menolak build sampai seseorang menuliskan `true` atau `false`
+ * untuknya. Pola yang sama sudah dipakai `LABEL_SESI` dan `PERPINDAHAN_SESI`
+ * di berkas ini; konstanta lama adalah satu-satunya lubangnya.
+ *
+ * `tidak_hadir` sengaja `false`: apakah sesi yang kliennya tidak hadir tetap
+ * ditagih adalah keputusan C3 yang belum diambil, dan menaikkannya menjadi
+ * `true` di sini akan mendahului keputusan itu.
  */
-export const SESI_DIBATALKAN = "dibatalkan_padma" satisfies StatusSesi;
+const SESI_TIDAK_TERJADI: Record<StatusSesi, boolean> = {
+  terjadwal: false,
+  berjalan: false,
+  selesai: false,
+  tidak_hadir: false,
+  dibatalkan_padma: true,
+  dibatalkan_klien: true,
+};
+
+/** Daftar status yang berarti sesi itu batal. Diturunkan, tidak ditulis dua kali. */
+export const SESI_BATAL: readonly StatusSesi[] = STATUS_SESI.filter(
+  (s) => SESI_TIDAK_TERJADI[s],
+);
+
+/** Perbandingan `===` yang lama diganti KEANGGOTAAN lewat fungsi ini. */
+export function sesiBatal(status: StatusSesi): boolean {
+  return SESI_TIDAK_TERJADI[status];
+}
+
+/**
+ * Bentuk daftar yang diterima operator `in` PostgREST: `(a,b)`.
+ *
+ * Dipakai sebagai `.not("status", "in", FILTER_SESI_BATAL)` — pengganti
+ * `.neq("status", ...)` yang hanya bisa menyebut SATU nilai. Dirangkai di sini,
+ * bukan di lima pemanggil, supaya penambahan anggota himpunan tidak menuntut
+ * lima suntingan yang salah satunya pasti terlupa.
+ */
+export const FILTER_SESI_BATAL = `(${SESI_BATAL.join(",")})`;
 
 /** Keadaan "sedang dicarikan bidan" — dipakai server action admin (spec J7). */
 export const PERMINTAAN_DICARIKAN = "mencari_mitra" satisfies StatusPermintaan;

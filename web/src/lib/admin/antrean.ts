@@ -2,7 +2,7 @@ import { cache } from "react";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ambilSesiMenungguTarif } from "@/lib/owner/data";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
-import { SESI_DIBATALKAN } from "@/lib/jadwal/status";
+import { FILTER_SESI_BATAL } from "@/lib/jadwal/status";
 import { STATUS_ANTRE } from "@/lib/jadwal/status";
 
 export type Antrean = {
@@ -55,7 +55,7 @@ export async function hitungKlaimMenunggu(): Promise<number> {
       .select("*", kepala)
       .eq("status_bayar", "menunggu_verifikasi")
       .is("client_package_id", null)
-      .neq("status", SESI_DIBATALKAN),
+      .not("status", "in", FILTER_SESI_BATAL),
     supabase
       .from("client_packages")
       .select("*", kepala)
