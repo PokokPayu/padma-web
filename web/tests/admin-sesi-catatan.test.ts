@@ -210,6 +210,10 @@ function petakan(r: {
   return {
     id: r.id,
     serviceId: r.service_id,
+    // Jam tidak relevan untuk apa yang diuji berkas ini (catatan & rekomendasi
+    // bidan), tetapi `SesiRingkas` menuntutnya sejak C1 — dan tipe yang menuntut
+    // adalah tipe yang tidak bisa lupa.
+    jamMulai: "09:00:00",
     namaLayanan: "",
     namaMitra: "",
     tanggal: "2026-01-01",

@@ -321,6 +321,7 @@ async function main() {
         variant_id: variantUji,
         partner_id: MITRA_SEED,
         tanggal: TANGGAL_SESI,
+        jam_mulai: "09:00",
         status: "selesai",
         status_bayar: "belum",
       })
@@ -368,6 +369,7 @@ async function main() {
         partner_id: MITRA_SEED,
         client_package_id: paketKlien.id,
         tanggal: TANGGAL_SESI_PAKET,
+        jam_mulai: "09:00",
         status: "terjadwal",
         status_bayar: "belum",
       })

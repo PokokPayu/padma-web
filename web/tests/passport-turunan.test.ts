@@ -10,7 +10,7 @@ import { formatTanggalID } from "@/lib/passport/waktu";
 // transport apa pun.
 const s = (o: Partial<SesiRingkas>): SesiRingkas => ({
   id: "s1", serviceId: "svc1", namaLayanan: "Layanan", namaMitra: "Bidan A",
-  tanggal: "2026-07-08", status: "selesai", clientPackageId: "pkg1",
+  tanggal: "2026-07-08", jamMulai: "09:00:00", status: "selesai", clientPackageId: "pkg1",
   catatan: "", rekomendasi: "", statusBayar: "belum", jenjang: null,
   varian: { label: "", durasiMenit: null, format: null }, ...o,
 });

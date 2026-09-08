@@ -212,6 +212,7 @@ describe("kartu sesi — perilaku per status", () => {
     namaLayanan: "Sankalpa Fertility Massage",
     namaMitra: "Bidan Sri Wahyuni",
     tanggal: "2026-07-08",
+    jamMulai: "09:00:00",
     status: "selesai" as const,
     clientPackageId: "pkg1",
     catatan: "Ketegangan punggung bawah jauh berkurang.",

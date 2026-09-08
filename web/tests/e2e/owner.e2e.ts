@@ -396,6 +396,7 @@ async function main() {
       variant_id: idVarian,
       partner_id: idMitra,
       tanggal,
+      jam_mulai: "09:00",
       status: "selesai",
       status_bayar: "belum",
       catatan: "",
