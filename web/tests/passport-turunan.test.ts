@@ -10,7 +10,7 @@ import { formatTanggalID } from "@/lib/passport/waktu";
 // transport apa pun.
 const s = (o: Partial<SesiRingkas>): SesiRingkas => ({
   id: "s1", serviceId: "svc1", namaLayanan: "Layanan", namaMitra: "Bidan A",
-  tanggal: "2026-07-08", status: "selesai", clientPackageId: "pkg1",
+  tanggal: "2026-07-08", jamMulai: "09:00:00", status: "selesai", clientPackageId: "pkg1",
   catatan: "", rekomendasi: "", statusBayar: "belum", jenjang: null,
   varian: { label: "", durasiMenit: null, format: null }, ...o,
 });
@@ -137,7 +137,7 @@ describe("susunTagihan", () => {
   it("sesi batal tidak ditagih", () => {
     const t = susunTagihan({
       paket: [],
-      sesi: [s({ id: "x", clientPackageId: null, status: "batal", statusBayar: "belum" })],
+      sesi: [s({ id: "x", clientPackageId: null, status: "dibatalkan_padma", statusBayar: "belum" })],
     });
     expect(t).toHaveLength(0);
   });
@@ -264,7 +264,7 @@ describe("susunTagihan", () => {
   it("sesi BATAL berjenjang tidak menghasilkan item sama sekali", () => {
     const t = susunTagihan({
       paket: [],
-      sesi: [s({ id: "x", clientPackageId: null, status: "batal", jenjang: "5_10" })],
+      sesi: [s({ id: "x", clientPackageId: null, status: "dibatalkan_padma", jenjang: "5_10" })],
     });
     expect(t).toHaveLength(0);
   });

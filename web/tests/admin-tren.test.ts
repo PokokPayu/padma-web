@@ -86,6 +86,7 @@ beforeAll(async () => {
     status_bayar: "belum" as const,
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
     { ...dasarSesi, id: SESI.pekanIni, tanggal: SENIN, status: "selesai" },

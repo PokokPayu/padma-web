@@ -461,6 +461,12 @@ export async function seedUsers() {
     risalahSesi.map((s) => ({
       ...s,
       variant_id: petaVarian.get(s.service_id),
+      // `sessions.jam_mulai` NOT NULL tanpa bawaan sejak migration
+      // `20260909110000_jam_sesi` (spec C1 J2). Ditulis di satu tempat di sini,
+      // bukan diulang di sepuluh objek di atas: data demo tidak sedang
+      // menceritakan apa pun tentang JAM, dan angka berbeda-beda per baris
+      // akan terbaca sebagai keterangan yang tidak pernah dimaksudkan.
+      jam_mulai: "09:00",
     })),
     { onConflict: "id" },
   );

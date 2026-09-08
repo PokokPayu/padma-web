@@ -11,12 +11,21 @@ import { Paginasi } from "@/app/_shell/panel/paginasi";
 import { PanelGeser } from "@/app/_shell/panel/panel-geser";
 import { Bantuan } from "@/app/_shell/panel/bantuan";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
-import { BlokPermintaan, type PermintaanAntre } from "./antrean-permintaan";
+import {
+  BlokPermintaan,
+  type PermintaanAntre,
+  type MitraPilihan as MitraPilihanBlok,
+} from "./antrean-permintaan";
 import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
 import { PanelSesi } from "./panel-sesi";
 import { LABEL_WAKTU, LABEL_STATUS_SESI, type PreferensiWaktu, type StatusSesi } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
+import { STATUS_ANTRE, STATUS_SESI, LABEL_SESI } from "@/lib/jadwal/status";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
+import { bacaPengaturan } from "@/lib/settings";
+import type { StatusPermintaan } from "@/lib/jadwal/status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Sesi" };
@@ -28,14 +37,28 @@ type BarisPermintaan = {
   tanggal: string;
   preferensi_waktu: PreferensiWaktu;
   catatan: string;
+  jam_mulai: string;
+  status: StatusPermintaan;
+  alamat_lat: number | null;
+  alamat_lon: number | null;
   clients: { nama: string } | null;
   services: { nama: string } | null;
+  partners: { nama: string } | null;
 };
 
 const KELAS_PILL: Record<StatusSesi, string> = {
   terjadwal: "bg-gold/15 text-[#8A6A16]",
+  // `berjalan` memakai hijau daun MUDA, bukan gold: ia keadaan yang sedang
+  // terjadi sekarang, dan admin perlu membedakannya sekilas dari yang baru
+  // dijadwalkan.
+  berjalan: "bg-leaf/15 text-leaf",
   selesai: "bg-leaf-soft text-leaf",
-  batal: "bg-clay/10 text-clay",
+  // `tidak_hadir` memakai clay (warna yang menuntut perhatian) sementara
+  // `dibatalkan_padma` memakai abu netral: yang pertama meninggalkan pekerjaan
+  // (menghubungi klien, memutuskan tagihannya), yang kedua sudah selesai
+  // diurus saat dibatalkan.
+  tidak_hadir: "bg-clay/10 text-clay",
+  dibatalkan_padma: "bg-black/5 text-ink-soft",
 };
 
 export default async function SesiPage({
@@ -51,12 +74,16 @@ export default async function SesiPage({
   const hariIni = hariIniJakarta();
 
   const supabase = await createServerSupabase();
-  const [{ baris, total }, { data: permintaan }] = await Promise.all([
+  const [{ jamLayanan }, { baris, total }, { data: permintaan }] = await Promise.all([
+    bacaPengaturan(),
     ambilDaftarSesi(param, hariIni),
     supabase
       .from("booking_requests")
-      .select("id, tanggal, preferensi_waktu, catatan, clients ( nama ), services ( nama )")
-      .eq("status", "menunggu")
+      .select(
+        "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, alamat_lat, alamat_lon, " +
+          "clients ( nama ), services ( nama ), partners ( nama )",
+      )
+      .in("status", STATUS_ANTRE)
       // Yang paling dekat tanggalnya paling mendesak dijawab.
       .order("tanggal", { ascending: true })
       .order("created_at", { ascending: true })
@@ -105,9 +132,30 @@ export default async function SesiPage({
     namaLayanan: p.services?.nama ?? "Layanan",
     // Diformat lewat kalender Asia/Jakarta — `new Date(tgl)` bisa mundur sehari.
     tanggal: formatTanggalID(p.tanggal),
+    jam: formatJam(jamDariDb(p.jam_mulai)),
     waktu: LABEL_WAKTU[p.preferensi_waktu] ?? p.preferensi_waktu,
     catatan: p.catatan,
+    status: p.status,
+    namaMitra: p.partners?.nama ?? null,
   }));
+
+  // Mitra diurutkan PER PERMINTAAN, bukan sekali untuk seluruh antrean:
+  // jaraknya dihitung ke alamat permintaan itu sendiri, jadi satu daftar
+  // bersama akan benar untuk paling banyak satu baris. Diurutkan & diformat di
+  // SERVER — `BlokPermintaan` adalah komponen klien, dan mengoper fungsi
+  // penghitung ke sana melanggar batas server/klien yang dijaga
+  // tests/pagar-batas-server-klien.test.ts.
+  const mitraPerPermintaan = new Map<string, MitraPilihanBlok[]>(
+    (permintaan ?? []).map((p) => [
+      p.id,
+      urutkanMitraMenurutJarak(
+        mitra,
+        p.alamat_lat != null && p.alamat_lon != null
+          ? { lat: p.alamat_lat, lon: p.alamat_lon }
+          : null,
+      ).map((m) => ({ id: m.id, nama: m.nama, jarak: formatKm(m.km) })),
+    ]),
+  );
 
   const pilihanKlien: PilihanKlien[] = klien.map((k) => ({
     id: k.id,
@@ -137,7 +185,7 @@ export default async function SesiPage({
         ) : (
           <>
             {antre.map((p) => (
-              <BlokPermintaan key={p.id} permintaan={p} mitra={mitra} />
+              <BlokPermintaan key={p.id} permintaan={p} mitra={mitraPerPermintaan.get(p.id) ?? []} />
             ))}
             <p className="mt-0.5 text-[12px] text-panel-muted">
               Konfirmasi mengubah permintaan menjadi sesi Terjadwal — kabari juga klien via WhatsApp.
@@ -154,9 +202,9 @@ export default async function SesiPage({
             nama: "status",
             label: "Status",
             pilihan: [
-              { nilai: "terjadwal", label: "Terjadwal" },
-              { nilai: "selesai", label: "Selesai" },
-              { nilai: "batal", label: "Batal" },
+              // Diturunkan dari SATU sumber: daftar dan labelnya tidak
+              // pernah bisa berselisih dengan enum basis data.
+              ...STATUS_SESI.map((s) => ({ nilai: s, label: LABEL_SESI[s] })),
             ],
           },
           {
@@ -229,6 +277,7 @@ export default async function SesiPage({
                     {s.namaLayanan}
                     <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                       {formatTanggalID(s.tanggal)}
+                      <span className="ml-1.5 text-panel-muted">{formatJam(jamDariDb(s.jamMulai))}</span>
                       {/* GERBANG SAKLAR (K11). Baris tabel ini dulu hidup di
                           `form-selesai.tsx`, tempat literalnya SUDAH digerbang;
                           sapuan panel memindahkannya ke tabel halaman ini.
@@ -283,6 +332,7 @@ export default async function SesiPage({
               // Tanggal awal = hari ini menurut kalender Jakarta, bukan jam
               // server: pada 17:00–24:00 UTC keduanya sudah berbeda tanggal.
               tanggalAwal={hariIni}
+              jamPilihan={jamLayanan}
               hrefTutup={hrefTutup}
             />
           )}

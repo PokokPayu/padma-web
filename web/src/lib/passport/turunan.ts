@@ -1,12 +1,17 @@
 import { formatTanggalID, sudahLewat } from "./waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
+import { SESI_DIBATALKAN, type StatusSesi } from "@/lib/jadwal/status";
 
-export type StatusSesi = "terjadwal" | "selesai" | "batal";
+// Tipe ini kini hidup di `lib/jadwal/status.ts` — SATU-SATUNYA sumbernya.
+// Diekspor ulang di sini untuk pemanggil lama.
+export type { StatusSesi };
 export type PayStatus = "belum" | "menunggu_verifikasi" | "lunas";
 
 export type SesiRingkas = {
   id: string;
+  /** 'HH:MM:SS' apa adanya dari Postgres — dipendekkan `jamDariDb()`. */
+  jamMulai: string;
   serviceId: string;
   namaLayanan: string;
   namaMitra: string;
@@ -162,7 +167,7 @@ export function susunTagihan(input: {
   // — lihat komentar di `SesiRingkas.varian` di atas.
   for (const s of input.sesi) {
     if (s.clientPackageId !== null) continue;
-    if (s.status === "batal") continue;
+    if (s.status === SESI_DIBATALKAN) continue;
     const varLabel = labelVarian(s.varian);
 
     // Rincian TRANSPORT (Task 9) — TANPA NOMINAL sama sekali (money

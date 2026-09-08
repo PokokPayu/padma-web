@@ -60,8 +60,8 @@ describe("penimpaan jenjang menuntut alasan", () => {
       await expect(
         jalankan(
           `insert into public.sessions
-             (client_id, service_id, variant_id, partner_id, tanggal, jenjang, jenjang_sumber)
-           values ($1,$2,$3,$4, current_date, '5_10', 'admin')`,
+             (client_id, service_id, variant_id, partner_id, tanggal, jam_mulai, jenjang, jenjang_sumber)
+           values ($1,$2,$3,$4, current_date, '09:00', '5_10', 'admin')`,
           [k.id, v.service_id, v.variant_id, m.id],
         ),
       ).rejects.toThrow(/sessions_alasan_penimpaan/);
@@ -78,8 +78,8 @@ describe("penimpaan jenjang menuntut alasan", () => {
 
       const hasil = await jalankan(
         `insert into public.sessions
-           (client_id, service_id, variant_id, partner_id, tanggal, jenjang, jenjang_sumber, jenjang_alasan)
-         values ($1,$2,$3,$4, current_date, '5_10', 'admin', 'Alamat di seberang sungai, memutar lewat jembatan.')
+           (client_id, service_id, variant_id, partner_id, tanggal, jam_mulai, jenjang, jenjang_sumber, jenjang_alasan)
+         values ($1,$2,$3,$4, current_date, '09:00', '5_10', 'admin', 'Alamat di seberang sungai, memutar lewat jembatan.')
          returning id`,
         [k.id, v.service_id, v.variant_id, m.id],
       );

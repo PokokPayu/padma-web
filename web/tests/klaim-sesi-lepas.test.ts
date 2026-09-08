@@ -95,6 +95,7 @@ beforeEach(async () => {
       variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA_A,
       tanggal: "2026-12-20",
+      jam_mulai: "09:00",
       status: "terjadwal",
       status_bayar: "belum",
       catatan: "",
@@ -108,6 +109,7 @@ beforeEach(async () => {
       variant_id: await varianBaku(admin, SVC_NUTRISI),
       partner_id: MITRA_B,
       tanggal: "2026-12-21",
+      jam_mulai: "09:00",
       status: "terjadwal",
       status_bayar: "belum",
       catatan: "",
@@ -159,7 +161,7 @@ describe("klaim pembayaran hanya untuk sesi lepas", () => {
   });
 
   it("sesi lepas yang sudah BATAL tidak bisa diklaim", async () => {
-    await admin.from("sessions").update({ status: "batal" }).eq("id", SESI_LEPAS);
+    await admin.from("sessions").update({ status: "dibatalkan_padma" }).eq("id", SESI_LEPAS);
     const k = await signInAs("ananda@padma.test");
     const { data } = await k.rpc("klaim_sudah_bayar", {
       jenis: "sesi",
@@ -243,7 +245,7 @@ describe("badge antrean sinkron dengan daftar", () => {
     const sebelum = await hitungKlaimMenunggu();
     await admin
       .from("sessions")
-      .update({ status: "batal", status_bayar: "menunggu_verifikasi" })
+      .update({ status: "dibatalkan_padma", status_bayar: "menunggu_verifikasi" })
       .eq("id", SESI_LEPAS);
     expect(await hitungKlaimMenunggu()).toBe(sebelum);
   });
@@ -359,6 +361,7 @@ describe("constraint sesi berpaket tidak memikul status pembayaran", () => {
       variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA_A,
       tanggal: "2026-12-22",
+      jam_mulai: "09:00",
       status: "terjadwal",
       status_bayar: "lunas",
       catatan: "",

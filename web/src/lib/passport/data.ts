@@ -6,6 +6,7 @@ import type { FormatVarian } from "@/lib/varian";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import { saringDaftarMateri } from "./materi-tampil";
 import type { PaketRingkas, PayStatus, SesiRingkas, StatusSesi } from "./turunan";
+import { STATUS_ANTRE, type StatusPermintaan } from "@/lib/jadwal/status";
 
 export type KlienPassport = {
   id: string;
@@ -82,6 +83,7 @@ export const ambilKlien = cache(async (): Promise<KlienPassport | null> => {
 type BarisSesi = {
   id: string;
   tanggal: string;
+  jam_mulai: string;
   status: StatusSesi;
   catatan: string | null;
   rekomendasi: string | null;
@@ -125,7 +127,7 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
     supabase
       .from("sessions")
       .select(
-        "id, tanggal, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, jenjang, services(nama)",
+        "id, tanggal, jam_mulai, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, jenjang, services(nama)",
       )
       .eq("client_id", clientId) // eksplisit, walau RLS sudah menyaring
       // `tanggal` bertipe date dan sudah berupa string YYYY-MM-DD: urutannya
@@ -153,6 +155,7 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
       namaLayanan: r.services?.nama ?? "Layanan",
       namaMitra: namaMitraPer.get(r.partner_id) ?? "Tim PADMA",
       tanggal: r.tanggal,
+      jamMulai: r.jam_mulai,
       status: r.status,
       clientPackageId: r.client_package_id,
       catatan: r.catatan ?? "",
@@ -386,15 +389,18 @@ export type PermintaanRingkas = {
   id: string;
   namaLayanan: string;
   tanggal: string;
+  /** 'HH:MM:SS' apa adanya dari Postgres — dipendekkan `jamDariDb()`. */
+  jamMulai: string;
   preferensiWaktu: string;
-  status: string;
+  status: StatusPermintaan;
 };
 
 type BarisPermintaan = {
   id: string;
   tanggal: string;
+  jam_mulai: string;
   preferensi_waktu: string;
-  status: string;
+  status: StatusPermintaan;
   services: { nama: string } | null;
 };
 
@@ -402,9 +408,9 @@ export async function ambilPermintaanJadwal(clientId: string): Promise<Permintaa
   const supabase = await createServerSupabase();
   const { data } = await supabase
     .from("booking_requests")
-    .select("id, tanggal, preferensi_waktu, status, services(nama)")
+    .select("id, tanggal, jam_mulai, preferensi_waktu, status, services(nama)")
     .eq("client_id", clientId)
-    .eq("status", "menunggu")
+    .in("status", STATUS_ANTRE)
     .order("tanggal")
     .returns<BarisPermintaan[]>();
 
@@ -412,6 +418,7 @@ export async function ambilPermintaanJadwal(clientId: string): Promise<Permintaa
     id: r.id,
     namaLayanan: r.services?.nama ?? "Layanan",
     tanggal: r.tanggal,
+    jamMulai: r.jam_mulai,
     preferensiWaktu: r.preferensi_waktu,
     status: r.status,
   }));

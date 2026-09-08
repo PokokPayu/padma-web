@@ -216,6 +216,7 @@ beforeAll(async () => {
     status_bayar: "belum" as const,
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
     // Tiga sesi SELESAI di pekan berjalan: dua mitra A, satu mitra B.
@@ -232,7 +233,7 @@ beforeAll(async () => {
     },
     // Belum/tidak pernah dikerjakan — tidak menghasilkan honor.
     { ...dasarSesi, id: SESI.terjadwal, partner_id: MITRA_A, tanggal: SENIN, status: "terjadwal" },
-    { ...dasarSesi, id: SESI.batal, partner_id: MITRA_A, tanggal: SENIN, status: "batal" },
+    { ...dasarSesi, id: SESI.batal, partner_id: MITRA_A, tanggal: SENIN, status: "dibatalkan_padma" },
     // Selesai, tetapi layanannya tidak punya satu baris tarif pun.
     {
       ...dasarSesi,

@@ -175,12 +175,13 @@ describe("registri tidak bisa ditulis staf (kalau tidak, FK-nya hiasan)", () => 
     expect(error).toBeNull();
     expect(data!.map((r) => r.key).sort()).toEqual([
       "alamat_klinik",
+      "jam_layanan",
       "jam_operasional",
       "nomor_wa",
     ]);
     for (const r of data!) {
       expect(r.keterangan.length, `kunci ${r.key} wajib punya keterangan`).toBeGreaterThan(0);
-      expect(["nomor_wa", "teks_polos"]).toContain(r.bentuk);
+      expect(["nomor_wa", "teks_polos", "daftar_jam"]).toContain(r.bentuk);
     }
   });
 

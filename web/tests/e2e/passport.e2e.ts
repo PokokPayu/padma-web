@@ -15,7 +15,9 @@
  *      dan tidak ada aksi unduh.
  *   4. Klaim bayar hanya membawa status ke `menunggu_verifikasi`, tidak pernah
  *      ke `lunas`.
- *   5. Permintaan jadwal dari klien selalu berstatus `menunggu`.
+ *   5. Permintaan jadwal dari klien selalu berstatus `diminta` (nama baru
+ *      sejak C1; dulu `menunggu`) — klien tidak pernah bisa menyisipkan status
+ *      yang lebih jauh di rantai.
  *   6. Bottom bar mobile muncul di 390px tanpa scroll horizontal.
  *
  * Prasyarat: `npx supabase start`, `npm run seed:users`, `npm run dev`.
@@ -362,8 +364,8 @@ async function main() {
       .order("created_at", { ascending: false })
       .limit(1);
     catat(
-      "5b. status permintaan = menunggu (bukan dikonfirmasi)",
-      br?.[0]?.status === "menunggu",
+      "5b. status permintaan = diminta (bukan dikonfirmasi)",
+      br?.[0]?.status === "diminta",
       `status di DB: ${br?.[0]?.status ?? "(tidak ada)"}`,
     );
 

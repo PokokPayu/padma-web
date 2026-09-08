@@ -13,11 +13,18 @@ export function KartuInfo({
   detail,
   berlambang = false,
   garis = "putus",
+  aksi,
 }: {
   judul: string;
   detail: string;
   berlambang?: boolean;
   garis?: "putus" | "titik";
+  // Elemen aksi opsional (mis. tombol batalkan pengajuan). Dioper sebagai
+  // ELEMEN yang sudah jadi, bukan sebagai fungsi callback: kartu ini dirender
+  // di berkas server, dan prop bernilai fungsi yang menyeberang ke komponen
+  // klien adalah kelas cacat yang sudah tiga kali menggigit repo ini —
+  // dijaga tests/pagar-batas-server-klien.test.ts.
+  aksi?: React.ReactNode;
 }) {
   return (
     <div
@@ -33,6 +40,7 @@ export function KartuInfo({
       <span className="min-w-0">
         <b className="block text-sm text-night">{judul}</b>
         <span className="text-ink-soft">{detail}</span>
+        {aksi}
       </span>
     </div>
   );

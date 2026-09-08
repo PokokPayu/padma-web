@@ -1,6 +1,7 @@
 import { awalPekan, geserHari, rentangPekan } from "./pekan";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import { tarifTransportPadaTanggal, type TarifTransportRingkas } from "@/lib/transport/tarif";
+import type { StatusSesi } from "@/lib/jadwal/status";
 
 // ============================================================================
 // REKAP HONOR — agregasi uang, dihitung di TYPESCRIPT
@@ -39,7 +40,7 @@ export type SesiRekap = {
   partnerId: string;
   namaMitra: string;
   tanggal: string; // YYYY-MM-DD
-  status: "terjadwal" | "selesai" | "batal";
+  status: StatusSesi;
   clientPackageId: string | null;
   /** `sessions.updated_at` — kapan sesi terakhir disentuh admin. Boleh null. */
   selesaiPada: string | null;

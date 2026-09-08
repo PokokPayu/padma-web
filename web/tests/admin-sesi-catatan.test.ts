@@ -136,6 +136,10 @@ function fdJadwal(ubah: Record<string, string> = {}) {
   fd.set("variant_id", VARIAN_BARU);
   fd.set("partner_id", MITRA);
   fd.set("tanggal", TGL);
+  // `sessions.jam_mulai` NOT NULL sejak C1 (spec J2), dan `jadwalkanSesi`
+  // memvalidasinya terhadap `app_settings.jam_layanan`. '09:00' ada di daftar
+  // bawaan, jadi fixture ini tidak bergantung pada setelan yang disunting uji lain.
+  fd.set("jam", "09:00");
   for (const [k, v] of Object.entries(ubah)) {
     if (v === "") fd.delete(k);
     else fd.set(k, v);
@@ -152,7 +156,7 @@ function fdSelesai(catatan: string, rekomendasi = "") {
 
 /** Sesi langsung lewat service role — bahan uji, bukan jalur yang diuji. */
 async function buatSesi(
-  status: "terjadwal" | "batal" | "selesai",
+  status: "terjadwal" | "dibatalkan_padma" | "selesai",
   opsi: { denganPaket?: boolean; serviceId?: string; catatan?: string } = {},
 ) {
   const serviceId = opsi.serviceId ?? SVC_BARU;
@@ -168,6 +172,7 @@ async function buatSesi(
       catatan: opsi.catatan ?? "",
       rekomendasi: "",
       client_package_id: opsi.denganPaket ? PAKET : null,
+      jam_mulai: "09:00",
     })
     .select("id")
     .single();
@@ -205,6 +210,10 @@ function petakan(r: {
   return {
     id: r.id,
     serviceId: r.service_id,
+    // Jam tidak relevan untuk apa yang diuji berkas ini (catatan & rekomendasi
+    // bidan), tetapi `SesiRingkas` menuntutnya sejak C1 — dan tipe yang menuntut
+    // adalah tipe yang tidak bisa lupa.
+    jamMulai: "09:00:00",
     namaLayanan: "",
     namaMitra: "",
     tanggal: "2026-01-01",
@@ -352,7 +361,7 @@ describe("menyelesaikan sesi mengalir ke passport klien", () => {
       sesi: (await sesiKlienBaca()).map(petakan),
     });
 
-    await buatSesi("batal", { denganPaket: true });
+    await buatSesi("dibatalkan_padma", { denganPaket: true });
 
     const sesudah = progresPaket({
       totalSesi: 8,
@@ -397,10 +406,10 @@ describe("pagar selesaikanSesi", () => {
   });
 
   it("sesi BATAL tidak bisa dihidupkan menjadi selesai", async () => {
-    const id = await buatSesi("batal", { denganPaket: true });
+    const id = await buatSesi("dibatalkan_padma", { denganPaket: true });
     const r = await selesaikanSesi(id, fdSelesai("Coba hidupkan."));
     expect(r.ok).toBe(false);
-    expect((await sesiDb(id))!.status).toBe("batal");
+    expect((await sesiDb(id))!.status).toBe("dibatalkan_padma");
     expect((await sesiDb(id))!.catatan).toBe("");
   });
 
@@ -1081,7 +1090,8 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
           tanggal: TGL_ANTREAN,
           preferensi_waktu: "pagi",
           catatan: "Uji ruling mitra saat panel tertutup.",
-          status: "menunggu",
+          status: "diminta",
+          jam_mulai: "09:00",
         })
         .select("id")
         .single();
@@ -1113,7 +1123,7 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(5); // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
+    expect(jumlahAction).toBe(7); // cariMitra, pilihMitra, konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

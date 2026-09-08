@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ambilKlien } from "@/lib/passport/data";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { bacaPengaturan } from "@/lib/settings";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import { FormAjukan } from "./form";
 
@@ -34,7 +35,13 @@ export default async function HalamanAjukan() {
   // kolom ini — nilai yang tersimpan selalu apa yang ada di FormData saat
   // submit, prefilled atau tidak.
   const supabase = await createServerSupabase();
-  const [{ data: layanan }, { data: varian }, { data: profil }] = await Promise.all([
+  // Daftar jam dibaca dari `app_settings` (spec J2): jam operasional klinik akan
+  // berubah, dan perubahan seperti itu tidak boleh menuntut deploy. Dibaca di
+  // SERVER — nilai yang sama dipakai ulang sebagai pagar di `ajukanJadwal`,
+  // sehingga apa yang ditawarkan layar dan apa yang diterima server tidak
+  // pernah bisa berselisih.
+  const [{ jamLayanan }, { data: layanan }, { data: varian }, { data: profil }] = await Promise.all([
+    bacaPengaturan(),
     supabase.from("services").select("id, nama").eq("aktif", true).order("nama"),
     supabase
       .from("service_variants")
@@ -65,6 +72,7 @@ export default async function HalamanAjukan() {
     <FormAjukan
       layanan={(layanan ?? []) as Array<{ id: string; nama: string }>}
       varian={varianTampil}
+      jamPilihan={jamLayanan}
       tanggalPalingAwal={hariIniJakarta()}
       alamatDefault={profil?.alamat ?? ""}
     />

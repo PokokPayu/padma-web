@@ -203,6 +203,7 @@ beforeAll(async () => {
     variant_id: await varianBaku(svc, svcRahasia),
     partner_id: "33333333-3333-3333-3333-333333333301",
     tanggal: "2026-08-20",
+    jam_mulai: "09:00",
     status: "selesai",
     catatan: CATATAN_RAHASIA,
     rekomendasi: REKOMENDASI_RAHASIA,

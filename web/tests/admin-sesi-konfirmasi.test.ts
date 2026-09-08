@@ -87,6 +87,7 @@ const sumberStatus = baca("src/app/admin/sesi/status.ts");
 const sumberHalaman = baca("src/app/admin/sesi/page.tsx");
 const sumberAntrean = baca("src/app/admin/sesi/antrean-permintaan.tsx");
 const migrasi = baca("supabase/migrations/20260829170000_sesi_dari_permintaan.sql");
+const migrasiKonfirmasiAtomik = baca("supabase/migrations/20260909135000_konfirmasi_atomik.sql");
 
 /**
  * Badan SATU server action, dipotong dari sumbernya.
@@ -173,10 +174,18 @@ beforeEach(async () => {
       client_id: KLIEN,
       service_id: SVC,
       variant_id: VARIAN_SVC,
+      partner_id: MITRA,
       tanggal: TGL,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       catatan: "Kalau bisa sebelum pukul 9.",
-      status: "menunggu",
+      // Rantai C1: konfirmasiPermintaan() kini HANYA menerima permintaan yang
+      // sudah 'mitra_siap' (bidan sudah ditetapkan lewat cariMitra/pilihMitra
+      // — diuji tersendiri di tests/admin-rantai-mitra.test.ts). Fixture
+      // ditulis LANGSUNG pada status tujuan lewat INSERT (tidak dibatasi
+      // trigger perpindahan, yang hanya menahan UPDATE) supaya berkas ini
+      // tetap fokus pada konfirmasi itu sendiri.
+      status: "mitra_siap",
     })
     .select("id")
     .single();
@@ -190,7 +199,7 @@ beforeEach(async () => {
 
 describe("konfirmasi permintaan jadwal", () => {
   it("mengubah permintaan menjadi dikonfirmasi DAN membuat satu sesi terjadwal", async () => {
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
 
     expect((await baris(permintaanId))!.status).toBe("dikonfirmasi");
@@ -219,7 +228,7 @@ describe("konfirmasi permintaan jadwal", () => {
       .update({ alamat: "Jl. Alamat Permintaan Ini No. 9", alamat_lat: -6.9, alamat_lon: 107.6 })
       .eq("id", permintaanId);
 
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
 
     const sesi = await sesiPadaTanggal();
@@ -241,31 +250,36 @@ describe("konfirmasi permintaan jadwal", () => {
   });
 
   it("identitas klien & layanan diambil dari baris permintaan, bukan dari pemanggil", async () => {
-    // Hanya dua nilai yang boleh datang dari luar: permintaan mana, dan mitra
-    // siapa. Sisanya dibaca dari barisnya sendiri — kalau tidak, satu request
-    // POST yang dikarang bisa membuat sesi atas nama klien lain.
+    // Hanya SATU nilai boleh datang dari luar sejak rantai C1: permintaan
+    // mana. Mitra sudah tertaut lebih dulu lewat `pilihMitra`. Sisanya dibaca
+    // dari barisnya sendiri — kalau tidak, satu request POST yang dikarang
+    // bisa membuat sesi atas nama klien lain.
     const badan = badanAction("konfirmasiPermintaan");
-    // Tidak ada FormData sama sekali di jalur ini — bukan sekadar tidak ada
-    // medan `client_id`. Yang masuk hanyalah dua argumen fungsi.
+    // Tidak ada FormData sama sekali di jalur ini.
     expect(badan).not.toContain("formData");
-    expect(badan).toMatch(/client_id:\s*\w+\.client_id/);
-    expect(badan).toMatch(/service_id:\s*\w+\.service_id/);
-    // Varian sejak Task 9: harga menempel di varian, bukan hanya layanan —
-    // membacanya dari payload membuka celah yang sama seperti client_id.
-    expect(badan).toMatch(/variant_id:\s*\w+\.variant_id/);
+    // Sejak `konfirmasi_atomik`, penyalinan client_id/service_id/variant_id
+    // pindah ke DALAM fungsi Postgres `konfirmasi_permintaan()` — satu
+    // transaksi, bukan dua round-trip dari TypeScript (lihat dokblok migration
+    // `20260909135000_konfirmasi_atomik.sql`). Yang dijaga di sini karena itu
+    // adalah RPC-nya, bukan lagi badan action.
+    expect(badan).toMatch(/supabase\.rpc\(\s*"konfirmasi_permintaan"/);
+    expect(migrasiKonfirmasiAtomik).toMatch(/client_id,\s*service_id,\s*variant_id,\s*partner_id/);
+    expect(migrasiKonfirmasiAtomik).toMatch(
+      /p\.client_id,\s*p\.service_id,\s*p\.variant_id,\s*p\.partner_id/,
+    );
   });
 
   it("menyegarkan cache antrean admin dan passport klien", async () => {
-    await konfirmasiPermintaan(permintaanId, MITRA);
+    await konfirmasiPermintaan(permintaanId);
     expect(jejak.revalidate).toContain("/admin/sesi");
     expect(jejak.revalidate).toContain("/passport");
   });
 
   it("konfirmasi KEDUA pada permintaan yang sama tidak melahirkan sesi kedua", async () => {
-    const pertama = await konfirmasiPermintaan(permintaanId, MITRA);
+    const pertama = await konfirmasiPermintaan(permintaanId);
     expect(pertama.ok).toBe(true);
 
-    const kedua = await konfirmasiPermintaan(permintaanId, MITRA);
+    const kedua = await konfirmasiPermintaan(permintaanId);
     expect(kedua.ok).toBe(false);
 
     expect(await sesiPadaTanggal()).toHaveLength(1); // tetap satu
@@ -273,8 +287,8 @@ describe("konfirmasi permintaan jadwal", () => {
 
   it("dua konfirmasi PARALEL hanya menghasilkan satu sesi (balapan)", async () => {
     const [a, b] = await Promise.all([
-      konfirmasiPermintaan(permintaanId, MITRA),
-      konfirmasiPermintaan(permintaanId, MITRA),
+      konfirmasiPermintaan(permintaanId),
+      konfirmasiPermintaan(permintaanId),
     ]);
     expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1); // tepat satu pemenang
 
@@ -285,13 +299,14 @@ describe("konfirmasi permintaan jadwal", () => {
   it("basis data ikut menjaga: dua sesi tidak bisa menaut satu permintaan", async () => {
     // Jaring kedua, tidak bergantung pada urutan pernyataan di TypeScript.
     // Bahkan service role — yang menembus seluruh RLS — tertahan di sini.
-    await konfirmasiPermintaan(permintaanId, MITRA);
+    await konfirmasiPermintaan(permintaanId);
     const { error } = await admin.from("sessions").insert({
       client_id: KLIEN,
       service_id: SVC,
       variant_id: VARIAN_SVC,
       partner_id: MITRA,
       tanggal: TGL,
+      jam_mulai: "09:00",
       status: "terjadwal",
       booking_request_id: permintaanId,
     });
@@ -305,52 +320,47 @@ describe("konfirmasi permintaan jadwal", () => {
       .update({ status: "dikonfirmasi" })
       .eq("id", permintaanId);
 
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(false);
     expect(await sesiPadaTanggal()).toHaveLength(0);
   });
 
-  it("permintaan yang sudah ditolak tidak bisa dihidupkan lewat konfirmasi", async () => {
+  it("permintaan yang sudah dibatalkan klien tidak bisa dihidupkan lewat konfirmasi", async () => {
+    // `ditolak` sudah tidak lagi keadaan yang bisa dituju perpindahan mana pun
+    // (spec J8 — nilainya dipertahankan untuk riwayat lama, tapi tidak
+    // terjangkau dari layar mana pun; lihat dokblok `PERPINDAHAN_PERMINTAAN`
+    // di `src/lib/jadwal/status.ts`). `dibatalkan_klien` adalah keadaan akhir
+    // yang sungguh dituju sekarang, dan `mitra_siap -> dibatalkan_klien` sah.
     await admin
       .from("booking_requests")
-      .update({ status: "ditolak" })
+      .update({ status: "dibatalkan_klien" })
       .eq("id", permintaanId);
 
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(false);
-    expect((await baris(permintaanId))!.status).toBe("ditolak");
+    expect((await baris(permintaanId))!.status).toBe("dibatalkan_klien");
     expect(await sesiPadaTanggal()).toHaveLength(0);
   });
 
   it("permintaan yang tidak ada ditolak tanpa membuat sesi yatim", async () => {
-    const r = await konfirmasiPermintaan(HANTU, MITRA);
+    const r = await konfirmasiPermintaan(HANTU);
     expect(r.ok).toBe(false);
     expect(await sesiPadaTanggal()).toHaveLength(0);
   });
 
-  it("mitra yang tidak ada ditolak, dan permintaan KEMBALI ke antrean", async () => {
-    // Sesi yatim adalah satu bahaya; permintaan yang hilang diam-diam dari
-    // antrean karena konfirmasinya gagal separuh jalan adalah bahaya lain.
-    const r = await konfirmasiPermintaan(permintaanId, HANTU);
-    expect(r.ok).toBe(false);
-    expect(await sesiPadaTanggal()).toHaveLength(0);
-    expect((await baris(permintaanId))!.status).toBe("menunggu");
-  });
-
-  it("mitra NONAKTIF tidak bisa ditugaskan lewat action, walau UI menyaringnya", async () => {
-    // Daftar pilihan di UI memang sudah menyaring `aktif`, tetapi server action
-    // adalah endpoint POST tersendiri yang tidak pernah melewati UI itu.
-    const r = await konfirmasiPermintaan(permintaanId, MITRA_NONAKTIF);
-    expect(r.ok).toBe(false);
-    expect(await sesiPadaTanggal()).toHaveLength(0);
-    expect((await baris(permintaanId))!.status).toBe("menunggu");
-  });
+  // "mitra yang tidak ada ditolak" dan "mitra NONAKTIF tidak bisa
+  // ditugaskan" pindah ke `pilihMitra` sejak rantai C1 (spec C1 J7):
+  // `konfirmasiPermintaan` tidak lagi menerima id mitra sebagai argumen —
+  // mitra sudah harus tertaut lebih dulu, dan itu diuji tuntas di
+  // `tests/admin-rantai-mitra.test.ts` ("menolak mitra NONAKTIF dengan
+  // kalimat, bukan kode Postgres").
 
   it("tanda tangan action TIDAK menerima status dari pemanggil", () => {
     // Bentuk celah "klien menyetujui permintaannya sendiri" pernah tembus di
-    // proyek ini justru karena nilai status datang dari luar. Dua parameter
-    // saja: id permintaan & id mitra.
-    expect(konfirmasiPermintaan.length).toBe(2);
+    // proyek ini justru karena nilai status datang dari luar. Satu parameter
+    // saja sejak rantai C1: id permintaan (mitra sudah tertaut lebih dulu
+    // lewat `pilihMitra`).
+    expect(konfirmasiPermintaan.length).toBe(1);
     expect(tolakPermintaan.length).toBe(1);
     for (const pola of [
       /function\s+\w+\([^)]*status\s*:/,
@@ -366,9 +376,9 @@ describe("konfirmasi permintaan jadwal", () => {
 
   it("PENJAGA PERAN: klien yang login tidak bisa mengonfirmasi permintaannya sendiri", async () => {
     ref.sesi = sesiKlien;
-    await expect(konfirmasiPermintaan(permintaanId, MITRA)).rejects.toThrow(/REDIRECT/);
+    await expect(konfirmasiPermintaan(permintaanId)).rejects.toThrow(/REDIRECT/);
 
-    expect((await baris(permintaanId))!.status).toBe("menunggu");
+    expect((await baris(permintaanId))!.status).toBe("mitra_siap");
     expect(await sesiPadaTanggal()).toHaveLength(0);
   });
 });
@@ -396,7 +406,7 @@ describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => 
       .eq("id", permintaanId);
     await admin.from("partners").update({ lat: KOORD_SAMA.lat, lon: KOORD_SAMA.lon }).eq("id", MITRA);
 
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
 
     const { data } = await admin
@@ -416,7 +426,7 @@ describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => 
       .eq("id", permintaanId);
     // MITRA sengaja TIDAK diberi koordinat (default seed: NULL).
 
-    const r = await konfirmasiPermintaan(permintaanId, MITRA);
+    const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
 
     const { data } = await admin
@@ -434,18 +444,24 @@ describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => 
 // ---------------------------------------------------------------------------
 
 describe("menolak permintaan jadwal", () => {
-  it("menandai permintaan ditolak tanpa membuat sesi apa pun", async () => {
+  it("TIDAK LAGI TERJANGKAU (spec C1 J8): tolakPermintaan gagal, trigger perpindahan menahannya", async () => {
+    // `ditolak` bukan tujuan yang sah dari status mana pun di
+    // `PERPINDAHAN_PERMINTAAN` (src/lib/jadwal/status.ts) — klien sekarang
+    // membatalkan sendiri lewat `batalkanPengajuan` (Passport), diuji tuntas
+    // di tests/pembatalan-klien.test.ts. Fungsi & tombolnya sengaja belum
+    // dihapus (pola saklar `lib/paket-tampil.ts`), tetapi jalurnya sudah mati:
+    // UPDATE-nya ditahan trigger, dan action ini melaporkannya sebagai
+    // kegagalan biasa — bukan galat yang lolos ke pemanggil.
     const r = await tolakPermintaan(permintaanId);
-    expect(r.ok).toBe(true);
-    expect((await baris(permintaanId))!.status).toBe("ditolak");
+    expect(r.ok).toBe(false);
+    expect((await baris(permintaanId))!.status).toBe("mitra_siap");
     expect(await sesiPadaTanggal()).toHaveLength(0);
-    expect(jejak.revalidate).toContain("/admin/sesi");
   });
 
   it("permintaan yang sudah dikonfirmasi TIDAK bisa dibatalkan lewat tolak", async () => {
     // Sesi sudah lahir; memutar status permintaan kembali ke 'ditolak' hanya
     // membuat sesi itu kehilangan asal-usulnya tanpa membatalkan apa pun.
-    await konfirmasiPermintaan(permintaanId, MITRA);
+    await konfirmasiPermintaan(permintaanId);
     const r = await tolakPermintaan(permintaanId);
     expect(r.ok).toBe(false);
     expect((await baris(permintaanId))!.status).toBe("dikonfirmasi");
@@ -461,7 +477,7 @@ describe("menolak permintaan jadwal", () => {
   it("PENJAGA PERAN: klien yang login tidak bisa menolak permintaan", async () => {
     ref.sesi = sesiKlien;
     await expect(tolakPermintaan(permintaanId)).rejects.toThrow(/REDIRECT/);
-    expect((await baris(permintaanId))!.status).toBe("menunggu");
+    expect((await baris(permintaanId))!.status).toBe("mitra_siap");
   });
 });
 
@@ -479,7 +495,7 @@ describe("pagar basis data yang menopang modul ini", () => {
       .eq("id", permintaanId)
       .select("id");
     expect(ubah ?? []).toHaveLength(0);
-    expect((await baris(permintaanId))!.status).toBe("menunggu");
+    expect((await baris(permintaanId))!.status).toBe("mitra_siap");
   });
 
   it("klien TIDAK bisa menyisipkan sesi untuk dirinya sendiri", async () => {
@@ -499,7 +515,7 @@ describe("pagar basis data yang menopang modul ini", () => {
     // Asal-usul sesi tidak boleh lenyap tanpa sesinya ikut dibereskan lebih
     // dulu — sekaligus yang membuat index unik di atas tidak bisa dilepas
     // dengan satu DELETE.
-    await konfirmasiPermintaan(permintaanId, MITRA);
+    await konfirmasiPermintaan(permintaanId);
     const { error } = await admin
       .from("booking_requests")
       .delete()
@@ -537,10 +553,10 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
     expect(markup).not.toContain("PAD-UJI Bidan Pensiun");
   });
 
-  it("menyediakan tombol Konfirmasi dan Tolak", async () => {
+  it("menyediakan tombol Konfirmasi — Tolak sudah dilepas dari layar (spec C1 J8)", async () => {
     const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toContain("Konfirmasi");
-    expect(markup).toContain("Tolak");
+    expect(markup).not.toContain("Tolak");
   });
 
   it("menjelaskan akibat konfirmasi kepada admin", async () => {
@@ -550,7 +566,7 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
   });
 
   it("permintaan yang sudah ditangani TIDAK muncul lagi di antrean", async () => {
-    await konfirmasiPermintaan(permintaanId, MITRA);
+    await konfirmasiPermintaan(permintaanId);
     const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).not.toContain("Kalau bisa sebelum pukul 9.");
     expect(markup).toMatch(/tidak ada permintaan/i);
@@ -599,11 +615,11 @@ describe("berkas server action sesi", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi,
-    // tetapkanJenjang (Task 7). Angkanya sengaja tepat, bukan
-    // `toBeGreaterThan`: action baru yang lupa memasang penjaganya harus
-    // memerahkan berkas ini, bukan lewat diam-diam.
-    expect(jumlahAction).toBe(5);
+    // cariMitra, pilihMitra (rantai C1), konfirmasiPermintaan, tolakPermintaan,
+    // jadwalkanSesi, selesaikanSesi, tetapkanJenjang (Task 7). Angkanya
+    // sengaja tepat, bukan `toBeGreaterThan`: action baru yang lupa memasang
+    // penjaganya harus memerahkan berkas ini, bukan lewat diam-diam.
+    expect(jumlahAction).toBe(7);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -613,9 +629,12 @@ describe("berkas server action sesi", () => {
     expect(LABEL_WAKTU).toMatchObject({ pagi: expect.any(String) });
     expect(Object.keys(LABEL_WAKTU).sort()).toEqual(["pagi", "siang", "sore"]);
     expect(Object.keys(LABEL_STATUS_PERMINTAAN).sort()).toEqual([
+      "dibatalkan_klien",
       "dikonfirmasi",
+      "diminta",
       "ditolak",
-      "menunggu",
+      "mencari_mitra",
+      "mitra_siap",
     ]);
   });
 

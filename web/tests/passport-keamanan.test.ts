@@ -49,7 +49,7 @@ describe("penjaga booking_requests", () => {
     const { k, clientId } = await klienDanId();
     const { data, error } = await k.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-10",
-      preferensi_waktu: "pagi", status: "dikonfirmasi",
+      jam_mulai: "09:00", preferensi_waktu: "pagi", status: "dikonfirmasi",
     }).select();
     if (data?.[0]) bersihkan.push(data[0].id);
     expect(error?.code).toBe("42501");
@@ -59,7 +59,7 @@ describe("penjaga booking_requests", () => {
     const { k, clientId } = await klienDanId();
     const { data: baru } = await admin.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-11",
-      preferensi_waktu: "sore", status: "menunggu",
+      jam_mulai: "09:00", preferensi_waktu: "sore", status: "diminta",
     }).select("id").single();
     bersihkan.push(baru!.id);
 
@@ -70,14 +70,14 @@ describe("penjaga booking_requests", () => {
     // PostgREST menjawab 200 + [] untuk update yang tertahan — baca ulang nilainya.
     const { data: cek } = await admin.from("booking_requests")
       .select("status").eq("id", baru!.id).single();
-    expect(cek!.status).toBe("menunggu");
+    expect(cek!.status).toBe("diminta");
   });
 
-  it("klien BOLEH menyisipkan permintaan berstatus menunggu (alur sah)", async () => {
+  it("klien BOLEH menyisipkan permintaan berstatus diminta (alur sah)", async () => {
     const { k, clientId } = await klienDanId();
     const { data, error } = await k.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-12",
-      preferensi_waktu: "pagi", status: "menunggu",
+      jam_mulai: "09:00", preferensi_waktu: "pagi", status: "diminta",
     }).select("id");
     expect(error).toBeNull();
     if (data?.[0]) bersihkan.push(data[0].id);
@@ -85,9 +85,15 @@ describe("penjaga booking_requests", () => {
 
   it("staf tetap bisa mengonfirmasi permintaan", async () => {
     const { clientId } = await klienDanId();
+    // Rantai C1: konfirmasi hanya sah dari 'mitra_siap' (dengan mitra sudah
+    // tertaut) — bukan langsung dari 'diminta'. Fixture ditulis LANGSUNG pada
+    // status itu lewat INSERT (tidak dibatasi trigger perpindahan, yang hanya
+    // menahan UPDATE), supaya berkas ini tetap fokus pada penjaga peran, bukan
+    // pada seluruh rantai (yang diuji tuntas di tests/admin-rantai-mitra.test.ts).
     const { data: baru } = await admin.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-13",
-      preferensi_waktu: "siang", status: "menunggu",
+      jam_mulai: "09:00", preferensi_waktu: "siang", status: "mitra_siap",
+      partner_id: "33333333-3333-3333-3333-333333333301",
     }).select("id").single();
     bersihkan.push(baru!.id);
 

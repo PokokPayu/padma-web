@@ -8,6 +8,7 @@ import { JENJANG_SAH } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { VarianPilihan } from "@/lib/admin/katalog-admin";
+import { formatJam } from "@/lib/jadwal/jam";
 
 // `alamatLat`/`alamatLon` adalah alamat DEFAULT klien (Task 6/T7 spec),
 // dipakai sebagai perkiraan lokasi sesi baru — jalur ini sendiri tidak
@@ -50,6 +51,7 @@ export function FormJadwalSesi({
   varian,
   mitra,
   tanggalAwal,
+  jamPilihan,
   hrefTutup,
 }: {
   klien: PilihanKlien[];
@@ -59,6 +61,8 @@ export function FormJadwalSesi({
   varian: VarianPilihan[];
   mitra: PilihanMitra[];
   tanggalAwal: string;
+  /** Jam yang boleh dipilih, dari `app_settings.jam_layanan`. */
+  jamPilihan: string[];
   /** Alamat halaman TANPA `?ubah` — ke sinilah sukses & "Batal" menuju. */
   hrefTutup: string;
 }) {
@@ -196,6 +200,22 @@ export function FormJadwalSesi({
             defaultValue={tanggalAwal}
             className={KELAS_MEDAN}
           />
+        </label>
+        <label>
+          {/* Jam WAJIB sejak C1 (spec J2): `sessions.jam_mulai` NOT NULL, dan
+              seluruh tenggat pembatalan C3 dihitung darinya. Jalur ini adalah
+              jadwal yang lahir di TELEPON, bukan dari pengajuan klien — jadi
+              jamnya diketik admin, bukan diwarisi dari baris permintaan.
+              Daftar pilihannya sama dengan yang ditawarkan ke klien, supaya
+              dua jalur tidak melahirkan dua kebiasaan jam yang berbeda. */}
+          <span className={KELAS_LABEL}>Jam mulai</span>
+          <select name="jam" required defaultValue={jamPilihan[0] ?? ""} className={KELAS_MEDAN}>
+            {jamPilihan.map((j) => (
+              <option key={j} value={j}>
+                {formatJam(j)}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           <span className={KELAS_LABEL}>Mitra</span>

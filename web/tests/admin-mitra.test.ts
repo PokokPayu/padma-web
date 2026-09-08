@@ -896,6 +896,7 @@ describe("daftar mitra — cari, saring, halaman", () => {
         partner_id: UJI_MITRA_SESI,
         tanggal: "2026-01-01",
         status: "selesai",
+        jam_mulai: "09:00",
       })),
     );
   });

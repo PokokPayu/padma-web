@@ -56,6 +56,7 @@ beforeAll(async () => {
       catatan: "",
       rekomendasi: "",
       status_bayar: "belum",
+      jam_mulai: "09:00",
     },
     { onConflict: "id" },
   );
@@ -400,6 +401,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
         variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
+        jam_mulai: "09:00",
         status: "terjadwal",
         status_bayar: "lunas",
       })
@@ -454,6 +456,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
       variant_id: VARIAN_NUTRISI,
       partner_id: MITRA,
       tanggal: "2026-12-28",
+      jam_mulai: "09:00",
       status: "terjadwal",
       status_bayar: "menunggu_verifikasi",
     });
@@ -474,6 +477,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
         variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
+        jam_mulai: "09:00",
         status: "terjadwal",
       })
       .select("status_bayar")
@@ -490,6 +494,7 @@ describe("lubang INSERT: status uang tidak boleh lahir tanpa jejak", () => {
         variant_id: VARIAN_NUTRISI,
         partner_id: MITRA,
         tanggal: "2026-12-28",
+        jam_mulai: "09:00",
         status: "terjadwal",
         status_bayar: "belum",
       })

@@ -113,7 +113,7 @@ const SESI = {
   a5: "66666666-6666-6666-6666-6666666665a5", // tak bertarif
   b1: "66666666-6666-6666-6666-6666666666a5",
   c1: "66666666-6666-6666-6666-6666666667a5",
-  c2: "66666666-6666-6666-6666-6666666668a5", // batal, DISELESAIKAN sesudah tanda
+  c2: "66666666-6666-6666-6666-6666666668a5", // terjadwal, DISELESAIKAN sesudah tanda
 };
 
 // Tarif fixture: 400.000 / 150.000 -> margin 250.000 per sesi.
@@ -302,17 +302,18 @@ beforeAll(async () => {
     status_bayar: "belum",
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
   });
 
   await admin.from("sessions").insert([
     sesi(SESI.a1, MITRA_A, LAYANAN_BERTARIF, "2024-03-04", "selesai"),
     sesi(SESI.a2, MITRA_A, LAYANAN_BERTARIF, "2024-03-06", "selesai"),
     sesi(SESI.a3, MITRA_A, LAYANAN_BERTARIF, "2024-03-05", "terjadwal"),
-    sesi(SESI.a4, MITRA_A, LAYANAN_BERTARIF, "2024-03-07", "batal"),
+    sesi(SESI.a4, MITRA_A, LAYANAN_BERTARIF, "2024-03-07", "dibatalkan_padma"),
     sesi(SESI.a5, MITRA_A, LAYANAN_TANPA_TARIF, "2024-03-08", "selesai"),
     sesi(SESI.b1, MITRA_B, LAYANAN_BERTARIF, "2024-03-09", "selesai"),
     sesi(SESI.c1, MITRA_C, LAYANAN_BERTARIF, "2024-03-11", "selesai"),
-    sesi(SESI.c2, MITRA_C, LAYANAN_BERTARIF, "2024-03-13", "batal"),
+    sesi(SESI.c2, MITRA_C, LAYANAN_BERTARIF, "2024-03-13", "terjadwal"),
   ]);
 });
 
@@ -431,6 +432,7 @@ describe("ambilRekap() — transport (Task 9)", () => {
         catatan: "",
         rekomendasi: "",
         jenjang: "5_10",
+        jam_mulai: "09:00",
       },
       {
         id: SESI_JAUH,
@@ -444,6 +446,7 @@ describe("ambilRekap() — transport (Task 9)", () => {
         catatan: "",
         rekomendasi: "",
         jenjang: "di_atas_20",
+        jam_mulai: "09:00",
       },
     ]);
   });
@@ -773,8 +776,15 @@ describe("sesi susulan di bawah tanda 'sudah dibayar'", () => {
     const hasil = await tandaiHonorDibayar(MITRA_C, PEKAN_B);
     expect(hasil.ok, hasil.ok ? "" : hasil.pesan).toBe(true);
 
-    // 2. SESUDAH itu, sesi yang tadinya batal diselesaikan admin. Trigger
+    // 2. SESUDAH itu, sesi yang tadinya terjadwal diselesaikan admin. Trigger
     //    `trg_sessions_updated_at` menggeser updated_at melewati stempel tanda.
+    //    `terjadwal -> selesai` (bukan `dibatalkan_padma -> selesai`, yang
+    //    sejak trigger perpindahan sesi — migration `rantai_status_pagar` —
+    //    bukan lagi panah yang sah: `dibatalkan_padma` tidak punya panah
+    //    keluar sama sekali) — niat aslinya, "sesi yang belum selesai saat
+    //    tanda dipasang, lalu diselesaikan admin", tetap teruji lewat UPDATE
+    //    yang sungguhan (bukan DELETE+INSERT), supaya `updated_at` betul-betul
+    //    tercatat.
     await new Promise((r) => setTimeout(r, 1100));
     await admin.from("sessions").update({ status: "selesai" }).eq("id", SESI.c2);
 

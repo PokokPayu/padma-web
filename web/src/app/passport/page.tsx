@@ -17,6 +17,9 @@ import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { GridStempel } from "./_komponen/grid-stempel";
 import { KartuInfo } from "./_komponen/kartu-info";
 import { SampulPassport } from "./_komponen/sampul";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { LABEL_PERMINTAAN } from "@/lib/jadwal/status";
+import { TombolBatal } from "./_komponen/tombol-batal";
 
 // Judul mengandalkan template `%s · PADMA` di root layout — jangan mengulang
 // nama aplikasi di sini.
@@ -105,7 +108,7 @@ export default async function BerandaPassport() {
         <KartuInfo
           berlambang
           judul={`Sesi berikutnya: ${berikut.namaLayanan}`}
-          detail={`${formatTanggalID(berikut.tanggal)} · ${berikut.namaMitra} · datang ke rumah Anda`}
+          detail={`${formatTanggalID(berikut.tanggal)} · ${formatJam(jamDariDb(berikut.jamMulai))} · ${berikut.namaMitra} · datang ke rumah Anda`}
         />
       ) : (
         <KartuInfo
@@ -119,7 +122,11 @@ export default async function BerandaPassport() {
           key={p.id}
           garis="titik"
           judul={`Permintaan jadwal: ${p.namaLayanan}`}
-          detail={`${formatTanggalID(p.tanggal)} · ${p.preferensiWaktu} · menunggu konfirmasi tim PADMA`}
+          detail={`${formatTanggalID(p.tanggal)} · ${formatJam(jamDariDb(p.jamMulai))} · ${LABEL_PERMINTAAN[p.status]}`}
+          // Hanya pengajuan yang masih di antrean yang bisa dibatalkan sendiri.
+          // Yang sudah dikonfirmasi adalah SESI, dan pembatalan sesi menyangkut
+          // uang serta tenggat waktu — seluruhnya milik C3.
+          aksi={<TombolBatal permintaanId={p.id} />}
         />
       ))}
 

@@ -1,9 +1,13 @@
+import { bentukJamSah } from "@/lib/jadwal/jam";
+
 /**
  * BENTUK NILAI SETELAN — satu-satunya tempat yang memutuskan "nilai seperti apa
  * yang boleh hidup di `app_settings`", dan "nomor mana yang benar-benar dipakai
  * ketika yang tersimpan tidak masuk akal".
  *
- * Berkas ini sengaja MURNI — tanpa satu pun impor. Ia dipakai dari tiga sisi
+ * Berkas ini MURNI dari sisi infrastruktur: satu-satunya impornya adalah modul
+ * murni lain (`@/lib/jadwal/jam`), bukan Supabase maupun `node:crypto`. Yang
+ * dijaga larangan di bawah adalah itu — bukan jumlah impornya. Ia dipakai dari tiga sisi
  * yang tidak boleh saling menyeret: `@/lib/settings` (service role, dipanggil
  * halaman publik), server action panel admin (sesi pengguna), dan komponen
  * `"use client"` yang menyusun pratinjau. Satu impor Supabase di sini sudah
@@ -28,7 +32,7 @@
  */
 
 /** Bentuk yang dikenal registri `app_setting_keys.bentuk` (CHECK di basis data). */
-export type BentukSetelan = "nomor_wa" | "teks_polos";
+export type BentukSetelan = "nomor_wa" | "teks_polos" | "daftar_jam";
 
 /**
  * Nomor cadangan. Ia bukan "nilai default yang boleh dilupakan": ia jaring
@@ -145,6 +149,47 @@ export type HasilPeriksa =
  */
 export function periksaNilai(bentuk: BentukSetelan, mentah: string): HasilPeriksa {
   const nilai = mentah.trim();
+
+  if (bentuk === "daftar_jam") {
+    // Jalur TULIS sengaja LEBIH KETAT daripada jalur BACA.
+    // `uraikanDaftarJam()` (lib/jadwal/jam.ts) membuang entri yang salah bentuk
+    // dan jatuh ke daftar bawaan bila tidak ada yang tersisa — itu benar untuk
+    // MEMBACA, karena formulir pemesanan tidak boleh pernah terbit tanpa satu
+    // pun pilihan jam. Untuk MENULIS, sikap yang sama akan berbohong: admin
+    // mengetik "8 pagi", panel menjawab "Tersimpan", dan yang tersimpan adalah
+    // sesuatu yang lain. Di sini setiap entri yang tidak sah DITOLAK dengan
+    // menyebut entrinya.
+    const entri = nilai
+      .split(",")
+      .map((bagian) => bagian.trim())
+      .filter((bagian) => bagian.length > 0);
+
+    if (entri.length === 0) {
+      return { ok: false, pesan: "Isi minimal satu jam, misalnya 08:00, 09:00, 13:00." };
+    }
+    const salah = entri.filter((jam) => !bentukJamSah(jam));
+    if (salah.length > 0) {
+      return {
+        ok: false,
+        pesan: `Jam harus ditulis 24 jam dengan format HH:MM — perbaiki: ${salah.join(", ")}.`,
+      };
+    }
+    // Menit ganjil ditolak di sini juga, bukan hanya oleh CHECK basis data pada
+    // `booking_requests.jam_mulai`: jam seperti 09:07 akan lolos sampai ke
+    // formulir pemesanan, lalu gagal saat klien menekan kirim — kegagalan yang
+    // muncul di tangan orang yang tidak melakukan kesalahan apa pun.
+    const menitGanjil = entri.filter((jam) => !["00", "30"].includes(jam.slice(3)));
+    if (menitGanjil.length > 0) {
+      return {
+        ok: false,
+        pesan: `Jam mulai hanya boleh pada menit :00 atau :30 — perbaiki: ${menitGanjil.join(", ")}.`,
+      };
+    }
+
+    // Ternormalisasi: unik dan terurut, supaya basis data tidak pernah
+    // menyimpan dua ejaan untuk daftar yang sama.
+    return { ok: true, nilai: [...new Set(entri)].sort().join(", ") };
+  }
 
   if (bentuk === "nomor_wa") {
     if (nilai.length === 0) {
