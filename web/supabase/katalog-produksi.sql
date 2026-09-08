@@ -37,11 +37,20 @@
 -- `harga_klien` = kolom "Harga Soft Launch"  (yang dibayar hari ini)
 -- `harga_coret` = kolom "Harga Normal"       (yang tampil dicoret)
 --
--- >>> HONOR MITRA BELUM DIISI KLIEN. <<<
--- Angka honor TIDAK ADA di tabel harga kiriman klien, dan menebaknya berarti
--- rekap owner menampilkan margin yang salah tanpa satu pun peringatan. Isi
--- keenam angka `honor` di bawah sebelum menjalankan berkas ini; penjaga di
--- blok 2 menolak berjalan selama masih -1.
+-- >>> HONOR MITRA MASIH NOL — SEMENTARA, ATAS KEPUTUSAN PEMILIK 8 Sep 2026. <<<
+-- Angka honor TIDAK ADA di tabel harga kiriman klien. Nol dipilih supaya
+-- katalog bisa hidup lebih dulu, BUKAN karena mitra tidak dibayar.
+--
+-- Akibat yang harus diketahui: selama nol, rekap owner menghitung SELURUH
+-- harga sebagai margin PADMA. Angkanya akan terlihat wajar dan tetap salah —
+-- tidak ada peringatan apa pun yang muncul.
+--
+-- CARA MEMPERBAIKI kelak — JANGAN sekadar mengubah angka di bawah lalu
+-- menjalankan ulang berkas ini. Penjaga `where not exists` di blok 5
+-- menjadikannya no-op senyap bila dijalankan pada tanggal yang sama, dan
+-- pada tanggal berbeda ia menerbitkan tarif baru yang benar. Yang tepat:
+-- tambahkan baris `variant_rates` baru dengan `berlaku_sejak` hari koreksi,
+-- supaya riwayat tarif tidak ditimpa. Rekap lama tetap membaca tarif lama.
 --
 -- Bila ternyata honor TIDAK seragam per durasi×format melainkan berbeda per
 -- program, bentuk tabel ini yang harus berubah, bukan angkanya saja.
@@ -56,12 +65,12 @@ create temporary table tarif_acuan (
 );
 
 insert into tarif_acuan (durasi, format, harga_klien, harga_coret, honor) values
-  ( 60, 'private', 139000, 159000, -1),   -- <<< ISI honor
-  ( 90, 'private', 179000, 199000, -1),   -- <<< ISI honor
-  (120, 'private', 219000, 239000, -1),   -- <<< ISI honor
-  ( 60, 'circle',   99000, 109000, -1),   -- <<< ISI honor
-  ( 90, 'circle',  109000, 119000, -1),   -- <<< ISI honor
-  (120, 'circle',  119000, 129000, -1);   -- <<< ISI honor
+  ( 60, 'private', 139000, 159000, 0),
+  ( 90, 'private', 179000, 199000, 0),
+  (120, 'private', 219000, 239000, 0),
+  ( 60, 'circle',   99000, 109000, 0),
+  ( 90, 'circle',  109000, 119000, 0),
+  (120, 'circle',  119000, 129000, 0);
 
 
 -- ---------------------------------------------------------------------------
@@ -76,6 +85,10 @@ begin
   if exists (select 1 from tarif_acuan where honor < 0) then
     raise exception
       'Honor mitra belum diisi. Isi kolom honor pada tabel tarif_acuan di bagian atas berkas ini, lalu jalankan ulang.';
+  end if;
+  if exists (select 1 from tarif_acuan where honor = 0) then
+    raise warning
+      'Honor mitra masih NOL — sementara. Rekap owner akan menghitung seluruh harga sebagai margin PADMA sampai tarif baru diterbitkan.';
   end if;
 end $$;
 
