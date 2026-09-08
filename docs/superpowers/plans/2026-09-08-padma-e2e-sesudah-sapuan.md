@@ -469,14 +469,37 @@ Verifikasi sungguhannya menunggu keputusan pemilik repo."
 **Kenapa pagar ini ada.** Sapuan panel mengganti tiga label tombol menjadi tautan, dan `npm test`
 tetap hijau berbulan-bulan seandainya tidak ada yang menjalankan E2E. Skrip E2E tidak ikut
 `npm test` (butuh server), jadi tidak ada apa pun yang memberi tahu bahwa selektornya sudah basi.
-Pagar di bawah menutup kelas itu dengan biaya nyaris nol: ia memeriksa bahwa setiap LABEL yang
-dicari skrip E2E masih ada di suatu tempat di `src/app/`.
+Pagar di bawah menutup kelas itu dengan biaya nyaris nol — tapi cakupannya sempit, bukan "setiap
+label": ia memeriksa literal string bertanda kutip ganda pada argumen `name:` dari pola TEPAT
+`getByRole("button"|"link", { name: "…" })` — 34 literal unik dari 64 pemanggilan `getByRole` total
+(diukur 2026-09-08) — dan memeriksa bahwa tiap literal itu masih ada di suatu tempat di `src/app/`.
+`getByLabel`/`getByText` tidak dipindai sama sekali.
 
-**Batasnya, dinyatakan di muka:** ini pagar EJAAN, bukan pagar alur. Ia menangkap label yang
-berganti nama atau hilang. Ia TIDAK menangkap tombol yang pindah halaman sambil mempertahankan
-namanya — dan itu justru yang terjadi pada `Nonaktifkan`. Jadi ia akan menangkap dua dari tiga
-kepatahan malam itu, bukan tiga. Pagar yang menangkap dua dari tiga tetap lebih baik daripada nol,
-tetapi jangan menulis di runbook seolah ia menutup seluruh kelasnya.
+**Batasnya, DIUKUR bukan diperkirakan.** Regexnya dijalankan atas keadaan `main` sebelum rencana
+ini: 38 label diperiksa, 4 tidak ditemukan di `src/app`. Dari ketiga skrip yang benar-benar patah,
+pagar ini (bentuk aslinya) hanya menangkap SATU:
+
+| Kepatahan | Tertangkap? | Sebab |
+|---|---|---|
+| `admin-operasional`: `+ Jadwalkan sesi`, `Tandai selesai` | **ya** | labelnya lenyap sama sekali dari `src/` |
+| `materi-pdf`: `Materi baru` | **tidak** | `src/` memuat `+ Materi baru`; pencocokan substring lolos |
+| `materi-pdf`: `Kelola isi` | **tidak** | bertahan lewat COPY BASI — `form-materi.tsx:111,121` masih menyuruh admin membuka tombol yang sudah dihapus, plus dua pesan galat sungguhan di `aksi.ts:314,320` |
+| `materi-pdf`: `Kelola penugasan` | **tidak** (asli) / **ya** (sesudah pelucutan komentar, lihat runbook) | bertahan lewat KOMENTAR — dokblok `AksiMateri` (`form-materi.tsx:258`) mengutip label itu verbatim |
+| `admin-pelengkap`: `Nonaktifkan` | **tidak** | labelnya utuh, ia hanya PINDAH halaman |
+
+Jadi ini pagar EJAAN yang (pada bentuk aslinya) menangkap label yang **lenyap**, bukan yang
+berganti bentuk, berpindah tempat, atau bertahan di teks basi/komentar yang mengutipnya verbatim.
+Satu dari tiga skrip. Tetap lebih baik daripada nol — kelas "label dihapus" nyata dan murah dijaga
+— tetapi jangan menulis di runbook seolah ia menutup seluruh kelasnya. Pagar alur yang sesungguhnya
+menuntut E2E berjalan di CI dengan server dan basis datanya sendiri. Detail pelucutan komentar yang
+menutup mekanisme `Kelola penugasan` (tanpa mengubah angka "satu dari tiga" di tingkat skrip) ada
+di `docs/superpowers/2026-09-08-e2e-tindak-lanjut.md`, ditambahkan dalam gelombang perbaikan
+sesudah tinjauan cabang.
+
+**Dua positif-palsu sudah diketahui** dan harus masuk `DIKECUALIKAN` beserta alasannya, bukan
+"diperbaiki": `funnel-skrining.e2e.ts` mencari tombol `"Kehamilan"` dan `"Menopause"` — keduanya
+nama FASE yang datang dari kolom `phases.nama` di basis data, bukan literal di sumber. Label yang
+memang tidak berasal dari `src/app/` adalah persis kasus yang daftar pengecualian itu ada untuknya.
 
 - [ ] **Langkah 1: Tulis uji yang gagal**
 
@@ -653,7 +676,9 @@ bagian "Keadaan terukur".
 - **Tugas 4 tidak bisa diverifikasi sama sekali** oleh siapa pun yang mengerjakannya. Itu bukan
   kelemahan rencana yang bisa saya tutup; itu batas yang lahir dari keputusan sadar untuk tidak
   menyentuh penyimpanan produksi klien demi kenyamanan pengujian.
-- **Pagar Tugas 5 menangkap dua dari tiga kepatahan malam itu**, dan saya menulis batas itu ke
+- **Pagar Tugas 5 menangkap satu dari tiga kepatahan malam itu** (diukur, bukan diperkirakan —
+  bagian "Batasnya, DIUKUR bukan diperkirakan" di atas menggantikan perkiraan awal "dua dari tiga"
+  yang sempat tertulis di draf ini), dan saya menulis batas itu ke
   dalam kode pagarnya sendiri supaya pembaca berikutnya tidak mengiranya lebih kuat. Pagar alur
   yang sesungguhnya menuntut menjalankan E2E di CI dengan server dan basis data sendiri — itu
   pekerjaan rencana tersendiri, dan bukan pekerjaan malam ini.

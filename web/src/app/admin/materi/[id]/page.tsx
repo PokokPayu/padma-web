@@ -127,7 +127,7 @@ export default async function DetailMateriPage({
             <CentangLayanan
               layanan={layananPilihan}
               terpilih={materi.layananId}
-              labelUntuk={(nama) => `Layanan ${nama} untuk materi ${materi.judul}`}
+              labelAkhiran={`untuk materi ${materi.judul}`}
               disabled
             />
           )}

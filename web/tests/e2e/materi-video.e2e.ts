@@ -34,12 +34,19 @@
  *    join `profiles` (yang tidak punya kolom email sama sekali, dan draf lama
  *    mengabaikan parameter `email`-nya — `limit(1)` polos akan mendarat di
  *    klien PERTAMA apa pun, bukan klien yang diminta).
- *  - Navigasi `/admin/materi/${materiId}` DIHAPUS: rute itu tidak ada. Panel
- *    admin mengelola satu materi INLINE di `/admin/materi` (expand "Kelola
- *    isi" pada kartunya) — persis pola `tests/e2e/materi-pdf.e2e.ts`.
- *  - Klik "+ Materi baru" ditambahkan sebelum mengisi formulir: formulirnya
- *    sengaja mulai TERTUTUP (lihat komentar `FormMateriBaru`), draf lama
- *    langsung mengisi input yang belum ada di DOM.
+ *  - [Diperbarui sesudah sapuan panel staf, rencana 2] Navigasi ke
+ *    `/admin/materi/${materiId}` kini BENAR: isi materi hidup di halaman
+ *    DETAIL dan Kartu "Isi" SELALU tampil di sana, tanpa gerbang (lihat
+ *    dokblok `AksiMateri` di form-materi.tsx). Bullet ini semula (Task 8)
+ *    mencatat sebaliknya — "rute itu tidak ada", dikelola inline lewat
+ *    "Kelola isi" pada kartu daftar — yang sudah tidak berlaku; diperbaiki di
+ *    sini persis pola `tests/e2e/materi-pdf.e2e.ts`.
+ *  - [Diperbarui sesudah sapuan panel staf, rencana 2] Klik "+ Materi baru"
+ *    kini menautkan ke `?ubah=baru`, BUKAN tombol yang membuka formulir
+ *    inline "mulai TERTUTUP": keadaan panel hidup di URL sejak sapuan itu, dan
+ *    gerbang kedua di dalam formulirnya sendiri dibuang commit `747d330`.
+ *    Bullet ini semula mencatat perilaku pra-sapuan; diperbaiki supaya tidak
+ *    berkontradiksi dengan kode di bawah.
  *  - Pemeriksaan 4 (URL tidak muncul di HTML) TIDAK memakai `page.content()`.
  *    `<PemutarVideo/>` menugaskan `video.src = url` sesudah hidup — dan `src`
  *    elemen media adalah atribut IDL yang MEREFLEKSI, jadi `page.content()`
@@ -324,14 +331,18 @@ async function main() {
     const kerja = await admin.newPage();
     await kerja.goto(`${BASE}/admin/materi`, { waitUntil: "networkidle" });
 
-    // Formulir "Materi baru" mulai TERTUTUP (lihat komentar `FormMateriBaru`
-    // di form-materi.tsx) — harus dibuka dulu sebelum input judul/tipe ada.
-    await kerja.getByRole("button", { name: "Materi baru" }).click();
+    // "+ Materi baru" kini TAUTAN ke `?ubah=baru`; formulirnya langsung ada di
+    // dalam panel. Komentar lama di sini menyebut formulir yang "mulai
+    // TERTUTUP" — gerbang itu dibuang Tugas 3 (untuk sesi) dan commit
+    // `747d330` (untuk materi & layanan).
+    await kerja.getByRole("link", { name: "+ Materi baru", exact: true }).click();
+    await tungguIsi(kerja);
     await kerja.locator('input[name="judul"]').fill(JUDUL);
     await kerja.locator('select[name="tipe"]').selectOption("video");
     // Nol checkbox layanan dicentang dengan sengaja: materi lahir "Tanpa
     // layanan", terbuka hanya lewat penugasan manual di bawah.
     await kerja.getByRole("button", { name: "Simpan materi", exact: true }).click();
+    await kerja.locator('[role="dialog"]').waitFor({ state: "detached", timeout: 20_000 });
     await kerja.getByText(JUDUL).first().waitFor({ timeout: 20_000 });
 
     const { data: baris } = await svc
@@ -344,15 +355,21 @@ async function main() {
     );
     if (materiId === "") throw new Error("materi tidak terbentuk");
 
-    const kartuMateri = kerja.locator("li", { hasText: JUDUL }).first();
-    await kartuMateri.getByRole("button", { name: "Kelola isi" }).click();
-    await kartuMateri
+    // Materi baru lahir NONAKTIF dan daftarnya berurut `aktif desc, judul asc`
+    // (`ambilDaftarMateri`) — begitu klinik punya 25+ materi (`PER_HAL`), baris
+    // ini jatuh ke halaman terakhir, bukan halaman 1. Cari lewat `stempel`
+    // supaya baris ini pasti tampil di halaman yang sedang dilihat.
+    await kerja.goto(`${BASE}/admin/materi?cari=${stempel}`, { waitUntil: "networkidle" });
+    // Isi materi hidup di halaman DETAIL, dan Kartu "Isi" SELALU tampil.
+    await kerja.getByRole("link", { name: JUDUL }).click();
+    await tungguIsi(kerja);
+    await kerja
       .locator('input[type="file"][accept="video/mp4,video/webm"]')
       .setInputFiles({ name: "uji.mp4", mimeType: "video/mp4", buffer: buatMp4Uji() });
     // Unggahan (presigned PUT ke R2 dari peramban) + pencatatan baris berjalan
     // sesudah "Simpan materi", di peramban admin sungguhan — inilah rantai
     // yang dibuktikan skrip ini, bukan dipotong lewat service role.
-    await kartuMateri.getByText("Video tersimpan.").first().waitFor({ timeout: 60_000 });
+    await kerja.getByText("Video tersimpan.").first().waitFor({ timeout: 60_000 });
 
     const { data: vid } = await svc
       .from("material_videos").select("objek, mime").eq("material_id", materiId).maybeSingle();

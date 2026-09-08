@@ -715,17 +715,26 @@ async function main() {
       `${(await bacaHalaman()).length} halaman terbaca lewat REST`,
     );
 
-    await kerja.goto(`${BASE}/admin/materi`, { waitUntil: "networkidle" });
-    const kartuMateri = kerja.locator("li", { hasText: JUDUL_MATERI }).first();
-    // `exact: true` MENGIKAT: pencocokan nama getByRole bawaan Playwright adalah
-    // SUBSTRING tanpa peduli huruf besar/kecil, sehingga { name: "Aktifkan" }
-    // ikut mencocoki tombol "NonAKTIFKAN" yang masih terpampang. Tanpa `exact`,
-    // `waitFor` di bawah selesai SEKETIKA pada tombol lama — dan pemeriksaan
-    // berikutnya membaca basis data sebelum server action-nya mendarat, lalu
-    // melapor "2 halaman masih terbaca" seolah gating materi jebol. Kegagalan
-    // harness yang menyamar sebagai temuan keamanan.
-    await kartuMateri.getByRole("button", { name: "Nonaktifkan", exact: true }).click();
-    await kartuMateri
+    // Materi baru lahir NONAKTIF dan daftarnya berurut `aktif desc, judul asc`
+    // (`ambilDaftarMateri`) — begitu klinik punya 25+ materi (`PER_HAL`), baris
+    // ini jatuh ke halaman terakhir, bukan halaman 1. Cari lewat `stempel`
+    // supaya baris ini pasti tampil di halaman yang sedang dilihat.
+    await kerja.goto(`${BASE}/admin/materi?cari=${stempel}`, { waitUntil: "networkidle" });
+    // Aksi per materi (Aktifkan/Nonaktifkan) pindah ke halaman DETAIL sejak
+    // sapuan rencana 2: baris daftar MENAUT, ia tidak lagi membawa aksi
+    // (pola B, spec K1). Judulnya adalah tautannya.
+    await kerja.getByRole("link", { name: JUDUL_MATERI }).click();
+    await tungguIsi(kerja);
+
+    // `exact: true` MENGIKAT — lihat komentar serupa di materi-pdf.e2e.ts
+    // (pemeriksaan 1, sekitar :329): tanpa itu
+    // { name: "Aktifkan" } ikut mencocoki "NonAKTIFKAN" yang masih terpampang,
+    // `waitFor` selesai seketika pada tombol lama, dan pemeriksaan berikutnya
+    // membaca basis data sebelum server action-nya mendarat — lalu melapor
+    // "2 halaman masih terbaca" seolah gating materi jebol. Kegagalan harness
+    // yang menyamar sebagai temuan keamanan.
+    await kerja.getByRole("button", { name: "Nonaktifkan", exact: true }).click();
+    await kerja
       .getByRole("button", { name: "Aktifkan", exact: true })
       .waitFor({ state: "visible", timeout: 20_000 });
 
@@ -759,8 +768,8 @@ async function main() {
       "metadata materi tidak ikut menghilang dari riwayat",
     );
 
-    await kartuMateri.getByRole("button", { name: "Aktifkan", exact: true }).click();
-    await kartuMateri
+    await kerja.getByRole("button", { name: "Aktifkan", exact: true }).click();
+    await kerja
       .getByRole("button", { name: "Nonaktifkan", exact: true })
       .waitFor({ state: "visible", timeout: 20_000 });
     catat(
