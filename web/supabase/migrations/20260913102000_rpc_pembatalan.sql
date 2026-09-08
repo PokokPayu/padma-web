@@ -323,3 +323,123 @@ $$;
 
 revoke execute on function public.jadwal_ulang_sesi(uuid, date, time) from public, anon;
 grant execute on function public.jadwal_ulang_sesi(uuid, date, time) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- TUKAR HAK MENJADI SESI
+-- ---------------------------------------------------------------------------
+-- Sesi penggantinya lahir `status_bayar = 'lunas'`, dan itu wajib: uangnya
+-- sudah dibayar untuk sesi yang batal. Tanpa ini klien menerima tagihan kedua
+-- untuk sesi yang sudah ia bayar — kesalahan yang sama sudah ditutup di C2 saat
+-- sesi lahir dari konfirmasi.
+--
+-- `varian` sengaja TIDAK diminta pemanggil: ia diwarisi dari sesi asal bila
+-- ada, karena hak menjanjikan "satu sesi untuk layanan yang sama", dan varian
+-- yang berbeda adalah harga yang berbeda.
+create or replace function public.tukar_hak_sesi(
+  hak_id uuid,
+  tanggal_baru date,
+  jam_baru time,
+  mitra uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  h public.hak_sesi%rowtype;
+  peran text := public.user_role();
+  staf boolean := peran in ('admin', 'owner');
+  varian uuid;
+  daftar_jam text;
+  sesi_baru uuid;
+begin
+  select * into h from public.hak_sesi where id = hak_id;
+  if not found then
+    return null;
+  end if;
+
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = h.client_id and c.user_id = auth.uid()
+  ) then
+    raise exception 'hak ini bukan milik Anda' using errcode = '42501';
+  end if;
+
+  if h.dipakai_sesi_id is not null then
+    return null;
+  end if;
+
+  if h.kedaluwarsa < (now() at time zone 'Asia/Jakarta')::date then
+    raise exception 'hak ini sudah kedaluwarsa pada %', h.kedaluwarsa
+      using errcode = '23514';
+  end if;
+
+  -- `daftar_jam` disimpan dengan spasi sesudah koma ("08:00, 09:00, ..."),
+  -- jadi pencocokannya wajib `btrim` tiap unsur — pola yang sama dipakai
+  -- `guard_booking_pembatas` dan `jadwal_ulang_sesi` untuk daftar yang sama.
+  daftar_jam := public.jam_layanan_terpakai();
+  if daftar_jam is null or not exists (
+    select 1 from unnest(string_to_array(daftar_jam, ',')) as j(teks)
+     where btrim(j.teks) = to_char(jam_baru, 'HH24:MI')
+  ) then
+    raise exception 'jam % di luar jam layanan klinik', to_char(jam_baru, 'HH24:MI')
+      using errcode = '22023';
+  end if;
+
+  if exists (
+    select 1 from public.sessions x
+     where x.partner_id = mitra
+       and x.tanggal = tanggal_baru
+       and x.jam_mulai = jam_baru
+       and x.status = 'terjadwal'
+  ) then
+    raise exception 'bidan sudah punya jadwal pada waktu itu — pilih waktu lain'
+      using errcode = '23505';
+  end if;
+
+  select s.variant_id into varian
+    from public.sessions s
+   where s.id = h.sesi_asal_id;
+
+  -- Hak yang diterbitkan tanpa sesi asal (mis. staf menerbitkannya langsung)
+  -- tidak punya varian untuk diwarisi. Jatuh ke varian BAKU layanan — pola
+  -- backfill yang SAMA dipakai migration `varian_wajib` dan helper uji
+  -- `varianBaku()` (`order by urutan, created_at, id`, hanya yang `aktif`).
+  if varian is null then
+    select v.id into varian
+      from public.service_variants v
+     where v.service_id = h.service_id
+       and v.aktif
+     order by v.urutan, v.created_at, v.id
+     limit 1;
+  end if;
+
+  insert into public.sessions (
+    client_id, service_id, variant_id, partner_id,
+    tanggal, jam_mulai, status, status_bayar
+  ) values (
+    h.client_id, h.service_id, varian, mitra,
+    tanggal_baru, jam_baru, 'terjadwal', 'lunas'
+  )
+  returning id into sesi_baru;
+
+  -- Indeks unik parsial `hak_sesi_dipakai_sekali` menjamin dua penukaran
+  -- serentak tidak bisa melahirkan dua sesi dari satu hak: yang kedua gagal di
+  -- indeks, dan seluruh transaksinya ikut batal bersama sesinya.
+  update public.hak_sesi set dipakai_sesi_id = sesi_baru where id = hak_id;
+
+  insert into public.jejak_jadwal (
+    sesi_id, tindakan, jenjang, ke_tanggal, ke_jam, aktor_id, peran_aktor
+  ) values (
+    sesi_baru, 'tukar_hak', 2, tanggal_baru, jam_baru, auth.uid(), peran
+  );
+
+  return sesi_baru;
+end;
+$$;
+
+revoke execute on function public.tukar_hak_sesi(uuid, date, time, uuid) from public, anon;
+grant execute on function public.tukar_hak_sesi(uuid, date, time, uuid) to authenticated;

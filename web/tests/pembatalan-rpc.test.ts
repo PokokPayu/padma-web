@@ -469,3 +469,96 @@ describe("jadwal ulang tunduk pada pagar yang sama dengan pemesanan", () => {
     expect(jejak!.ke_jam).toBe("13:00:00");
   });
 });
+
+describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
+  async function terbitkanHak(kedaluwarsa: string): Promise<string> {
+    const { data, error } = await admin
+      .from("hak_sesi")
+      .insert({ client_id: ANANDA, service_id: SVC, kedaluwarsa })
+      .select("id")
+      .single<{ id: string }>();
+    if (error) throw error;
+    return data.id;
+  }
+
+  it("melahirkan sesi terjadwal yang sudah LUNAS", async () => {
+    // Uangnya sudah dibayar untuk sesi yang batal. Sesi penggantinya lahir
+    // lunas — tanpa itu klien menerima tagihan kedua untuk sesi yang sudah ia
+    // bayar, persis kesalahan yang C2 tutup saat sesi lahir dari konfirmasi.
+    const hak = await terbitkanHak("2027-12-31");
+
+    const { data: sesiBaru } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "14:00",
+      mitra: MITRA,
+    });
+
+    const { data: s } = await admin
+      .from("sessions")
+      .select("status, status_bayar, service_id, client_id")
+      .eq("id", sesiBaru)
+      .single();
+
+    expect(s!.status).toBe("terjadwal");
+    expect(s!.status_bayar).toBe("lunas");
+    expect(s!.service_id).toBe(SVC);
+    expect(s!.client_id).toBe(ANANDA);
+  });
+
+  it("hak yang sudah dipakai TIDAK bisa dipakai lagi", async () => {
+    const hak = await terbitkanHak("2027-12-31");
+    await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "15:00",
+      mitra: MITRA,
+    });
+
+    const { data: kedua, error } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-26",
+      jam_baru: "15:00",
+      mitra: MITRA,
+    });
+    expect(kedua === null || error !== null).toBe(true);
+  });
+
+  it("hak KEDALUWARSA ditolak — dan ditolaknya di basis data", async () => {
+    // Pemeriksaannya di sini, bukan di TypeScript: kedaluwarsa yang hanya
+    // diperiksa di layar adalah kedaluwarsa yang bisa dilewati satu panggilan
+    // RPC.
+    const hak = await terbitkanHak("2020-01-01");
+
+    const { error } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "16:00",
+      mitra: MITRA,
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it("klien tidak bisa menukar hak milik orang lain", async () => {
+    // Haknya milik RINA; Ananda yang login mencobanya.
+    const { data: h, error: eh } = await admin
+      .from("hak_sesi")
+      .insert({ client_id: RINA, service_id: SVC, kedaluwarsa: "2027-12-31" })
+      .select("id")
+      .single<{ id: string }>();
+    if (eh) throw eh;
+    const hak = h.id;
+
+    // 16:00 dan BUKAN 17:00: jam layanan seed hanya
+    // 08,09,10,11,13,14,15,16. Memakai jam di luar daftar membuat uji ini
+    // hijau karena jamnya tak sah, bukan karena kepemilikannya ditolak — uji
+    // yang lolos karena sebab lain tidak menjaga apa pun.
+    const { data, error } = await sesiKlien.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "16:00",
+      mitra: MITRA,
+    });
+    expect(data === null || error !== null).toBe(true);
+  });
+});
