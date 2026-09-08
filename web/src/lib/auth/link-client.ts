@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { INVITE_TTL_DAYS, tautanAktivasi } from "@/lib/auth/pesan-undangan";
+import { normalizeEmail } from "@/lib/auth/normalisasi-email";
 
 /**
  * PENAUTAN AKUN KLIEN — WAJIB TOKEN UNDANGAN SEKALI-PAKAI.
@@ -43,15 +44,14 @@ export { INVITE_TTL_DAYS };
 export const COOKIE_UNDANGAN = "padma_undangan";
 
 /**
- * Email dinormalkan (trim + huruf kecil) sebelum dipakai membandingkan.
- * DB menyimpan clients.email dalam bentuk yang sama (trigger
- * `clients_normalize_email` + constraint `clients_email_lowercase`, migration
- * 20260828114500), jadi `email = normalizeEmail(input)` setara dengan
- * `lower(email) = lower(input)` — tetap buta kapitalisasi, tapi PERSIS.
+ * `normalizeEmail` tinggal di `@/lib/auth/normalisasi-email` (berkas murni
+ * tanpa impor) — bukan di sini — supaya komponen `"use client"` yang cuma
+ * butuh normalisasi (mis. `form-daftar.tsx`) tidak ikut menyeret
+ * `node:crypto` dan klien service role di berkas ini ke bundel browser.
+ * Diekspor ulang di sini untuk pemanggil lama, pola yang sama dengan
+ * `INVITE_TTL_DAYS` di atas.
  */
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+export { normalizeEmail };
 
 /**
  * Token undangan: 32 byte dari CSPRNG sistem, dikodekan base64url supaya aman

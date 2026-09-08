@@ -1,4 +1,9 @@
-import { normalizeEmail } from "@/lib/auth/link-client";
+// Dari `normalisasi-email.ts` (berkas murni tanpa impor), BUKAN dari
+// `link-client.ts` — `daftar.ts` dipakai `form-daftar.tsx` yang bertanda
+// "use client", dan `link-client.ts` memuat `node:crypto` beserta klien
+// service role. Satu impor dari sisi klien sudah cukup menyeret keduanya ke
+// bundel browser (lihat komentar di kedua berkas itu untuk riwayat lengkap).
+import { normalizeEmail } from "@/lib/auth/normalisasi-email";
 
 /**
  * VALIDATOR PENDAFTARAN MANDIRI (spec 8 Sep 2026, keputusan K3/K4) — tanpa
