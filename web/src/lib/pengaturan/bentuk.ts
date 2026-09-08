@@ -55,6 +55,16 @@ export const NOMOR_WA_BAWAAN = "6287778400200";
  * `src/app/_landing/footer.tsx`; ia dipindahkan ke sini, bukan dikarang.
  */
 export const ALAMAT_BAWAAN = "Melayani area Jabodetabek";
+
+/**
+ * QRIS cadangan (spec J12). Sama seperti nomor WA: BUKAN "nilai default yang
+ * boleh dilupakan", melainkan jaring supaya halaman Bayar tidak pernah terbit
+ * tanpa kode yang bisa dipindai. Nilai sungguhannya ditanam migrasi dan
+ * disunting lewat /admin/pengaturan.
+ */
+export const QRIS_GAMBAR_BAWAAN = "/qris-padma.jpeg";
+export const QRIS_MERCHANT_BAWAAN = "PADMA WOMEN'S WELLNESS HOMEC, KESEHATAN & OLAHRAGA";
+export const QRIS_NMID_BAWAAN = "ID1026557963836";
 export const JAM_BAWAAN = "Jadwal kunjungan diatur lewat WhatsApp";
 
 export const PANJANG_WA_MIN = 8;

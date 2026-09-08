@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { ambilKlien, ambilPaket, ambilSesi } from "@/lib/passport/data";
 import { susunTagihan, type PayStatus } from "@/lib/passport/turunan";
 import { bacaPengaturan } from "@/lib/settings";
-import { QrisContoh } from "../_komponen/qris";
 import { TombolKlaim } from "./tombol-klaim";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -30,6 +29,7 @@ export default async function HalamanBayar() {
     bacaPengaturan(),
   ]);
   const tagihan = susunTagihan({ paket, sesi });
+  const { qrisGambar, qrisMerchant, qrisNmid } = pengaturan;
 
   return (
     <>
@@ -90,13 +90,28 @@ export default async function HalamanBayar() {
       <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
         <h2 className="mb-4 font-serif text-xl text-night">Cara Pembayaran</h2>
         <div className="flex flex-wrap items-center gap-5">
-          <QrisContoh />
+          {/* QRIS SUNGGUHAN (spec J12) — bukan lagi pola dekoratif.
+              Alamat gambarnya dibaca dari `app_settings`: kode QRIS bisa
+              berganti, dan penggantiannya tidak boleh menuntut deploy. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={qrisGambar}
+            alt={`Kode QRIS ${qrisMerchant}`}
+            width={220}
+            height={220}
+            className="h-[220px] w-[220px] rounded-xl border border-black/10 bg-white object-contain p-2"
+          />
           <div className="min-w-[220px] flex-1 text-[13.5px] text-[#3C4C42]">
-            <b className="mb-1 block text-[15px] text-ink">QRIS a.n. PADMA Wellness</b>
-            Scan dengan aplikasi bank atau e-wallet apa pun. Setelah membayar, kirim
-            bukti ke WhatsApp admin — tim kami memverifikasi secara manual.
-            <span className="mt-2 block w-fit rounded-full border border-black/10 bg-paper px-2.5 py-1 text-[11px] text-ink-soft">
-              Contoh QR — bukan untuk dipindai
+            <b className="mb-1 block text-[15px] text-ink">Scan QRIS di samping</b>
+            Bisa dengan aplikasi bank atau e-wallet apa pun. Setelah membayar, kirim bukti ke
+            WhatsApp admin — tim kami memverifikasi secara manual.
+            {/* NAMA MERCHANT & NMID ditampilkan, dan itu bukan hiasan: QRIS
+                statis tidak menyebut nominal, jadi satu-satunya yang bisa
+                diperiksa mata sebelum mengirim uang adalah nama penerimanya. */}
+            <span className="mt-3 block rounded-xl border border-black/10 bg-paper p-3 text-[12px] leading-relaxed">
+              <span className="block text-ink-soft">Pastikan nama penerima cocok:</span>
+              <b className="block text-ink">{qrisMerchant}</b>
+              <span className="block text-ink-soft">NMID {qrisNmid}</span>
             </span>
           </div>
         </div>

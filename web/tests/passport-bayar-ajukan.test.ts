@@ -646,10 +646,24 @@ describe("halaman bayar — status tanpa nominal", () => {
     expect(m).not.toContain("Harga");
   });
 
-  it("QRIS ditandai jujur sebagai contoh, bukan kode yang bisa dipindai", async () => {
+  it("QRIS yang tampil SUNGGUHAN, dan penerimanya bisa diperiksa mata", async () => {
+    // Uji ini dulu menegaskan yang SEBALIKNYA — bahwa QR-nya ditandai jujur
+    // sebagai contoh. Itu benar selama kodenya dekoratif; sejak spec C1 J12
+    // yang tampil adalah QRIS sungguhan dari klien, dan chip "Contoh QR"
+    // justru menjadi kebohongan yang membuat orang ragu memindai kode yang
+    // benar.
+    //
+    // Yang menggantikannya BUKAN sekadar "tidak ada lagi kata contoh":
+    // QRIS statis tidak menyebut nominal, jadi satu-satunya yang bisa
+    // diperiksa mata sebelum mengirim uang adalah NAMA PENERIMA dan NMID-nya.
+    // Keduanya wajib tampil.
     const m = await markup();
-    expect(m).toContain("Contoh QR");
-    expect(m).toContain("QRIS a.n. PADMA Wellness");
+    expect(m).not.toContain("Contoh QR");
+    expect(m).not.toContain("bukan untuk dipindai");
+    expect(m).toContain("PADMA WOMEN'S WELLNESS HOMEC".replace(/'/g, "&#x27;"));
+    expect(m).toContain("ID1026557963836");
+    // Gambarnya dirujuk, bukan dibangkitkan sebagai SVG dekoratif.
+    expect(m).toContain("qris-padma");
   });
 
   it("sesi berpaket tidak melahirkan tagihan hantu", async () => {
