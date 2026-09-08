@@ -94,6 +94,40 @@ describe("token visual panel", () => {
     expect(css).not.toMatch(/--color-panel-bg:\s*var\(--color-paper\)/);
   });
 
+  it("tidak ada berkas di src/app/owner yang memakai palet PRA-PANEL", () => {
+    // Utang #4 runbook sapuan lahir karena tidak ada satu pun uji yang
+    // menyebut enam berkas /admin berpalet lama: bersihnya panel hari itu
+    // adalah hasil pemeriksaan mata satu kali, bukan pagar. Panel owner
+    // disapu tuntas di rencana 3B, dan pagar ini yang menjaganya tetap begitu.
+    //
+    // `leaf` dan `clay` SENGAJA tidak dilarang: keduanya aksen sah di era
+    // panel (pill aktif/nonaktif, chip `menuntut`), dipakai juga oleh halaman
+    // /admin yang sudah disapu. Yang dilarang adalah permukaan & tinta era
+    // KLIEN — night, paper, gold-pale, putih telanjang, garis hitam beropasitas
+    // — plus serif, yang sudah keluar dari panel staf.
+    const TERLARANG: [RegExp, string][] = [
+      [/\b(?:text|bg|border|hover:text|hover:bg|from|to)-(?:night|paper|gold-pale)\b/, "token era klien"],
+      [/\bbg-white\b/, "putih telanjang — pakai bg-panel-surface"],
+      [/\bborder-black\/\d/, "garis hitam beropasitas — pakai border-panel-border"],
+      [/\bfont-serif\b/, "serif sudah keluar dari panel staf"],
+    ];
+
+    const berkas = berkasSumber("src/app/owner");
+    // Anti-hampa: direktori yang dipindah atau salah tulis akan berhenti
+    // dipindai diam-diam, dan ujinya lolos tanpa memeriksa apa pun.
+    expect(berkas.length, "tidak ada berkas di src/app/owner").toBeGreaterThan(0);
+
+    const galat: string[] = [];
+    for (const b of berkas) {
+      const isi = baca(b);
+      for (const [pola, sebab] of TERLARANG) {
+        const temuan = isi.match(new RegExp(pola, "g"));
+        if (temuan) galat.push(`${b}: ${[...new Set(temuan)].join(", ")} — ${sebab}`);
+      }
+    }
+    expect(galat, "palet pra-panel tersisa di panel owner").toEqual([]);
+  });
+
   it("kelas Tailwind yang memakai token panel harus punya token yang didefinisikan", () => {
     // Rencana 1 hanya memindai `src/app/_shell/panel/`. Rencana 2 & 3 menulis
     // kelas panel ke lima belas halaman DI LUAR jangkauan itu, dan halaman

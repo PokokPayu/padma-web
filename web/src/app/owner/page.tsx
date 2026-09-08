@@ -14,7 +14,7 @@ import { ambilTrenPenilaian } from "@/lib/admin/penilaian";
 export const metadata = { title: "Panel Owner" };
 
 const TAUTAN_KECIL =
-  "text-[12px] font-bold text-leaf underline underline-offset-4 transition hover:text-night";
+  "text-[12px] font-bold text-leaf underline underline-offset-4 transition hover:text-panel-ink";
 
 /** Satu kolom tren. Dipisah supaya kedua kolom tidak pernah bisa berbeda bentuk. */
 function KolomTren({
