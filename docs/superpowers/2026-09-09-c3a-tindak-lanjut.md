@@ -203,6 +203,37 @@ ada di kedua fungsi menyebut PERSIS apa yang dijamin indeks itu ("satu sesi
 tidak diklaim dua hak") dan apa yang TIDAK dijaminnya, supaya kesalahan yang
 sama tidak terulang saat fungsi ini disentuh lagi.
 
+### 6. "Batal" adalah HIMPUNAN — dan sisi SQL-nya tidak punya pemaksa
+
+Cacat paling mahal yang ditemukan review menyeluruh bukan di kode baru,
+melainkan di kode lama yang mendadak salah: `SESI_DIBATALKAN` adalah konstanta
+**tunggal** `'dibatalkan_padma'`, dipakai lima tempat untuk berarti "kecualikan
+sesi yang batal". Lahirnya `dibatalkan_klien` membuat kelimanya menganggap
+separuh pembatalan sebagai sesi hidup — bidan berangkat ke kunjungan yang sudah
+dibatalkan, dan klien yang dijanjikan refund tetap melihat tagihannya.
+
+Di TypeScript ia kini `SESI_TIDAK_TERJADI: Record<StatusSesi, boolean>`, jadi
+anggota enum berikutnya **menolak build** sampai seseorang memutuskan status itu
+termasuk "terjadi" atau "tidak". Itu pagar yang benar: ia memaksa keputusan
+alih-alih membiarkannya terlewat.
+
+**Sisi SQL tidak punya padanannya.** `klaim_sudah_bayar` sempat tertinggal
+dengan literal tunggal yang sama (ditutup migrasi `20260913103000`), dan bentuk
+penggantinya — `not in ('dibatalkan_padma', 'dibatalkan_klien')` di dalam badan
+plpgsql — tetap **tidak menolak dipasang** ketika anggota enum baru lahir.
+Yang menjaganya sekarang hanya uji berpasangan di `klaim-sesi-lepas.test.ts` dan
+pemindai `prosrc` di `rantai-status-db.test.ts`, dan pemindai itu menangkap nilai
+**mati**, bukan nilai baru yang belum disebut.
+
+Konsekuensinya harus dipegang siapa pun yang menambah anggota `session_status`
+berikutnya: **sapu seluruh definisi fungsi SQL dengan tangan.** TypeScript akan
+memberitahumu; Postgres tidak.
+
+`tidak_hadir` sengaja TETAP di luar daftar itu. Apakah sesi yang kliennya tidak
+hadir tetap ditagih adalah keputusan C3 yang belum diambil, dan mengubahnya
+sambil lewat dalam sebuah perbaikan bug berarti mengambil keputusan produk
+diam-diam.
+
 ## Kewajiban menyapu `jejak_jadwal`
 
 `jejak_jadwal` (migrasi `20260913101000_hak_sesi_dan_jejak.sql`) **sengaja
