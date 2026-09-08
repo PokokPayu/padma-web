@@ -7,7 +7,7 @@ import { normalizeEmail } from "@/lib/auth/normalisasi-email";
 import { rapikanNama, rapikanNoHp } from "@/lib/auth/daftar";
 
 /**
- * PENAUTAN AKUN KLIEN — WAJIB TOKEN UNDANGAN SEKALI-PAKAI.
+ * PENAUTAN AKUN KLIEN — DUA JALUR SAH, KEDUANYA MENUNTUT BUKTI.
  *
  * Riwayat celah (dua kali, akar berbeda):
  *
@@ -23,15 +23,44 @@ import { rapikanNama, rapikanNoHp } from "@/lib/auth/daftar";
  *      merebut rekamnya — terbukti sampai terbacanya catatan medis lewat RLS
  *      `clients.user_id = auth.uid()`. Menebak alamat email bukan otentikasi.
  *
- * Model sekarang: admin membuat data klien → server menerbitkan TOKEN UNDANGAN
- * (32 byte acak kriptografis) → admin mengirim tautan aktivasi lewat pesan
- * sambutan WhatsApp (kanal terpisah yang sudah ada di alur bisnis) → klien
- * membuka tautan, login, dan penautan terjadi hanya bila TOKEN dan EMAIL
- * sama-sama sepakat. Token berumur terbatas dan sekali pakai.
+ * MODEL SEKARANG (spec 8 September 2026, K1/K14) — DUA jalur, bukan satu:
  *
- * Yang TIDAK ada lagi di modul ini: fungsi yang menautkan hanya berdasarkan
- * email (`linkClientByEmail`). Selama fungsi seperti itu masih ada, celahnya
+ *  (I) TOKEN UNDANGAN + EMAIL COCOK — `linkClientByInvite`, di paruh ATAS
+ *      berkas ini. Admin membuat data klien → server menerbitkan token 32 byte
+ *      acak kriptografis → admin mengirim tautan aktivasi lewat pesan sambutan
+ *      WhatsApp (kanal terpisah yang sudah ada di alur bisnis) → klien membuka
+ *      tautan dan login. Penautan terjadi hanya bila TOKEN dan EMAIL sama-sama
+ *      sepakat; tokennya berumur terbatas dan sekali pakai. Jalur ini TIDAK
+ *      berubah sedikit pun oleh (II).
+ *
+ * (II) EMAIL YANG SUDAH TERBUKTI — `tautkanKlienLewatEmailTerverifikasi` dan
+ *      `terbitkanKlienMandiri`, di paruh BAWAH berkas ini, di balik banner
+ *      "JALUR KEDUA: PENDAFTARAN MANDIRI". Klien mendaftar sendiri lewat
+ *      `/daftar`, GoTrue mengirim tautan konfirmasi, dan barulah sesudah
+ *      `email_confirmed_at` terisi ia ditautkan ke baris klien beremail sama —
+ *      atau, bila belum ada barisnya, diberi baris baru yang bertuan sejak
+ *      INSERT.
+ *
+ * KENAPA (II) BUKAN PENGULANGAN CELAH (2) DI ATAS. Bacalah keduanya
+ * berdampingan: yang dulu ditolak adalah "email COCOK", yang sekarang
+ * diizinkan adalah "email cocok DAN TERBUKTI". Bedanya bukan tingkat kehati-
+ * hatian melainkan fakta di dunia — sejak 28 Agustus 2026
+ * `[auth.email] enable_confirmations = true`, sehingga sebuah sesi
+ * terkonfirmasi membuktikan penguasaan kotak surat. Konsekuensinya dipikul
+ * terbuka: setelan itu naik pangkat dari lapis kedua menjadi PENOPANG UTAMA,
+ * dan mematikannya menghidupkan celah (2) utuh seperti semula. Karena itu ia
+ * dijaga pagar fail-closed tersendiri (`tests/konfirmasi-email-wajib.test.ts`).
+ *
+ * Yang TETAP tidak ada di modul ini: fungsi yang menautkan HANYA berdasarkan
+ * email (`linkClientByEmail`). Kedua fungsi jalur (II) menerima objek `User`
+ * utuh dan memeriksa `email_confirmed_at` di dalam dirinya sendiri — bukan
+ * string email telanjang. Selama fungsi berbentuk begitu masih ada, celahnya
  * bisa kambuh hanya dengan satu pemanggilan dari rute baru.
+ *
+ * URUTAN kedua jalur dipegang satu tempat, `@/lib/auth/pastikan-klien`, dan
+ * urutan itulah keamanannya. Jangan menyalin aturan mana pun dari sini ke
+ * halaman atau rute: duplikasi aturan keamanan di dua tempat adalah cara celah
+ * (2) lahir.
  */
 
 /**

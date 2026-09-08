@@ -51,18 +51,40 @@ Akun demo (password semua `padma-dev-123`):
 - admin@padma.test → /admin
 - ananda@padma.test → /passport (klien yang sudah diaktifkan)
 
-Klien `Rina Hapsari` sengaja **belum** diaktifkan — ia bahan uji alur aktivasi.
-Akun klien tidak bisa lagi tertaut hanya karena emailnya cocok (celah yang
-membocorkan rekam medis; lihat spec bagian 7): penautan wajib lewat tautan
-undangan sekali-pakai yang di produksi dikirim admin via WhatsApp. Untuk dev,
-`npm run seed:users` mencetak tautannya:
+Klien `Rina Hapsari` sengaja **belum** diaktifkan — ia bahan uji alur penautan.
+`npm run seed:users` menjamin dua hal sekaligus untuknya: barisnya belum
+bertuan, **dan** tidak ada akun auth yang sudah membuktikan alamat
+`rina@padma.test` miliknya (akun sisa dari run test sebelumnya dihapus). Sejak
+pendaftaran mandiri hidup, syarat kedua itu bagian dari fixture-nya — tanpa ia,
+sebuah akun sisa yang terkonfirmasi akan menautkan barisnya pada login pertama.
 
-```
-http://localhost:3000/aktivasi?token=undangan-dev-rina-...
-```
+**Ada DUA jalur penautan yang sah, dan keduanya menuntut bukti** (spec 8 Sep
+2026, K1/K14). Yang tidak pernah cukup, dulu maupun sekarang, adalah email yang
+sekadar *cocok* — itulah celah yang pernah membocorkan rekam medis (lihat spec
+bagian 7 dan kepala `src/lib/auth/link-client.ts`):
 
-Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
-menampilkan datanya. Masuk tanpa tautan berakhir di `/akun-belum-terhubung`.
+1. **Tautan undangan sekali-pakai.** Di produksi dikirim admin via WhatsApp.
+   Untuk dev, `npm run seed:users` mencetak tautannya:
+
+   ```
+   http://localhost:3000/aktivasi?token=undangan-dev-rina-...
+   ```
+
+   Buka tautan itu, lalu masuk sebagai `rina@padma.test` — barulah `/passport`
+   menampilkan datanya.
+
+2. **Email yang sudah terbukti.** Daftar sendiri di `/daftar` dengan email yang
+   sama seperti yang terdaftar di PADMA, lalu **buka tautan konfirmasinya**
+   (di dev, kotak surat lokal Mailpit: <http://localhost:54324>). Sesudah
+   `email_confirmed_at` terisi, baris klien beremail sama ikut tertaut. Jalur
+   ini sah **semata-mata** karena `[auth.email] enable_confirmations = true` di
+   `supabase/config.toml`; mematikannya menghidupkan celah lama utuh seperti
+   semula, dan `tests/konfirmasi-email-wajib.test.ts` memerahkan `npm test`
+   bila ia berubah.
+
+Masuk tanpa salah satu dari keduanya tidak membuka data siapa pun: email yang
+belum dikonfirmasi berakhir di `/periksa-email`, dan akun yang tidak berhak atas
+baris klien mana pun berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
