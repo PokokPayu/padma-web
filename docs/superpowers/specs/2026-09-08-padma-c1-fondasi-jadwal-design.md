@@ -346,7 +346,9 @@ Disebut eksplisit supaya tidak dikira sudah beres:
 - **Pemberitahuan tiga kanal** (WhatsApp siap-kirim, email otomatis, keadaan di Passport) — **C2**,
   karena peristiwa yang memicunya adalah terbitnya tagihan.
 - **Pembatalan berjenjang waktu, jadwal ulang, kredit layanan, penanda berangkat & no-show,
-  peninjauan darurat medis** — **C3**.
+  peninjauan darurat medis** — **C3**. Isi kebijakannya sudah diputuskan klien dan tersalin utuh di
+  `docs/superpowers/2026-09-08-kebijakan-pembatalan-klien.md` — empat jenjang, masa berlaku kredit,
+  dan pengecualian darurat medis. **Baca dari sana, jangan meringkas dari ingatan.**
 - **Pemeriksaan pra-sesi** (*change-of-condition check*) — ditunda atas keputusan klien; untuk
   sementara urusan SOP lapangan, bukan urusan sistem.
 - **Promo dan kode promo** — ditunda. `harga_coret` yang sudah ada dianggap memadai.
