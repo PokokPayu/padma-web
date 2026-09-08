@@ -49,6 +49,14 @@ describe("hitungRentang", () => {
   it("halaman 3 melompat dua halaman penuh", () => {
     expect(hitungRentang(3)).toEqual({ dari: 2 * PER_HAL, sampai: 3 * PER_HAL - 1 });
   });
+  it("hitungRentang menghormati ukuran halaman yang diberikan", () => {
+    // Bawaan tidak berubah — 25 baris per halaman.
+    expect(hitungRentang(1)).toEqual({ dari: 0, sampai: 24 });
+    expect(hitungRentang(3)).toEqual({ dari: 50, sampai: 74 });
+    // Ukuran lain: kartu pekan rekap, 8 per halaman.
+    expect(hitungRentang(1, 8)).toEqual({ dari: 0, sampai: 7 });
+    expect(hitungRentang(3, 8)).toEqual({ dari: 16, sampai: 23 });
+  });
 });
 
 describe("bangunQuery", () => {
@@ -103,5 +111,13 @@ describe("jumlahHalaman", () => {
   it("tepat sepenuh halaman tidak melahirkan halaman kosong berikutnya", () => {
     expect(jumlahHalaman(PER_HAL)).toBe(1);
     expect(jumlahHalaman(PER_HAL + 1)).toBe(2);
+  });
+  it("jumlahHalaman menghormati ukuran halaman yang diberikan", () => {
+    expect(jumlahHalaman(0)).toBe(1);
+    expect(jumlahHalaman(26)).toBe(2);
+    expect(jumlahHalaman(0, 8)).toBe(1);
+    expect(jumlahHalaman(8, 8)).toBe(1);
+    expect(jumlahHalaman(9, 8)).toBe(2);
+    expect(jumlahHalaman(24, 8)).toBe(3);
   });
 });

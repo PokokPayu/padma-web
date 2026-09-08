@@ -396,7 +396,7 @@ describe("saklar paket: halaman owner tidak menyebut paket", () => {
 
   it("halaman /owner/rekap tidak menyebut paket", async () => {
     const { default: RekapPage } = await import("@/app/owner/rekap/page");
-    expect(await render(RekapPage)).not.toMatch(/paket/i);
+    expect(await render(RekapPage, SP())).not.toMatch(/paket/i);
   });
 });
 

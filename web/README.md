@@ -126,6 +126,7 @@ sama-sama membuat `npm test` MERAH.
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
+| `/owner/tarif/[variantId]` | Owner | Detail satu varian layanan: tarif ditetapkan di sini + seluruh riwayat tarifnya terbaca |
 | `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
 | `/akun-belum-terhubung` | Publik | Jalan buntu jujur: akun sah yang rekam kliennya tidak bisa ditentukan tanpa tim PADMA (alamat email sudah dimiliki akun lain, atau token undangan gagal dan tak ada baris beremail sama) — sebabnya sengaja tidak dibedakan di layar |
 | `/periksa-email` | Publik | Menunggu konfirmasi email + kirim ulang tautan; konfirmasi inilah satu-satunya alasan penautan lewat email menjadi sah (K1) |

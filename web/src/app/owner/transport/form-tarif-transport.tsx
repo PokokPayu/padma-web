@@ -6,12 +6,10 @@ import { NOMINAL_MAKS } from "./status";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 
 const KELAS_MEDAN =
-  "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
-const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
-const KELAS_TOMBOL_KECIL =
-  "rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft disabled:opacity-60";
+  "mt-1 min-h-[42px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13.5px]";
+const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 const KELAS_TOMBOL_UTAMA =
-  "rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60";
+  "rounded-lg bg-panel-ink px-3 py-1.5 text-[12px] font-bold text-panel-surface disabled:opacity-60";
 
 /**
  * Formulir "Tetapkan tarif baru" untuk SATU jenjang jarak.
@@ -37,24 +35,15 @@ export function FormTarifTransport({
   tarifSekarang: number | null;
   honorSekarang: number | null;
 }) {
-  const [terbuka, setTerbuka] = useState(false);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
-
-  if (!terbuka) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setPesan(null);
-          setTerbuka(true);
-        }}
-        className={KELAS_TOMBOL_KECIL}
-      >
-        {tarifSekarang === null ? "Tetapkan tarif" : "Tarif baru"}
-      </button>
-    );
-  }
+  // `sukses`, bukan `terbuka`/`selesai`: panel geser ini TETAP terbuka sesudah
+  // simpan (owner boleh langsung menetapkan jenjang berikutnya), jadi
+  // formulirnya sendiri harus tetap ada di layar — pola `FormTarif`
+  // (`owner/tarif/form-tarif.tsx`), bukan pola `FormTarifKhusus` di berkas ini
+  // yang MENGGANTI seluruh formulir dengan paragraf karena sesi >20 km hanya
+  // bisa ditetapkan sekali dan lenyap dari daftar sesudahnya.
+  const [sukses, setSukses] = useState(false);
 
   return (
     <form
@@ -63,13 +52,14 @@ export function FormTarifTransport({
           const r = await tetapkanTarifTransport(fd);
           if (r.ok) {
             setPesan(null);
-            setTerbuka(false);
+            setSukses(true);
           } else {
+            setSukses(false);
             setPesan(r.pesan);
           }
         })
       }
-      className="grid w-full gap-2.5 rounded-xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-3"
+      className="grid w-full gap-2.5"
     >
       {/* `jenjang` terikat pada baris yang sedang dibuka — server tetap
           memeriksanya ulang, karena argumen action pun masukan jaringan. */}
@@ -131,19 +121,16 @@ export function FormTarifTransport({
 
       {pesan && <p className="text-[12px] font-semibold text-clay">{pesan}</p>}
 
+      {sukses && (
+        <p className="text-[12px] font-semibold text-leaf">
+          Tarif baru tersimpan sebagai baris baru bertanggal berlaku. Riwayat
+          jenjang ini ikut bertambah di tabel.
+        </p>
+      )}
+
       <span className="flex gap-2">
         <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>
           {pending ? "Menyimpan…" : "Simpan tarif"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTerbuka(false);
-            setPesan(null);
-          }}
-          className={KELAS_TOMBOL_KECIL}
-        >
-          Batal
         </button>
       </span>
     </form>

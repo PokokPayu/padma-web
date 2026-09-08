@@ -12,12 +12,15 @@ export function Paginasi({
   basis,
   param,
   total,
+  perHal,
 }: {
   basis: string;
   param: ParamDaftar;
   total: number;
+  /** Ukuran halaman daftar ini. Bawaan `PER_HAL` — lihat `hitungRentang`. */
+  perHal?: number;
 }) {
-  const halaman = jumlahHalaman(total);
+  const halaman = jumlahHalaman(total, perHal);
   if (halaman <= 1) return null;
 
   const hal = Math.min(param.hal, halaman);

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import {
   ambilTarifTransport,
@@ -9,14 +10,30 @@ import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { JENJANG_TARIF_RATE_CARD } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { FormTarifTransport, FormTarifKhusus } from "./form-tarif-transport";
+import { uraikanParamDaftar, bangunQuery, hitungRentang, type ParamMentah } from "@/app/_shell/panel/daftar";
+import { PanelGeser } from "@/app/_shell/panel/panel-geser";
+import { Paginasi } from "@/app/_shell/panel/paginasi";
+import { Bantuan } from "@/app/_shell/panel/bantuan";
+import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Transport" };
 
-const KELAS_TH = "p-4 text-left font-extrabold";
+const BASIS = "/owner/transport";
 
-export default async function TransportPage() {
+export default async function TransportPage({
+  searchParams,
+}: {
+  searchParams: Promise<ParamMentah>;
+}) {
   await requireRole(["owner"]);
+
+  const sp = await searchParams;
+  // Tidak ada saringan di halaman ini: empat jenjang adalah tabel TETAP, dan
+  // menyaring empat baris adalah bilah yang lebih besar daripada isinya.
+  // `uraikanParamDaftar` tetap dipakai demi `hal` — dan demi satu tempat yang
+  // sama untuk aturan "halaman minimal 1".
+  const param = uraikanParamDaftar(sp, {});
 
   // "Hari ini" menurut Jakarta, bukan menurut jam server (Vercel berjalan
   // UTC). Diteruskan sebagai argumen: `ambilTarifTransport` sengaja tidak
@@ -30,116 +47,132 @@ export default async function TransportPage() {
   const cariTarif = (jenjang: (typeof JENJANG_TARIF_RATE_CARD)[number]): BarisTarifTransport | null =>
     tarif.find((t) => t.jenjang === jenjang) ?? null;
 
+  // Paginasi memotong daftar yang SUDAH terbaca seluruhnya oleh
+  // `ambilSesiMenungguTarif()` — memperbaiki layar, bukan batas bacaan.
+  // Fungsi itu sendiri sudah dipaginasi terhadap `max_rows` di lapisan
+  // datanya; yang di sini murni tampilan.
+  const { dari, sampai } = hitungRentang(param.hal);
+  const halamanMenunggu = menunggu.slice(dari, sampai + 1);
+
+  // DAFTAR PUTIH. `ubah` datang dari URL: panel yang terbuka atas nilai asing
+  // merender formulir yang menunjuk jenjang atau sesi yang tidak ada, dan
+  // penolakannya baru datang dari basis data sebagai kode Postgres.
+  const ubah = typeof sp.ubah === "string" ? sp.ubah : "";
+  const jenjangDibuka = JENJANG_TARIF_RATE_CARD.find((j) => j === ubah) ?? null;
+  const sesiDibuka = ubah.startsWith("sesi-")
+    ? (menunggu.find((s) => s.id === ubah.slice("sesi-".length)) ?? null)
+    : null;
+  const hrefTutup = `${BASIS}${bangunQuery(param, { ubah: null })}`;
+
   return (
     <main>
-      <header className="mb-5">
-        <h1 className="font-serif text-2xl text-night">Transport</h1>
-        <p className="mt-1 max-w-2xl text-[13px] text-ink-soft">
+      <header className="mb-4">
+        <h1 className="text-[18px] font-bold text-panel-ink">Transport</h1>
+        <Bantuan judul="Tentang halaman ini">
           Tarif transport ke klien &amp; honor mitra per jenjang jarak, berlaku{" "}
-          {formatTanggalID(hariIni)}, ditambah tarif khusus untuk sesi yang
-          jaraknya di atas 20 km.
-        </p>
+          {formatTanggalID(hariIni)}. Sama seperti Rate Card layanan: tarif transport tidak pernah
+          ditimpa, hanya <b>ditambah</b>, dan tarif lama tidak bisa dihapus maupun disunting —
+          basis data menolaknya, bahkan untuk pemilik, karena baris lama adalah bukti berapa honor
+          yang seharusnya dibayarkan pada sesi-sesi yang sudah lewat. Jenjang{" "}
+          <b>di atas 20 km</b> sengaja tidak muncul di tabel: nominalnya bukan tarif rate card,
+          melainkan konfirmasi PER SESI yang ditetapkan di bagian bawah halaman ini.
+        </Bantuan>
       </header>
 
-      <p className="mb-4 rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4 text-[13px] leading-relaxed text-ink">
-        ✦ Sama seperti Rate Card layanan: tarif transport tidak pernah ditimpa,
-        hanya <b>ditambah</b>. Jenjang <b>di atas 20 km</b> sengaja tidak
-        muncul di tabel ini — nominalnya bukan tarif rate card, melainkan
-        konfirmasi PER SESI yang ditetapkan di bagian bawah halaman ini.
-      </p>
-
-      <div className="overflow-hidden rounded-2xl border border-black/10 bg-white">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-[13.5px]">
-            <thead>
-              <tr className="border-b-[1.5px] border-black/10 bg-paper text-[11px] uppercase tracking-wider text-ink-soft">
-                <th className={KELAS_TH}>Jenjang jarak</th>
-                <th className={KELAS_TH}>Tarif klien</th>
-                <th className={KELAS_TH}>Honor mitra</th>
-                <th className={KELAS_TH}>Subsidi PADMA</th>
-                <th className={KELAS_TH}>Berlaku sejak</th>
-                <th className={KELAS_TH}>Tetapkan</th>
-              </tr>
-            </thead>
-            <tbody>
-              {JENJANG_TARIF_RATE_CARD.map((jenjang) => {
-                const b = cariTarif(jenjang);
-                return (
-                  <tr key={jenjang} className="border-b border-black/5 align-top">
-                    <td className="p-4">
-                      <b className="text-[14px] text-night">{LABEL_JENJANG[jenjang]}</b>
-                    </td>
-                    <td className="p-4 font-mono text-[13.5px] text-night">
-                      {b ? formatRupiah(b.tarifKlien) : "—"}
-                    </td>
-                    <td className="p-4 font-mono text-[13.5px] text-night">
-                      {b ? formatRupiah(b.honorMitra) : "—"}
-                    </td>
-                    {/* Subsidi DIHITUNG, tidak pernah disimpan sebagai kolom —
-                        lihat komentar `BarisTarifTransport` di lib/owner/data.ts. */}
-                    <td className="p-4 font-mono text-[13.5px] text-leaf">
-                      {b ? formatRupiah(b.subsidi) : "—"}
-                    </td>
-                    <td className="p-4 text-[12.5px] text-ink-soft">
-                      {b ? (
-                        formatTanggalID(b.berlakuSejak)
-                      ) : (
-                        <span className="text-clay">Belum bertarif.</span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <FormTarifTransport
-                        jenjang={jenjang}
-                        labelJenjang={LABEL_JENJANG[jenjang]}
-                        hariIni={hariIni}
-                        tarifSekarang={b?.tarifKlien ?? null}
-                        honorSekarang={b?.honorMitra ?? null}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="rounded-lg border border-panel-border bg-panel-surface">
+        <Tabel label="Rate card transport per jenjang jarak">
+          <thead>
+            <tr>
+              <Th>Jenjang jarak</Th><Th>Tarif klien</Th><Th>Honor mitra</Th>
+              <Th>Subsidi PADMA</Th><Th>Berlaku sejak</Th><Th>Tetapkan</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {JENJANG_TARIF_RATE_CARD.map((jenjang) => {
+              const b = cariTarif(jenjang);
+              return (
+                <tr key={jenjang}>
+                  <Td><b className="text-panel-ink">{LABEL_JENJANG[jenjang]}</b></Td>
+                  <Td className="font-mono text-[13px]">{b ? formatRupiah(b.tarifKlien) : "—"}</Td>
+                  <Td className="font-mono text-[13px]">{b ? formatRupiah(b.honorMitra) : "—"}</Td>
+                  {/* Subsidi DIHITUNG, tidak pernah disimpan sebagai kolom —
+                      lihat komentar `BarisTarifTransport` di lib/owner/data.ts. */}
+                  <Td className="font-mono text-[13px] text-leaf">
+                    {b ? formatRupiah(b.subsidi) : "—"}
+                  </Td>
+                  <Td>
+                    {b ? formatTanggalID(b.berlakuSejak) : <span className="text-clay">Belum bertarif</span>}
+                  </Td>
+                  <Td>
+                    <Link
+                      href={`${BASIS}${bangunQuery(param, { ubah: jenjang })}`}
+                      className="font-bold text-panel-ink underline"
+                    >
+                      {b === null ? "Tetapkan tarif" : "Tarif baru"}
+                    </Link>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Tabel>
       </div>
 
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-soft">
-        Tarif lama tidak bisa dihapus maupun disunting — basis data
-        menolaknya, bahkan untuk pemilik. Baris lama adalah bukti berapa
-        honor yang seharusnya dibayarkan pada sesi-sesi yang sudah lewat.
-      </p>
-
       <section aria-label="Sesi menunggu tarif khusus" className="mt-8">
-        <h2 className="font-serif text-xl text-night">
+        <h2 className="text-[15px] font-bold text-panel-ink">
           Sesi &gt;20 km menunggu tarif khusus
         </h2>
-        <p className="mt-1 max-w-2xl text-[13px] text-ink-soft">
-          Materi klien menulis &quot;&gt;20 km: konfirmasi admin&quot; — bukan
-          tarif, melainkan ketiadaan tarif. Setiap sesi di bawah ini butuh
-          nominal yang Anda tetapkan SENDIRI, per kasus.
+        <p className="mt-1 max-w-2xl text-[12.5px] text-panel-muted">
+          Materi klien menulis &quot;&gt;20 km: konfirmasi admin&quot; — bukan tarif, melainkan
+          ketiadaan tarif. Setiap sesi di bawah ini butuh nominal yang Anda tetapkan SENDIRI, per
+          kasus.
+        </p>
+        <p className="mt-2 text-[12px] text-panel-muted">
+          Menampilkan {halamanMenunggu.length} dari {menunggu.length}
         </p>
 
         {menunggu.length === 0 ? (
-          <p className="mt-3 rounded-2xl border border-black/10 bg-white p-4 text-[13px] text-ink-soft">
+          <p className="mt-3 rounded-lg border border-panel-border bg-panel-surface p-4 text-[13px] italic text-panel-muted">
             Tidak ada sesi &gt;20 km yang menunggu tarif khusus.
           </p>
         ) : (
           <ul className="mt-3 grid gap-3">
-            {menunggu.map((s) => (
-              <li
-                key={s.id}
-                className="rounded-2xl border border-black/10 bg-white p-4"
-              >
-                <p className="mb-2 text-[13px] text-night">
+            {halamanMenunggu.map((s) => (
+              <li key={s.id} className="rounded-lg border border-panel-border bg-panel-surface p-4">
+                <p className="text-[13px] text-panel-ink">
                   <b>{s.namaKlien}</b> · {formatTanggalID(s.tanggal)}
                 </p>
-                <FormTarifKhusus sessionId={s.id} namaKlien={s.namaKlien} />
+                <Link
+                  href={`${BASIS}${bangunQuery(param, { ubah: `sesi-${s.id}` })}`}
+                  className="mt-1 inline-block text-[12.5px] font-bold text-panel-ink underline"
+                >
+                  Tetapkan tarif khusus
+                </Link>
               </li>
             ))}
           </ul>
         )}
+
+        <Paginasi basis={BASIS} param={param} total={menunggu.length} />
       </section>
+
+      {jenjangDibuka !== null && (
+        <PanelGeser judul={`Tarif ${LABEL_JENJANG[jenjangDibuka]}`} hrefTutup={hrefTutup}>
+          <FormTarifTransport
+            jenjang={jenjangDibuka}
+            labelJenjang={LABEL_JENJANG[jenjangDibuka]}
+            hariIni={hariIni}
+            tarifSekarang={cariTarif(jenjangDibuka)?.tarifKlien ?? null}
+            honorSekarang={cariTarif(jenjangDibuka)?.honorMitra ?? null}
+          />
+        </PanelGeser>
+      )}
+
+      {sesiDibuka !== null && (
+        <PanelGeser judul={`Tarif khusus · ${sesiDibuka.namaKlien}`} hrefTutup={hrefTutup}>
+          <FormTarifKhusus sessionId={sesiDibuka.id} namaKlien={sesiDibuka.namaKlien} />
+        </PanelGeser>
+      )}
     </main>
   );
 }

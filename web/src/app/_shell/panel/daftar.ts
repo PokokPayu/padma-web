@@ -64,15 +64,23 @@ export function uraikanParamDaftar(sp: ParamMentah, saringSah: SaringSah): Param
   };
 }
 
-/** Rentang `.range()` PostgREST untuk sebuah halaman — keduanya inklusif. */
-export function hitungRentang(hal: number): { dari: number; sampai: number } {
-  const dari = (hal - 1) * PER_HAL;
-  return { dari, sampai: dari + PER_HAL - 1 };
+/**
+ * Rentang `.range()` PostgREST untuk sebuah halaman — keduanya inklusif.
+ *
+ * `perHal` bisa diberikan karena tidak setiap daftar panel berbentuk baris
+ * tabel: `/owner/rekap` menampilkan KARTU pekan, yang tingginya berkali lipat
+ * satu baris, dan 25 kartu sekaligus adalah halaman yang harus digulung jauh
+ * untuk mencapai paginasinya sendiri. Bawaannya tetap `PER_HAL` supaya
+ * ketujuh daftar yang sudah ada tidak berubah perilaku.
+ */
+export function hitungRentang(hal: number, perHal: number = PER_HAL): { dari: number; sampai: number } {
+  const dari = (hal - 1) * perHal;
+  return { dari, sampai: dari + perHal - 1 };
 }
 
-export function jumlahHalaman(total: number): number {
+export function jumlahHalaman(total: number, perHal: number = PER_HAL): number {
   // Minimal 1: daftar kosong tetap "halaman 1 dari 1", bukan "1 dari 0".
-  return Math.max(1, Math.ceil(total / PER_HAL));
+  return Math.max(1, Math.ceil(total / perHal));
 }
 
 /**

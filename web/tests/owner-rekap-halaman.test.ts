@@ -102,6 +102,12 @@ const MITRA_B = "33333333-3333-3333-3333-3333333332a5"; // subjek tanda bayar
 const MITRA_C = "33333333-3333-3333-3333-3333333333a5"; // subjek sesi susulan
 const MITRA_HANTU = "33333333-3333-3333-3333-33333333ffa5"; // tidak pernah ada
 
+// Nama mitra ini dipakai untuk menguji kotak cari `BilahDaftar` — MITRA_A
+// tidak pernah ditandai dibayar di describe "halaman rekap honor" (describe
+// itu berjalan SEBELUM describe "tandaiHonorDibayar"), jadi pekannya juga
+// cocok untuk menguji saringan honor=tuntas/belum.
+const NAMA_MITRA = "PAD-UJI Bidan Rekap Alfa";
+
 const KLIEN = "44444444-4444-4444-4444-4444444444a5";
 const PADMA_ID = "PAD-UJI-00A5";
 
@@ -225,9 +231,9 @@ function kartuPekan(markup: string, senin: string): string {
 
 const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
-async function renderHalaman(): Promise<string> {
+async function renderHalaman(sp: Record<string, string> = {}): Promise<string> {
   ref.sesi = sesiOwner;
-  return renderToStaticMarkup(await RekapPage());
+  return renderToStaticMarkup(await RekapPage({ searchParams: Promise.resolve(sp) }));
 }
 
 beforeAll(async () => {
@@ -588,6 +594,49 @@ describe("halaman rekap honor (/owner/rekap)", () => {
   it("halaman menjaga perannya sendiri dengan requireRole(['owner'])", () => {
     expect(sumberHalaman).toMatch(/await\s+requireRole\(\s*\[\s*"owner"\s*\]\s*\)/);
     expect(sumberHalaman).not.toContain('"admin"');
+  });
+
+  it("bilah daftar menyediakan kotak cari dan chip saring honor", async () => {
+    const markup = await renderHalaman();
+    expect(markup).toContain('name="cari"');
+    expect(markup).toContain('href="/owner/rekap?honor=belum"');
+    expect(markup).toContain('href="/owner/rekap?honor=tuntas"');
+  });
+
+  it("kartu pekan TETAP kartu — rekap laporan, bukan daftar berformulir", async () => {
+    const markup = await renderHalaman();
+    // `data-pekan` membawa Senin pekannya, dan tanpa penanda itu sebuah
+    // assertion (atau seorang pembaca) bisa membaca angka pekan lain sebagai
+    // angka pekan yang sedang dilihatnya.
+    expect(markup).toContain("data-pekan=");
+    // Tidak ada tabel daftar dan tidak ada panel geser di halaman ini.
+    expect(sumberHalaman).not.toContain("PanelGeser");
+    expect(sumberHalaman).not.toContain("@/app/_shell/panel/tabel");
+  });
+
+  it("cari menyaring PEKAN dan meninggalkan kartunya utuh", async () => {
+    const markup = await renderHalaman({ cari: NAMA_MITRA });
+    expect(markup).toContain(NAMA_MITRA);
+    expect(markup).toMatch(/Menampilkan \d+ dari \d+/);
+  });
+
+  it("saring honor=tuntas menyembunyikan pekan yang masih punya honor belum ditandai", async () => {
+    const markup = await renderHalaman({ honor: "tuntas" });
+    // Pekan uji belum ditandai dibayar, jadi ia tidak boleh muncul.
+    expect(markup).not.toContain(NAMA_MITRA);
+  });
+
+  it("paginasi memakai delapan kartu per halaman, bukan dua puluh lima", () => {
+    expect(sumberHalaman).toContain("PER_HAL_REKAP");
+    expect(sumberHalaman).toMatch(/perHal=\{PER_HAL_REKAP\}/);
+  });
+
+  it("tidak ada satu pun token palet lama tersisa di kedua berkas", () => {
+    for (const sumber of [sumberHalaman, sumberTabel]) {
+      expect(sumber).not.toMatch(/\b(?:text|bg|border|hover:text|hover:bg)-(?:night|paper|gold-pale)\b/);
+      expect(sumber).not.toContain("bg-white");
+      expect(sumber).not.toContain("font-serif");
+    }
   });
 });
 

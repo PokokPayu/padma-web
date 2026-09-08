@@ -36,4 +36,22 @@ describe("Paginasi", () => {
   it("menyebut posisi halaman", () => {
     expect(render(2, PER_HAL * 3)).toContain("Halaman 2 dari 3");
   });
+
+  it("Paginasi memakai ukuran halaman yang diberikan untuk menghitung jumlah halaman", () => {
+    const param = { cari: "", saring: {}, hal: 1 };
+    // 9 baris, 8 per halaman => 2 halaman => "Berikutnya" harus ada.
+    const markup = renderToStaticMarkup(
+      <Paginasi basis="/owner/rekap" param={param} total={9} perHal={8} />,
+    );
+    expect(markup).toContain("Halaman 1 dari 2");
+    expect(markup).toContain("Berikutnya");
+
+    // 9 baris pada ukuran BAWAAN (25) hanya satu halaman => komponen tidak
+    // merender apa pun. Ini yang membuktikan `perHal` sungguh dipakai, bukan
+    // diabaikan diam-diam.
+    const bawaan = renderToStaticMarkup(
+      <Paginasi basis="/owner/rekap" param={param} total={9} />,
+    );
+    expect(bawaan).toBe("");
+  });
 });
