@@ -143,7 +143,13 @@ describe("landing publik — berisi tanpa login", () => {
     // lagi mengubah landing dan katalog kosong pun tetap terlihat "penuh".
     const perenderKartu = sumberLanding["lini-layanan.tsx"];
     expect(perenderKartu).toBeTruthy();
-    expect(perenderKartu).toContain("katalog.map");
+    // Dulu asersi ini berbunyi `toContain("katalog.map")`. Komponen kini
+    // menyaring fase kosong lebih dulu (`katalog.filter(...)` lalu
+    // `tampil.map(...)`), sehingga bentuk lama jatuh tanpa ada yang rusak —
+    // ia mengunci NAMA VARIABEL ANTARA, bukan sifat yang hendak dijaga.
+    // Yang dijaga adalah ASAL kartunya: lahir dari prop `katalog`, bukan
+    // ditulis satu per satu. Pagar sesungguhnya tetap perulangan di bawah.
+    expect(perenderKartu).toMatch(/katalog\.(map|filter)\(/);
     for (const fase of katalog) {
       expect(perenderKartu, "menulis keras nama fase").not.toContain(
         fase.namaSanskrit,
