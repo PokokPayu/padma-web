@@ -6,9 +6,27 @@
  *   2. klien (ananda):  /passport tampil; /admin & /owner DITOLAK
  *   3. admin:           /admin tampil;    /owner DITOLAK
  *   4. owner:           /owner tampil DAN /admin tampil (owner superset admin)
- *   5. aktivasi klien:  login dengan email klien TANPA tautan aktivasi berakhir
- *      di /akun-belum-terhubung dan tidak melihat data klien; dengan tautan
- *      aktivasi bertoken berakhir di /passport berisi data kliennya.
+ *   5. penautan akun klien: penyamar DIHENTIKAN, pemilik sah DILEWATKAN.
+ *
+ * SKENARIO 5 DITULIS ULANG 8 Sep 2026, dan alasannya perlu dibaca sebelum
+ * seseorang "mengembalikannya". Versi lamanya membuat akun lewat service role
+ * dengan `email_confirm: true`, login tanpa tautan aktivasi, lalu menuntut
+ * pendaratan di /akun-belum-terhubung. Sejak spec 8 September (K1), akun
+ * berpenanda `email_confirmed_at` BUKAN LAGI model penyamar — itu justru model
+ * PEMILIK SAH kotak surat itu, dan gerbang memang menautkannya. Skenario lama
+ * karena itu tidak lagi menguji apa pun tentang eksploitnya; ia hanya merah.
+ *
+ * Penyamar di bawah aturan sekarang adalah orang yang MENDAFTAR SENDIRI lewat
+ * anon key dengan menebak alamat email seorang klien — dan yang menghentikannya
+ * adalah bahwa pendaftaran seperti itu tidak pernah terkonfirmasi. Karena itu
+ * skenario ini berisi KEDUA paruhnya, dan keduanya harus ada: tanpa kontrol
+ * positif, "tidak melihat data" bisa berarti tembok yang menolak semua orang;
+ * tanpa penyamar, kontrol positif hanya membuktikan aplikasinya menyala.
+ *
+ * Pendaftaran mandiri LENGKAP (formulir /daftar → kotak surat → /passport)
+ * diuji skrip tersendiri: `npm run test:e2e:daftar`
+ * (tests/e2e/daftar-mandiri.e2e.ts). Yang di sini sengaja dibatasi pada apa
+ * yang menjadi klaim berkas ini: siapa boleh melihat rekam klien Rina.
  *
  * Prasyarat: `npx supabase start`, `npm run seed:users`, lalu `npm run dev`
  * (server hidup di http://localhost:3000). Jalankan: `npm run test:e2e`.
@@ -188,41 +206,125 @@ async function keadaanAwalRina() {
 }
 
 /**
- * Skenario 5 — inti perbaikan keamanan 28 Agu 2026, diuji lewat aplikasi
- * sungguhan (rute /aktivasi + /setelah-masuk), bukan hanya lewat fungsi
- * penautan.
+ * Login yang BOLEH GAGAL — dipakai skenario penyamar.
+ *
+ * `login()` di atas melempar bila halaman tidak pernah meninggalkan /masuk,
+ * dan itu benar untuk skenario 1–4 yang memang menuntut sesi. Di sini
+ * kegagalannya justru hasil yang dicari: dengan `enable_confirmations = true`,
+ * `signInWithPassword` atas akun yang belum dikonfirmasi memulangkan
+ * `email_not_confirmed` tanpa sesi, sehingga URL-nya tidak pernah berpindah.
  */
-async function ujiAktivasiKlien(browser: Browser) {
-  // (a) Penyerang menduduki alamat email klien — posisi terkuat yang mungkin:
-  //     akun sudah terkonfirmasi. Ia login TANPA tautan aktivasi.
-  await keadaanAwalRina();
-  await buatUser(EMAIL_RINA);
-  const penyerang = await login(browser, EMAIL_RINA);
-  catat(
-    "5a. login tanpa tautan aktivasi -> /akun-belum-terhubung",
-    urlPendaratan === "/akun-belum-terhubung",
-    `mendarat di ${urlPendaratan}`,
+async function cobaLogin(
+  browser: Browser,
+  email: string,
+): Promise<{ context: BrowserContext; pindahDariMasuk: boolean; path: string }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`${BASE}/masuk`, { waitUntil: "networkidle" });
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Kata sandi").fill(PASSWORD);
+  await page.getByRole("button", { name: "Masuk", exact: true }).click();
+  const pindah = await page
+    .waitForURL((u) => !u.pathname.startsWith("/masuk"), { timeout: 8_000 })
+    .then(() => true)
+    .catch(() => false);
+  const path = new URL(page.url()).pathname;
+  console.log(`      [coba login ${email}] berhenti di ${page.url()}`);
+  await page.close();
+  return { context, pindahDariMasuk: pindah, path };
+}
+
+/** Pendaftaran mandiri lewat anon key — persis yang bisa dilakukan siapa pun. */
+async function daftarMandiri(email: string) {
+  const anon = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
   );
-  const passportPenyerang = await buka(penyerang, "/passport");
-  catat(
-    "5b. tanpa token: data klien TIDAK terlihat di /passport",
-    !passportPenyerang.teks.includes("Rina Hapsari") &&
-      !passportPenyerang.teks.includes("PAD-2608-0019"),
-    `isi: ${passportPenyerang.teks.slice(0, 120)}`,
-  );
-  const { data: sesudahPenyerang } = await svc()
+  return anon.auth.signUp({ email, password: PASSWORD });
+}
+
+async function userIdRina(): Promise<string | null> {
+  const { data } = await svc()
     .from("clients")
     .select("user_id")
     .eq("id", RINA_CLIENT_ID)
     .single();
-  catat(
-    "5c. baris klien tetap belum tertaut sesudah percobaan penyerang",
-    sesudahPenyerang!.user_id === null,
-    `clients.user_id = ${sesudahPenyerang!.user_id}`,
-  );
-  await penyerang.close();
+  return (data?.user_id as string | null) ?? null;
+}
 
-  // (b) Klien asli membuka tautan aktivasi bertoken dari pesan WhatsApp.
+/**
+ * Skenario 5 — siapa boleh melihat rekam klien Rina, diuji lewat aplikasi
+ * sungguhan (rute /aktivasi + /setelah-masuk), bukan lewat fungsi penautan.
+ *
+ * Empat paruh, dan tidak satu pun boleh berdiri sendiri: penyamar dihentikan
+ * (a), pemilik sah lewat email terkonfirmasi dilewatkan (b), jalur undangan
+ * lama tetap hidup (c), dan token tetap sekali pakai (d).
+ */
+async function ujiAktivasiKlien(browser: Browser) {
+  // ---- (a) PENYAMAR, dalam bentuk yang masih mungkin hari ini ----
+  // Ia tidak punya service role. Yang bisa dilakukannya hanyalah MENEBAK
+  // alamat email seorang klien lalu mendaftar sendiri dengan alamat itu.
+  await keadaanAwalRina();
+  const { data: daftar, error: errDaftar } = await daftarMandiri(EMAIL_RINA);
+  catat(
+    "5a. penyamar bisa mendaftar, tetapi TIDAK mendapat sesi & emailnya tidak terkonfirmasi",
+    !errDaftar &&
+      daftar.session === null &&
+      !daftar.user?.email_confirmed_at,
+    `error: ${errDaftar?.message ?? "-"} | sesi: ${daftar?.session ? "ADA" : "tidak ada"} | confirmed_at: ${daftar?.user?.email_confirmed_at ?? "kosong"}`,
+  );
+
+  const penyamar = await cobaLogin(browser, EMAIL_RINA);
+  // Dua akhir yang sama-sama benar: login ditolak sehingga ia tertahan di
+  // /masuk, ATAU (bila GoTrue kelak memberi sesi tak terkonfirmasi) gerbang
+  // memulangkannya ke /periksa-email. Yang TIDAK boleh: /passport.
+  catat(
+    "5b. penyamar tertahan: tetap di /masuk, atau /periksa-email — tidak pernah /passport",
+    penyamar.path === "/masuk" || penyamar.path === "/periksa-email",
+    `berhenti di ${penyamar.path} (pindah dari /masuk: ${penyamar.pindahDariMasuk})`,
+  );
+  const passportPenyamar = await buka(penyamar.context, "/passport");
+  catat(
+    "5c. data klien TIDAK terlihat oleh penyamar di /passport",
+    passportPenyamar.path !== "/passport" ||
+      (!passportPenyamar.teks.includes("Rina Hapsari") &&
+        !passportPenyamar.teks.includes("PAD-2608-0019")),
+    `URL akhir ${passportPenyamar.path} | isi: ${passportPenyamar.teks.slice(0, 120)}`,
+  );
+  catat(
+    "5d. baris klien tetap belum tertaut sesudah percobaan penyamar",
+    (await userIdRina()) === null,
+    `clients.user_id = ${await userIdRina()}`,
+  );
+  await penyamar.context.close();
+
+  // ---- (b) KONTROL POSITIF K1: pemilik sah kotak surat itu ----
+  // Bedanya dengan (a) HANYA satu: emailnya sudah terbukti miliknya. Di sini
+  // buktinya dipasang lewat service role (`email_confirm: true`) — pola yang
+  // sama dipakai seed dev, dan batas jujurnya tercatat di spec: kaki "tautan
+  // konfirmasi benar-benar sampai dan bekerja" diuji skrip
+  // `test:e2e:daftar`, yang membacanya dari kotak surat lokal.
+  //
+  // Perhatikan bahwa ia TIDAK membuka tautan aktivasi apa pun. Sampai 8 Sep
+  // 2026 justru inilah yang dituntut GAGAL di berkas ini; pembalikannya
+  // disengaja (K1) dan berdiri di atas satu fakta yang berubah —
+  // enable_confirmations menyala sejak 28 Agu 2026.
+  await keadaanAwalRina();
+  await buatUser(EMAIL_RINA);
+  const pemilik = await login(browser, EMAIL_RINA);
+  catat(
+    "5e. pemilik sah (email TERKONFIRMASI) tanpa tautan undangan -> /passport",
+    urlPendaratan === "/passport",
+    `mendarat di ${urlPendaratan}`,
+  );
+  await cekTampil(pemilik, "5f. pemilik sah", "/passport", [
+    "Rina Hapsari",
+    "PAD-2608-0019",
+  ]);
+  await pemilik.close();
+
+  // ---- (c) Jalur undangan TIDAK dicabut oleh jalur kedua (K14) ----
   await keadaanAwalRina();
   await buatUser(EMAIL_RINA);
   const klien = await login(
@@ -231,23 +333,23 @@ async function ujiAktivasiKlien(browser: Browser) {
     inviteLink(BASE, TOKEN_UNDANGAN_RINA),
   );
   catat(
-    "5d. login lewat tautan aktivasi bertoken -> /passport",
+    "5g. login lewat tautan aktivasi bertoken -> /passport",
     urlPendaratan === "/passport",
     `mendarat di ${urlPendaratan}`,
   );
-  await cekTampil(klien, "5e. klien teraktivasi", "/passport", [
+  await cekTampil(klien, "5h. klien teraktivasi lewat undangan", "/passport", [
     "Rina Hapsari",
     "PAD-2608-0019",
   ]);
   await klien.close();
 
-  // (c) Token sekali pakai: akun lain dengan tautan yang sama tidak kebagian.
+  // ---- (d) Token sekali pakai: akun LAIN dengan tautan yang sama ----
   const passportUlang = await buka(
     await login(browser, "ananda@padma.test", inviteLink(BASE, TOKEN_UNDANGAN_RINA)),
     "/passport",
   );
   catat(
-    "5f. token yang sudah dipakai tidak memberi akses rekam Rina",
+    "5i. token yang sudah dipakai tidak memberi akses rekam Rina",
     !passportUlang.teks.includes("Rina Hapsari"),
     `isi: ${passportUlang.teks.slice(0, 120)}`,
   );
@@ -282,7 +384,7 @@ async function main() {
     await cekTampil(owner, "4. owner", "/admin", ["Panel Admin"]);
     await owner.close();
 
-    // --- Skenario 5: aktivasi klien wajib token undangan ---
+    // --- Skenario 5: penyamar dihentikan, pemilik sah dilewatkan ---
     await ujiAktivasiKlien(browser);
   } finally {
     await browser.close();

@@ -102,9 +102,14 @@ describe("inventaris rute: README memetakan seluruh permukaan aplikasi", () => {
   });
 });
 
-describe("inventaris E2E: keenam skrip terangkai dan terdokumentasi", () => {
+describe("inventaris E2E: skrip terangkai dan terdokumentasi", () => {
   const SKRIP = [
     "test:e2e",
+    // Pendaftaran mandiri (spec 8 Sep 2026, bagian Pengujian: "skrip baru
+    // untuk pendaftaran mandiri, dirangkai ke test:e2e:semua"). Ia ditambahkan
+    // ke daftar ini pada saat yang sama ia lahir — skrip yang ada tetapi tidak
+    // terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
+    "test:e2e:daftar",
     "test:e2e:funnel",
     "test:e2e:passport",
     "test:e2e:admin",
@@ -112,7 +117,7 @@ describe("inventaris E2E: keenam skrip terangkai dan terdokumentasi", () => {
     "test:e2e:owner",
   ];
 
-  it("keenam script E2E ada di package.json", () => {
+  it("setiap script E2E yang terdaftar ada di package.json", () => {
     for (const s of SKRIP) {
       expect(PKG.scripts?.[s], `script \`${s}\` hilang dari package.json`).toBeTypeOf("string");
     }
@@ -122,7 +127,7 @@ describe("inventaris E2E: keenam skrip terangkai dan terdokumentasi", () => {
   // merilis. Skrip yang ada tetapi tidak terangkai ke sini adalah skrip yang
   // tidak pernah dijalankan siapa pun — persis nasib test:e2e:owner sebelum
   // Plan 5 Task 6.
-  it("test:e2e:semua merangkai keenamnya", () => {
+  it("test:e2e:semua merangkai semuanya", () => {
     const semua = PKG.scripts?.["test:e2e:semua"] ?? "";
     for (const s of SKRIP) {
       expect(
@@ -132,7 +137,7 @@ describe("inventaris E2E: keenam skrip terangkai dan terdokumentasi", () => {
     }
   });
 
-  it("README mendokumentasikan keenam script E2E", () => {
+  it("README mendokumentasikan setiap script E2E", () => {
     for (const s of SKRIP) {
       expect(README, `README tidak menyebut \`npm run ${s}\``).toContain(`npm run ${s}`);
     }

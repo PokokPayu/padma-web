@@ -123,7 +123,7 @@ sama-sama membuat `npm test` MERAH.
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
 | `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
-| `/akun-belum-terhubung` | Publik | Halaman ramah bagi akun klien yang belum ditautkan tautan aktivasi |
+| `/akun-belum-terhubung` | Publik | Jalan buntu jujur: akun sah yang rekam kliennya tidak bisa ditentukan tanpa tim PADMA (alamat email sudah dimiliki akun lain, atau token undangan gagal dan tak ada baris beremail sama) — sebabnya sengaja tidak dibedakan di layar |
 | `/periksa-email` | Publik | Menunggu konfirmasi email + kirim ulang tautan; konfirmasi inilah satu-satunya alasan penautan lewat email menjadi sah (K1) |
 
 Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi
@@ -207,8 +207,8 @@ Test yang menjaga keamanan:
   dengan `src/app`. Rute yang tidak terdaftar adalah rute yang luput dari audit
   permukaan serang — persis nasib `/aktivasi` (penukar token undangan) dan
   `/api/skrining` (penulis ber-service-role) sebelum test ini ada. Sekaligus
-  menjaga keenam skrip E2E tetap terangkai ke `test:e2e:semua`: skrip yang ada
-  tetapi tidak terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
+  menjaga skrip E2E tetap terangkai ke `test:e2e:semua`: skrip yang ada tetapi
+  tidak terangkai adalah skrip yang tidak pernah dijalankan siapa pun.
 - `tests/access-matrix-layouts.test.ts` — membaca sumber tiap layout
   terproteksi dan menegaskan daftar peran `requireRole([...])` persis sesuai
   matriks: `/admin` → `["admin","owner"]`, `/owner` → `["owner"]`,
@@ -220,10 +220,23 @@ Test yang menjaga keamanan:
 
 ```bash
 npm run dev               # terminal lain
-npm run test:e2e:semua    # keenam skrip di bawah, berurutan
+npm run test:e2e:semua    # seluruh skrip di bawah, berurutan
 ```
 
 - `npm run test:e2e` — matriks akses peran lewat browser sungguhan (Playwright).
+  Skenario 5-nya menguji penautan akun klien dari KEDUA sisinya: penyamar yang
+  mendaftar sendiri dengan menebak alamat email seorang klien tertahan tanpa
+  sesi, sementara pemilik sah — lewat email terkonfirmasi maupun lewat tautan
+  undangan — masuk ke Passport-nya. Tanpa paruh kedua, "tidak melihat data"
+  bisa berarti tembok yang menolak semua orang.
+- `npm run test:e2e:daftar` — pendaftaran mandiri utuh: formulir `/daftar` →
+  `/periksa-email` → **tautan konfirmasi diambil dari kotak surat lokal**
+  (Mailpit, <http://localhost:54324>) dan dibuka di browser yang sama →
+  `/passport`. Termasuk paruh negatifnya pada akun yang sama: sebelum tautan itu
+  dibuka, tidak ada baris klien yang lahir dan Passport tidak terbuka. Skenario
+  keduanya jalur K14 — klien yang datanya sudah dibuat admin mendaftar sendiri
+  dan tertaut ke barisnya yang SUDAH ADA, bukan mendapat baris kedua. Akun &
+  baris yang dibuatnya dihapus lagi di akhir run, jadi aman diulang.
 - `npm run test:e2e:funnel` — funnel calon klien: landing (katalog dari DB) →
   wizard skrining → hasil tersimpan → muncul di inbox admin. Termasuk pagar
   keselamatan: demam pada fase **kehamilan** wajib memicu merah-urgent + blok
