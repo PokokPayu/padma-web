@@ -165,9 +165,16 @@ describe("PAGAR KESELAMATAN: data kesehatan tidak boleh masuk URL atau log", () 
       expect(sumberWizard).not.toContain(terlarang);
     }
     // Satu-satunya URL yang dibangun adalah tautan WhatsApp (dibuka pengguna),
-    // bukan navigasi aplikasi.
+    // bukan navigasi aplikasi — dua kemunculan karena ada dua cabang pesan
+    // (mis. darurat vs biasa), masing-masing membangun tautan wa.me sendiri.
+    // Diperiksa satu per satu, bukan hanya dihitung, supaya penambahan
+    // encodeURIComponent yang BUKAN wa.me tetap membuat uji ini merah.
     const encode = [...sumberWizard.matchAll(/encodeURIComponent\(/g)];
-    expect(encode).toHaveLength(1);
+    expect(encode).toHaveLength(2);
+    for (const kecocokan of encode) {
+      const sekitar = sumberWizard.slice(Math.max(0, kecocokan.index! - 80), kecocokan.index! + 80);
+      expect(sekitar).toContain("https://wa.me/");
+    }
     expect(sumberWizard).toContain("https://wa.me/");
   });
 

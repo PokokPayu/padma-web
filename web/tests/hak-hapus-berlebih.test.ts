@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql, dalamTransaksiRollback } from "./helpers/db";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 
 /**
  * HAK DELETE BERLEBIH — sisa yang tidak ikut tercabut di Plan 3A.
@@ -150,6 +151,8 @@ beforeAll(async () => {
     .delete()
     .eq("client_id", KLIEN_RINA)
     .eq("tanggal", TGL_PERMINTAAN);
+  await svc.from("screenings").delete().like("kode", "UJI-%");
+  const screeningId = await skriningHijau(svc, KLIEN_RINA);
   const { data, error } = await svc
     .from("booking_requests")
     .insert({
@@ -161,6 +164,7 @@ beforeAll(async () => {
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan",
       status: "diminta",
+      screening_id: screeningId,
     })
     .select("id")
     .single();
@@ -178,6 +182,7 @@ afterAll(async () => {
     .delete()
     .eq("client_id", KLIEN_RINA)
     .eq("tanggal", TGL_PERMINTAAN);
+  await svc.from("screenings").delete().like("kode", "UJI-%");
   await svc.from("honor_marks").delete().eq("id", HONOR_UJI);
   await svc.from("variant_rates").delete().eq("id", TARIF_UJI);
   await svc.from("material_videos").delete().eq("material_id", MATERI_UJI);
@@ -503,6 +508,7 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
     // mitra_siap), jadi pembatalan benar-benar membebaskan slot yang sama
     // untuk diajukan ulang — inilah yang membuat DELETE tidak pernah
     // dibutuhkan.
+    const screeningUlang = await skriningHijau(svc, KLIEN_RINA);
     const { error: eUlang } = await svc.from("booking_requests").insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
@@ -512,6 +518,7 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan ulang",
       status: "diminta",
+      screening_id: screeningUlang,
     });
     expect(eUlang).toBeNull();
 

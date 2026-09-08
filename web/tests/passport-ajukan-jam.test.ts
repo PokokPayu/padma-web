@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 
 const admin = createAdminSupabase();
 
@@ -36,6 +37,15 @@ const { ajukanJadwal } = await import("@/lib/passport/aksi");
 
 let VARIAN_NUTRISI: string;
 let sesiAnanda: SupabaseClient;
+/**
+ * `ajukanJadwal` mencari skrining hijau BELUM DIPAKAI milik klien sendiri
+ * (spec J3) — id-nya tidak pernah datang dari FormData. Diterbitkan ulang
+ * tiap `beforeEach`, sesudah menyapu skrining fixture berkas ini sendiri
+ * (kode UJI-*), supaya tidak menumpuk skrining hijau tak terpakai yang bisa
+ * mengganggu berkas lain yang menghitung baris `screenings` (mis.
+ * tests/admin-shell.test.ts).
+ */
+let SKRINING_ID: string;
 
 /**
  * Alamat dibuat IDENTIK dengan alamat profil klien uji supaya `ajukanJadwal`
@@ -95,11 +105,16 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   ref.sesi = sesiAnanda;
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await admin.from("booking_requests").delete().eq("client_id", ANANDA);
+  await admin.from("screenings").delete().like("kode", "UJI-%");
+  SKRINING_ID = await skriningHijau(admin, ANANDA);
 });
 
 afterAll(async () => {
   await admin.from("booking_requests").delete().eq("client_id", ANANDA);
+  await admin.from("screenings").delete().like("kode", "UJI-%");
   if (profilAsli) {
     await admin
       .from("clients")
@@ -182,6 +197,7 @@ describe("gerbang jam ditembak LANGSUNG ke PostgREST, tanpa server action", () =
       preferensi_waktu: "pagi",
       alamat: ALAMAT_PROFIL,
       status: "diminta",
+      screening_id: SKRINING_ID,
     });
 
     expect(error).not.toBeNull();

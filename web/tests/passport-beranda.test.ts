@@ -70,7 +70,14 @@ async function markupBeranda(): Promise<string> {
   const { default: BerandaPassport } = await import("@/app/passport/page");
   // Server Component async: dipanggil sebagai fungsi, hasilnya pohon elemen
   // yang seluruh anaknya sinkron sehingga bisa dirender ke markup statis.
-  return renderToStaticMarkup(await BerandaPassport());
+  //
+  // `searchParams` wajib sejak sapaan bernama sesudah skrining (spec C1 J4,
+  // lihat src/app/passport/page.tsx) — halaman ini tidak lagi bisa dipanggil
+  // tanpa argumen. Berkas ini tidak menguji jalur `?skrining=`, jadi objek
+  // kosong sudah cukup.
+  return renderToStaticMarkup(
+    await BerandaPassport({ searchParams: Promise.resolve({}) }),
+  );
 }
 
 function hitung(markup: string, pola: RegExp): number {

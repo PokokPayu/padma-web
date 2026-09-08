@@ -19,6 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { BATAS_PERMINTAAN_MENUNGGU as BATAS } from "@/lib/passport/batas";
 
 const admin = createAdminSupabase();
@@ -59,6 +60,10 @@ async function bersihkan() {
   await admin.from("sessions").delete().eq("tanggal", TGL);
   await admin.from("booking_requests").delete().eq("tanggal", TGL);
   await admin.from("booking_requests").delete().gte("tanggal", "2027-01-01").lte("tanggal", "2027-01-31");
+  // Skrining fixture selalu diterbitkan lewat skriningHijau() (kode UJI-*),
+  // dan indeksnya UNIK — setiap pengajuan di atas butuh skriningnya sendiri.
+  // Disapu di sini (SESUDAH booking_requests di atas) supaya FK tidak menahan.
+  await admin.from("screenings").delete().like("kode", "UJI-%");
 }
 
 async function permintaanPada(
@@ -66,6 +71,7 @@ async function permintaanPada(
   clientId: string = ANANDA,
   tanggal: string = TGL,
 ): Promise<string> {
+  const screeningId = await skriningHijau(admin, clientId);
   const { data, error } = await admin
     .from("booking_requests")
     .insert({
@@ -78,6 +84,7 @@ async function permintaanPada(
       preferensi_waktu: "pagi",
       alamat: "Jl. Uji Batal No. 3",
       status,
+      screening_id: screeningId,
     })
     .select("id")
     .single<{ id: string }>();

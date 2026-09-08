@@ -24,6 +24,11 @@ describe("invarian struktural: tidak ada tabel tanpa RLS", () => {
     // API mana pun, termasuk admin. Penerbitannya lewat server action
     // service-role yang mengembalikan token mentah sekali saja.
     "client_invites",
+    // Token klaim skrining (spec C1 J3) disimpan sebagai SHA-256 dan sengaja
+    // tanpa policy sama sekali — lihat komentar tabelnya di migration
+    // 20260910100000_skrining_syarat_pemesanan.sql. Hanya service role di
+    // server yang boleh menyambungkan skrining anonim ke akun.
+    "screening_claims",
   ];
 
   it("tabel ber-RLS tanpa policy hanya yang sengaja terkunci", async () => {

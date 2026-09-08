@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 
 /**
  * PENJAGA PRA-PASSPORT.
@@ -31,7 +32,10 @@ const VARIAN_SVC = await varianBaku(admin, SVC);
 const bersihkan: string[] = [];
 
 afterAll(async () => {
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   if (bersihkan.length) await admin.from("booking_requests").delete().in("id", bersihkan);
+  await admin.from("screenings").delete().like("kode", "UJI-%");
   // Baris uji duplikat hanya lolos SEBELUM unique index ada (saat test ini
   // sengaja MERAH). Dibersihkan supaya tidak mencemari
   // tests/rls-firewall.test.ts yang meng-assert Ananda tepat 1 baris clients.
@@ -47,9 +51,13 @@ async function klienDanId() {
 describe("penjaga booking_requests", () => {
   it("klien TIDAK bisa menyisipkan permintaan berstatus dikonfirmasi", async () => {
     const { k, clientId } = await klienDanId();
+    // Skrining hijau milik klien SENDIRI (spec J3) — insertnya harus gagal
+    // karena STATUS-nya, bukan karena screening_id kosong/tak sah.
+    const screeningId = await skriningHijau(admin, clientId);
     const { data, error } = await k.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-10",
       jam_mulai: "09:00", preferensi_waktu: "pagi", status: "dikonfirmasi",
+      screening_id: screeningId,
     }).select();
     if (data?.[0]) bersihkan.push(data[0].id);
     expect(error?.code).toBe("42501");
@@ -57,9 +65,11 @@ describe("penjaga booking_requests", () => {
 
   it("klien TIDAK bisa mengubah status permintaannya sendiri", async () => {
     const { k, clientId } = await klienDanId();
+    const screeningId = await skriningHijau(admin, clientId);
     const { data: baru } = await admin.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-11",
       jam_mulai: "09:00", preferensi_waktu: "sore", status: "diminta",
+      screening_id: screeningId,
     }).select("id").single();
     bersihkan.push(baru!.id);
 
@@ -75,9 +85,11 @@ describe("penjaga booking_requests", () => {
 
   it("klien BOLEH menyisipkan permintaan berstatus diminta (alur sah)", async () => {
     const { k, clientId } = await klienDanId();
+    const screeningId = await skriningHijau(admin, clientId);
     const { data, error } = await k.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-12",
       jam_mulai: "09:00", preferensi_waktu: "pagi", status: "diminta",
+      screening_id: screeningId,
     }).select("id");
     expect(error).toBeNull();
     if (data?.[0]) bersihkan.push(data[0].id);
@@ -85,6 +97,7 @@ describe("penjaga booking_requests", () => {
 
   it("staf tetap bisa mengonfirmasi permintaan", async () => {
     const { clientId } = await klienDanId();
+    const screeningId = await skriningHijau(admin, clientId);
     // Rantai C1: konfirmasi hanya sah dari 'mitra_siap' (dengan mitra sudah
     // tertaut) — bukan langsung dari 'diminta'. Fixture ditulis LANGSUNG pada
     // status itu lewat INSERT (tidak dibatasi trigger perpindahan, yang hanya
@@ -94,6 +107,7 @@ describe("penjaga booking_requests", () => {
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-13",
       jam_mulai: "09:00", preferensi_waktu: "siang", status: "mitra_siap",
       partner_id: "33333333-3333-3333-3333-333333333301",
+      screening_id: screeningId,
     }).select("id").single();
     bersihkan.push(baru!.id);
 

@@ -40,6 +40,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { badgeDari, progresPaket, type SesiRingkas } from "@/lib/passport/turunan";
 import { nominalDalam } from "./helpers/nominal";
 
@@ -1081,6 +1082,7 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
     let idPermintaanAntre = "";
 
     beforeAll(async () => {
+      const screeningId = await skriningHijau(admin, KLIEN);
       const { data, error } = await admin
         .from("booking_requests")
         .insert({
@@ -1092,15 +1094,19 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
           catatan: "Uji ruling mitra saat panel tertutup.",
           status: "diminta",
           jam_mulai: "09:00",
+          screening_id: screeningId,
         })
-        .select("id")
+        .select("id, screening_id")
         .single();
       if (error) throw error;
       idPermintaanAntre = data!.id as string;
     });
 
     afterAll(async () => {
+      // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+      // screenings selama masih ditunjuk baris permintaan.
       await admin.from("booking_requests").delete().eq("id", idPermintaanAntre);
+      await admin.from("screenings").delete().like("kode", "UJI-%");
     });
 
     it("TIDAK menampilkan 'Belum ada mitra aktif' walau panel tertutup", async () => {

@@ -34,6 +34,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
@@ -173,7 +174,10 @@ afterAll(async () => {
   // bayar) tidak mewarisi status yang diubah di sini.
   await setStatusBayar("sessions", SESI_LEPAS, "belum");
   await setStatusBayar("client_packages", PAKET_ANANDA, "lunas");
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("tanggal", TGL_UJI);
+  await admin.from("screenings").delete().like("kode", "UJI-%");
   await admin.from("sessions").delete().eq("id", sesiUjiRina);
   await admin.from("client_packages").delete().eq("id", paketUjiRina);
 });
@@ -359,7 +363,13 @@ describe("penjaga peran di dalam server action (bukan hanya di layout)", () => {
 describe("ajukan jadwal", () => {
   beforeEach(async () => {
     ref.sesi = sesiAnanda;
+    // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+    // screenings selama masih ditunjuk baris permintaan.
     await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("tanggal", TGL_UJI);
+    await admin.from("screenings").delete().like("kode", "UJI-%");
+    // `ajukanJadwal()` memilih sendiri skrining hijau BELUM DIPAKAI milik
+    // klien (spec J3) — id-nya tidak pernah datang dari FormData.
+    await skriningHijau(admin, ANANDA);
     jejak.revalidate.length = 0;
   });
 

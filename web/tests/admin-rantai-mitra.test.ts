@@ -15,6 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { querySql } from "./helpers/db";
 
 const admin = createAdminSupabase();
@@ -49,10 +50,14 @@ async function bersihkan() {
   // penghapusan permintaan yang sudah menjadi sesi (FK tanpa on delete).
   await admin.from("sessions").delete().eq("tanggal", TGL);
   await admin.from("booking_requests").delete().eq("tanggal", TGL);
+  // SESUDAH booking_requests: FK screening_id (RESTRICT) menahan penghapusan
+  // selama masih ditunjuk baris permintaan.
+  await admin.from("screenings").delete().like("kode", "UJI-%");
 }
 
 /** Membuat satu permintaan pada status tertentu, memakai service role. */
 async function permintaanPada(status: string, partnerId: string | null = null): Promise<string> {
+  const screeningId = await skriningHijau(admin, KLIEN);
   const { data, error } = await admin
     .from("booking_requests")
     .insert({
@@ -65,6 +70,7 @@ async function permintaanPada(status: string, partnerId: string | null = null): 
       preferensi_waktu: "pagi",
       alamat: "Jl. Uji Rantai No. 7",
       status,
+      screening_id: screeningId,
     })
     .select("id")
     .single<{ id: string }>();

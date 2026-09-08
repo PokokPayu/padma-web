@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { OBJEK_VIDEO_TERBUKA } from "./helpers/materi-video-fixture";
 
 // `createServerSupabase()` membaca `cookies()` dari next/headers, yang hanya
@@ -346,18 +347,28 @@ describe("ambilPermintaanJadwal", () => {
 
   beforeAll(async () => { await pakaiSesi("ananda@padma.test"); });
   afterAll(async () => {
+    // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+    // screenings selama masih ditunjuk baris permintaan.
     if (bersihkan.length) await svc.from("booking_requests").delete().in("id", bersihkan);
+    await svc.from("screenings").delete().like("kode", "UJI-%");
   });
 
   it("hanya permintaan berstatus menunggu milik klien yang ditampilkan", async () => {
     const varianYoga = await varianBaku(svc, SVC_YOGA);
     const MITRA_YOGA = "33333333-3333-3333-3333-333333333301";
+    // Indeks unik `screening_id`: satu skrining hijau untuk tepat satu
+    // pengajuan (spec J3) — tiga baris di bawah butuh skriningnya sendiri.
+    const [skAnanda1, skAnanda2, skRina] = await Promise.all([
+      skriningHijau(svc, ANANDA),
+      skriningHijau(svc, ANANDA),
+      skriningHijau(svc, RINA),
+    ]);
     const { data: baris } = await svc.from("booking_requests").insert([
-      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-18", jam_mulai: "09:00", preferensi_waktu: "pagi", status: "diminta" },
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-18", jam_mulai: "09:00", preferensi_waktu: "pagi", status: "diminta", screening_id: skAnanda1 },
       // 'dikonfirmasi' menuntut partner_id (CHECK
       // `booking_requests_mitra_siap_bermitra`, migration `mitra_pada_permintaan`).
-      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, partner_id: MITRA_YOGA, tanggal: "2026-12-19", jam_mulai: "09:00", preferensi_waktu: "sore", status: "dikonfirmasi" },
-      { client_id: RINA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-17", jam_mulai: "09:00", preferensi_waktu: "siang", status: "diminta" },
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, partner_id: MITRA_YOGA, tanggal: "2026-12-19", jam_mulai: "09:00", preferensi_waktu: "sore", status: "dikonfirmasi", screening_id: skAnanda2 },
+      { client_id: RINA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-17", jam_mulai: "09:00", preferensi_waktu: "siang", status: "diminta", screening_id: skRina },
     ]).select("id, tanggal, status");
     for (const b of baris ?? []) bersihkan.push(b.id);
 

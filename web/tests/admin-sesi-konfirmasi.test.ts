@@ -36,6 +36,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
@@ -115,6 +116,9 @@ async function bersihkan() {
   // penghapusan permintaan yang sudah menjadi sesi (FK tanpa on delete).
   await admin.from("sessions").delete().eq("tanggal", TGL);
   await admin.from("booking_requests").delete().eq("tanggal", TGL);
+  // SESUDAH booking_requests: FK screening_id (RESTRICT) menahan penghapusan
+  // selama masih ditunjuk baris permintaan.
+  await admin.from("screenings").delete().like("kode", "UJI-%");
 }
 
 async function baris(id: string) {
@@ -168,6 +172,7 @@ beforeEach(async () => {
   jejak.revalidate.length = 0;
 
   await bersihkan();
+  const screeningId = await skriningHijau(admin, KLIEN);
   const { data, error } = await admin
     .from("booking_requests")
     .insert({
@@ -186,6 +191,7 @@ beforeEach(async () => {
       // trigger perpindahan, yang hanya menahan UPDATE) supaya berkas ini
       // tetap fokus pada konfirmasi itu sendiri.
       status: "mitra_siap",
+      screening_id: screeningId,
     })
     .select("id")
     .single();
