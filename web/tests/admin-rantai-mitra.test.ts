@@ -110,11 +110,29 @@ describe("rantai admin: cari bidan", () => {
     expect(await statusPermintaan(id)).toBe("mencari_mitra");
   });
 
-  it("menolak dari keadaan yang bukan diminta, dengan kalimat", async () => {
+  it("GANTI BIDAN: mitra_siap -> mencari_mitra, dan partner_id DILEPAS", async () => {
+    // Jalan mundur ini ada karena bidan bisa berhalangan atau dinonaktifkan
+    // sesudah ditetapkan. Tanpa itu permintaannya tersangkut permanen:
+    // konfirmasi menolaknya, dan sejak J8 admin tidak lagi punya tombol tolak.
     const id = await permintaanPada("mitra_siap", MITRA);
+    expect(await cariMitra(id)).toEqual({ ok: true });
+
+    const { data } = await admin
+      .from("booking_requests")
+      .select("status, partner_id")
+      .eq("id", id)
+      .maybeSingle<{ status: string; partner_id: string | null }>();
+    expect(data?.status).toBe("mencari_mitra");
+    // Membiarkannya menempel akan membuat layar menampilkan nama bidan yang
+    // sudah tidak jadi datang, dan CHECK mitra_siap tidak menahannya.
+    expect(data?.partner_id).toBeNull();
+  });
+
+  it("menolak dari keadaan yang sudah dikonfirmasi", async () => {
+    const id = await permintaanPada("dikonfirmasi", MITRA);
     const hasil = await cariMitra(id);
     expect(hasil.ok).toBe(false);
-    expect(await statusPermintaan(id)).toBe("mitra_siap");
+    expect(await statusPermintaan(id)).toBe("dikonfirmasi");
   });
 });
 
@@ -181,10 +199,7 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
     // jadwalnya sendiri lewat satu panggilan RPC.
     const id = await permintaanPada("mitra_siap", MITRA);
     const sesiKlien = await signInAs("ananda@padma.test");
-    const { error } = await sesiKlien.rpc("konfirmasi_permintaan", {
-      permintaan_id: id,
-      jenjang_saran: null,
-    });
+    const { error } = await sesiKlien.rpc("konfirmasi_permintaan", { permintaan_id: id });
     expect(error).not.toBeNull();
     expect(await statusPermintaan(id)).toBe("mitra_siap");
     expect(await sesiDari(id)).toEqual([]);
@@ -193,25 +208,28 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
   it("anon tidak punya hak EXECUTE atasnya", async () => {
     const baris = await querySql<{ ada: boolean }>(
       `select has_function_privilege('anon',
-         'public.konfirmasi_permintaan(uuid, jenjang_transport)', 'execute') as ada`,
+         'public.konfirmasi_permintaan(uuid)', 'execute') as ada`,
     );
     expect(baris[0].ada).toBe(false);
   });
 
-  it("TIDAK menerima jenjang_sumber sebagai argumen — ia tidak bisa dipalsukan", async () => {
-    // Pagar STRUKTURAL, bukan perilaku: yang dijaga adalah bentuk tanda tangan
-    // fungsinya. Begitu `jenjang_sumber` menjadi parameter, admin bisa mencatat
-    // jenjang pilihan tangan sebagai hasil hitungan otomatis — dan rekap
-    // transport owner membacanya sebagai angka yang tidak pernah diperiksa.
-    // `sessions_alasan_penimpaan` tidak menahannya: ia hanya menuntut alasan
-    // ketika sumbernya sudah 'admin'.
+  it("TIDAK menerima nilai turunan apa pun sebagai argumen — hanya id permintaan", async () => {
+    // Pagar STRUKTURAL. Versi pertama uji ini hanya memeriksa bahwa
+    // `jenjang_sumber` bukan argumen — dan hijau untuk lubang yang masih
+    // terbuka: `jenjang` SENDIRI tetap dioper pemanggil, lalu dicap 'otomatis'
+    // oleh fungsi. Admin yang memanggil RPC langsung bisa menyodorkan jenjang
+    // karangan dan mendapatkannya tercatat sebagai hasil hitungan mesin.
+    //
+    // Sekarang yang dijaga adalah SELURUH daftar argumennya: satu id, titik.
+    // Setiap nilai turunan yang kelak ingin dioper masuk harus mengalahkan uji
+    // ini lebih dulu, dan itulah maksudnya.
     const baris = await querySql<{ args: string }>(
       `select pg_get_function_arguments(p.oid) as args
          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname = 'public' and p.proname = 'konfirmasi_permintaan'`,
     );
     expect(baris.length).toBe(1);
-    expect(baris[0].args).not.toContain("jenjang_sumber");
+    expect(baris[0].args.trim()).toBe("permintaan_id uuid");
   });
 
   it("menuliskan jenjang_sumber='otomatis' sendiri ketika ada saran", async () => {
@@ -229,7 +247,6 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
     const id = await permintaanPada("diminta");
     const { data, error } = await sesiAdmin.rpc("konfirmasi_permintaan", {
       permintaan_id: id,
-      jenjang_saran: null,
     });
     expect(error).toBeNull();
     expect(data).toBeNull();

@@ -135,16 +135,14 @@ describe("tidak ada nilai status lama yang tertinggal di definisi SQL", () => {
     }
   });
 
-  it("tak satu pun view menyebut nilai status yang sudah berganti nama", async () => {
-    for (const mati of NILAI_MATI) {
-      const baris = await querySql<{ nama: string }>(
-        `select c.relname as nama
-           from pg_class c
-           join pg_namespace n on n.oid = c.relnamespace
-          where n.nspname = 'public' and c.relkind = 'v' and pg_get_viewdef(c.oid) ~ $1`,
-        [pola(mati)],
-      );
-      expect(baris.map((b) => b.nama), `view menyebut '${mati}'`).toEqual([]);
-    }
-  });
+  // TIDAK ADA pagar pemindai VIEW di sini, dan itu keputusan yang diprobe:
+  //
+  //   alter type t rename value 'lama' to 'baru';
+  //   -- pg_get_viewdef(v) -> "... where s = 'baru'::t"   <-- IKUT BERUBAH
+  //   -- pg_proc.prosrc(f) -> "... where s = 'lama' ..."  <-- TIDAK BERUBAH
+  //
+  // View menyimpan OID nilai enum; badan fungsi plpgsql adalah TEKS. Pagar
+  // pemindai view karena itu TIDAK PERNAH bisa merah untuk kelas kesalahan ini,
+  // dan pagar yang tidak bisa merah lebih buruk daripada tidak ada pagar: ia
+  // membuat pembaca berikutnya mengira sesuatu sedang dijaga.
 });

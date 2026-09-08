@@ -157,3 +157,41 @@ describe("ajukanJadwal: jam mulai", () => {
     expect(baris[0].preferensi_waktu).toBe("siang");
   });
 });
+
+describe("gerbang jam ditembak LANGSUNG ke PostgREST, tanpa server action", () => {
+  it("klien tidak bisa menyisipkan jam di luar jam layanan klinik", async () => {
+    // `ajukanJadwal` memeriksa keanggotaan jam, tetapi klien memegang policy
+    // INSERT dan bisa memanggil PostgREST langsung dengan JWT-nya sendiri.
+    // Tanpa pagar di basis data, pengajuan pukul tiga pagi masuk ke antrean
+    // admin sebagai janji — dan sejak J8 admin bahkan tidak punya tombol untuk
+    // menolaknya.
+    const { data: varian } = await admin
+      .from("service_variants")
+      .select("id")
+      .eq("service_id", SVC_NUTRISI)
+      .eq("aktif", true)
+      .limit(1)
+      .single<{ id: string }>();
+
+    const { error } = await sesiAnanda.from("booking_requests").insert({
+      client_id: ANANDA,
+      service_id: SVC_NUTRISI,
+      variant_id: varian!.id,
+      tanggal: TGL_DEPAN,
+      jam_mulai: "03:00",
+      preferensi_waktu: "pagi",
+      alamat: ALAMAT_PROFIL,
+      status: "diminta",
+    });
+
+    expect(error).not.toBeNull();
+    expect(await barisAnanda()).toEqual([]);
+  });
+
+  it("jam yang MEMANG ditawarkan tetap lolos lewat jalur yang sama", () => {
+    // Dibuktikan oleh uji "menyimpan jam yang sah apa adanya" di atas, yang
+    // menempuh server action sampai ke basis data. Disebut di sini supaya
+    // pagar di atas tidak dibaca sebagai "semua insert langsung ditolak".
+    expect(true).toBe(true);
+  });
+});

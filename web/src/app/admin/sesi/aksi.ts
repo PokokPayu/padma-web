@@ -67,11 +67,21 @@ export async function cariMitra(permintaanId: string): Promise<Berhasil | Gagal>
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
+  // DUA keadaan asal, bukan satu: `diminta` (mulai mencari) dan `mitra_siap`
+  // (GANTI bidan). Tanpa yang kedua, permintaan yang bidannya berhalangan —
+  // atau dinonaktifkan di sela-sela — tersangkut permanen: `konfirmasiPermintaan`
+  // menyuruh "pilih mitra lain" sementara tidak ada satu pun layar yang bisa
+  // melakukannya, dan admin tidak lagi punya tombol tolak (spec J8).
+  //
+  // `partner_id` DILEPAS bersamaan. Membiarkannya menempel akan membuat
+  // `mencari_mitra` menyimpan nama bidan yang sudah tidak jadi datang — dan
+  // CHECK `booking_requests_mitra_siap_bermitra` tidak menahannya, karena ia
+  // hanya menuntut ADA-nya mitra pada dua status berikutnya.
   const { data } = await supabase
     .from("booking_requests")
-    .update({ status: PERMINTAAN_DICARIKAN })
+    .update({ status: PERMINTAAN_DICARIKAN, partner_id: null })
     .eq("id", permintaanId)
-    .eq("status", PERMINTAAN_AWAL)
+    .in("status", [PERMINTAAN_AWAL, PERMINTAAN_SIAP_KONFIRMASI])
     .select("id");
 
   // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
@@ -161,40 +171,29 @@ export async function konfirmasiPermintaan(permintaanId: string): Promise<Berhas
   // sudah dipilih di langkah sebelumnya.
   const { data: p } = await supabase
     .from("booking_requests")
-    .select("id, alamat_lat, alamat_lon, partner_id, partners ( id, aktif, lat, lon )")
+    .select("id, partners ( aktif )")
     .eq("id", permintaanId)
     .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
-    .maybeSingle<{
-      id: string;
-      alamat_lat: number | null;
-      alamat_lon: number | null;
-      partner_id: string | null;
-      partners: { id: string; aktif: boolean; lat: number | null; lon: number | null } | null;
-    }>();
+    .maybeSingle<{ id: string; partners: { aktif: boolean } | null }>();
 
   if (!p) return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
 
   // Mitra bisa dinonaktifkan di sela-sela antara "tetapkan bidan" dan
-  // "konfirmasi". Menolak di sini memberi admin kalimat yang bisa ditindak
-  // ("pilih mitra lain"), bukan sesi yang lahir untuk orang yang sudah pensiun.
+  // "konfirmasi". Menolak di sini memberi admin kalimat yang bisa ditindak,
+  // bukan sesi yang lahir untuk orang yang sudah pensiun. Tombol "Ganti bidan"
+  // ada di layar yang sama, jadi kalimatnya menunjuk sesuatu yang nyata.
   if (!p.partners?.aktif) {
-    return { ok: false, pesan: "Mitra sudah tidak aktif. Pilih mitra lain lebih dulu." };
+    return { ok: false, pesan: "Bidan sudah tidak aktif. Tekan “Ganti bidan” lebih dulu." };
   }
 
-  const saran = saranJenjang(
-    p.partners.lat != null && p.partners.lon != null
-      ? { lat: p.partners.lat, lon: p.partners.lon }
-      : null,
-    p.alamat_lat != null && p.alamat_lon != null
-      ? { lat: p.alamat_lat, lon: p.alamat_lon }
-      : null,
-  );
-
+  // SATU argumen, dan tidak satu pun nilai turunan ikut menyeberang. Jenjang
+  // jarak dihitung DI DALAM fungsi dari koordinat yang sudah tersimpan —
+  // sebelumnya ia dihitung di sini lalu dioper, dan pemanggil yang menyodorkan
+  // angka karangan tetap mendapatkannya tercatat sebagai hasil hitungan
+  // otomatis. Kesetaraan rumus SQL dan TypeScript dijaga
+  // tests/jarak-sql-vs-ts.test.ts.
   const { data: sesiId, error } = await supabase.rpc("konfirmasi_permintaan", {
     permintaan_id: permintaanId,
-    jenjang_saran: saran?.jenjang ?? null,
-    // TIDAK ada argumen `jenjang_sumber` — fungsinya yang menuliskannya, supaya
-    // jenjang pilihan tangan tidak bisa dicatat sebagai hasil hitungan otomatis.
   });
 
   if (error) return { ok: false, pesan: "Gagal mengonfirmasi. Coba lagi." };

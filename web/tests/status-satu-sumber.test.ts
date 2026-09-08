@@ -18,21 +18,55 @@ const AKAR = path.resolve(__dirname, "..", "src");
 const SUMBER_SAH = path.join(AKAR, "lib", "jadwal", "status.ts");
 
 /** Nilai lama yang sudah tidak ada di basis data mana pun. */
-const NILAI_MATI = ["'menunggu'", '"menunggu"', "'batal'", '"batal"'];
+const NILAI_MATI = ["menunggu", "batal"];
 
-/** Nilai baru — sah, tetapi hanya boleh disebut modul sumbernya. */
-const NILAI_BARU = [
-  "'diminta'",
-  '"diminta"',
-  "'mencari_mitra'",
-  '"mencari_mitra"',
-  "'mitra_siap'",
-  '"mitra_siap"',
-  "'dibatalkan_klien'",
-  '"dibatalkan_klien"',
-  "'dibatalkan_padma'",
-  '"dibatalkan_padma"',
+/**
+ * Nilai yang BERGANTI NAMA atau BARU LAHIR di C1 — bukan seluruh anggota enum.
+ *
+ * ===== KENAPA BUKAN SEMUANYA, DAN APA ONGKOS KEPUTUSAN INI =====
+ * Tinjauan menyeluruh menunjuk bahwa daftar ini meloloskan `terjadwal`,
+ * `selesai`, `dikonfirmasi`, dan `ditolak` — dan itu benar: keempatnya memang
+ * ditulis literal di 14 tempat di seluruh repo.
+ *
+ * Yang DIPILIH: melarang hanya nilai yang berubah. Bahaya yang pagar ini ada
+ * untuk mencegahnya adalah perbandingan yang BERHENTI COCOK setelah sebuah
+ * nilai berganti nama — kegagalan senyap yang tidak melempar error apa pun.
+ * Keempat nilai stabil itu tidak berganti nama di C1, jadi tidak satu pun dari
+ * 14 tempat itu rusak hari ini; memaksa semuanya lewat modul berarti menyunting
+ * tujuh modul yang tidak ada hubungannya dengan pekerjaan ini
+ * (`lib/admin/klien.ts`, `mitra.ts`, `penugasan.ts`, `tren.ts`, …) demi
+ * kerapian, bukan demi kebenaran.
+ *
+ * ONGKOSNYA, ditulis terbuka: bila C2 atau C3 kelak MENGGANTI NAMA salah satu
+ * dari keempat nilai stabil itu, pagar ini tidak akan menangkapnya. Siapa pun
+ * yang melakukannya WAJIB menambahkan nilai lamanya ke `NILAI_MATI` di atas
+ * dalam commit yang sama — persis seperti yang C1 lakukan untuk `menunggu` dan
+ * `batal`.
+ */
+const NILAI_STATUS = [
+  "diminta",
+  "mencari_mitra",
+  "mitra_siap",
+  "dibatalkan_klien",
+  "berjalan",
+  "tidak_hadir",
+  "dibatalkan_padma",
 ];
+
+/**
+ * Pencocokan DEKAT KATA `status`, bukan literalnya sendiri.
+ *
+ * Sebabnya: beberapa literal yang sama sah di tempat lain — `"ditolak"` juga
+ * anggota enum `screening_followup`, dan `"selesai"` juga salah satu fase
+ * pengunggah PDF. Melarang katanya di mana saja akan memaksa dua modul yang
+ * tidak ada hubungannya dengan C1 memakai konstanta yang tidak berlaku bagi
+ * mereka.
+ *
+ * `status` ditulis huruf kecil dan case-sensitive: `STATUS_SAH` milik modul
+ * skrining karena itu tidak ikut terjaring.
+ */
+const dekatStatus = (nilai: string) =>
+  new RegExp(`status[^\n]{0,40}["']${nilai}["']`);
 
 function berkasTs(dir: string): string[] {
   const hasil: string[] = [];
@@ -58,20 +92,19 @@ describe("satu sumber nilai status", () => {
       const kode = tanpaKomentar(readFileSync(f, "utf8"));
       for (const mati of NILAI_MATI) {
         // `menunggu_verifikasi` adalah enum pay_status yang SAH dan tidak
-        // disentuh C1 — literalnya berbeda, jadi pencocokan penuh di atas
-        // (dengan kutip di kedua sisi) sudah memisahkannya.
-        if (kode.includes(mati)) pelanggar.push(`${path.relative(AKAR, f)} → ${mati}`);
+        // disentuh C1 — kutip penutup pada pola memisahkannya.
+        if (dekatStatus(mati).test(kode)) pelanggar.push(`${path.relative(AKAR, f)} → ${mati}`);
       }
     }
     expect(pelanggar).toEqual([]);
   });
 
-  it("nilai status baru pun tidak ditulis literal di luar modulnya", () => {
+  it("tidak ada nilai status yang ditulis literal di luar modulnya", () => {
     const pelanggar: string[] = [];
     for (const f of berkas) {
       const kode = tanpaKomentar(readFileSync(f, "utf8"));
-      for (const nilai of NILAI_BARU) {
-        if (kode.includes(nilai)) pelanggar.push(`${path.relative(AKAR, f)} → ${nilai}`);
+      for (const nilai of NILAI_STATUS) {
+        if (dekatStatus(nilai).test(kode)) pelanggar.push(`${path.relative(AKAR, f)} → ${nilai}`);
       }
     }
     expect(pelanggar).toEqual([]);

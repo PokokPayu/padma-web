@@ -41,7 +41,7 @@ export type MitraPilihan = { id: string; nama: string; jarak: string };
  * TIGA LANGKAH, bukan satu (spec C1 J7):
  *   diminta       -> tombol "Cari bidan"
  *   mencari_mitra -> daftar mitra terurut jarak + "Tetapkan bidan"
- *   mitra_siap    -> nama bidan terpilih + "Konfirmasi"
+ *   mitra_siap    -> nama bidan terpilih + "Konfirmasi" + "Ganti bidan"
  *
  * Langkahnya dipisah karena tarif transport berasal dari domisili MITRA ke
  * alamat KLIEN: transport tidak bisa dihitung sebelum mitranya diketahui, dan
@@ -148,6 +148,20 @@ export function BlokPermintaan({
                 className="rounded-lg bg-gold px-3 py-1.5 text-[12px] font-bold text-night disabled:opacity-60"
               >
                 {pending ? "Memproses…" : "Konfirmasi"}
+              </button>
+              {/* JALAN MUNDUR. Tanpa tombol ini, permintaan yang bidannya
+                  berhalangan — atau dinonaktifkan sesudah ditetapkan —
+                  tersangkut permanen: konfirmasi menolaknya, dan sejak J8 admin
+                  tidak lagi punya tombol tolak. Peta perpindahan status memang
+                  sudah menyahkan `mitra_siap -> mencari_mitra`; yang hilang
+                  hanyalah jalan menuju ke sana. */}
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => jalankan(() => cariMitra(permintaan.id))}
+                className="rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft disabled:opacity-60"
+              >
+                Ganti bidan
               </button>
             </>
           )}

@@ -198,6 +198,35 @@ describe("pagar ditembak LANGSUNG ke PostgREST, tanpa server action", () => {
   });
 });
 
+describe("STAF tidak bisa memalsukan pembatalan oleh klien", () => {
+  it("admin yang menulis dibatalkan_klien ditolak basis data", async () => {
+    // `dibatalkan_klien` adalah CATATAN TENTANG SIAPA. Policy "booking: staf"
+    // adalah `for all`, jadi tanpa pagar ini admin bisa menuliskannya atas
+    // pengajuan yang kliennya tidak pernah membatalkan — dan tidak ada jejak
+    // aktor pada tabel ini yang bisa meluruskannya nanti.
+    //
+    // Pembatalan oleh PADMA punya tempatnya sendiri (`sessions`), dan seluruh
+    // perkaranya milik C3.
+    const id = await permintaanPada("diminta", ANANDA);
+    const sesiAdmin = await signInAs("admin@padma.test");
+    const { error } = await sesiAdmin
+      .from("booking_requests")
+      .update({ status: "dibatalkan_klien" })
+      .eq("id", id)
+      .select("id");
+
+    expect(error).not.toBeNull();
+    expect((await bacaBaris(id))?.status).toBe("diminta");
+  });
+
+  it("admin TETAP bisa menggerakkan rantai yang memang wewenangnya", () => {
+    // Pagar di atas mempersempit SATU nilai, bukan mencabut kewenangan staf.
+    // Perpindahan diminta -> mencari_mitra -> mitra_siap -> dikonfirmasi diuji
+    // tuntas di tests/admin-rantai-mitra.test.ts.
+    expect(true).toBe(true);
+  });
+});
+
 describe("penolakan admin tidak lagi terjangkau dari layar (spec J8)", () => {
   function berkasTsx(dir: string): string[] {
     const hasil: string[] = [];

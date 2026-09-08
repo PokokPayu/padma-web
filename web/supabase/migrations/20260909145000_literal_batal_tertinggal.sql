@@ -11,17 +11,34 @@
 -- `session_status` yang juga berganti nama — dan lolos sepenuhnya:
 --
 --   * fungsi `klaim_sudah_bayar` (20260830100000_klaim_hanya_sesi_lepas)
---   * view  `sesi_menunggu_tarif` (20260907140000_sesi_menunggu_tarif)
 --
--- Keduanya GAGAL saat dijalankan (22P02: nilai enum tidak dikenal), bukan saat
+-- Ia GAGAL saat dijalankan (22P02: nilai enum tidak dikenal), bukan saat
 -- migrasi — persis bentuk kegagalan yang diperingatkan spec C1: kode yang
 -- membandingkan dengan nilai lama tidak error saat dipasang, ia menunggu
 -- sampai ada yang memakainya. Yang memakainya di sini adalah klien yang
--- menekan "saya sudah bayar", dan owner yang membuka daftar sesi >20 km.
+-- menekan "saya sudah bayar".
 --
--- Pagar pemindainya ikut diperluas ke `session_status` di berkas uji yang sama.
--- Satu pagar yang hanya memeriksa separuh enum yang berubah adalah pagar yang
--- memberi rasa aman tanpa memberi keamanan.
+-- ===== FAKTA YANG DIPROBE, DAN KOREKSI ATAS DRAF PERTAMA BERKAS INI =====
+-- Draf pertama juga menulis ulang view `sesi_menunggu_tarif_transport` dengan
+-- alasan yang sama. ALASAN ITU SALAH, dan probe langsung membuktikannya:
+--
+--   begin;
+--   create type t as enum ('lama','x');
+--   create view v as select * from tbl where s = 'lama';
+--   create function f() ... where s = 'lama' ...;
+--   alter type t rename value 'lama' to 'baru';
+--   -- pg_get_viewdef(v) -> "... where s = 'baru'::t"   <-- IKUT BERUBAH
+--   -- pg_proc.prosrc(f) -> "... where s = 'lama' ..."  <-- TIDAK BERUBAH
+--
+-- View menyimpan OID nilai enum, bukan teksnya, sehingga `rename value`
+-- memperbaikinya sendiri. Badan fungsi plpgsql adalah TEKS, dan tidak.
+-- Karena itu hanya FUNGSI yang perlu disentuh — dan pagar pemindai di
+-- `tests/rantai-status-db.test.ts` yang memindai VIEW dihapus, karena ia tidak
+-- akan pernah bisa merah untuk kelas kesalahan ini.
+--
+-- Pagar pemindai FUNGSI tetap ada dan diperluas ke `session_status`. Satu pagar
+-- yang hanya memeriksa separuh enum yang berubah adalah pagar yang memberi
+-- rasa aman tanpa memberi keamanan.
 
 -- ===== 1) `klaim_sudah_bayar` =====
 -- DISALIN APA ADANYA dari 20260830100000_klaim_hanya_sesi_lepas — tipe
@@ -90,36 +107,3 @@ begin
   end if;
 end;
 $$;
-
--- ===== 2) view `sesi_menunggu_tarif_transport` =====
--- NAMA VIEWNYA `sesi_menunggu_tarif_transport`, bukan `sesi_menunggu_tarif`.
--- Draf pertama berkas ini salah menyebutnya dan akibatnya BUKAN galat: ia
--- MELAHIRKAN view baru bernama `sesi_menunggu_tarif` yang tidak dipakai siapa
--- pun, sementara view yang sebenarnya rusak tetap rusak. Ketahuan lewat
--- `admin-pengerasan` — view baru itu lahir dengan hak tulis bawaan Supabase
--- untuk `authenticated`, dan pagar "tidak ada view yang boleh ditulis peran
--- API" menyala. Kalau bukan karena pagar itu, view hantu ini akan hidup
--- diam-diam sampai seseorang membacanya dan bertanya-tanya mana yang benar.
-drop view if exists public.sesi_menunggu_tarif;
-
-create or replace view public.sesi_menunggu_tarif_transport
-  with (security_invoker = off) as
-  select s.id, c.nama as nama_klien, s.tanggal
-    from public.sessions s
-    join public.clients c on c.id = s.client_id
-   where s.jenjang = 'di_atas_20'
-     and s.status <> 'dibatalkan_padma'
-     and not exists (
-       select 1 from public.transport_khusus tk where tk.session_id = s.id
-     )
-     and public.user_role() in ('admin', 'owner');
-
--- Hak DIPULIHKAN eksplisit, tidak dianggap terbawa: view yang lahir di skema
--- `public` mendapat INSERT/UPDATE bawaan untuk `authenticated`, dan hanya
--- `revoke` yang menutupnya. Disalin dari migration aslinya.
-revoke all on public.sesi_menunggu_tarif_transport from public, anon, authenticated;
-grant select on public.sesi_menunggu_tarif_transport to authenticated;
-
-comment on view public.sesi_menunggu_tarif_transport is
-  'Sesi >20 km, bukan dibatalkan, tanpa baris transport_khusus — satu-satunya '
-  'definisi "menunggu tarif khusus" di sistem ini.';

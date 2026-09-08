@@ -465,15 +465,32 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
     expect(error?.code).toBe("42501");
   });
 
-  it("KONTROL: admin TETAP bisa MEMBATALKAN permintaan, dan pembatalan melepas antrean", async () => {
-    // `status: "ditolak"` tidak lagi tujuan yang sah dari perpindahan mana
-    // pun (spec C1 J8 — lihat dokblok `PERPINDAHAN_PERMINTAAN` di
-    // `src/lib/jadwal/status.ts`; tombol & jalur "Tolak" sudah dilepas dari
-    // layar). `dibatalkan_klien` sekarang yang membebaskan slot antrean, dan
-    // admin (bukan hanya klien lewat `batalkanPengajuan`) tetap boleh
-    // menuliskannya — `guard_booking_status` hanya mempersempit KLIEN.
+  it("ADMIN TIDAK bisa menuliskan pembatalan atas nama klien; pembatalan klien melepas antrean", async () => {
+    // Draf pertama uji ini mengabadikan yang SEBALIKNYA — bahwa admin boleh
+    // menulis `dibatalkan_klien`. Tinjauan menyeluruh menunjuknya sebagai
+    // cacat, dan itu benar: nilai itu adalah CATATAN TENTANG SIAPA, dan tabel
+    // ini tidak punya jejak aktor yang bisa meluruskannya nanti. Pembatalan
+    // oleh PADMA punya tempatnya sendiri (`sessions.dibatalkan_padma`), dan
+    // seluruh perkaranya milik C3.
     const a = await signInAs("admin@padma.test");
-    const { data, error } = await a
+    const { error: eAdmin } = await a
+      .from("booking_requests")
+      .update({ status: "dibatalkan_klien" })
+      .eq("id", permintaanUji)
+      .select("id, status");
+    expect(eAdmin?.code).toBe("42501");
+
+    // Yang membebaskan slot antrean adalah pembatalan oleh KLIEN PEMILIKNYA.
+    // Barisnya milik Rina, yang sengaja belum punya akun auth (fixture "klien
+    // belum diaktifkan"), jadi di sini pembatalannya ditulis service role —
+    // penjaga peran memang hanya berlaku untuk `anon`/`authenticated`. Bahwa
+    // klien sungguhan bisa melakukannya lewat sesinya sendiri diuji tuntas di
+    // tests/pembatalan-klien.test.ts.
+    //
+    // `status: "ditolak"` tidak lagi tujuan yang sah dari perpindahan mana pun
+    // (spec C1 J8), jadi inilah satu-satunya jalan keluar dari antrean — dan
+    // itulah sebabnya DELETE tidak pernah dibutuhkan.
+    const { data, error } = await svc
       .from("booking_requests")
       .update({ status: "dibatalkan_klien" })
       .eq("id", permintaanUji)
