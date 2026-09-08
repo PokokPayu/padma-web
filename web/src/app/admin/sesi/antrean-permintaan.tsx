@@ -28,6 +28,8 @@ export type PermintaanAntre = {
   labelBayar: string;
   /** Sudah diverifikasi lunas — hanya ini yang boleh dikonfirmasi. */
   lunas: boolean;
+  /** Tautan WhatsApp siap tempel berisi pesan tagihan. Kosong bila belum ditagih. */
+  tautanWa: string;
 };
 
 /**
@@ -186,6 +188,21 @@ export function BlokPermintaan({
               Menampilkannya lebih awal berarti menawarkan tombol yang akan
               ditolak basis data — dan tombol yang berbohong adalah cara
               tercepat membuat admin berhenti memercayai layarnya. */}
+          {/* KANAL PERTAMA dari dua (spec C2 P7): pesan siap-salin, bukan
+              kiriman otomatis. PADMA belum punya jalur kirim WhatsApp, dan
+              menambahkannya berarti satu penyedia baru beserta jalur
+              kegagalannya — sementara admin memang sudah punya percakapan
+              berjalan dengan klien itu. */}
+          {permintaan.tautanWa && (
+            <a
+              href={permintaan.tautanWa}
+              target="_blank"
+              rel="noopener"
+              className="rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft"
+            >
+              Kirim tagihan via WA
+            </a>
+          )}
           {permintaan.lunas && (
             <button
               type="button"

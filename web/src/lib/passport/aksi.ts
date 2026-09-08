@@ -264,7 +264,11 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     // berubah, yang menopang pemesanannya harus jawaban terakhirnya.
     .order("created_at", { ascending: false });
 
-  const skriningPakai = (skriningHijau ?? []).find((s) => !sudahDipakai.has(s.id as string));
+  const kandidat = (skriningHijau ?? [])
+    .map((s) => s.id as string)
+    .filter((id) => !sudahDipakai.has(id));
+
+  const skriningPakai = kandidat[0] ? { id: kandidat[0] } : undefined;
 
   if (!skriningPakai) {
     return {
@@ -278,20 +282,48 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
   // Nilai apa pun yang ikut dikirim browser di FormData diabaikan — hanya
   // medan di bawah yang pernah menyentuh basis data.
-  const { error } = await supabase.from("booking_requests").insert({
-    client_id: clientId,
-    service_id: serviceId,
-    variant_id: variantId,
-    tanggal,
-    jam_mulai: jam,
-    preferensi_waktu: waktu,
-    catatan,
-    alamat: cekAlamat.nilai,
-    alamat_lat: koordinat?.lat ?? null,
-    alamat_lon: koordinat?.lon ?? null,
-    screening_id: skriningPakai.id,
-    status: PERMINTAAN_AWAL, // hardcoded; trigger DB menolak nilai lain dari klien
-  });
+  // PEMILIHAN SKRINING ADALAH BACA-LALU-TULIS, dan itu bisa kalah balapan.
+  //
+  // Dua pengiriman bersamaan dari klien yang sama membaca daftar "belum
+  // terpakai" yang identik, lalu keduanya menulis skrining yang sama — yang
+  // kedua ditolak indeks unik `booking_requests_skrining_unik` dengan 23505,
+  // dan klien membaca "Gagal mengirim permintaan" untuk pengajuan yang
+  // sebenarnya sah.
+  //
+  // Yang membatasi berapa banyak pengajuan boleh hidup adalah KUOTA ANTREAN,
+  // bukan siapa yang menang balapan. Karena itu bentrok skrining dicoba ulang
+  // dengan kandidat berikutnya, bukan dilaporkan sebagai kegagalan.
+  //
+  // Ditemukan oleh uji 50-pengiriman-serentak, bukan oleh pembacaan kode:
+  // hasilnya berselang-seling 3, 4, lalu 5 baris untuk kuota yang sama.
+  // Nilai yang sudah lolos penyempitan tipe diikat SEBELUM perulangan: di
+  // dalam blok, TypeScript kehilangan penyempitan atas union `cekAlamat`.
+  const alamatFinal = cekAlamat.nilai;
+
+  let error: { code?: string } | null = null;
+  for (const idSkrining of kandidat) {
+    const { error: e } = await supabase.from("booking_requests").insert({
+      client_id: clientId,
+      service_id: serviceId,
+      variant_id: variantId,
+      tanggal,
+      jam_mulai: jam,
+      preferensi_waktu: waktu,
+      catatan,
+      alamat: alamatFinal,
+      alamat_lat: koordinat?.lat ?? null,
+      alamat_lon: koordinat?.lon ?? null,
+      screening_id: idSkrining,
+      status: PERMINTAAN_AWAL, // hardcoded; trigger DB menolak nilai lain dari klien
+    });
+    error = e;
+    // 23505 = bentrok indeks unik. Satu-satunya yang unik pada baris ini selain
+    // id adalah `screening_id` dan dedup antrean — dan dedup antrean sudah
+    // ditolak lebih awal dengan kalimatnya sendiri, jadi sampai di sini 23505
+    // berarti skriningnya keburu dipakai pengiriman lain.
+    if (e?.code !== "23505") break;
+  }
+
   if (error) return { ok: false, pesan: "Gagal mengirim permintaan." };
 
   revalidatePath("/passport");
