@@ -27,11 +27,16 @@
  * (`menunggu_verifikasi`, `terjadwal`, `belum`), dan menaruh `AWAITING_PAYMENT`
  * di sebelahnya membuat satu skema punya dua kosakata.
  *
- * ===== YANG SENGAJA BELUM ADA =====
- * `menunggu_bayar` (`AWAITING_PAYMENT`) milik C2, disisipkan antara `mitra_siap`
- * dan `dikonfirmasi`. Ia TIDAK dibuat sekarang: nilai enum yang belum dipakai
- * adalah keadaan mati di dalam basis data yang tidak satu pun kode tahu cara
- * keluar darinya.
+ * ===== `menunggu_bayar` SEKARANG ADA (C2) =====
+ * Ia sengaja TIDAK dibuat di C1 — nilai enum yang belum dipakai adalah keadaan
+ * mati yang tidak satu pun kode tahu cara keluar darinya. C2 membuatnya
+ * bersamaan dengan jalan masuk (terbitkan tagihan) dan DUA jalan keluarnya
+ * (dibayar & diverifikasi, atau tenggatnya lewat).
+ *
+ * Bersamanya lahir `dibatalkan_tenggat`, yang sengaja BUKAN `dibatalkan_klien`:
+ * nilai status adalah catatan tentang SIAPA, dan orang yang lupa membayar bukan
+ * orang yang memutuskan membatalkan. Hanya batal-tenggat yang mengembalikan
+ * skrining (spec C2 P5).
  */
 
 /**
@@ -45,8 +50,10 @@ export const STATUS_PERMINTAAN = [
   "diminta",
   "mencari_mitra",
   "mitra_siap",
+  "menunggu_bayar",
   "dikonfirmasi",
   "dibatalkan_klien",
+  "dibatalkan_tenggat",
   "ditolak",
 ] as const;
 
@@ -66,6 +73,11 @@ export const STATUS_ANTRE: readonly StatusPermintaan[] = [
   "diminta",
   "mencari_mitra",
   "mitra_siap",
+  // `menunggu_bayar` IKUT antrean (spec C2 P1): klien masih menunggu jawaban
+  // PADMA — tepatnya menunggu jadwalnya terkunci — dan bidannya masih
+  // tertahan. Mengeluarkannya berarti klien bisa menumpuk tagihan yang belum
+  // dibayar tanpa pernah menabrak batas antrean.
+  "menunggu_bayar",
 ];
 
 /**
@@ -85,8 +97,10 @@ export const LABEL_PERMINTAAN: Record<StatusPermintaan, string> = {
   diminta: "Diminta",
   mencari_mitra: "Mencari bidan",
   mitra_siap: "Bidan siap",
+  menunggu_bayar: "Menunggu pembayaran",
   dikonfirmasi: "Dikonfirmasi",
   dibatalkan_klien: "Dibatalkan klien",
+  dibatalkan_tenggat: "Batal — tenggat bayar lewat",
   ditolak: "Ditolak",
 };
 
@@ -120,9 +134,21 @@ export const LABEL_PERMINTAAN: Record<StatusPermintaan, string> = {
 export const PERPINDAHAN_PERMINTAAN: Record<StatusPermintaan, readonly StatusPermintaan[]> = {
   diminta: ["mencari_mitra", "dibatalkan_klien"],
   mencari_mitra: ["mitra_siap", "diminta", "dibatalkan_klien"],
-  mitra_siap: ["dikonfirmasi", "mencari_mitra", "dibatalkan_klien"],
+  // `mitra_siap -> dikonfirmasi` DIHAPUS di C2, dan itu seluruh inti C2:
+  // konfirmasi tidak lagi bisa terjadi tanpa uang berpindah. Jalannya kini
+  // wajib lewat `menunggu_bayar`.
+  mitra_siap: ["menunggu_bayar", "mencari_mitra", "dibatalkan_klien"],
+  menunggu_bayar: [
+    "dikonfirmasi",
+    // Mundur melepas bidan tanpa membatalkan pengajuan klien — bidannya bisa
+    // berhalangan sementara kliennya tidak melakukan kesalahan apa pun.
+    "mencari_mitra",
+    "dibatalkan_klien",
+    "dibatalkan_tenggat",
+  ],
   dikonfirmasi: [],
   dibatalkan_klien: [],
+  dibatalkan_tenggat: [],
   ditolak: [],
 };
 
@@ -190,3 +216,14 @@ export const SESI_DIBATALKAN = "dibatalkan_padma" satisfies StatusSesi;
 
 /** Keadaan "sedang dicarikan bidan" — dipakai server action admin (spec J7). */
 export const PERMINTAAN_DICARIKAN = "mencari_mitra" satisfies StatusPermintaan;
+
+/** Tagihan sudah terbit, jadwal belum terkunci (spec C2 P1). */
+export const PERMINTAAN_MENUNGGU_BAYAR = "menunggu_bayar" satisfies StatusPermintaan;
+
+/**
+ * Batal karena tenggat bayar lewat — BUKAN `dibatalkan_klien`.
+ *
+ * Perbedaannya bukan kosmetik: yang satu keputusan orang, yang satu kelalaian
+ * waktu, dan hanya yang KEDUA yang mengembalikan skrining (spec C2 P5).
+ */
+export const PERMINTAAN_BATAL_TENGGAT = "dibatalkan_tenggat" satisfies StatusPermintaan;

@@ -11,9 +11,11 @@ import type { JenjangTransport } from "@/lib/transport/jarak";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
+  PERMINTAAN_MENUNGGU_BAYAR,
   PERMINTAAN_SIAP_KONFIRMASI,
   STATUS_ANTRE,
 } from "@/lib/jadwal/status";
+import { JAM_TENGGAT_BAYAR } from "@/lib/tagihan/tenggat";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -143,6 +145,42 @@ export async function pilihMitra(
 }
 
 /**
+ * `mitra_siap` -> `menunggu_bayar`: menerbitkan tagihan (spec C2 P1, P3).
+ *
+ * Terbit TEPAT di sini, tidak lebih awal, dan alasannya struktural: tarif
+ * transport berasal dari domisili MITRA ke alamat KLIEN, jadi total tagihan
+ * tidak bisa diketahui sebelum bidannya dipilih.
+ *
+ * `tenggat` diisi server, bukan diterima dari pemanggil — tenggat yang bisa
+ * disebut peramban adalah tenggat yang bisa dipanjangkan sendiri.
+ */
+export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+  const supabase = await createServerSupabase();
+
+  const tenggat = new Date(Date.now() + JAM_TENGGAT_BAYAR * 3_600_000).toISOString();
+
+  const { data } = await supabase
+    .from("booking_requests")
+    .update({ status: PERMINTAAN_MENUNGGU_BAYAR, tenggat })
+    .eq("id", permintaanId)
+    // Hanya dari `mitra_siap`. Memanggilnya dua kali karena itu TIDAK
+    // memperpanjang tenggat — yang kedua tidak mengenai baris mana pun.
+    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
+    .select("id");
+
+  if ((data ?? []).length === 0) {
+    return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
+  }
+
+  revalidatePath("/admin/sesi");
+  revalidatePath("/admin");
+  revalidatePath("/passport");
+  revalidatePath("/passport/bayar");
+  return { ok: true };
+}
+
+/**
  * Mengubah satu permintaan jadwal menjadi sesi terjadwal.
  *
  * SATU nilai yang boleh datang dari luar: permintaan mana. Mitra dibaca dari
@@ -173,7 +211,7 @@ export async function konfirmasiPermintaan(permintaanId: string): Promise<Berhas
     .from("booking_requests")
     .select("id, partners ( aktif )")
     .eq("id", permintaanId)
-    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
+    .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
     .maybeSingle<{ id: string; partners: { aktif: boolean } | null }>();
 
   if (!p) return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };

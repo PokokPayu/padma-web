@@ -26,7 +26,7 @@ async function nilaiEnum(nama: string): Promise<string[]> {
   return baris.map((b) => b.label);
 }
 
-describe("enum booking_status sesudah C1", () => {
+describe("enum booking_status sesudah C2", () => {
   it("isinya persis daftar di lib/jadwal/status.ts", async () => {
     expect((await nilaiEnum("booking_status")).sort()).toEqual([...STATUS_PERMINTAAN].sort());
   });
@@ -39,8 +39,22 @@ describe("enum booking_status sesudah C1", () => {
     expect(await nilaiEnum("booking_status")).toContain("ditolak");
   });
 
-  it("menunggu_bayar BELUM ada — itu milik C2", async () => {
-    expect(await nilaiEnum("booking_status")).not.toContain("menunggu_bayar");
+  it("menunggu_bayar & dibatalkan_tenggat SUDAH ada (C2)", async () => {
+    // C1 menolak membuat `menunggu_bayar` selama jalan keluarnya belum ada —
+    // nilai enum yang belum dipakai adalah keadaan mati. C2 membuatnya
+    // bersamaan dengan jalan masuk dan dua jalan keluarnya.
+    const nilai = await nilaiEnum("booking_status");
+    expect(nilai).toContain("menunggu_bayar");
+    expect(nilai).toContain("dibatalkan_tenggat");
+  });
+
+  it("urutannya menempatkan menunggu_bayar TEPAT sebelum dikonfirmasi", async () => {
+    // Urutan enum bukan kosmetik: ia menentukan hasil setiap perbandingan
+    // `<`/`>` yang mungkin ditulis orang berikutnya, dan rantai yang urutannya
+    // tidak mengikuti alur nyata adalah jebakan yang menunggu.
+    const nilai = await nilaiEnum("booking_status");
+    expect(nilai.indexOf("menunggu_bayar")).toBe(nilai.indexOf("mitra_siap") + 1);
+    expect(nilai.indexOf("dikonfirmasi")).toBe(nilai.indexOf("menunggu_bayar") + 1);
   });
 });
 
