@@ -261,12 +261,21 @@ async function main() {
     const kerja = await ctxAdmin.newPage();
     await kerja.goto(`${BASE}/admin/materi`, { waitUntil: "networkidle" });
 
-    await kerja.getByRole("button", { name: "Materi baru" }).click();
+    // "+ Materi baru" kini TAUTAN ke `?ubah=baru`, bukan tombol yang membuka
+    // formulir inline: sejak sapuan rencana 2 keadaan panel hidup di URL.
+    // Formulirnya langsung ada di dalam panel — gerbang keduanya (tombol
+    // "+ Materi baru" di dalam panel) dibuang commit `747d330`, jadi jangan
+    // menambahkan klik kedua di sini.
+    await kerja.getByRole("link", { name: "+ Materi baru" }).click();
+    await tungguIsi(kerja);
     await kerja.getByLabel("Judul materi").fill(JUDUL_MATERI);
-    // Tipe sudah default "ebook" (`useState<TipeMateri>("ebook")`), dan NOL
-    // checkbox layanan dicentang — materi lahir sengaja tanpa satu pun layanan
-    // (bahan pemeriksaan 3, aturan M10).
+    // Tipe sudah default "ebook", dan NOL checkbox layanan dicentang — materi
+    // lahir sengaja tanpa satu pun layanan (bahan pemeriksaan 3, aturan M10).
     await kerja.getByRole("button", { name: "Simpan materi", exact: true }).click();
+    // Sukses menutup panel lewat `router.push(hrefTutup)` — tidak ada teks
+    // sukses untuk ditunggu. Yang membuktikan simpannya mendarat: panelnya
+    // pergi, lalu judulnya muncul di tabel.
+    await kerja.locator('[role="dialog"]').waitFor({ state: "detached", timeout: 20_000 });
     await kerja.getByText(JUDUL_MATERI).first().waitFor({ timeout: 20_000 });
 
     const { data: materiBaru, error: eMateriBaru } = await admin
@@ -282,20 +291,21 @@ async function main() {
       `materials.aktif: ${String(materiBaru.aktif)}`,
     );
 
-    const kartuMateri = kerja.locator("li", { hasText: JUDUL_MATERI }).first();
-    await kartuMateri.getByRole("button", { name: "Kelola isi" }).click();
-    await kartuMateri
+    // Isi materi kini hidup di halaman DETAIL, dan Kartu "Isi" SELALU tampil —
+    // tombol "Kelola isi" tidak ada lagi (lihat dokblok `AksiMateri`). Baris
+    // daftar menaut ke sana lewat judulnya.
+    await kerja.getByRole("link", { name: JUDUL_MATERI }).click();
+    await tungguIsi(kerja);
+    await kerja
       .locator('input[type="file"][accept="application/pdf"]')
       .setInputFiles(berkasPdf);
     // Rasterisasi + unggah berjalan DI PERAMBAN dan menembak banyak permintaan
     // paralel — "networkidle" datang dan pergi berkali-kali sebelum baris
-    // `material_pages` benar-benar tercatat. Tunggu TEKS HASILNYA, bukan jaringan.
-    // `.first()` MENGIKAT: begitu unggahan selesai DAN `router.refresh()` tiba,
-    // kalimat "3 halaman tersimpan." muncul DUA KALI di kartu yang sama — pesan
-    // sukses milik `<PengunggahPdf/>` sendiri (`role="status"`) dan paragraf
-    // ringkasan `<IsiEbook/>` yang membaca `jumlahHalaman` dari server. Tanpa
-    // `.first()`, Playwright menolak locator yang cocok ganda (strict mode).
-    await kartuMateri.getByText(/3 halaman tersimpan/).first().waitFor({ timeout: 60_000 });
+    // `material_pages` tercatat. Tunggu TEKS HASILNYA, bukan jaringan.
+    // `.first()` MENGIKAT: "3 halaman tersimpan." muncul DUA KALI di halaman
+    // yang sama — pesan sukses `<PengunggahPdf/>` (`role="status"`) dan
+    // ringkasan `<IsiEbook/>` yang membaca `jumlahHalaman` dari server.
+    await kerja.getByText(/3 halaman tersimpan/).first().waitFor({ timeout: 60_000 });
 
     const { count: halamanTercatat } = await admin
       .from("material_pages")
@@ -311,8 +321,13 @@ async function main() {
     // mensyaratkan `materials.aktif = true` di CABANG MANA PUN (otomatis
     // ataupun penugasan) — tanpa ini, pemeriksaan 2 & 4 di bawah tercampur
     // alasan "materi belum terbit", bukan murni menguji gerbang penugasan.
-    await kartuMateri.getByRole("button", { name: "Aktifkan", exact: true }).click();
-    await kartuMateri
+    // `exact: true` MENGIKAT: pencocokan nama `getByRole` bawaan Playwright
+    // adalah SUBSTRING tanpa peduli huruf besar/kecil, sehingga
+    // { name: "Aktifkan" } ikut mencocoki "NonAKTIFKAN". Tanpa `exact`,
+    // `waitFor` selesai SEKETIKA pada tombol lama dan pemeriksaan berikutnya
+    // membaca basis data sebelum server action-nya mendarat.
+    await kerja.getByRole("button", { name: "Aktifkan", exact: true }).click();
+    await kerja
       .getByRole("button", { name: "Nonaktifkan", exact: true })
       .waitFor({ state: "visible", timeout: 20_000 });
 
@@ -357,16 +372,17 @@ async function main() {
     await halamanDaftar.close();
 
     // =============== 4. Admin menugaskan klien -> klien jadi berhak ==========
-    await kartuMateri.getByRole("button", { name: "Kelola penugasan" }).click();
-    await kartuMateri
+    // Kartu "Penugasan manual" SELALU tampil di halaman detail; tombol
+    // "Kelola penugasan" tidak ada lagi (lihat dokblok `AksiMateri`).
+    await kerja
       .getByLabel(`Tugaskan materi ${JUDUL_MATERI} ke klien`)
       .selectOption({ value: ANANDA_CLIENT_ID });
-    await kartuMateri.getByRole("button", { name: "Tugaskan", exact: true }).click();
+    await kerja.getByRole("button", { name: "Tugaskan", exact: true }).click();
     // `li` MENGIKAT: sebelum diklik, "Ananda Putri" sudah ada di DOM sebagai
     // <option> pilihan dropdown (tidak pernah visible, tapi tetap dalam DOM).
     // Menunggu `<li>` yang memuat namanya membedakan baris "ditugaskan"
     // sungguhan dari opsi dropdown yang kebetulan memuat teks yang sama.
-    await kartuMateri
+    await kerja
       .locator("li")
       .filter({ hasText: NAMA_ANANDA })
       .first()
@@ -460,11 +476,14 @@ async function main() {
 
     // =============== 6. WATERMARK DIBAKAR: dua pasien, byte BERBEDA ==========
     await pastikanRinaBisaLogin();
-    await kartuMateri
+    // Masih di halaman detail yang sama sejak pemeriksaan 1 — tidak ada
+    // `kartuMateri` (li) lagi untuk menyekop locator ini, sama seperti
+    // penugasan Ananda di atas.
+    await kerja
       .getByLabel(`Tugaskan materi ${JUDUL_MATERI} ke klien`)
       .selectOption({ value: RINA_CLIENT_ID });
-    await kartuMateri.getByRole("button", { name: "Tugaskan", exact: true }).click();
-    await kartuMateri
+    await kerja.getByRole("button", { name: "Tugaskan", exact: true }).click();
+    await kerja
       .locator("li")
       .filter({ hasText: NAMA_RINA })
       .first()
@@ -509,7 +528,9 @@ async function main() {
     );
 
     // =============== 8. Cabut penugasan menutup lagi, PRESISI =================
-    const liAnanda = kartuMateri.locator("li").filter({ hasText: NAMA_ANANDA });
+    // `kerja`, bukan `kartuMateri`: sudah tidak ada `<li>` pembungkus kartu
+    // sejak pemeriksaan 3 pindah ke halaman detail (lihat komentar di sana).
+    const liAnanda = kerja.locator("li").filter({ hasText: NAMA_ANANDA });
     await liAnanda.getByRole("button", { name: "Cabut" }).click();
     await liAnanda.waitFor({ state: "detached", timeout: 20_000 });
 
