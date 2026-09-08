@@ -335,7 +335,7 @@ async function main() {
     // dalam panel. Komentar lama di sini menyebut formulir yang "mulai
     // TERTUTUP" — gerbang itu dibuang Tugas 3 (untuk sesi) dan commit
     // `747d330` (untuk materi & layanan).
-    await kerja.getByRole("link", { name: "+ Materi baru" }).click();
+    await kerja.getByRole("link", { name: "+ Materi baru", exact: true }).click();
     await tungguIsi(kerja);
     await kerja.locator('input[name="judul"]').fill(JUDUL);
     await kerja.locator('select[name="tipe"]').selectOption("video");
@@ -355,6 +355,11 @@ async function main() {
     );
     if (materiId === "") throw new Error("materi tidak terbentuk");
 
+    // Materi baru lahir NONAKTIF dan daftarnya berurut `aktif desc, judul asc`
+    // (`ambilDaftarMateri`) — begitu klinik punya 25+ materi (`PER_HAL`), baris
+    // ini jatuh ke halaman terakhir, bukan halaman 1. Cari lewat `stempel`
+    // supaya baris ini pasti tampil di halaman yang sedang dilihat.
+    await kerja.goto(`${BASE}/admin/materi?cari=${stempel}`, { waitUntil: "networkidle" });
     // Isi materi hidup di halaman DETAIL, dan Kartu "Isi" SELALU tampil.
     await kerja.getByRole("link", { name: JUDUL }).click();
     await tungguIsi(kerja);

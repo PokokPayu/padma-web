@@ -266,7 +266,7 @@ async function main() {
     // Formulirnya langsung ada di dalam panel — gerbang keduanya (tombol
     // "+ Materi baru" di dalam panel) dibuang commit `747d330`, jadi jangan
     // menambahkan klik kedua di sini.
-    await kerja.getByRole("link", { name: "+ Materi baru" }).click();
+    await kerja.getByRole("link", { name: "+ Materi baru", exact: true }).click();
     await tungguIsi(kerja);
     await kerja.getByLabel("Judul materi").fill(JUDUL_MATERI);
     // Tipe sudah default "ebook", dan NOL checkbox layanan dicentang — materi
@@ -291,6 +291,11 @@ async function main() {
       `materials.aktif: ${String(materiBaru.aktif)}`,
     );
 
+    // Materi baru lahir NONAKTIF dan daftarnya berurut `aktif desc, judul asc`
+    // (`ambilDaftarMateri`) — begitu klinik punya 25+ materi (`PER_HAL`), baris
+    // ini jatuh ke halaman terakhir, bukan halaman 1. Cari lewat `stempel`
+    // supaya baris ini pasti tampil di halaman yang sedang dilihat.
+    await kerja.goto(`${BASE}/admin/materi?cari=${stempel}`, { waitUntil: "networkidle" });
     // Isi materi kini hidup di halaman DETAIL, dan Kartu "Isi" SELALU tampil —
     // tombol "Kelola isi" tidak ada lagi (lihat dokblok `AksiMateri`). Baris
     // daftar menaut ke sana lewat judulnya.
@@ -529,7 +534,7 @@ async function main() {
 
     // =============== 8. Cabut penugasan menutup lagi, PRESISI =================
     // `kerja`, bukan `kartuMateri`: sudah tidak ada `<li>` pembungkus kartu
-    // sejak pemeriksaan 3 pindah ke halaman detail (lihat komentar di sana).
+    // sejak pemeriksaan 1 pindah ke halaman detail (lihat komentar di :484).
     const liAnanda = kerja.locator("li").filter({ hasText: NAMA_ANANDA });
     await liAnanda.getByRole("button", { name: "Cabut" }).click();
     await liAnanda.waitFor({ state: "detached", timeout: 20_000 });

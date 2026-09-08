@@ -678,14 +678,19 @@ async function main() {
       `${(await bacaHalaman()).length} halaman terbaca lewat REST`,
     );
 
-    await kerja.goto(`${BASE}/admin/materi`, { waitUntil: "networkidle" });
+    // Materi baru lahir NONAKTIF dan daftarnya berurut `aktif desc, judul asc`
+    // (`ambilDaftarMateri`) — begitu klinik punya 25+ materi (`PER_HAL`), baris
+    // ini jatuh ke halaman terakhir, bukan halaman 1. Cari lewat `stempel`
+    // supaya baris ini pasti tampil di halaman yang sedang dilihat.
+    await kerja.goto(`${BASE}/admin/materi?cari=${stempel}`, { waitUntil: "networkidle" });
     // Aksi per materi (Aktifkan/Nonaktifkan) pindah ke halaman DETAIL sejak
     // sapuan rencana 2: baris daftar MENAUT, ia tidak lagi membawa aksi
     // (pola B, spec K1). Judulnya adalah tautannya.
     await kerja.getByRole("link", { name: JUDUL_MATERI }).click();
     await tungguIsi(kerja);
 
-    // `exact: true` MENGIKAT — lihat komentar aslinya: tanpa itu
+    // `exact: true` MENGIKAT — lihat komentar serupa di materi-pdf.e2e.ts
+    // (pemeriksaan 1, sekitar :329): tanpa itu
     // { name: "Aktifkan" } ikut mencocoki "NonAKTIFKAN" yang masih terpampang,
     // `waitFor` selesai seketika pada tombol lama, dan pemeriksaan berikutnya
     // membaca basis data sebelum server action-nya mendarat — lalu melapor

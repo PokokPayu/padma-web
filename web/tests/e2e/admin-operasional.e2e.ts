@@ -353,7 +353,7 @@ async function main() {
     await kerja.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
     // "+ Sesi baru" kini TAUTAN ke `?ubah=baru`: keadaan panel hidup di URL,
     // jadi tombol kembali peramban menutupnya seperti yang orang harapkan.
-    await kerja.getByRole("link", { name: "+ Sesi baru" }).click();
+    await kerja.getByRole("link", { name: "+ Sesi baru", exact: true }).click();
     await tungguIsi(kerja);
     await kerja.selectOption('select[name="client_id"]', {
       label: `${NAMA_KLIEN} (${PADMA_ID})`,
@@ -385,7 +385,13 @@ async function main() {
     // Formulir "tandai selesai" pindah dari dalam SEL TABEL ke panel geser —
     // itu inti keluhan yang memulai seluruh pekerjaan ini. Barisnya kini
     // membawa tautan "Ubah" menuju `?ubah=<id>`.
-    await barisSesi.getByRole("link", { name: "Ubah" }).click();
+    // `exact: true` di sini juga: pencocokan nama `getByRole` bawaan
+    // Playwright adalah SUBSTRING, jadi tanpanya locator ini juga akan
+    // mencocoki tautan lain apa pun di baris yang sama yang namanya memuat
+    // "Ubah" sebagai bagian (mis. "Ubah jadwal"). `barisSesi` menyekop ke
+    // SATU `<tr>`, tapi skop itu tidak menggantikan kebutuhan `exact` —
+    // keduanya lapisan berbeda.
+    await barisSesi.getByRole("link", { name: "Ubah", exact: true }).click();
     await tungguIsi(kerja);
     await kerja.locator('textarea[name="catatan"]').fill(CATATAN);
     await kerja.locator('textarea[name="rekomendasi"]').fill(REKOMENDASI);
