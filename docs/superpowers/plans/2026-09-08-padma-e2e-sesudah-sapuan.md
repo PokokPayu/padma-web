@@ -472,11 +472,25 @@ tetap hijau berbulan-bulan seandainya tidak ada yang menjalankan E2E. Skrip E2E 
 Pagar di bawah menutup kelas itu dengan biaya nyaris nol: ia memeriksa bahwa setiap LABEL yang
 dicari skrip E2E masih ada di suatu tempat di `src/app/`.
 
-**Batasnya, dinyatakan di muka:** ini pagar EJAAN, bukan pagar alur. Ia menangkap label yang
-berganti nama atau hilang. Ia TIDAK menangkap tombol yang pindah halaman sambil mempertahankan
-namanya — dan itu justru yang terjadi pada `Nonaktifkan`. Jadi ia akan menangkap dua dari tiga
-kepatahan malam itu, bukan tiga. Pagar yang menangkap dua dari tiga tetap lebih baik daripada nol,
-tetapi jangan menulis di runbook seolah ia menutup seluruh kelasnya.
+**Batasnya, DIUKUR bukan diperkirakan.** Regexnya dijalankan atas keadaan `main` sebelum rencana
+ini: 38 label diperiksa, 4 tidak ditemukan di `src/app`. Dari ketiga skrip yang benar-benar patah,
+pagar ini hanya menangkap SATU:
+
+| Kepatahan | Tertangkap? | Sebab |
+|---|---|---|
+| `admin-operasional`: `+ Jadwalkan sesi`, `Tandai selesai` | **ya** | labelnya lenyap sama sekali dari `src/` |
+| `materi-pdf`: `Materi baru` | **tidak** | `src/` memuat `+ Materi baru`; pencocokan substring lolos |
+| `admin-pelengkap`: `Nonaktifkan` | **tidak** | labelnya utuh, ia hanya PINDAH halaman |
+
+Jadi ini pagar EJAAN yang menangkap label yang **lenyap**, bukan yang berganti bentuk atau berpindah
+tempat. Satu dari tiga. Tetap lebih baik daripada nol — kelas "label dihapus" nyata dan murah
+dijaga — tetapi jangan menulis di runbook seolah ia menutup seluruh kelasnya. Pagar alur yang
+sesungguhnya menuntut E2E berjalan di CI dengan server dan basis datanya sendiri.
+
+**Dua positif-palsu sudah diketahui** dan harus masuk `DIKECUALIKAN` beserta alasannya, bukan
+"diperbaiki": `funnel-skrining.e2e.ts` mencari tombol `"Kehamilan"` dan `"Menopause"` — keduanya
+nama FASE yang datang dari kolom `phases.nama` di basis data, bukan literal di sumber. Label yang
+memang tidak berasal dari `src/app/` adalah persis kasus yang daftar pengecualian itu ada untuknya.
 
 - [ ] **Langkah 1: Tulis uji yang gagal**
 
