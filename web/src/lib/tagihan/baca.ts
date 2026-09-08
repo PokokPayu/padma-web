@@ -48,7 +48,7 @@ type BarisPengajuan = {
   tenggat: string | null;
   bukti_objek: string | null;
   services: { nama: string } | null;
-  partners: { lat: number | null; lon: number | null } | null;
+  partner_id: string | null;
   alamat_lat: number | null;
   alamat_lon: number | null;
 };
@@ -69,7 +69,7 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
     .from("booking_requests")
     .select(
       "id, tanggal, jam_mulai, variant_id, status_bayar, tenggat, bukti_objek, " +
-        "alamat_lat, alamat_lon, services ( nama ), partners ( lat, lon )",
+        "alamat_lat, alamat_lon, partner_id, services ( nama )",
     )
     .eq("client_id", clientId)
     .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
@@ -95,17 +95,39 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
     berlakuSejak: t.berlaku_sejak as string,
   }));
 
+  // KOORDINAT MITRA dibaca service role, BUKAN di-embed pada query sesi klien.
+  //
+  // `partners` berpolicy staf: klien yang login membacanya sebagai NOL BARIS —
+  // bukan sebagai galat. Embed `partners ( lat, lon )` karena itu selalu
+  // memulangkan `null` di halaman klien, jenjangnya selalu tak diketahui, dan
+  // SETIAP tagihan tampil sebagai "totalnya sedang dilengkapi tim". Fiturnya
+  // mati sepenuhnya, tanpa satu pun galat di log — dan tidak ada uji unit yang
+  // bisa melihatnya, karena semuanya membaca dengan service role.
+  //
+  // Yang menentukan pengajuan SIAPA yang terlihat tetap policy pada query di
+  // atas. Yang dibaca di sini hanya dua angka domisili mitra, dan dari keduanya
+  // tidak ada satu pun nilai yang sampai ke layar — hanya jenjang jaraknya.
+  // Pemisahan yang sama sudah dipakai untuk `transport_rates` di fungsi ini.
+  const idMitra = [...new Set((pengajuan.map((p) => p.partner_id).filter(Boolean) as string[]))];
+  const { data: mitra } = idMitra.length
+    ? await admin.from("partners").select("id, lat, lon").in("id", idMitra)
+    : { data: [] as { id: string; lat: number | null; lon: number | null }[] };
+  const titikMitra = new Map(
+    (mitra ?? []).map((m) => [m.id as string, { lat: m.lat as number | null, lon: m.lon as number | null }]),
+  );
+
   const hasil: TagihanPengajuan[] = [];
   for (const p of pengajuan) {
+    const titik = p.partner_id ? titikMitra.get(p.partner_id) : undefined;
     let jenjang: JenjangTransport | null = null;
     if (
-      p.partners?.lat != null &&
-      p.partners?.lon != null &&
+      titik?.lat != null &&
+      titik?.lon != null &&
       p.alamat_lat != null &&
       p.alamat_lon != null
     ) {
       const { data } = await admin.rpc("jenjang_dari_jarak", {
-        km: await jarak(admin, p.partners.lat, p.partners.lon, p.alamat_lat, p.alamat_lon),
+        km: await jarak(admin, titik.lat, titik.lon, p.alamat_lat, p.alamat_lon),
       });
       jenjang = (data as JenjangTransport | null) ?? null;
     }
