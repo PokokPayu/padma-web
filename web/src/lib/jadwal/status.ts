@@ -176,3 +176,14 @@ export const PERPINDAHAN_SESI: Record<StatusSesi, readonly StatusSesi[]> = {
 export function bolehPindahSesi(dari: StatusSesi, ke: StatusSesi): boolean {
   return PERPINDAHAN_SESI[dari].includes(ke);
 }
+
+/**
+ * Satu-satunya keadaan sesi yang berarti "tidak jadi terjadi karena PADMA".
+ *
+ * Dipakai query yang selama ini menulis `.neq("status", "batal")` — mengecualikan
+ * sesi yang dibatalkan dari agenda, tagihan, dan hitungan antrean. Sengaja TIDAK
+ * ikut mengecualikan `tidak_hadir`: apakah sesi yang kliennya tidak hadir tetap
+ * ditagih adalah keputusan C3 yang belum diambil, dan mengubah perilakunya
+ * diam-diam di sini akan mendahului keputusan itu.
+ */
+export const SESI_DIBATALKAN = "dibatalkan_padma" satisfies StatusSesi;

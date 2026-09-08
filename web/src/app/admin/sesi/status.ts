@@ -20,33 +20,23 @@ export const LABEL_WAKTU: Record<PreferensiWaktu, string> = {
   sore: "Sore",
 };
 
-export const STATUS_PERMINTAAN_SAH = [
-  "menunggu",
-  "dikonfirmasi",
-  "ditolak",
-] as const;
-
-export type StatusPermintaan = (typeof STATUS_PERMINTAAN_SAH)[number];
-
-export const LABEL_STATUS_PERMINTAAN: Record<StatusPermintaan, string> = {
-  menunggu: "Menunggu",
-  dikonfirmasi: "Dikonfirmasi",
-  ditolak: "Ditolak",
-};
-
-// Status SESI (enum `session_status`) — berbeda dari status PERMINTAAN di atas.
-// Keduanya sengaja tidak digabung: permintaan yang `ditolak` dan sesi yang
-// `batal` terdengar mirip tetapi hidup di tabel berbeda, dan menyatukan
-// labelnya adalah cara paling mudah menampilkan status yang salah.
-export const STATUS_SESI_SAH = ["terjadwal", "selesai", "batal"] as const;
-
-export type StatusSesi = (typeof STATUS_SESI_SAH)[number];
-
-export const LABEL_STATUS_SESI: Record<StatusSesi, string> = {
-  terjadwal: "Terjadwal",
-  selesai: "Selesai",
-  batal: "Batal",
-};
+// Status permintaan & sesi kini hidup di `lib/jadwal/status.ts` — SATU-SATUNYA
+// sumbernya. Berkas ini mengekspornya ULANG untuk pemanggil lama, mengikuti
+// arah kebergantungan yang sudah ditetapkan Ruling 20 untuk `LABEL_JENJANG`:
+// `lib/` adalah lapisan domain, `app/` lapisan presentasi, dan domain tidak
+// boleh diimpor nilainya dari presentasi.
+//
+// Dua daftar yang dulu ditulis di sini (status permintaan & status sesi) tidak
+// dihapus melainkan DIPINDAHKAN: menyisakan salinannya berarti dua daftar yang
+// harus identik selamanya, dan itulah kesalahan yang paling mudah terjadi.
+export {
+  STATUS_PERMINTAAN as STATUS_PERMINTAAN_SAH,
+  LABEL_PERMINTAAN as LABEL_STATUS_PERMINTAAN,
+  STATUS_SESI as STATUS_SESI_SAH,
+  LABEL_SESI as LABEL_STATUS_SESI,
+  type StatusPermintaan,
+  type StatusSesi,
+} from "@/lib/jadwal/status";
 
 // `LABEL_JENJANG` sendiri kini hidup di `lib/transport/jarak.ts` (Ruling 20,
 // Task 9 fix round 1) — SATU-SATUNYA sumber, diimpor di atas alih-alih

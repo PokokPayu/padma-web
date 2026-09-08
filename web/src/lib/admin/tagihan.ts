@@ -5,6 +5,7 @@ import type { PayStatus } from "@/lib/passport/turunan";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 import { PER_HAL, hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
+import { SESI_DIBATALKAN } from "@/lib/jadwal/status";
 
 /** Nilai saringan yang sah untuk daftar tagihan — dipakai halaman DAN uji. */
 export const SARING_BAYAR = {
@@ -134,7 +135,7 @@ export async function daftarTagihanAdmin(
       "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
     )
     .is("client_package_id", null)
-    .neq("status", "batal")
+    .neq("status", SESI_DIBATALKAN)
     // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
     // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
     .order("tanggal", { ascending: false });

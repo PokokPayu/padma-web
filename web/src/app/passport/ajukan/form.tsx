@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ajukanJadwal } from "@/lib/passport/aksi";
+import { formatJam } from "@/lib/jadwal/jam";
 
 // Formulir hanya mengirim keinginan klien (layanan, tanggal, preferensi waktu,
 // catatan). Status permintaan bukan urusan formulir ini: ia ditetapkan server
@@ -14,6 +15,7 @@ export type VarianPilihan = { id: string; serviceId: string; label: string };
 export function FormAjukan({
   layanan,
   varian,
+  jamPilihan,
   tanggalPalingAwal,
   alamatDefault,
 }: {
@@ -22,6 +24,11 @@ export function FormAjukan({
   // wizard butuh keduanya bersamaan supaya pilihan kedua bisa berubah tanpa
   // round-trip ke server saat layanan diganti.
   varian: VarianPilihan[];
+  // Jam mulai yang boleh dipilih, dari `app_settings.jam_layanan` (spec J2).
+  // Dibaca di server dan dipakai ULANG sebagai pagar di `ajukanJadwal`, jadi
+  // apa yang ditawarkan di sini dan apa yang diterima server tidak pernah bisa
+  // berselisih. Tidak pernah kosong: `uraikanDaftarJam()` menjamin itu.
+  jamPilihan: string[];
   // String 'YYYY-MM-DD' menurut kalender Jakarta, dirakit di server. Jangan
   // menghitungnya di browser: jam perangkat pemakai bisa apa saja.
   tanggalPalingAwal: string;
@@ -33,6 +40,7 @@ export function FormAjukan({
 }) {
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
+  const [jam, setJam] = useState(jamPilihan[0] ?? "");
   const [layananId, setLayananId] = useState(layanan[0]?.id ?? "");
   const varianLayanan = varian.filter((v) => v.serviceId === layananId);
   const [varianId, setVarianId] = useState(varianLayanan[0]?.id ?? "");
@@ -73,6 +81,7 @@ export function FormAjukan({
         action={(fd) => {
           fd.set("waktu", waktu);
           fd.set("varian", varianId);
+          fd.set("jam", jam);
           mulai(async () => {
             const r = await ajukanJadwal(fd);
             if (r.ok) setSelesai(true);
@@ -134,8 +143,31 @@ export function FormAjukan({
           />
         </label>
 
+        {/* Urutan medan mengikuti gambar alur klien: durasi -> tanggal -> JAM ->
+            alamat -> catatan (spec J2). Jam berdiri SESUDAH tanggal karena
+            keduanya satu keputusan: "kapan", dan memisahkannya dengan medan
+            lain membuat klien memilih tanggal, lupa jam, lalu kembali. */}
+        <label className="mb-4 block text-sm">
+          <span className="font-semibold text-ink-soft">Jam mulai</span>
+          <select
+            name="jam"
+            required
+            value={jam}
+            onChange={(e) => setJam(e.target.value)}
+            className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
+          >
+            {jamPilihan.map((j) => (
+              <option key={j} value={j}>
+                {formatJam(j)}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <fieldset className="mb-4">
-          <legend className="text-sm font-semibold text-ink-soft">Preferensi waktu</legend>
+          <legend className="text-sm font-semibold text-ink-soft">
+            Kalau jam itu penuh, saya lebih suka
+          </legend>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {WAKTU.map((w) => (
               <button
@@ -153,6 +185,14 @@ export function FormAjukan({
               </button>
             ))}
           </div>
+          {/* Arti medan ini BERUBAH di C1 (spec J2): dulu ia satu-satunya
+              keterangan waktu, sekarang ia alternatif bila jam yang diminta
+              tidak bisa. Kalimat di bawah ada supaya klien tidak mengira ia
+              sedang memilih waktunya dua kali. */}
+          <span className="mt-2 block text-[11.5px] text-ink-soft">
+            Tim PADMA memakai ini saat menawarkan jam pengganti — jadwal Anda tetap jam yang
+            dipilih di atas.
+          </span>
         </fieldset>
 
         <label className="mb-4 block text-sm">

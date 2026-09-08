@@ -3,6 +3,7 @@ import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/pa
 import { awalPekan, akhirPekan } from "@/lib/owner/pekan";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import type { StatusSesi } from "@/app/admin/sesi/status";
+import { STATUS_SESI } from "@/lib/jadwal/status";
 
 /**
  * Lapisan data daftar sesi.
@@ -19,7 +20,7 @@ import type { StatusSesi } from "@/app/admin/sesi/status";
 
 /** Nilai saringan yang sah untuk daftar sesi — dipakai halaman DAN uji. */
 export const SARING_SESI = {
-  status: ["terjadwal", "selesai", "batal"],
+  status: STATUS_SESI,
   jenjang: ["kosong"],
   waktu: ["mendatang", "pekan_ini", "lampau"],
 } as const satisfies SaringSah;
@@ -32,6 +33,8 @@ export type BarisSesiDaftar = {
   namaMitra: string;
   /** ISO `YYYY-MM-DD` mentah — pemformatannya milik halaman, bukan lapisan ini. */
   tanggal: string;
+  /** 'HH:MM:SS' apa adanya dari Postgres — dipendekkan lapisan tampilan. */
+  jamMulai: string;
   status: StatusSesi;
   dalamPaket: boolean;
   catatan: string;
@@ -43,6 +46,7 @@ export type BarisSesiDaftar = {
 type BarisDb = {
   id: string;
   tanggal: string;
+  jam_mulai: string;
   status: StatusSesi;
   catatan: string;
   rekomendasi: string;
@@ -76,7 +80,7 @@ export async function ambilDaftarSesi(
   let q = supabase
     .from("sessions")
     .select(
-      "id, tanggal, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, " +
+      "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, " +
         "clients!inner(nama, padma_id), services(nama), partners(nama)",
       { count: "exact" },
     )
@@ -123,6 +127,7 @@ export async function ambilDaftarSesi(
       // SELURUH klien menjadi "Tim PADMA" tanpa satu pun error.
       namaMitra: s.partners?.nama ?? "Tim PADMA",
       tanggal: s.tanggal,
+      jamMulai: s.jam_mulai,
       status: s.status,
       dalamPaket: s.client_package_id !== null,
       catatan: s.catatan,

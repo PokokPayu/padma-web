@@ -6,6 +6,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { JENJANG_SAH, periksaAlasanPenimpaan } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
 import type { JenjangTransport } from "@/lib/transport/jarak";
+import { PERMINTAAN_SIAP_KONFIRMASI, STATUS_ANTRE } from "@/lib/jadwal/status";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -86,7 +87,7 @@ export async function konfirmasiPermintaan(
   // lalu klaim gagal, tertinggal sesi yatim sementara permintaannya tetap di
   // antrean menunggu dikonfirmasi untuk kedua kalinya.
   //
-  // `eq("status","menunggu")` bukan sekadar validasi: ia yang menyerialkan dua
+  // `eq("status", PERMINTAAN_SIAP_KONFIRMASI)` bukan sekadar validasi: ia yang menyerialkan dua
   // konfirmasi paralel. Transaksi kedua menunggu kunci baris, lalu menilai
   // ulang syaratnya terhadap baris yang sudah berubah — dan tidak mengenai apa
   // pun. Index unik `sessions_booking_request_unik` adalah jaring keduanya.
@@ -94,7 +95,7 @@ export async function konfirmasiPermintaan(
     .from("booking_requests")
     .update({ status: "dikonfirmasi" })
     .eq("id", permintaanId)
-    .eq("status", "menunggu")
+    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
     .select("id, client_id, service_id, variant_id, tanggal, alamat, alamat_lat, alamat_lon");
 
   // UPDATE yang tidak mengenai baris mana pun dijawab PostgREST dengan 200 + []
@@ -150,7 +151,7 @@ export async function konfirmasiPermintaan(
     // menimpa keputusan orang lain yang sempat masuk di sela-selanya.
     await supabase
       .from("booking_requests")
-      .update({ status: "menunggu" })
+      .update({ status: PERMINTAAN_SIAP_KONFIRMASI })
       .eq("id", p.id)
       .eq("status", "dikonfirmasi");
     return { ok: false, pesan: "Gagal membuat sesi. Coba lagi." };
@@ -179,7 +180,7 @@ export async function tolakPermintaan(permintaanId: string): Promise<Berhasil | 
     .from("booking_requests")
     .update({ status: "ditolak" })
     .eq("id", permintaanId)
-    .eq("status", "menunggu")
+    .in("status", STATUS_ANTRE)
     .select("id");
 
   if (error || (data ?? []).length === 0) {

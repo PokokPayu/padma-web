@@ -1,4 +1,5 @@
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { uraikanDaftarJam } from "@/lib/jadwal/jam";
 import {
   ALAMAT_BAWAAN,
   JAM_BAWAAN,
@@ -41,7 +42,7 @@ import {
  * salah hanyalah SUMBERNYA. Satu query mengembalikan ketiganya: kunci yang
  * terpisah query akan terpisah pula umur cache-nya.
  */
-const KUNCI_PUBLIK = ["nomor_wa", "alamat_klinik", "jam_operasional"] as const;
+const KUNCI_PUBLIK = ["nomor_wa", "alamat_klinik", "jam_operasional", "jam_layanan"] as const;
 
 export async function bacaPengaturan() {
   const admin = createAdminSupabase();
@@ -60,5 +61,11 @@ export async function bacaPengaturan() {
     nomorWaTampilan: keFormatLokal(link),
     alamatTampilan: teksTerpakai(nilai.get("alamat_klinik"), ALAMAT_BAWAAN),
     jamTampilan: teksTerpakai(nilai.get("jam_operasional"), JAM_BAWAAN),
+    // `jam_operasional` adalah KALIMAT yang dipajang di footer ("Senin–Sabtu
+    // 08.00–17.00"); `jam_layanan` adalah DAFTAR jam yang boleh DIPILIH klien
+    // saat memesan. Dua hal berbeda yang namanya mirip — sengaja tidak
+    // digabung: yang satu untuk dibaca manusia, yang satu untuk divalidasi
+    // server sebelum sebuah janji dibuat.
+    jamLayanan: uraikanDaftarJam(nilai.get("jam_layanan")),
   };
 }

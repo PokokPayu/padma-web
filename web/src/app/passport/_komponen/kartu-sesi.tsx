@@ -4,16 +4,25 @@ import { useId, useState } from "react";
 import type { SesiRingkas, StatusSesi } from "@/lib/passport/turunan";
 import { formatTanggalPendek } from "@/lib/passport/waktu";
 
+// Label yang dilihat KLIEN. Sengaja tidak memakai `LABEL_SESI` dari
+// `lib/jadwal/status.ts`: yang di sana ditulis untuk staf ("Dibatalkan PADMA"),
+// dan klien tidak perlu membaca nama penyelenggaranya di paspornya sendiri.
+// Daftarnya tetap `Record<StatusSesi, …>` sehingga status baru mana pun
+// menggagalkan build sampai kalimatnya diputuskan manusia.
 const LABEL: Record<StatusSesi, string> = {
   selesai: "Selesai",
   terjadwal: "Terjadwal",
-  batal: "Batal",
+  berjalan: "Berlangsung",
+  tidak_hadir: "Tidak hadir",
+  dibatalkan_padma: "Dibatalkan",
 };
 
 const PIL: Record<StatusSesi, string> = {
   selesai: "border-leaf/25 bg-leaf-soft text-leaf",
   terjadwal: "border-[#E9D9A8] bg-[#F7EDD3] text-[#8A6A1B]",
-  batal: "border-black/10 bg-black/5 text-ink-soft",
+  berjalan: "border-leaf/25 bg-leaf/10 text-leaf",
+  tidak_hadir: "border-black/10 bg-black/5 text-ink-soft",
+  dibatalkan_padma: "border-black/10 bg-black/5 text-ink-soft",
 };
 
 // Satu kunjungan = satu "visa" di paspor: tanggal di tepi kiri, layanan dan

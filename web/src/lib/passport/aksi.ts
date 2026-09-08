@@ -9,6 +9,9 @@ import { normalkanAlamat } from "@/lib/transport/alamat";
 import { BATAS_PERMINTAAN_MENUNGGU } from "./batas";
 import { periksaAlamat } from "./status";
 import { hariIniJakarta } from "./waktu";
+import { bentukJamSah } from "@/lib/jadwal/jam";
+import { bacaPengaturan } from "@/lib/settings";
+import { PERMINTAAN_AWAL, STATUS_ANTRE } from "@/lib/jadwal/status";
 
 /**
  * SATU-SATUNYA jalur tulis milik klien.
@@ -98,6 +101,27 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     return { ok: false, pesan: "Preferensi waktu tidak sah." };
   }
 
+  // JAM MULAI (spec J2) — dua pemeriksaan, bukan satu.
+  //
+  // BENTUK ditolak lebih dulu supaya masukan sampah tidak pernah sampai ke
+  // query pengaturan. Lalu KEANGGOTAAN diperiksa terhadap daftar yang
+  // benar-benar berlaku hari ini, dan daftar itu dibaca DI SERVER — tidak
+  // pernah dipercaya dari FormData. `<select>` di layar bisa disunting siapa
+  // saja lewat devtools, dan server action adalah endpoint POST tersendiri yang
+  // tidak pernah melewati layar itu.
+  //
+  // Kenapa jam WAJIB, bukan opsional: seluruh kebijakan pembatalan C3
+  // bersandar pada "≥ 24 jam sebelum sesi" dan "< 2 jam". Pengajuan tanpa jam
+  // adalah pengajuan yang tenggatnya tidak bisa dihitung sama sekali.
+  const jam = String(formData.get("jam") ?? "");
+  if (!bentukJamSah(jam)) {
+    return { ok: false, pesan: "Pilih jam mulai layanan." };
+  }
+  const { jamLayanan } = await bacaPengaturan();
+  if (!jamLayanan.includes(jam)) {
+    return { ok: false, pesan: "Jam itu tidak tersedia. Pilih salah satu jam yang ditawarkan." };
+  }
+
   // Alamat WAJIB di sini (spec T6) — beda dari profil klien/domisili mitra
   // yang boleh kosong. Mitra harus tahu ke mana ia datang; format diperiksa
   // sebagai fungsi murni di `./status`, terpisah dari geocoding di bawah.
@@ -152,7 +176,7 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     .from("booking_requests")
     .select("id", { count: "exact", head: true })
     .eq("client_id", clientId)
-    .eq("status", "menunggu");
+    .in("status", STATUS_ANTRE);
   if ((count ?? 0) >= BATAS_PERMINTAAN_MENUNGGU) {
     return {
       ok: false,
@@ -167,7 +191,7 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     .eq("service_id", serviceId)
     .eq("tanggal", tanggal)
     .eq("preferensi_waktu", waktu)
-    .eq("status", "menunggu")
+    .in("status", STATUS_ANTRE)
     .limit(1);
   if ((kembar ?? []).length > 0) {
     return { ok: false, pesan: "Permintaan yang sama sudah terkirim dan sedang diproses." };
@@ -218,12 +242,13 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     service_id: serviceId,
     variant_id: variantId,
     tanggal,
+    jam_mulai: jam,
     preferensi_waktu: waktu,
     catatan,
     alamat: cekAlamat.nilai,
     alamat_lat: koordinat?.lat ?? null,
     alamat_lon: koordinat?.lon ?? null,
-    status: "menunggu", // hardcoded; trigger DB menolak nilai lain dari klien
+    status: PERMINTAAN_AWAL, // hardcoded; trigger DB menolak nilai lain dari klien
   });
   if (error) return { ok: false, pesan: "Gagal mengirim permintaan." };
 

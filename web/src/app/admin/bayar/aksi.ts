@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { ASAL_SAH_LUNAS, ASAL_SAH_TOLAK } from "./status";
+import { SESI_DIBATALKAN } from "@/lib/jadwal/status";
 
 /**
  * Jalur tulis keputusan pembayaran — satu-satunya tempat status uang berubah
@@ -68,7 +69,7 @@ async function ubahStatus(
           .update({ status_bayar: tujuan })
           .eq("id", id)
           .is("client_package_id", null) // sesi berpaket bukan tagihan
-          .neq("status", "batal")
+          .neq("status", SESI_DIBATALKAN)
           .in("status_bayar", asalSah)
           .select("id");
 

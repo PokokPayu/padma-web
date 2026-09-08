@@ -8,7 +8,11 @@ export type PermintaanAntre = {
   namaKlien: string;
   namaLayanan: string;
   tanggal: string; // sudah diformat untuk manusia
-  waktu: string; // label preferensi waktu
+  jam: string; // sudah diformat, mis. "09.00 WIB"
+  // Label preferensi waktu. Sejak C1 ia berarti ALTERNATIF bila jam yang
+  // diminta tidak bisa (spec J2), bukan lagi satu-satunya keterangan waktu —
+  // karena itu ia dirender di belakang jam, bukan menggantikannya.
+  waktu: string;
   catatan: string;
 };
 
@@ -46,7 +50,8 @@ export function BlokPermintaan({
             Permintaan jadwal — {permintaan.namaKlien}
           </b>
           <span className="mt-0.5 block text-[11.5px] text-ink-soft">
-            {permintaan.namaLayanan} · {permintaan.tanggal} · {permintaan.waktu}
+            {permintaan.namaLayanan} · {permintaan.tanggal} · <b>{permintaan.jam}</b> · alternatif{" "}
+            {permintaan.waktu}
             {permintaan.catatan ? ` · “${permintaan.catatan}”` : ""}
           </span>
         </div>
