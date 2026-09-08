@@ -78,7 +78,13 @@ export default async function DaftarKlienPage({
       />
       {baris.length === 0 ? (
         <p className="rounded-lg border border-panel-border bg-panel-surface p-8 text-center text-[13px] italic text-panel-muted">
-          Tidak ada klien yang cocok dengan pencarian ini.
+          {/* Dua sebab, dua kalimat — hanya `page.tsx` tahu bedanya karena
+              hanya di sini `param` (cari + saring) terlihat sekaligus. */}
+          {param.cari === "" && Object.keys(param.saring).length === 0 ? (
+            <>Belum ada klien terdaftar. Mulai dari tombol &ldquo;+ Klien baru&rdquo;.</>
+          ) : (
+            "Tidak ada klien yang cocok dengan pencarian ini."
+          )}
         </p>
       ) : (
         <div className="rounded-lg border border-panel-border bg-panel-surface">

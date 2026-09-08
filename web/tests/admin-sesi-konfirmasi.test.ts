@@ -36,6 +36,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -520,7 +521,7 @@ describe("pagar basis data yang menopang modul ini", () => {
 
 describe("halaman antrean permintaan (/admin/sesi)", () => {
   it("menampilkan permintaan yang menunggu beserta konteksnya", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
 
     expect(markup).toContain("Ananda"); // nama klien, bukan sekadar UUID
     expect(markup).not.toContain(KLIEN);
@@ -531,26 +532,26 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
   });
 
   it("menawarkan mitra AKTIF untuk ditugaskan, bukan yang sudah pensiun", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toContain("Bidan Sri Wahyuni");
     expect(markup).not.toContain("PAD-UJI Bidan Pensiun");
   });
 
   it("menyediakan tombol Konfirmasi dan Tolak", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toContain("Konfirmasi");
     expect(markup).toContain("Tolak");
   });
 
   it("menjelaskan akibat konfirmasi kepada admin", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toMatch(/sesi\s+Terjadwal/i);
     expect(markup).toMatch(/whatsapp/i);
   });
 
   it("permintaan yang sudah ditangani TIDAK muncul lagi di antrean", async () => {
     await konfirmasiPermintaan(permintaanId, MITRA);
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).not.toContain("Kalau bisa sebelum pukul 9.");
     expect(markup).toMatch(/tidak ada permintaan/i);
   });
@@ -567,10 +568,10 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
   });
 
   it("TIDAK ada nominal uang di modul sesi (money firewall)", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberAntrean, sumberAksi, sumberStatus]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

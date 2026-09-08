@@ -142,8 +142,9 @@ export async function hitungMenungguTarifTransport(): Promise<number> {
  * cukup, sejalan dengan keempat penghitung lain di `hitungAntrean()`.
  *
  * Kemampuan memperbaikinya SUDAH ADA — `tetapkanJenjang`
- * (`app/admin/sesi/aksi.ts`, dipanggil dari laci "ubah jenjang" di
- * `form-selesai.tsx`) tidak memeriksa status maupun peran selain admin/owner.
+ * (`app/admin/sesi/aksi.ts`, dipanggil dari formulir "ubah jenjang" di panel
+ * geser sesi, `panel-sesi.tsx`) tidak memeriksa status maupun peran selain
+ * admin/owner.
  * Yang hilang sebelumnya hanya antrean yang menunjuk sesi mana.
  */
 export async function hitungMenungguJenjangTransport(): Promise<number> {

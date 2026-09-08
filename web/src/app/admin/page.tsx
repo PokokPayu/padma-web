@@ -130,7 +130,13 @@ export default async function AdminPage() {
           label="Sesi selesai tanpa jenjang"
           nilai={String(antrean.menungguJenjangTransport)}
           keterangan="Jarak belum diketahui — geocoding gagal atau data lama"
-          href="/admin/sesi"
+          // Menaut ke DAFTAR TERSARING, bukan ke modulnya. Ini yang membayar
+          // keputusan spec K2 (keadaan daftar hidup di URL): tanpa itu, tile
+          // ini hanya bisa memberi angka lalu menurunkan admin di daftar penuh.
+          // Urutannya `status` lalu `jenjang` — sama persis dengan yang
+          // dihasilkan `bangunQuery`, supaya chip yang menyala di halaman
+          // tujuan adalah keduanya, bukan salah satu.
+          href="/admin/sesi?status=selesai&jenjang=kosong"
           menuntut={antrean.menungguJenjangTransport > 0}
         />
       </section>

@@ -3,6 +3,12 @@ import { formatTanggalID } from "@/lib/passport/waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import type { PayStatus } from "@/lib/passport/turunan";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
+import { PER_HAL, hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
+
+/** Nilai saringan yang sah untuk daftar tagihan — dipakai halaman DAN uji. */
+export const SARING_BAYAR = {
+  status: ["belum", "menunggu_verifikasi", "lunas"],
+} as const satisfies SaringSah;
 
 export type ItemTagihanAdmin = {
   jenis: "paket" | "sesi";
@@ -96,8 +102,15 @@ const URUT: Record<PayStatus, number> = {
  * `labelVarian()` (`@/lib/varian`), SATU-SATUNYA perangkai label varian di
  * proyek ini; jangan menulis perangkai kedua di sini.
  */
-export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
+export async function daftarTagihanAdmin(
+  param: ParamDaftar,
+): Promise<{ baris: ItemTagihanAdmin[]; total: number }> {
   const supabase = await createServerSupabase();
+
+  // Saringan status dikerjakan di SQL pada kedua sumber, bukan sesudah
+  // penggabungan: memfilter di JS berarti menarik seluruh baris lunas hanya
+  // untuk membuangnya, dan itulah yang membuat `max_rows` cepat tersentuh.
+  const saringStatus = param.saring.status;
 
   // Embed `clients`/`packages`/`services` aman: ketiganya foreign key sungguhan.
   // (Embed ke `jejak_status_bayar` atau `profiles` yang GAGAL — PGRST200 —
@@ -108,28 +121,32 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
   // untuk embed semacam itu. Pola yang sudah dipakai `ambilSesiRekap()`
   // (`@/lib/owner/data`) diikuti di sini — tarik `variant_id` mentah, lalu
   // cocokkan ke katalog varian yang ditarik terpisah.
+  let qPaket = supabase
+    .from("client_packages")
+    .select("id, status_bayar, clients(nama, padma_id), packages(nama, jumlah_sesi)")
+    .eq("status", "aktif");
+  if (saringStatus) qPaket = qPaket.eq("status_bayar", saringStatus);
+
+  let qSesi = supabase
+    .from("sessions")
+    .select(
+      "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
+    )
+    .is("client_package_id", null)
+    .neq("status", "batal")
+    // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
+    // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
+    .order("tanggal", { ascending: false });
+  if (saringStatus) qSesi = qSesi.eq("status_bayar", saringStatus);
+
   const [
     { data: paket },
     { data: sesi },
     { data: varian },
     { data: menunggu, error: galatMenunggu },
   ] = await Promise.all([
-      supabase
-        .from("client_packages")
-        .select("id, status_bayar, clients(nama, padma_id), packages(nama, jumlah_sesi)")
-        .eq("status", "aktif")
-        .returns<BarisPaket[]>(),
-      supabase
-        .from("sessions")
-        .select(
-          "id, status_bayar, tanggal, variant_id, jenjang, clients(nama, padma_id), services(nama)",
-        )
-        .is("client_package_id", null)
-        .neq("status", "batal")
-        // `tanggal` bertipe date dan sudah berupa YYYY-MM-DD: urutannya
-        // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
-        .order("tanggal", { ascending: false })
-        .returns<BarisSesi[]>(),
+      qPaket.returns<BarisPaket[]>(),
+      qSesi.returns<BarisSesi[]>(),
       // Katalog varian saja (bukan tarifnya) — RLS "service_variants: baca
       // terautentikasi" menjawab TRUE untuk siapa pun yang login, jadi baris
       // ini tetap ada bagi admin.
@@ -258,5 +275,30 @@ export async function daftarTagihanAdmin(): Promise<ItemTagihanAdmin[]> {
 
   // Komparator mengembalikan 0 untuk peringkat kembar: komparator yang
   // mengembalikan 1 untuk elemen setara melanggar kontrak Array#sort.
-  return item.sort((a, b) => URUT[a.status] - URUT[b.status]);
+  const terurut = item.sort((a, b) => URUT[a.status] - URUT[b.status]);
+
+  // Pencarian dikerjakan DI SINI, bukan di SQL, karena daftar ini adalah
+  // gabungan DUA tabel yang tidak punya kolom nama bersama: `client_packages`
+  // dan `sessions` sama-sama menempel ke `clients`, tetapi PostgREST tidak
+  // bisa meng-OR-kan dua query berbeda menjadi satu hasil terurut.
+  const cari = param.cari.trim().toLowerCase();
+  const cocok = cari === ""
+    ? terurut
+    : terurut.filter(
+        (t) =>
+          t.namaKlien.toLowerCase().includes(cari) ||
+          t.padmaId.toLowerCase().includes(cari) ||
+          t.label.toLowerCase().includes(cari),
+      );
+
+  // BATAS YANG TIDAK DITUTUP DI SINI, dicatat supaya tidak diklaim sebaliknya:
+  // kedua query sumber di atas tidak memakai `.range()` dan karena itu tetap
+  // tunduk pada `max_rows = 1000` PostgREST — masing-masing. Paginasi di bawah
+  // memotong daftar yang SUDAH terbaca, jadi ia memperbaiki layar dan beban
+  // render, BUKAN batas bacaan. Menutupnya menuntut satu view SQL yang
+  // menyatukan kedua sumber (`union all` berkolom seragam) supaya `.range()`
+  // bisa bekerja di sisi database — pekerjaan rencana tersendiri, dan sama
+  // kelasnya dengan utang #1 runbook rencana 1.
+  const { dari } = hitungRentang(param.hal);
+  return { baris: cocok.slice(dari, dari + PER_HAL), total: cocok.length };
 }

@@ -48,6 +48,7 @@ import {
   INVITE_TTL_DAYS,
 } from "@/lib/auth/link-client";
 import { tautanAktivasi, teksUndanganWhatsApp } from "@/lib/auth/pesan-undangan";
+import { nominalDalam } from "./helpers/nominal";
 
 const svc = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -473,7 +474,7 @@ describe("kartu aktivasi di halaman detail klien", () => {
       await DetailKlienPage({ params: Promise.resolve({ id: KLIEN_PENJAGA }) }),
     );
     expect(m).toContain("Terbitkan tautan aktivasi");
-    expect(m).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(m), "nominal bocor").toEqual([]);
   });
 
   it("tidak menawarkannya untuk klien yang sudah aktif", async () => {

@@ -28,8 +28,7 @@
  * Sengaja BUKAN file *.test.ts agar `npm test` (vitest) tetap bisa jalan tanpa
  * server dev & peramban.
  *
- * PENYIMPANGAN DARI DRAF BRIEF (dicatat di sini, lihat task-8-report.md untuk
- * rinciannya):
+ * PENYIMPANGAN DARI DRAF BRIEF (dicatat di sini, dengan rinciannya):
  *  - `idKlien()` diperbaiki: `clients.email` adalah kolom LANGSUNG (unique,
  *    lihat `supabase/migrations/20260828094716_init_schema.sql`), bukan lewat
  *    join `profiles` (yang tidak punya kolom email sama sekali, dan draf lama

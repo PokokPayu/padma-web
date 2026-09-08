@@ -39,6 +39,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { PER_HAL } from "@/app/_shell/panel/daftar";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -702,9 +703,9 @@ describe("halaman daftar mitra (/admin/mitra)", () => {
 
   it("TIDAK ada nominal uang di modul mitra (money firewall)", () => {
     // Honor mitra adalah wilayah owner; admin mengelola orangnya, bukan angkanya.
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberForm, sumberAksi, sumberLib]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");

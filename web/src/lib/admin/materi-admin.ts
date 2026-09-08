@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
 import type { TipeMateri } from "@/app/admin/materi/status";
 
 /**
@@ -198,6 +199,111 @@ export async function daftarMateriAdmin(): Promise<LayananMateri[]> {
   });
 
   return kelompok;
+}
+
+export const SARING_MATERI = {
+  aktif: ["ya", "tidak"],
+  tipe: ["ebook", "video"],
+  isi: ["belum"],
+} as const satisfies SaringSah;
+
+/**
+ * Satu baris daftar datar — SEMUA medan `MateriKelola` KECUALI `layananId`.
+ *
+ * `Omit`, bukan `& { jumlahLayanan: number }` di atas `MateriKelola` utuh:
+ * daftar datar ini TIDAK menarik `material_services` per baris (lihat
+ * `ambilDaftarMateri` di bawah, yang hanya menghitungnya), jadi mengisi
+ * `layananId` di sini hanya bisa berupa larik palsu (`[]`) — sebuah nilai yang
+ * BERBOHONG persis pada materi yang justru punya layanan tertaut: pemanggil
+ * yang membaca `layananId` melihat kosong tanpa satu pun error, padahal
+ * `jumlahLayanan` di baris yang sama bisa saja > 0. `Omit` membuat kebohongan
+ * itu MUSTAHIL secara tipe, bukan sekadar "tidak dilakukan" — pemanggil yang
+ * sungguh butuh daftar id-nya wajib memanggil `ambilMateri(id)`.
+ */
+export type BarisMateriDaftar = Omit<MateriKelola, "layananId"> & { jumlahLayanan: number };
+
+/**
+ * Satu halaman daftar materi, datar.
+ *
+ * Berbeda dari `daftarMateriAdmin()` yang mengelompokkan per layanan: daftar
+ * datar berpaginasi tidak bisa dikelompokkan tanpa memecah paginasinya
+ * sendiri — sebuah kelompok yang terpotong di batas halaman terbaca sebagai
+ * kelompok yang isinya hilang. Pengelompokan per layanan tetap tersedia dari
+ * arah sebaliknya: halaman detail LAYANAN mendaftar materinya.
+ *
+ * Jumlah halaman e-book tetap lewat embed AGREGAT `material_pages(count)`,
+ * bukan `material_pages(*)`: PostgREST memotong BARIS pada `max_rows`, tidak
+ * pernah nilai agregat. Menarik satu baris per halaman dari seluruh klinik
+ * membuat materi di luar 1000 baris pertama MELAPORKAN `jumlahHalaman: 0` →
+ * `lengkap: false`, dan itu mengundang admin mengunggah ulang materi yang
+ * sebenarnya sudah lengkap.
+ */
+export async function ambilDaftarMateri(
+  param: ParamDaftar,
+): Promise<{ baris: BarisMateriDaftar[]; total: number }> {
+  const supabase = await createServerSupabase();
+  const { dari, sampai } = hitungRentang(param.hal);
+
+  let q = supabase
+    .from("materials")
+    .select("id, judul, tipe, deskripsi, aktif, material_pages(count)", { count: "exact" })
+    .order("aktif", { ascending: false })
+    .order("judul");
+
+  if (param.saring.aktif) q = q.eq("aktif", param.saring.aktif === "ya");
+  if (param.saring.tipe) q = q.eq("tipe", param.saring.tipe);
+  if (param.cari !== "") {
+    const aman = param.cari.replace(/[%_\\]/g, (c) => `\\${c}`);
+    q = q.ilike("judul", `%${aman}%`);
+  }
+
+  const [{ data: materi, count }, { data: tautan }, { data: video }] = await Promise.all([
+    q.range(dari, sampai).returns<BarisMateri[]>(),
+    supabase.from("material_services").select("material_id, service_id").returns<BarisTautan[]>(),
+    supabase.from("material_videos").select("material_id, objek").returns<BarisVideo[]>(),
+  ]);
+
+  const nLayanan = new Map<string, number>();
+  for (const t of tautan ?? []) nLayanan.set(t.material_id, (nLayanan.get(t.material_id) ?? 0) + 1);
+  const videoPer = new Map((video ?? []).map((v) => [v.material_id, v.objek] as const));
+
+  let baris: BarisMateriDaftar[] = (materi ?? []).map((m) => {
+    // Embed agregat: selalu satu objek `{ count }` (LEFT JOIN) — materi tanpa
+    // satu pun halaman menjawab `count: 0`, tidak pernah larik kosong.
+    const jumlahHalaman = m.material_pages[0]?.count ?? 0;
+    const objek = videoPer.get(m.id) ?? null;
+    return {
+      id: m.id,
+      judul: m.judul,
+      tipe: m.tipe,
+      deskripsi: m.deskripsi,
+      aktif: m.aktif,
+      jumlahHalaman,
+      objekVideo: objek,
+      lengkap: m.tipe === "ebook" ? jumlahHalaman > 0 : objek !== null,
+      jumlahLayanan: nLayanan.get(m.id) ?? 0,
+    };
+  });
+
+  // Saringan "belum ada isi" dikerjakan di JS: `lengkap` bukan kolom, ia
+  // gabungan dua tabel berbeda per TIPE materi. Konsekuensinya jujur — ia
+  // menyaring HALAMAN yang sudah ditarik, jadi `total` ikut dilaporkan sebagai
+  // jumlah yang benar-benar tampil, bukan `count` mentah. Melaporkan `count`
+  // mentah membuat paginasi menawarkan halaman yang tidak pernah ada isinya —
+  // persis cacat saringan paket yang sudah dibayar di rencana 1.
+  const saringIsi = param.saring.isi === "belum";
+  if (saringIsi) baris = baris.filter((m) => !m.lengkap);
+
+  return { baris, total: saringIsi ? baris.length : (count ?? 0) };
+}
+
+/** Satu materi beserta layanan tertautnya, atau `null` bila id-nya tidak ada. */
+export async function ambilMateri(id: string): Promise<MateriKelola | null> {
+  for (const kelompok of await daftarMateriAdmin()) {
+    const m = kelompok.materi.find((x) => x.id === id);
+    if (m) return m;
+  }
+  return null;
 }
 
 /**

@@ -43,6 +43,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { TabelInbox, type BarisSkrining } from "@/app/admin/skrining/tabel-inbox";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -87,6 +88,10 @@ const sumberAksi = baca("src/app/admin/skrining/aksi.ts");
 const sumberHalaman = baca("src/app/admin/skrining/page.tsx");
 const sumberTabel = baca("src/app/admin/skrining/tabel-inbox.tsx");
 const sumberDialog = baca("src/app/admin/skrining/jadikan-klien.tsx");
+// Sejak Task 6, proyeksi kolom `screenings` (termasuk `client_id`) pindah
+// dari `page.tsx` ke lapisan data `ambilDaftarSkrining()` — page.tsx kini
+// hanya memanggilnya, tidak lagi menuliskan daftar kolomnya sendiri.
+const sumberData = baca("src/lib/admin/skrining.ts");
 const sumberStatus = baca("src/app/admin/skrining/status.ts");
 
 let sesiAdmin: SupabaseClient;
@@ -455,9 +460,9 @@ describe("inbox menampilkan jembatan ke modul klien", () => {
   });
 
   it("tidak ada nominal uang di jalur konversi (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberTabel, sumberDialog, sumberAksi, sumberHalaman]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
     }
@@ -469,8 +474,10 @@ describe("inbox menampilkan jembatan ke modul klien", () => {
 // ---------------------------------------------------------------------------
 
 describe("berkas jalur konversi", () => {
-  it("halaman inbox ikut membaca client_id (tanpa itu jembatannya tak terlihat)", () => {
-    expect(sumberHalaman).toContain("client_id");
+  it("lapisan data inbox ikut membaca client_id (tanpa itu jembatannya tak terlihat)", () => {
+    // Sejak Task 6 proyeksi kolomnya hidup di `ambilDaftarSkrining()`
+    // (`@/lib/admin/skrining`), bukan lagi ditulis langsung di page.tsx.
+    expect(sumberData).toContain("client_id");
   });
 
   it("SETIAP action di modul skrining memanggil requireRole(['admin','owner'])", () => {
@@ -533,8 +540,18 @@ describe("berkas jalur konversi", () => {
   });
 
   it("data kesehatan tidak bocor ke URL maupun log", () => {
+    // `searchParams` DIKECUALIKAN hanya untuk `sumberHalaman`: sejak bilah
+    // daftar hidup di URL untuk SETIAP daftar panel (Global Constraint 2,
+    // spec K2, pola yang sama dengan /admin/bayar & /admin/sesi), tanda
+    // tangan `page.tsx` WAJIB menerima `searchParams`. `sumberAksi`
+    // (`"use server"`), `sumberTabel`, dan `sumberDialog` (`jadikan-klien.tsx`,
+    // komponen props-masuk) TIDAK PERNAH punya alasan membaca state URL —
+    // ketiganya tetap dijaga penuh, sama seperti sebelum Task 6. Skrining
+    // adalah DATA KESEHATAN; itulah alasan pagar ini ada.
     for (const sumber of [sumberAksi, sumberHalaman, sumberTabel, sumberDialog]) {
       expect(sumber).not.toContain("console.");
+    }
+    for (const sumber of [sumberAksi, sumberTabel, sumberDialog]) {
       expect(sumber).not.toContain("searchParams");
       expect(sumber).not.toContain("URLSearchParams");
     }

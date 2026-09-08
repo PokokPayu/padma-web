@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { jadwalkanSesi } from "./aksi";
 import { JENJANG_SAH } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
@@ -24,20 +25,18 @@ export type PilihanSederhana = { id: string; nama: string };
 export type PilihanMitra = { id: string; nama: string; lat: number | null; lon: number | null };
 
 const KELAS_MEDAN =
-  "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
-const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
+  "mt-1 min-h-[42px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13.5px] text-panel-ink";
+const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 
 /**
  * Formulir "Jadwalkan sesi" — jalur langsung, tanpa antrean permintaan.
  *
- * Sengaja dimulai TERTUTUP — formulir ini masih duduk di HEADER daftar sesi
- * (beda dari `FormKlienBaru`, yang sejak Task 9 pindah ke rute berdiri
- * sendiri dan karena itu tidak lagi butuh gerbang buka/tutup sendiri).
- * Alasannya bukan sekadar kerapian: layar pertama modul ini adalah DAFTAR
- * sesi dan antrean permintaan yang menunggu jawaban. Formulir yang selalu
- * terbuka mendorong admin membuat jadwal baru untuk permintaan yang
- * sebenarnya tinggal dikonfirmasi — dan sesi hasil jalur itu kehilangan
- * tautan ke permintaan asalnya.
+ * Sejak Task 3 (bilah daftar & panel geser) formulir ini tidak lagi punya
+ * gerbang buka/tutup sendiri: URL (`?ubah=baru`) yang memutuskan apakah
+ * `PanelGeser` — dan karena itu formulir ini — dirender sama sekali. Gerbang
+ * kedua di dalam panel yang sudah menjadi gerbangnya sendiri hanya berarti
+ * admin mengeklik "+ Sesi baru", panel terbuka, dan isinya masih sebuah
+ * tombol.
  *
  * Yang tidak ada di sini juga penting: tidak ada medan status (sesi selalu
  * lahir `terjadwal`) dan tidak ada medan paket bebas. Centang paket hanyalah
@@ -50,6 +49,7 @@ export function FormJadwalSesi({
   varian,
   mitra,
   tanggalAwal,
+  hrefTutup,
 }: {
   klien: PilihanKlien[];
   layanan: PilihanSederhana[];
@@ -58,11 +58,12 @@ export function FormJadwalSesi({
   varian: VarianPilihan[];
   mitra: PilihanMitra[];
   tanggalAwal: string;
+  /** Alamat halaman TANPA `?ubah` — ke sinilah sukses & "Batal" menuju. */
+  hrefTutup: string;
 }) {
-  const [terbuka, setTerbuka] = useState(false);
+  const router = useRouter();
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
-  const [berhasil, setBerhasil] = useState(false);
   const [serviceId, setServiceId] = useState(layanan[0]?.id ?? "");
   const varianLayanan = varian.filter((v) => v.serviceId === serviceId);
   const [variantId, setVariantId] = useState(varianLayanan[0]?.id ?? "");
@@ -106,30 +107,6 @@ export function FormJadwalSesi({
   // (lihat komentar di aksi.ts) — kotak alasan tidak perlu tampil sama sekali.
   const menimpaSaran = saran !== null && nilaiJenjang !== saran.jenjang;
 
-  if (!terbuka) {
-    return (
-      <div className="text-right">
-        <button
-          type="button"
-          onClick={() => {
-            setPesan(null);
-            setBerhasil(false);
-            setTerbuka(true);
-          }}
-          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
-        >
-          + Jadwalkan sesi
-        </button>
-        {/* Konfirmasi ditampilkan SESUDAH formulir ditutup — kalau ditaruh di
-            dalam formulir, ia ikut hilang bersama formulirnya dan admin tidak
-            pernah melihat bahwa jadwalnya tersimpan. */}
-        {berhasil && (
-          <p className="mt-2 text-[12.5px] text-leaf">Jadwal sesi tersimpan.</p>
-        )}
-      </div>
-    );
-  }
-
   const kosong =
     klien.length === 0 || layanan.length === 0 || varian.length === 0 || mitra.length === 0;
 
@@ -139,21 +116,19 @@ export function FormJadwalSesi({
         mulai(async () => {
           const r = await jadwalkanSesi(fd);
           if (r.ok) {
-            setBerhasil(true);
             setPesan(null);
-            setTerbuka(false);
+            // Menutup panel DENGAN kembali ke daftar yang sama — cari,
+            // saringan, dan halaman ikut, jadi admin melanjutkan dari tempat
+            // ia berhenti.
+            router.push(hrefTutup);
           } else {
             setPesan(r.pesan);
           }
         })
       }
-      className="w-full rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
+      className="grid gap-3"
     >
-      <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">
-        Jadwalkan sesi baru — sesi langsung tampil di Passport klien
-      </h2>
-
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3">
         <label>
           <span className={KELAS_LABEL}>Klien</span>
           <select
@@ -250,12 +225,12 @@ export function FormJadwalSesi({
           tidak akan tersimpan (lihat komentar di aksi.ts): pemilih di sini
           hanyalah perkiraan tanpa dasar untuk dibandingkan.
           Nol rupiah di blok ini: admin melihat "5–10 km", tidak pernah harga. */}
-      <div className="mt-3 rounded-xl border border-black/10 bg-paper px-3 py-2.5 text-[12.5px] text-ink-soft">
-        <span className="block font-bold text-ink">Perkiraan jarak ke mitra</span>
+      <div className="rounded-lg border border-panel-border bg-panel-bg px-3 py-2.5 text-[12.5px] text-panel-muted">
+        <span className="block font-bold text-panel-ink">Perkiraan jarak ke mitra</span>
         {/* Jarak di atas dihitung dari koordinat hasil geocoding Nominatim
             (OSM) — lisensi ODbL mewajibkan atribusi tampak persis di layar
             yang menampilkan hasilnya, bukan cukup di komentar kode. */}
-        <span className="block text-[10.5px] text-ink-soft/70">
+        <span className="block text-[10.5px] text-panel-muted">
           Jarak dihitung dari data lokasi © OpenStreetMap contributors.
         </span>
         {saran ? (
@@ -299,7 +274,7 @@ export function FormJadwalSesi({
         )}
       </div>
 
-      <label className="mt-3 flex items-start gap-2 text-[12.5px] text-ink">
+      <label className="flex items-start gap-2 text-[12.5px] text-panel-ink">
         <input name="pakai_paket" type="checkbox" className="mt-0.5" />
         <span>
           Hitung ke paket aktif klien (bila ada). Paketnya ditentukan dari klien
@@ -308,31 +283,27 @@ export function FormJadwalSesi({
       </label>
 
       {kosong && (
-        <p className="mt-3 text-[12.5px] font-semibold text-clay">
+        <p className="text-[12.5px] font-semibold text-clay">
           Klien, layanan (dengan varian), dan mitra aktif harus ada dulu
           sebelum sesi bisa dijadwalkan.
         </p>
       )}
-      {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
+      {pesan && <p className="text-[13px] font-semibold text-clay">{pesan}</p>}
 
-      <div className="mt-4 flex gap-2.5">
+      <div className="flex gap-2.5">
         <button
           type="submit"
           disabled={pending || kosong}
-          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+          className="rounded-lg bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
         >
           {pending ? "Menyimpan…" : "Simpan jadwal"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTerbuka(false);
-            setPesan(null);
-          }}
-          className="rounded-xl border border-black/15 px-4 py-2.5 text-[13px] font-bold text-ink-soft"
+        <a
+          href={hrefTutup}
+          className="rounded-lg border border-panel-border bg-panel-surface px-4 py-2.5 text-[13px] font-bold text-panel-muted"
         >
           Batal
-        </button>
+        </a>
       </div>
     </form>
   );

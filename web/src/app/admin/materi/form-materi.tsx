@@ -40,15 +40,24 @@ export type PilihanLayanan = { id: string; nama: string };
  * wajar ingin menumpuk bahan dulu, dan materi seperti itu tetap bisa dibuka
  * lewat penugasan manual. Karena itu TIDAK ADA satu pun checkbox di sini yang
  * `required`.
+ *
+ * `disabled` (Tugas 11): Kartu "Layanan tertaut" di halaman detail memakai
+ * komponen ini sebagai RINGKASAN bacaan saja, bukan editor kedua. Menulis
+ * relasi `material_services` tetap HANYA lewat formulir "Ubah" di
+ * `AksiMateri` (Kartu "Data materi") — dua tempat yang bisa menulis satu
+ * relasi adalah persis kelas bug yang komentar `Kartu "Materi yang termasuk
+ * layanan ini"` di `layanan/[id]/page.tsx` sudah tolak untuk arah sebaliknya.
  */
-function CentangLayanan({
+export function CentangLayanan({
   layanan,
   terpilih,
   labelUntuk,
+  disabled = false,
 }: {
   layanan: PilihanLayanan[];
   terpilih: string[];
   labelUntuk: (nama: string) => string;
+  disabled?: boolean;
 }) {
   return (
     <fieldset className="mt-3">
@@ -62,6 +71,7 @@ function CentangLayanan({
               value={l.id}
               defaultChecked={terpilih.includes(l.id)}
               aria-label={labelUntuk(l.nama)}
+              disabled={disabled}
             />
             {l.nama}
           </label>
@@ -223,8 +233,24 @@ export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
 }
 
 /**
- * Aksi per materi: ubah identitasnya, kelola isinya, nyalakan/matikan
- * ketersediaannya.
+ * Aksi per materi: ubah identitasnya (termasuk layanan tertautnya) dan
+ * nyalakan/matikan ketersediaannya.
+ *
+ * Sejak Tugas 11, ini adalah SATU-SATUNYA tempat yang menulis layanan
+ * tertaut — formulir "Ubah" di sini mengirim `judul`/`tipe`/`deskripsi`
+ * MAUPUN `service_id` dalam satu `perbaruiMateri()`, karena aksinya menulis
+ * ulang seluruh tautan sekaligus (hapus-lalu-sisip berskop `materiId`, lihat
+ * `gantiLayananMateri` di `./aksi.ts`) — checkbox yang tidak ikut terkirim
+ * berarti "lepaskan tautan itu". Kartu "Layanan tertaut" di halaman detail
+ * (`CentangLayanan disabled`) hanya menampilkan RINGKASAN, bukan editor
+ * kedua: dua tempat yang bisa menulis relasi yang sama adalah persis kelas
+ * bug yang membuat komentar `layanan/[id]/page.tsx` menahan arah sebaliknya
+ * jadi bacaan saja.
+ *
+ * Kelola isi (`IsiEbook`/`IsiVideo`) dan penugasan (`PanelPenugasan`) TIDAK
+ * lagi lahir dari sini sejak halaman detail materi (Tugas 11) menjadi
+ * wadahnya sendiri — masing-masing Kartu terpisah SELALU tampil, bukan lagi
+ * di balik tombol "Kelola isi"/"Kelola penugasan" yang harus diklik dulu.
  *
  * Tidak ada tombol "Hapus materi", dan itu bukan kelalaian: hak DELETE atas
  * `materials` sudah dicabut dari peran aplikasi, jadi tombol semacam itu pasti
@@ -239,11 +265,6 @@ export function AksiMateri({
   lengkap,
   layananId,
   layanan,
-  jumlahHalaman,
-  objekVideo,
-  ditugaskan,
-  otomatis,
-  pilihanKlien,
 }: {
   id: string;
   judul: string;
@@ -253,16 +274,9 @@ export function AksiMateri({
   lengkap: boolean;
   layananId: string[];
   layanan: PilihanLayanan[];
-  jumlahHalaman: number;
-  objekVideo: string | null;
-  ditugaskan: PasienRingkas[];
-  otomatis: PasienRingkas[];
-  pilihanKlien: KlienPilihan[];
 }) {
   const [ubah, setUbah] = useState(false);
   const [tipeBaru, setTipeBaru] = useState<TipeMateri>(tipe);
-  const [isi, setIsi] = useState(false);
-  const [tugas, setTugas] = useState(false);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -370,32 +384,12 @@ export function AksiMateri({
         >
           {aktif ? "Nonaktifkan" : "Aktifkan"}
         </button>
-        <button type="button" onClick={() => setIsi((t) => !t)} className={KELAS_TOMBOL_KECIL}>
-          {isi ? "Tutup isi" : "Kelola isi"}
-        </button>
-        <button type="button" onClick={() => setTugas((t) => !t)} className={KELAS_TOMBOL_KECIL}>
-          {tugas ? "Tutup penugasan" : "Kelola penugasan"}
-        </button>
         {!lengkap && (
           <span className="text-[12px] font-semibold text-clay">
             Materi ini belum ada isinya ({LABEL_ISI[tipe]}) — belum bisa diterbitkan.
           </span>
         )}
       </span>
-
-      {isi && tipe === "ebook" && <IsiEbook materiId={id} jumlahHalaman={jumlahHalaman} />}
-      {isi && tipe === "video" && (
-        <IsiVideo materiId={id} aktif={aktif} objekVideo={objekVideo} />
-      )}
-      {tugas && (
-        <PanelPenugasan
-          materiId={id}
-          judulMateri={judul}
-          ditugaskan={ditugaskan}
-          otomatis={otomatis}
-          pilihan={pilihanKlien}
-        />
-      )}
 
       {pesan && <span className="text-[12px] font-semibold text-clay">{pesan}</span>}
     </div>
@@ -411,8 +405,12 @@ export function AksiMateri({
  * ATAUPUN sudah ditugaskan) tidak ditawarkan lagi di daftar pilih "Tugaskan":
  * itu kenyamanan tampilan, BUKAN pagar keamanan — server tetap menolak
  * duplikat lewat kode 23505 apa pun yang dikirim.
+ *
+ * Sejak Tugas 11 hidup di Kartu tersendiri ("Penugasan manual") di halaman
+ * detail materi — SELALU tampil, tidak lagi di balik tombol "Kelola
+ * penugasan" milik `AksiMateri`.
  */
-function PanelPenugasan({
+export function PanelPenugasan({
   materiId,
   judulMateri,
   ditugaskan,
@@ -480,6 +478,7 @@ function PanelPenugasan({
 
       <div className="mt-2.5 flex flex-wrap gap-2">
         <select
+          name="client_id"
           value={klienBaru}
           onChange={(e) => setKlienBaru(e.target.value)}
           aria-label={`Tugaskan materi ${judulMateri} ke klien`}
@@ -523,8 +522,12 @@ function PanelPenugasan({
  * (`./unggah.ts`, RPC `ganti_halaman_materi`) — bukan lewat `aksi.ts` — jadi
  * jumlah di sini disegarkan lewat `router.refresh()` sesudah unggahan selesai,
  * bukan lewat state lokal yang mudah menyimpang dari basis data.
+ *
+ * Sejak Tugas 11 hidup di Kartu "Isi" tersendiri di halaman detail materi —
+ * SELALU tampil untuk materi bertipe `ebook`, tidak lagi di balik tombol
+ * "Kelola isi" milik `AksiMateri`.
  */
-function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman: number }) {
+export function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman: number }) {
   const router = useRouter();
   return (
     <div className="rounded-xl border border-black/10 bg-paper p-3">
@@ -548,8 +551,12 @@ function IsiEbook({ materiId, jumlahHalaman }: { materiId: string; jumlahHalaman
  * atas ("Belum ada video…") tetap basi berdampingan dengan "Video tersimpan."
  * milik `PengunggahVideo` sendiri, sampai admin berpindah halaman. "Lepas
  * video" memakai `router.refresh()` yang sama, untuk alasan simetris.
+ *
+ * Sejak Tugas 11 hidup di Kartu "Isi" tersendiri di halaman detail materi —
+ * SELALU tampil untuk materi bertipe `video`, tidak lagi di balik tombol
+ * "Kelola isi" milik `AksiMateri`.
  */
-function IsiVideo({
+export function IsiVideo({
   materiId,
   aktif,
   objekVideo,

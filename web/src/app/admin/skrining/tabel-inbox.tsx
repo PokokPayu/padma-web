@@ -36,21 +36,12 @@ export function TabelInbox({
   const [konversi, setKonversi] = useState<string | null>(null);
   const labelFase = new Map(fase.map((f) => [f.id, f.nama]));
 
-  if (baris.length === 0) {
-    return (
-      <p className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm italic text-ink-soft">
-        Belum ada hasil skrining masuk. Begitu ada pengunjung mengisi skrining,
-        entrinya muncul di sini.
-      </p>
-    );
-  }
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-black/10 bg-white">
+    <div className="overflow-hidden rounded-lg border border-panel-border bg-panel-surface">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[860px] text-[13.5px]">
           <thead>
-            <tr className="border-b-[1.5px] border-black/10 bg-paper text-[11px] uppercase tracking-wider text-ink-soft">
+            <tr className="border-b-[1.5px] border-panel-border bg-panel-bg text-[11px] uppercase tracking-wider text-panel-muted">
               <th className="p-4 text-left font-extrabold">Kode</th>
               <th className="p-4 text-left font-extrabold">Calon klien</th>
               <th className="p-4 text-left font-extrabold">Hasil</th>
@@ -69,10 +60,10 @@ export function TabelInbox({
                 // key WAJIB di Fragment: ia elemen teratas dalam map,
                 // bukan <tr> di dalamnya.
                 <Fragment key={r.id}>
-                  <tr className="border-b border-black/5">
+                  <tr className="border-b border-panel-border/70">
                     <td className="p-4">
                       <span className="font-mono text-xs">{r.kode}</span>
-                      <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                      <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                         {new Date(r.created_at).toLocaleDateString("id-ID", {
                           day: "numeric", month: "short", year: "numeric",
                         })}
@@ -80,7 +71,7 @@ export function TabelInbox({
                     </td>
                     <td className="p-4">
                       <b>{r.nama}</b>
-                      <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                      <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                         {r.no_hp} · {labelFase.get(r.fase) ?? r.fase}
                       </span>
                     </td>
@@ -97,7 +88,7 @@ export function TabelInbox({
                       <select defaultValue={r.status_tindak_lanjut}
                         onChange={(e) => void ubahTindakLanjut(r.id, e.target.value)}
                         aria-label={`Tindak lanjut ${r.kode}`}
-                        className="rounded-lg border-[1.5px] border-black/10 bg-white px-2.5 py-1.5 text-[12.5px]">
+                        className="rounded-lg border-[1.5px] border-panel-border bg-panel-surface px-2.5 py-1.5 text-[12.5px]">
                         {Object.entries(LABEL_STATUS).map(([v, l]) => (
                           <option key={v} value={v}>{l}</option>
                         ))}
@@ -117,7 +108,7 @@ export function TabelInbox({
                       ) : (
                         <button type="button"
                           onClick={() => setKonversi(konversi === r.id ? null : r.id)}
-                          className="rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-[12px] font-bold text-ink">
+                          className="rounded-lg border border-panel-border bg-panel-surface px-2.5 py-1.5 text-[12px] font-bold text-panel-ink">
                           Jadikan klien
                         </button>
                       )}
@@ -132,7 +123,7 @@ export function TabelInbox({
                   </tr>
                   {konversi === r.id && !r.client_id && (
                     <tr>
-                      <td colSpan={6} className="border-b border-black/5 bg-paper p-5">
+                      <td colSpan={6} className="border-b border-panel-border/70 bg-panel-bg p-5">
                         <JadikanKlien
                           skriningId={r.id}
                           nama={r.nama}
@@ -144,7 +135,7 @@ export function TabelInbox({
                   )}
                   {terbuka === r.id && (
                     <tr>
-                      <td colSpan={6} className="border-b border-black/5 bg-paper p-5 text-[13px]">
+                      <td colSpan={6} className="border-b border-panel-border/70 bg-panel-bg p-5 text-[13px]">
                         {r.flags.length === 0 ? (
                           <p>
                             Semua pertanyaan dijawab <b>Tidak</b> — tidak ada bendera.

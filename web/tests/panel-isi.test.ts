@@ -18,6 +18,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { nominalDalam } from "./helpers/nominal";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -290,7 +291,8 @@ describe("GrafikBatang", () => {
 
   it("tidak memuat nominal maupun pemformat rupiah", () => {
     const sumber = baca("src/app/_shell/panel/grafik-batang.tsx");
-    expect(sumber).not.toMatch(/Rp\s?\d|formatRupiah/);
+    expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
+    expect(sumber).not.toContain("formatRupiah");
   });
 });
 
@@ -393,7 +395,7 @@ describe("GrafikGaris", () => {
   it("tidak mengimpor pemformat rupiah — formatnya selalu datang dari prop", () => {
     const sumber = baca("src/app/_shell/panel/grafik-garis.tsx");
     expect(sumber).not.toContain("formatRupiah");
-    expect(sumber).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
   });
 
   describe("keadaan kosong — seluruh seri bernilai nol", () => {

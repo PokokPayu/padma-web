@@ -7,8 +7,8 @@ import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 export type PilihanFase = { id: string; nama: string };
 
 const KELAS_MEDAN =
-  "mt-1 min-h-[42px] w-full rounded-lg border border-black/15 bg-white px-3 py-2 text-[13.5px]";
-const KELAS_LABEL = "block text-[12.5px] font-bold text-ink-soft";
+  "mt-1 min-h-[42px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13.5px]";
+const KELAS_LABEL = "block text-[12.5px] font-bold text-panel-muted";
 
 /**
  * Pesan sukses dan pesan galat SALING MENIADAKAN — diekstrak jadi fungsi
@@ -76,9 +76,9 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           }
         })
       }
-      className="rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
+      className="rounded-lg border-[1.5px] border-panel-border bg-panel-bg p-4"
     >
-      <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">
+      <h2 className="mb-3 text-[13.5px] font-extrabold text-panel-ink">
         Klien baru — setelah disimpan, terbitkan tautan aktivasi dari halaman
         detailnya
       </h2>
@@ -127,7 +127,7 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
           {/* Alamat ini digeocoding lewat Nominatim (OSM) untuk saran jenjang
               transport — lisensi ODbL mewajibkan atribusi tampak di layar yang
               memakai hasilnya, bukan cukup tertulis di komentar kode. */}
-          <span className="mt-1 block text-[11px] text-ink-soft/70">
+          <span className="mt-1 block text-[11px] text-panel-muted/70">
             Lokasi diperkirakan lewat data © OpenStreetMap contributors.
           </span>
           <PemilihLokasi />
@@ -140,7 +140,7 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+          className="rounded-xl bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
         >
           {pending ? "Menyimpan…" : "Simpan klien"}
         </button>
@@ -149,7 +149,7 @@ export function FormKlienBaru({ fase }: { fase: PilihanFase[] }) {
         <button
           type="reset"
           onClick={() => setPesan(null)}
-          className="rounded-xl border border-black/15 px-4 py-2.5 text-[13px] font-bold text-ink-soft"
+          className="rounded-xl border border-panel-border px-4 py-2.5 text-[13px] font-bold text-panel-muted"
         >
           Batal
         </button>
@@ -200,9 +200,9 @@ export function FormEditKlien({
           setPesan(r.ok ? null : r.pesan);
         })
       }
-      className="rounded-2xl border border-black/10 bg-white p-5"
+      className="rounded-lg border border-panel-border bg-panel-surface p-5"
     >
-      <h2 className="mb-3 font-serif text-lg text-night">Data operasional</h2>
+      <h2 className="mb-3 font-serif text-lg text-panel-ink">Data operasional</h2>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label>
@@ -242,7 +242,7 @@ export function FormEditKlien({
           {/* Sama seperti FormKlienBaru: alamat ini digeocoding lewat
               Nominatim (OSM) setiap kali disimpan ulang, jadi atribusinya
               wajib tetap tampak di sini juga. */}
-          <span className="mt-1 block text-[11px] text-ink-soft/70">
+          <span className="mt-1 block text-[11px] text-panel-muted/70">
             Lokasi diperkirakan lewat data © OpenStreetMap contributors.
           </span>
           <PemilihLokasi
@@ -259,7 +259,7 @@ export function FormEditKlien({
       <button
         type="submit"
         disabled={pending}
-        className="mt-4 rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+        className="mt-4 rounded-xl bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
       >
         {pending ? "Menyimpan…" : "Simpan perubahan"}
       </button>

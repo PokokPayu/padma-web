@@ -433,8 +433,8 @@ export async function selesaikanSesi(
  * SAAT MEMBUAT sesi pun ditangani di sana, bukan di sini. Fungsi inilah yang
  * dipakai belakangan: alamat ternyata meleset, geocoding-nya salah, atau
  * sesinya lahir tanpa koordinat sama sekali (`jenjang` masih NULL) dan admin
- * baru sekarang tahu jenjang yang benar. Dipanggil dari laci "ubah jenjang"
- * pada baris sesi (`form-selesai.tsx`).
+ * baru sekarang tahu jenjang yang benar. Dipanggil dari formulir "ubah
+ * jenjang" di panel geser sesi (`panel-sesi.tsx`).
  *
  * Karena ia mengoreksi sesudah fakta, ia SELALU dianggap penimpaan admin:
  *

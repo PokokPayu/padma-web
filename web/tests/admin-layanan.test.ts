@@ -41,10 +41,12 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -126,6 +128,8 @@ const { ambilSesi, ambilPaket } = await import("@/lib/passport/data");
 const { progresPaket } = await import("@/lib/passport/turunan");
 const { bacaKatalog } = await import("@/lib/katalog");
 const { default: LayananPage } = await import("@/app/admin/layanan/page");
+const layananLibMod = await import("@/lib/admin/layanan");
+const { ambilDaftarLayanan, ambilLayanan } = layananLibMod;
 
 const sumberAksi = baca("src/app/admin/layanan/aksi.ts");
 const sumberHalaman = baca("src/app/admin/layanan/page.tsx");
@@ -133,7 +137,26 @@ const sumberForm = baca("src/app/admin/layanan/form-layanan.tsx");
 const sumberFormVarian = baca("src/app/admin/layanan/form-varian.tsx");
 const sumberStatus = baca("src/app/admin/layanan/status.ts");
 const sumberLib = baca("src/lib/admin/katalog-admin.ts");
-const SEMUA_SUMBER = [sumberAksi, sumberHalaman, sumberForm, sumberFormVarian, sumberStatus, sumberLib];
+// BLOCKING 1 (review sapuan panel): logika modul ini PINDAH sebagian ke dua
+// berkas yang sebelumnya tidak pernah dibaca sebagai sumber di sini —
+// `src/lib/admin/layanan.ts` (daftar berpaginasi + `ambilLayanan`) dan
+// halaman DETAIL `[id]/page.tsx`. Selama keduanya absen dari `SEMUA_SUMBER`,
+// tiga pagar yang tampak modul-lebar (money firewall, "sesi pengguna bukan
+// service role", pencocokan identitas) sebenarnya melindungi LEBIH SEDIKIT
+// daripada sebelum sapuan — dan pagar identitas bahkan sudah dilewati diam-
+// diam: `.ilike("nama", ...)` di `layanan.ts:58` tidak pernah tertangkap.
+const sumberLibLayanan = baca("src/lib/admin/layanan.ts");
+const sumberDetail = baca("src/app/admin/layanan/[id]/page.tsx");
+const SEMUA_SUMBER = [
+  sumberAksi,
+  sumberHalaman,
+  sumberForm,
+  sumberFormVarian,
+  sumberStatus,
+  sumberLib,
+  sumberLibLayanan,
+  sumberDetail,
+];
 
 let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
@@ -1196,18 +1219,28 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   beforeAll(async () => {
     ref.sesi = sesiAdmin;
     await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
-    markup = renderToStaticMarkup(await LayananPage());
+    // Next 16: `searchParams` adalah Promise. Dipanggil langsung (bukan lewat
+    // `createElement`) dan di-`await` di sini karena komponen halaman ini
+    // ASYNC — `renderToStaticMarkup` sendiri tidak bisa menunggu Promise
+    // sebuah komponen, ia hanya bisa merender pohon elemen yang sudah selesai.
+    markup = renderToStaticMarkup(
+      await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+        searchParams: Promise.resolve({}),
+      }),
+    );
   });
 
   afterAll(async () => {
     await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
   });
 
-  it("mengelompokkan layanan di bawah judul fasenya (seperti prototipe)", () => {
-    for (const fase of ["Prekonsepsi", "Kehamilan", "Nifas", "Menopause", "Newborn"]) {
-      expect(markup).toContain(fase);
-    }
-  });
+  // "mengelompokkan layanan di bawah judul fasenya" DIHAPUS, bukan dipindah:
+  // pengelompokan per-fase adalah bentuk KATALOG BERSARANG yang Tugas 7 bongkar
+  // sengaja (spec K1). Daftar datar tidak lagi punya header fase — `namaFase`
+  // sekarang sekadar satu kolom tabel per baris, dan itu sudah dibuktikan oleh
+  // `ambilDaftarLayanan` di lapisan data (`membawa jumlah varian, paket, dan
+  // sesi tercatat` & seluruh describe di bawah). Tidak ada guarantee yang
+  // hilang di sini — hanya bentuk render yang berubah.
 
   it("menampilkan layanan aktif maupun nonaktif", () => {
     expect(markup).toContain("PAD-UJI Layanan Edit Baru");
@@ -1216,29 +1249,18 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
     expect(markup).toMatch(/>Nonaktif</);
   });
 
-  it("menawarkan jalan MENGAKTIFKAN kembali layanan yang nonaktif", () => {
-    expect(markup).toContain("Aktifkan");
-  });
-
-  it("menampilkan paket di bawah layanannya beserta jumlah sesinya", () => {
-    expect(markup).toContain("PAD-UJI Paket Edit Baru");
-    expect(markup).toMatch(/10 sesi/);
-  });
-
-  it("menampilkan varian di bawah layanannya, termasuk yang nonaktif", () => {
-    expect(markup).toContain("PAD-UJI Varian Kedua");
-    // Varian baku (label kosong) jatuh ke teks penjelas, bukan string kosong
-    // yang membuat baris terlihat rusak.
-    expect(markup).toMatch(/Varian baku/i);
-  });
-
-  it("menawarkan jalan menambah varian baru per layanan", () => {
-    expect(markup).toContain("+ Varian");
-    expect(sumberFormVarian).toContain('name="label"');
-    expect(sumberFormVarian).toContain('name="durasi_menit"');
-    expect(sumberFormVarian).toContain('name="format"');
-    expect(sumberFormVarian).toContain('name="urutan"');
-  });
+  // Empat pemeriksaan berikut PINDAH ke tests/admin-layanan-detail.test.tsx
+  // (Tugas 8), bukan dihapus — lihat describe "guarantee yang pindah dari
+  // Tugas 7" di berkas itu:
+  //   • "menawarkan jalan MENGAKTIFKAN kembali layanan yang nonaktif" — tombol
+  //     Aktifkan/Nonaktifkan (AksiLayanan) sekarang hidup di halaman DETAIL,
+  //     bukan di baris daftar (pola B: baris menaut, tidak membawa aksi).
+  //   • "menampilkan paket ... beserta jumlah sesinya" — paket adalah anak
+  //     layanan, dan anak pindah ke halaman detail bersama layanannya.
+  //   • "menampilkan varian ... termasuk yang nonaktif" — alasan yang sama.
+  //   • "menawarkan jalan menambah varian baru" — tombol "+ Varian baru"
+  //     sekarang menaut ke `?ubah=baru` di halaman detail (Ruling A Tugas 8),
+  //     bukan formulir inline di daftar.
 
   it("memperingatkan bahwa mengubah jumlah sesi menggeser progres berjalan", () => {
     const teks = markup + sumberForm;
@@ -1272,13 +1294,44 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
   it("TIDAK ada nominal uang di modul layanan (money firewall)", () => {
     // Harga layanan hidup di `variant_rates` (dulu `service_rates`, dijatuhkan
     // Task 5), wilayah owner. Modul ini mengelola katalognya, bukan angkanya.
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of SEMUA_SUMBER) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
       expect(sumber).not.toContain("honor_mitra");
+    }
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = renderToStaticMarkup(
+      await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+        searchParams: Promise.resolve({ cari: "zzz-tidak-ada-layanan-bernama-ini" }),
+      }),
+    );
+    expect(m).toContain("Tidak ada layanan yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // dulu dirender untuk SETIAP daftar layanan kosong, walau tidak ada
+    // pencarian maupun saringan yang gagal. `ambilDaftarLayanan` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan katalog `services`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(layananLibMod, "ambilDaftarLayanan")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = renderToStaticMarkup(
+        await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+          searchParams: Promise.resolve({}),
+        }),
+      );
+      expect(m).toContain("Belum ada layanan yang terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
     }
   });
 });
@@ -1318,13 +1371,29 @@ describe("berkas server action layanan", () => {
     }
     expect(sumberAksi).toContain("createServerSupabase");
     expect(sumberLib).toContain("createServerSupabase");
+    expect(sumberLibLayanan).toContain("createServerSupabase");
   });
 
-  it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberLib]) {
-      expect(sumber).not.toContain(".ilike(");
-      expect(sumber).not.toContain(".like(");
-    }
+  it("pencocokan identitas memakai operator setara — .ilike/.like boleh pada kolom pencarian bebas, tidak pernah pada kolom identitas", () => {
+    // BLOCKING 1 (review sapuan panel): larangan BLANKET ".ilike(" yang
+    // pernah berdiri di sini lolos buta terhadap `src/lib/admin/layanan.ts:58`
+    // (`q.ilike("nama", ...)`) karena berkas itu tidak pernah masuk daftar
+    // yang diperiksa. Nilainya sendiri sah — `nama` bukan kolom identitas —
+    // tapi ketiadaannya dari daftar berarti `.ilike("id", ...)` atau
+    // `.ilike("*_id", ...)` yang menyelinap di berkas yang sama tidak akan
+    // membuat satu pun pagar menyala. Bentuk sadar-kolom ini (pola yang sama
+    // dengan tests/admin-sesi-daftar.test.ts:238-244) membedakan KOLOM, bukan
+    // METODE.
+    const kolomPerSumber = SEMUA_SUMBER.map(
+      (sumber) => [...sumber.matchAll(/\.(?:ilike|like)\(\s*["'`](\w+)["'`]/g)].map((m) => m[1]),
+    );
+    const semuaKolom = kolomPerSumber.flat();
+    // Gigi: pagar ini harus benar-benar menemukan sesuatu untuk diperiksa —
+    // `layanan.ts` memakai `.ilike("nama", ...)` untuk pencarian bebas, jadi
+    // panjang nol berarti regex-nya sendiri yang rusak, bukan modulnya bersih.
+    expect(semuaKolom.length).toBeGreaterThan(0);
+    const identitas = semuaKolom.filter((k) => k === "id" || /_id$/.test(k));
+    expect(identitas, `.ilike/.like pada kolom identitas: ${identitas.join(", ")}`).toEqual([]);
   });
 
   it("tidak menuliskan data katalog ke log", () => {
@@ -1346,5 +1415,92 @@ describe("berkas server action layanan", () => {
 
   it("navigasi admin menautkan modul ini", () => {
     expect(baca("src/app/admin/_shell/nav-admin.tsx")).toContain('href: "/admin/layanan"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tugas 7: lapisan data DAFTAR datar (@/lib/admin/layanan)
+// ---------------------------------------------------------------------------
+
+describe("ambilDaftarLayanan", () => {
+  it("menyaring menurut ketersediaan", async () => {
+    // BRIEF ASLINYA (dan versi tak berubah sampai review round 1) hanya
+    // memeriksa `baris.every((l) => l.aktif)` tanpa memaksa ada baris
+    // NONAKTIF nyata yang harus dikecualikan filter ini. `supabase/seed.sql`
+    // tidak punya satu pun baris `services` yang permanen nonaktif, dan
+    // setiap fixture yang pernah dinonaktifkan file lain sudah dikembalikan
+    // `aktif = true` oleh `afterAll`/`finally` masing-masing sebelum describe
+    // ini berjalan — jadi `.every()` di atas larik yang kebetulan HANYA berisi
+    // baris aktif lulus persis sama walau klausa `.eq("aktif", ...)` di
+    // `ambilDaftarLayanan` dihapus total. SVC_STATUS dinonaktifkan sendiri di
+    // sini, sementara, supaya lulus/gagalnya test benar-benar bergantung pada
+    // filter itu — pola yang sama dengan "memuat layanan NONAKTIF juga" di
+    // bawah.
+    await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
+    try {
+      const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "ya" }, hal: 1 });
+      expect(baris.length).toBeGreaterThan(0);
+      expect(baris.every((l) => l.aktif)).toBe(true);
+      expect(baris.map((l) => l.id)).not.toContain(SVC_STATUS);
+    } finally {
+      await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
+    }
+  });
+
+  it("membawa jumlah varian, paket, dan sesi tercatat", async () => {
+    const { baris } = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const l = baris.find((x) => x.jumlahVarian > 0);
+    // Angka-angka inilah yang menjelaskan mengapa baris tidak boleh dihapus.
+    expect(l).toBeDefined();
+    expect(l!.jumlahPaket).toBeGreaterThanOrEqual(0);
+    expect(l!.sesiTercatat).toBeGreaterThanOrEqual(0);
+  });
+
+  it("mencari menurut nama", async () => {
+    const semua = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const sasaran = semua.baris[0];
+    const { baris } = await ambilDaftarLayanan({
+      cari: sasaran.nama.slice(0, 5), saring: {}, hal: 1,
+    });
+    expect(baris.some((l) => l.id === sasaran.id)).toBe(true);
+  });
+
+  it("memuat layanan NONAKTIF juga — kelola bukan pilih", async () => {
+    // Tanpa ini, layanan yang dinonaktifkan karena salah klik tidak punya
+    // jalan kembali dari panel mana pun.
+    //
+    // BRIEF ASLINYA memeriksa `baris.every((l) => !l.aktif)` TANPA memaksa
+    // ada satu baris nonaktif lebih dulu — persis pola ".every() atas larik
+    // kosong selalu true" yang sudah tertangkap dua kali di rencana ini
+    // (lihat catatan pengarah tugas). Pada saat describe ini berjalan, SETIAP
+    // fixture nonaktif di berkas ini sudah dikembalikan `aktif = true` oleh
+    // try/finally masing-masing, sehingga tanpa baris di bawah filter
+    // `aktif: "tidak"` kemungkinan besar memulangkan larik KOSONG dan test
+    // ini lulus tanpa membuktikan apa pun. SVC_STATUS dinonaktifkan sendiri
+    // di sini, sementara — bukan meminjam keadaan test lain — supaya lulus
+    // atau gagalnya test ini sungguh bergantung pada perilaku `ambilDaftarLayanan`.
+    await admin.from("services").update({ aktif: false }).eq("id", SVC_STATUS);
+    try {
+      const { baris } = await ambilDaftarLayanan({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
+      expect(baris.length).toBeGreaterThan(0);
+      expect(baris.every((l) => !l.aktif)).toBe(true);
+      expect(baris.map((l) => l.id)).toContain(SVC_STATUS);
+    } finally {
+      await admin.from("services").update({ aktif: true }).eq("id", SVC_STATUS);
+    }
+  });
+});
+
+describe("ambilLayanan — satu layanan beserta anaknya", () => {
+  it("memulangkan null untuk id yang tidak ada, bukan melempar", async () => {
+    expect(await ambilLayanan("00000000-0000-0000-0000-000000000000")).toBeNull();
+  });
+
+  it("membawa varian dan paket lengkap dengan angka pemakaian", async () => {
+    const { baris } = await ambilDaftarLayanan({ cari: "", saring: {}, hal: 1 });
+    const l = await ambilLayanan(baris[0].id);
+    expect(l).not.toBeNull();
+    expect(Array.isArray(l!.varian)).toBe(true);
+    expect(Array.isArray(l!.paket)).toBe(true);
   });
 });

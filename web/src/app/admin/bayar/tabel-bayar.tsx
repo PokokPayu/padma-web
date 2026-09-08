@@ -22,15 +22,6 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<Record<string, string>>({});
 
-  if (item.length === 0) {
-    return (
-      <p className="rounded-2xl border border-black/10 bg-white p-8 text-center text-sm italic text-ink-soft">
-        Belum ada tagihan yang perlu diverifikasi. Begitu klien menekan
-        &ldquo;Saya sudah bayar&rdquo; di Passport-nya, itemnya muncul di sini.
-      </p>
-    );
-  }
-
   const jalankan = (
     kunci: string,
     aksi: () => Promise<{ ok: true } | { ok: false; pesan: string }>,
@@ -41,11 +32,11 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
     });
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-black/10 bg-white">
+    <div className="overflow-hidden rounded-lg border border-panel-border bg-panel-surface">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-[13.5px]">
           <thead>
-            <tr className="border-b-[1.5px] border-black/10 bg-paper text-[11px] uppercase tracking-wider text-ink-soft">
+            <tr className="border-b-[1.5px] border-panel-border bg-panel-bg text-[11px] uppercase tracking-wider text-panel-muted">
               <th className="p-4 text-left font-extrabold">Klien</th>
               <th className="p-4 text-left font-extrabold">Item</th>
               <th className="p-4 text-left font-extrabold">Status</th>
@@ -61,17 +52,17 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                   <tr
                     data-item={kunci}
                     data-status={t.status}
-                    className="border-b border-black/5 align-top"
+                    className="border-b border-panel-border/70 align-top"
                   >
                     <td className="p-4">
                       <b>{t.namaKlien}</b>
-                      <span className="mt-0.5 block font-mono text-[11px] text-ink-soft">
+                      <span className="mt-0.5 block font-mono text-[11px] text-panel-muted">
                         {t.padmaId}
                       </span>
                     </td>
                     <td className="p-4">
                       {t.label}
-                      <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                      <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                         {t.jenis === "paket" ? "Paket" : "Sesi lepas"}
                       </span>
                       {/* Rincian transport (Task 9) — SUB-BARIS pada item yang
@@ -79,7 +70,7 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                           sesi punya satu status_bayar, jadi "Tandai lunas" di
                           baris ini sudah melunasi transportnya juga. */}
                       {t.rincianTransport && (
-                        <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                        <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                           {t.rincianTransport}
                         </span>
                       )}
@@ -102,7 +93,7 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                             onClick={() =>
                               jalankan(kunci, () => tandaiLunas(t.jenis, t.id))
                             }
-                            className="rounded-lg bg-night px-3 py-1.5 text-[12px] font-bold text-gold-pale disabled:opacity-60"
+                            className="rounded-lg bg-panel-ink px-3 py-1.5 text-[12px] font-bold text-panel-surface disabled:opacity-60"
                           >
                             Tandai lunas
                           </button>
@@ -114,7 +105,7 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                             onClick={() =>
                               jalankan(kunci, () => tolakKlaim(t.jenis, t.id))
                             }
-                            className="rounded-lg border border-black/15 bg-white px-3 py-1.5 text-[12px] font-bold text-ink-soft disabled:opacity-60"
+                            className="rounded-lg border border-panel-border bg-panel-surface px-3 py-1.5 text-[12px] font-bold text-panel-muted disabled:opacity-60"
                           >
                             Tolak klaim
                           </button>
@@ -123,7 +114,7 @@ export function TabelBayar({ item }: { item: ItemTagihanAdmin[] }) {
                     </td>
                   </tr>
                   {pesan[kunci] ? (
-                    <tr className="border-b border-black/5">
+                    <tr className="border-b border-panel-border/70">
                       <td colSpan={4} className="px-4 pb-3 text-[12.5px] font-semibold text-clay">
                         {pesan[kunci]}
                       </td>

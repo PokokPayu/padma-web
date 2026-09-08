@@ -41,6 +41,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { badgeDari, progresPaket, type SesiRingkas } from "@/lib/passport/turunan";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 // Alias mengikuti pola singkat yang dipakai berkas uji lain (mis.
@@ -93,15 +94,25 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/sesi",
+  // `PanelGeser` (Task 3) dan `FormJadwalSesi` memakai `useRouter` — untuk
+  // tombol Escape/overlay dan untuk `router.push(hrefTutup)` sesudah submit
+  // berhasil. `renderToStaticMarkup` tidak menjalankan efeknya, tapi
+  // pemanggilan `useRouter()` sendiri di badan komponen tetap butuh mock ini
+  // (pola sama persis dengan `tests/admin-mitra.test.ts`).
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const { jadwalkanSesi, selesaikanSesi, tetapkanJenjang } = await import("@/app/admin/sesi/aksi");
+const sesiMod = await import("@/lib/admin/sesi");
 const { default: SesiPage } = await import("@/app/admin/sesi/page");
 
 const sumberAksi = baca("src/app/admin/sesi/aksi.ts");
 const sumberHalaman = baca("src/app/admin/sesi/page.tsx");
 const sumberFormSesi = baca("src/app/admin/sesi/form-sesi.tsx");
-const sumberFormSelesai = baca("src/app/admin/sesi/form-selesai.tsx");
+// `form-selesai.tsx` (dua laci di dalam sel tabel) dihapus di Task 3 — isinya
+// pindah ke `panel-sesi.tsx`, dirender di panel geser. Setiap asersi yang
+// dulu memeriksa `sumberFormSelesai` sekarang memeriksa berkas ini.
+const sumberPanelSesi = baca("src/app/admin/sesi/panel-sesi.tsx");
 const sumberStatus = baca("src/app/admin/sesi/status.ts");
 
 let sesiAdmin: SupabaseClient;
@@ -846,7 +857,7 @@ describe("tetapkanJenjang — penimpaan admin", () => {
 describe("daftar sesi di halaman /admin/sesi", () => {
   it("menampilkan sesi dengan nama klien, layanan, mitra, dan status", async () => {
     await buatSesi("terjadwal", { denganPaket: true });
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
 
     expect(markup).toContain("Ananda");
     expect(markup).toContain("Prenatal Gentle Yoga");
@@ -855,58 +866,76 @@ describe("daftar sesi di halaman /admin/sesi", () => {
     expect(markup).toMatch(/Terjadwal/);
   });
 
-  it("sesi terjadwal menawarkan 'Tandai selesai'", async () => {
-    await buatSesi("terjadwal", { denganPaket: true });
-    const markup = renderToStaticMarkup(await SesiPage());
-    expect(markup).toContain("Tandai selesai");
+  // Sejak Task 3, formulir "selesaikan sesi" hidup DI DALAM panel geser
+  // (`panel-sesi.tsx`), bukan lagi di baris tabel — dibuka lewat
+  // `?ubah=<id sesi>`. Tombol laci "Tandai selesai" (`form-selesai.tsx` lama)
+  // dibuang: panelnya sendiri sudah menjadi gerbang, jadi formulirnya tampil
+  // langsung begitu sesi berstatus terjadwal — tanpa toggle kedua.
+  it("sesi terjadwal menawarkan formulir 'selesaikan sesi' di panel geser", async () => {
+    const id = await buatSesi("terjadwal", { denganPaket: true });
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ ubah: id }) }),
+    );
+    expect(markup).toContain("Selesaikan sesi");
+    expect(markup).toContain("Simpan · sesi selesai");
   });
 
   it("catatan bidan pada sesi selesai bisa dibaca kembali di panel", async () => {
-    await buatSesi("selesai", {
+    const id = await buatSesi("selesai", {
       denganPaket: true,
       catatan: "Catatan asli dari bidan.",
     });
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ ubah: id }) }),
+    );
     expect(markup).toContain("Catatan asli dari bidan.");
   });
 
-  it("formulir jadwal baru tertutup sampai dibuka — daftar dulu, bukan formulir", async () => {
-    const markup = renderToStaticMarkup(await SesiPage());
-    expect(markup).toMatch(/Jadwalkan sesi/i);
-    // UUID klien tidak pernah ikut ke markup: daftar pilihan baru dirakit
-    // setelah admin membuka formulirnya.
+  it("tombol jadwal baru tidak memuat daftar klien sampai panel dibuka", async () => {
+    // Sejak Task 3, `FormJadwalSesi` kehilangan gerbang buka/tutupnya sendiri:
+    // yang tampil tertutup hanyalah tombol "+ Sesi baru" (`page.tsx`), dan
+    // daftar pilihan klien/layanan/varian baru ditarik saat `?ubah=baru`
+    // (lihat Ruling di brief Task 3). UUID klien karena itu tidak boleh
+    // pernah ikut ke markup pada keadaan tertutup.
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    expect(markup).toContain("+ Sesi baru");
     expect(markup).not.toContain(KLIEN);
   });
 
   it("TIDAK ada nominal uang di seluruh modul sesi (money firewall)", async () => {
     await buatSesi("selesai", { denganPaket: true, catatan: "Catatan." });
-    const markup = renderToStaticMarkup(await SesiPage());
-    expect(markup).not.toMatch(/Rp\s?\d/);
-    for (const sumber of [sumberHalaman, sumberFormSesi, sumberFormSelesai, sumberAksi]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
+    for (const sumber of [sumberHalaman, sumberFormSesi, sumberPanelSesi, sumberAksi]) {
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
     }
   });
 
-  it("sesi tanpa jenjang menawarkan koreksinya lewat 'ubah jenjang' (Ruling 11)", async () => {
+  it("sesi tanpa jenjang menawarkan koreksinya lewat 'ubah jenjang' di panel (Ruling 11)", async () => {
     // `buatSesi` menulis lewat service role tanpa jenjang — persis sesi yang
-    // lahir dari `jadwalkanSesi` saat koordinatnya kosong.
-    await buatSesi("terjadwal", { denganPaket: true });
-    const markup = renderToStaticMarkup(await SesiPage());
+    // lahir dari `jadwalkanSesi` saat koordinatnya kosong. Label & formulir
+    // koreksi sejak Task 3 hidup di panel geser, dibuka lewat `?ubah=<id>`.
+    const id = await buatSesi("terjadwal", { denganPaket: true });
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ ubah: id }) }),
+    );
     expect(markup).toContain("Jenjang: belum ditetapkan");
-    expect(markup).toContain("ubah jenjang");
+    expect(markup).toMatch(/ubah jenjang/i);
   });
 
-  it("sesi dengan jenjang OTOMATIS menampilkan label jenjangnya", async () => {
+  it("sesi dengan jenjang OTOMATIS menampilkan label jenjangnya di panel", async () => {
     const id = await buatSesi("terjadwal", { denganPaket: true });
     await admin
       .from("sessions")
       .update({ jenjang: "5_10", jenjang_sumber: "otomatis" })
       .eq("id", id);
 
-    const markup = renderToStaticMarkup(await SesiPage());
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ ubah: id }) }),
+    );
     // `renderToStaticMarkup` meng-escape "&gt;" pada teks — LABEL_JENJANG
     // sendiri tetap ">5–10 km" (lihat status.ts), hanya markupnya yang beda.
     expect(markup).toContain("Jenjang: &gt;5–10 km · otomatis");
@@ -916,10 +945,161 @@ describe("daftar sesi di halaman /admin/sesi", () => {
     // form-sesi.tsx (T7 ronde 1) sempat punya pemilih tanpa `name` yang tidak
     // pernah sampai ke FormData — inilah pagar supaya laci koreksi baris sesi
     // tidak jatuh ke cacat yang sama.
-    expect(sumberFormSelesai).toContain("tetapkanJenjang(fd)");
-    expect(sumberFormSelesai).toMatch(/name="sesi"/);
-    expect(sumberFormSelesai).toMatch(/name="jenjang"/);
-    expect(sumberFormSelesai).toMatch(/name="alasan"/);
+    expect(sumberPanelSesi).toContain("tetapkanJenjang(fd)");
+    expect(sumberPanelSesi).toMatch(/name="sesi"/);
+    expect(sumberPanelSesi).toMatch(/name="jenjang"/);
+    expect(sumberPanelSesi).toMatch(/name="alasan"/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Halaman /admin/sesi — bilah daftar, paginasi, panel geser (Task 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Halaman ini kini menerima `searchParams` — Next 16 mengopernya sebagai
+ * Promise. Dipanggil LANGSUNG dan di-`await` (bukan lewat `createElement`):
+ * `SesiPage` adalah komponen server ASYNC, dan `renderToStaticMarkup` sendiri
+ * tidak tahu cara menunggu Promise — memanggilnya lewat `createElement` lalu
+ * merender elemennya lewat `renderToStaticMarkup` tanpa `await` melempar
+ * "Objects are not valid as a React child", bukan markup. Pola yang sama
+ * (panggil sebagai fungsi biasa, `await` hasilnya, BARU render) sudah dipakai
+ * seluruh test lain di berkas ini dan di `admin-mitra.test.ts`.
+ */
+async function markupSesi(sp: Record<string, string> = {}) {
+  return renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve(sp) }));
+}
+
+describe("halaman sesi — bilah daftar & panel geser", () => {
+  it("punya kotak cari sebagai form GET, bukan komponen klien", async () => {
+    const m = await markupSesi();
+    expect(m).toContain('method="get"');
+    expect(m).toContain('action="/admin/sesi"');
+    expect(m).toContain('name="cari"');
+  });
+
+  it("chip saringan menaut, bukan menekan tombol", async () => {
+    const m = await markupSesi();
+    for (const href of [
+      "/admin/sesi?status=terjadwal",
+      "/admin/sesi?status=selesai",
+      "/admin/sesi?jenjang=kosong",
+      "/admin/sesi?waktu=pekan_ini",
+    ]) {
+      expect(m, `chip ${href} hilang`).toContain(`href="${href}"`);
+    }
+  });
+
+  it("tombol baru membuka panel, BUKAN kartu yang mendorong isi halaman", async () => {
+    const m = await markupSesi();
+    expect(m).toContain('href="/admin/sesi?ubah=baru"');
+    // Kartu putus-putus lama tidak boleh tersisa di keadaan tertutup.
+    expect(m).not.toContain("border-dashed");
+  });
+
+  it("?ubah=baru membuka panel geser berisi formulir jadwal", async () => {
+    const m = await markupSesi({ ubah: "baru" });
+    expect(m).toContain('role="dialog"');
+    expect(m).toContain('aria-modal="true"');
+    expect(m).toContain('name="client_id"');
+    expect(m).toContain('name="jenjang"');
+  });
+
+  it("id yang tidak ada di halaman ini TIDAK membuka panel kosong", async () => {
+    const m = await markupSesi({ ubah: HANTU });
+    expect(m).not.toContain('role="dialog"');
+  });
+
+  it("menutup panel mempertahankan cari, saringan, dan halaman", async () => {
+    const m = await markupSesi({ cari: "ananda", status: "selesai", hal: "2", ubah: "baru" });
+    expect(m).toContain('href="/admin/sesi?cari=ananda&amp;status=selesai&amp;hal=2"');
+  });
+
+  it("penjelasan halaman pindah ke tombol bantuan yang terlipat", async () => {
+    const m = await markupSesi();
+    expect(m).toContain("<details");
+    expect(m).toContain("<summary");
+  });
+
+  it("atribusi OpenStreetMap tetap tampak tanpa membuka apa pun", async () => {
+    // Kewajiban lisensi ODbL: atribusi harus tampak di LAYAR yang menampilkan
+    // hasil geocoding. Kolom "Jenjang" tampil begitu halaman dimuat, jadi
+    // atribusinya tidak boleh ikut pindah ke dalam panel yang mulai tertutup.
+    const m = await markupSesi();
+    expect(m).toContain("OpenStreetMap");
+  });
+
+  it("nol rupiah", async () => {
+    expect(nominalDalam(await markupSesi())).toEqual([]);
+    expect(nominalDalam(await markupSesi({ ubah: "baru" }))).toEqual([]);
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = await markupSesi({ cari: "zzz-tidak-ada-sesi-bernama-ini" });
+    expect(m).toContain("Tidak ada sesi yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // pernah dirender untuk SETIAP daftar sesi kosong, termasuk klinik yang
+    // belum pernah menjadwalkan satu sesi pun. `ambilDaftarSesi` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan tabel `sessions`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(sesiMod, "ambilDaftarSesi")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await markupSesi();
+      expect(m).toContain("Belum ada sesi.");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  // RULING (menggantikan draf Langkah 5 di brief Task 3): `BlokPermintaan`
+  // (antrean permintaan, tampil DI ATAS bilah daftar) menerima prop `mitra`
+  // yang sama dengan panel "Sesi baru", dan punya cabang sendiri yang
+  // menampilkan "Belum ada mitra aktif —
+  // daftarkan mitra dulu di menu Mitra" bila `mitra.length === 0`. Draf awal
+  // brief menarik `pilihanMitra()` HANYA saat `ubah === "baru"`, yang berarti
+  // kalimat itu muncul setiap kali panel tertutup — walau mitra aktif
+  // sungguhan ada — karena `page.tsx` mengirim array kosong ke antreannya
+  // sendiri. Tanpa pagar ini, koreksi tersebut bisa lenyap lagi di edit
+  // berikutnya tanpa satu test pun menjadi merah.
+  describe("mitra tetap tersedia untuk antrean permintaan walau panel tertutup", () => {
+    const TGL_ANTREAN = "2026-12-29";
+    let idPermintaanAntre = "";
+
+    beforeAll(async () => {
+      const { data, error } = await admin
+        .from("booking_requests")
+        .insert({
+          client_id: KLIEN,
+          service_id: SVC_BARU,
+          variant_id: VARIAN_BARU,
+          tanggal: TGL_ANTREAN,
+          preferensi_waktu: "pagi",
+          catatan: "Uji ruling mitra saat panel tertutup.",
+          status: "menunggu",
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      idPermintaanAntre = data!.id as string;
+    });
+
+    afterAll(async () => {
+      await admin.from("booking_requests").delete().eq("id", idPermintaanAntre);
+    });
+
+    it("TIDAK menampilkan 'Belum ada mitra aktif' walau panel tertutup", async () => {
+      const m = await markupSesi();
+      // Bukti bahwa antreannya sungguh dirender pada test ini — tanpa baris
+      // ini, test bisa hijau palsu karena blok antreannya sendiri gagal tampil.
+      expect(m).toContain("Permintaan jadwal");
+      expect(m).not.toContain("Belum ada mitra aktif");
+    });
   });
 });
 
@@ -943,14 +1123,14 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberFormSelesai, sumberStatus]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberPanelSesi, sumberStatus]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
   });
 
   it("tanggal tidak pernah dihitung dengan aritmatika Date", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberFormSelesai]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
       expect(sumber).not.toContain("getDay(");
@@ -958,7 +1138,7 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
   });
 
   it("tidak menuliskan data klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberFormSelesai]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("console.");
     }
   });

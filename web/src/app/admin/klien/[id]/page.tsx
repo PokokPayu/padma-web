@@ -77,16 +77,16 @@ export default async function DetailKlienPage({
     <main>
       <Link
         href="/admin/klien"
-        className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"
+        className="mb-3.5 inline-block rounded-xl border border-panel-border bg-panel-surface px-4 py-2 text-[13px] font-bold"
       >
         ← Kembali ke daftar klien
       </Link>
 
-      <header className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
+      <header className="mb-4 rounded-lg border border-panel-border bg-panel-surface p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-serif text-2xl text-night">{klien.nama}</h1>
-            <p className="mt-1 font-mono text-xs text-ink-soft">{klien.padma_id}</p>
+            <h1 className="font-serif text-2xl text-panel-ink">{klien.nama}</h1>
+            <p className="mt-1 font-mono text-xs text-panel-muted">{klien.padma_id}</p>
           </div>
           <span
             className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
@@ -99,19 +99,19 @@ export default async function DetailKlienPage({
 
         <dl className="mt-4 grid gap-3 text-[13.5px] sm:grid-cols-3">
           <div>
-            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-ink-soft">
+            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-panel-muted">
               Email
             </dt>
             <dd className="mt-0.5 break-all">{klien.email}</dd>
           </div>
           <div>
-            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-ink-soft">
+            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-panel-muted">
               WhatsApp
             </dt>
             <dd className="mt-0.5">{klien.no_hp || "—"}</dd>
           </div>
           <div>
-            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-ink-soft">
+            <dt className="text-[11.5px] font-bold uppercase tracking-wider text-panel-muted">
               Fase
             </dt>
             <dd className="mt-0.5">{namaFase}</dd>
@@ -145,10 +145,10 @@ export default async function DetailKlienPage({
           fase={fase ?? []}
         />
 
-        <section className="rounded-2xl border border-black/10 bg-white p-5">
-          <h2 className="mb-3 font-serif text-lg text-night">Sesi terakhir</h2>
+        <section className="rounded-lg border border-panel-border bg-panel-surface p-5">
+          <h2 className="mb-3 font-serif text-lg text-panel-ink">Sesi terakhir</h2>
           {(sesi ?? []).length === 0 ? (
-            <p className="text-[13px] italic text-ink-soft">
+            <p className="text-[13px] italic text-panel-muted">
               Belum ada sesi tercatat untuk klien ini.
             </p>
           ) : (
@@ -156,15 +156,15 @@ export default async function DetailKlienPage({
               {(sesi ?? []).map((s) => (
                 <li
                   key={s.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 pb-2 text-[13px] last:border-b-0"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-panel-border/70 pb-2 text-[13px] last:border-b-0"
                 >
                   <span>
                     <b>{s.services?.nama ?? "Layanan"}</b>
-                    <span className="mt-0.5 block text-[11.5px] text-ink-soft">
+                    <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                       {formatTanggalID(s.tanggal)}
                     </span>
                   </span>
-                  <span className="text-[11.5px] font-extrabold uppercase tracking-wider text-ink-soft">
+                  <span className="text-[11.5px] font-extrabold uppercase tracking-wider text-panel-muted">
                     {s.status}
                   </span>
                 </li>

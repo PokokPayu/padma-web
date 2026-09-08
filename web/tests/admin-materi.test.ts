@@ -42,12 +42,14 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
 import { MATERI_VIDEO_TERBUKA, MATERI_VIDEO_TERKUNCI } from "./helpers/materi-video-fixture";
+import { nominalDalam } from "./helpers/nominal";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -105,8 +107,19 @@ const {
   nonaktifkanMateri,
   lepasVideo,
 } = await import("@/app/admin/materi/aksi");
-const { daftarMateriAdmin, TANPA_LAYANAN_ID } = await import("@/lib/admin/materi-admin");
+const materiAdminMod = await import("@/lib/admin/materi-admin");
+const { daftarMateriAdmin, TANPA_LAYANAN_ID, SARING_MATERI, ambilDaftarMateri, ambilMateri } =
+  materiAdminMod;
 const { default: MateriPage } = await import("@/app/admin/materi/page");
+
+/** Next 16: `searchParams` adalah Promise — dipanggil langsung, bukan lewat `createElement`. */
+async function markupDaftar(sp: Record<string, string> = {}) {
+  return renderToStaticMarkup(
+    await (MateriPage as never as (p: unknown) => Promise<ReactElement>)({
+      searchParams: Promise.resolve(sp),
+    }),
+  );
+}
 
 const sumberAksi = baca("src/app/admin/materi/aksi.ts");
 const sumberHalaman = baca("src/app/admin/materi/page.tsx");
@@ -968,22 +981,34 @@ describe("halaman materi (/admin/materi)", () => {
       .select("id")
       .single();
     materiTanpaLayananId = data!.id as string;
-    markup = renderToStaticMarkup(await MateriPage());
+    markup = await markupDaftar();
   });
 
   afterAll(async () => {
     await admin.from("materials").delete().eq("id", materiTanpaLayananId);
   });
 
-  it("mengelompokkan materi di bawah nama layanannya", () => {
-    expect(markup).toContain("Sankalpa Fertility Massage");
-    expect(markup).toContain("PAD-UJI E-Book Materi Baru");
-  });
+  // "mengelompokkan materi di bawah nama layanannya" DIHAPUS, bukan dipindah:
+  // pengelompokan per-layanan adalah bentuk KATALOG BERSARANG yang Tugas 10
+  // bongkar sengaja (spec K1, sama seperti pembongkaran fase di Tugas 7). Daftar
+  // datar tidak lagi menampilkan NAMA layanan per baris — hanya `jumlahLayanan`
+  // (lihat describe "ambilDaftarMateri" untuk cakupan angka itu). Tidak ada
+  // guarantee yang hilang: hanya bentuk render yang berubah.
 
-  it("menampilkan materi aktif maupun nonaktif dengan penandanya", () => {
+  it("menampilkan judul materi aktif maupun nonaktif, dengan penandanya", () => {
+    expect(markup).toContain("PAD-UJI E-Book Materi Baru");
+    expect(markup).toContain("PAD-UJI Materi Tanpa Isi");
     expect(markup).toMatch(/>Aktif</);
     expect(markup).toMatch(/>Nonaktif</);
-    expect(markup).toContain("Aktifkan");
+  });
+
+  // "Aktifkan"/"Kelola isi"/"Kelola penugasan" (AksiMateri) PINDAH ke
+  // tests/admin-materi-detail.test.tsx (Tugas 11) — pola B memindahkan aksi
+  // per baris ke halaman DETAIL; baris daftar hanya menaut (lihat describe
+  // "detail materi" di berkas itu untuk cakupan tombol-tombol tadi).
+
+  it("baris materi menaut ke halaman detailnya sendiri", () => {
+    expect(markup).toMatch(new RegExp(`href="/admin/materi/[0-9a-f-]+"`));
   });
 
   it("menandai materi tanpa layanan sama sekali — bukan tersembunyi diam-diam", () => {
@@ -994,12 +1019,9 @@ describe("halaman materi (/admin/materi)", () => {
   it("menandai materi yang isinya belum lengkap, bukan mendiamkannya", () => {
     expect(markup).toContain("PAD-UJI Materi Tanpa Isi");
     // Diikat pada PIL "Belum ada isi" (`>Belum ada isi<`, huruf besar/kecil
-    // dan tanpa embel-embel), BUKAN pada kata "isi" secara longgar: pesan
-    // penjelas AksiMateri di baris yang sama juga memuat frasa "belum ada
-    // isinya" (huruf kecil), dan regex longgar tanpa jangkar akan lolos
-    // hanya karena kalimat itu ada — terlepas pil-nya sungguh dirender atau
-    // tidak. Menghapus PillBelumAdaIsi dari page.tsx (dan hanya itu) MEMBUAT
-    // baris ini merah; regex lama tidak.
+    // dan tanpa embel-embel), BUKAN pada kata "isi" secara longgar — regex
+    // longgar tanpa jangkar akan lolos hanya karena kalimat penjelas lain
+    // memuat kata itu, terlepas pil-nya sungguh dirender atau tidak.
     expect(markup).toContain(">Belum ada isi<");
   });
 
@@ -1020,9 +1042,13 @@ describe("halaman materi (/admin/materi)", () => {
     expect(sumberForm).not.toContain('name="bab_judul"');
   });
 
-  it("menyediakan panel penugasan manual per materi", () => {
-    expect(markup).toContain("Kelola penugasan");
-    expect(sumberHalaman).toContain("daftarPenugasan");
+  // "menyediakan panel penugasan manual per materi" PINDAH ke
+  // tests/admin-materi-detail.test.tsx (Tugas 11): `daftarPenugasan` sekarang
+  // dipanggil oleh halaman DETAIL, bukan daftar — lihat guard di bawah yang
+  // membuktikan arah sebaliknya (daftar TIDAK lagi memanggilnya).
+
+  it("halaman daftar TIDAK memanggil daftarPenugasan — itu tugas halaman detail", () => {
+    expect(sumberHalaman).not.toContain("daftarPenugasan");
   });
 
   it("menjelaskan bahwa materi tidak dihapus, hanya dinonaktifkan", () => {
@@ -1041,12 +1067,35 @@ describe("halaman materi (/admin/materi)", () => {
   });
 
   it("TIDAK ada nominal uang di modul materi (money firewall)", () => {
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of SEMUA_SUMBER) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
+    }
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    const m = await markupDaftar({ cari: "zzz-tidak-ada-materi-bernama-ini" });
+    expect(m).toContain("Tidak ada materi yang cocok dengan pencarian ini.");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): "tidak cocok dengan pencarian ini"
+    // dulu dirender untuk SETIAP daftar materi kosong, walau tidak ada
+    // pencarian maupun saringan yang gagal. `ambilDaftarMateri` di-spy
+    // supaya baris kosong bisa diuji tanpa mengosongkan tabel `materials`
+    // yang dipakai bersama seluruh suite.
+    const spy = vi
+      .spyOn(materiAdminMod, "ambilDaftarMateri")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const m = await markupDaftar();
+      expect(m).toContain("Belum ada materi yang terdaftar");
+      expect(m).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
     }
   });
 });
@@ -1115,10 +1164,21 @@ describe("berkas server action materi", () => {
   });
 
   it("pencocokan identitas memakai operator setara, tidak pernah pola", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberLib]) {
+    for (const sumber of [sumberAksi, sumberHalaman]) {
       expect(sumber).not.toContain(".ilike(");
       expect(sumber).not.toContain(".like(");
     }
+    // `sumberLib` (materi-admin.ts) TERKECUALI sejak Tugas 10: `ambilDaftarMateri`
+    // memakai `.ilike("judul", ...)` untuk kotak CARI daftar datar — pola yang
+    // sama persis dengan `ambilDaftarLayanan` (Tugas 7). Itu beda kelas dari
+    // pencocokan ID yang mengikat SATU baris (mis. `.eq("id", materiId)`), jadi
+    // dilonggarkan di sini, bukan dihapus: setiap kemunculan `.ilike`/`.like` di
+    // berkas ini tetap wajib menyasar `judul`, tidak pernah dipakai untuk
+    // mencocokkan id — pagar radius yang sama dengan describe "radius tautan
+    // layanan" di atas, hanya diterapkan pada operator pencocokan, bukan filter.
+    const kecocokanPola = [...sumberLib.matchAll(/\.(?:ilike|like)\(\s*["'](\w+)["']/g)];
+    expect(kecocokanPola.length).toBeGreaterThan(0);
+    for (const m of kecocokanPola) expect(m[1]).toBe("judul");
   });
 
   it("tidak menuliskan isi materi ke log", () => {
@@ -1153,5 +1213,109 @@ describe("medan URL video (Task 6) benar-benar dibongkar, bukan cuma tak terpaka
     expect(sumberStatus).not.toContain("periksaUrlVideo");
     expect(sumberStatus).not.toContain("PENYEDIA_VIDEO");
     expect(sumberStatus).not.toContain("POLA_URL_VIDEO");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tugas 10: lapisan data DAFTAR datar (@/lib/admin/materi-admin)
+// ---------------------------------------------------------------------------
+
+describe("ambilDaftarMateri", () => {
+  it("SARING_MATERI mendaftar tepat tiga saringan: aktif, tipe, isi", () => {
+    expect(Object.keys(SARING_MATERI).sort()).toEqual(["aktif", "isi", "tipe"]);
+  });
+
+  it("memuat materi NONAKTIF juga — kelola bukan pilih", async () => {
+    const { baris } = await ambilDaftarMateri({ cari: "", saring: { aktif: "tidak" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => !m.aktif)).toBe(true);
+  });
+
+  it("menyaring menurut tipe", async () => {
+    const { baris } = await ambilDaftarMateri({ cari: "", saring: { tipe: "ebook" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => m.tipe === "ebook")).toBe(true);
+  });
+
+  it("saringan 'belum lengkap' menemukan materi yang terkunci selamanya", async () => {
+    // Materi video tanpa objek video (atau e-book tanpa halaman) terkunci
+    // selamanya bagi klien yang sudah berhak, TANPA satu pun error, sementara
+    // kartunya berbunyi "Terbuka setelah layanan terkait selesai". Saringan
+    // inilah yang membuat keadaan itu bisa ditemukan, bukan tertebak.
+    const { baris } = await ambilDaftarMateri({ cari: "", saring: { isi: "belum" }, hal: 1 });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((m) => !m.lengkap)).toBe(true);
+  });
+
+  it("mencari menurut judul", async () => {
+    const semua = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+    const sasaran = semua.baris[0];
+    const { baris } = await ambilDaftarMateri({
+      cari: sasaran.judul.slice(0, 5), saring: {}, hal: 1,
+    });
+    expect(baris.some((m) => m.id === sasaran.id)).toBe(true);
+  });
+
+  it("membawa jumlah layanan tertaut — nol adalah keadaan SAH yang wajib terlihat", async () => {
+    // Materi tanpa layanan tidak pernah terbuka lewat jalur otomatis, hanya
+    // lewat penugasan manual. Materi yang diam-diam tidak terlihat siapa pun
+    // adalah persis kegagalan yang modul ini ada untuk mencegah.
+    const { baris: awal } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+    expect(awal.every((m) => typeof m.jumlahLayanan === "number")).toBe(true);
+
+    // `typeof === "number"` di atas lolos untuk konstanta 0/1 yang HARDCODED
+    // ataupun tautan yang dihitung dua kali — tidak satu pun membuktikan
+    // ANGKANYA benar. MATERI_EBOOK tertaut PERSIS ke SVC_TERBUKA di titik ini
+    // (dibuktikan describe "perbaruiMateri" & "radius tautan layanan" di
+    // atas, yang mengembalikan tautannya ke [SVC_TERBUKA] di akhir masing-
+    // masing). Menautkan SVC_KEDUA lalu melepasnya lagi membuktikan angkanya
+    // ikut BERGERAK 1 -> 2 -> 1, menangkap baik konstanta tetap maupun cache
+    // basi — bukan sekadar "bertipe number".
+    const jumlahSebelum = awal.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan;
+    expect(jumlahSebelum).toBe(1);
+
+    await admin
+      .from("material_services")
+      .insert({ material_id: MATERI_EBOOK, service_id: SVC_KEDUA });
+    try {
+      const { baris: sesudah } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+      expect(sesudah.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan).toBe(2);
+    } finally {
+      // Simetris dengan penyisipan di atas — baris yatim di `material_services`
+      // memerahkan berkas LAIN yang meng-assert `layananId`/`jumlahLayanan`
+      // MATERI_EBOOK secara persis (sudah terjadi sekali di rencana ini).
+      await admin
+        .from("material_services")
+        .delete()
+        .eq("material_id", MATERI_EBOOK)
+        .eq("service_id", SVC_KEDUA);
+    }
+
+    const { baris: kembali } = await ambilDaftarMateri({ cari: "", saring: {}, hal: 1 });
+    expect(kembali.find((m) => m.id === MATERI_EBOOK)!.jumlahLayanan).toBe(1);
+  });
+
+  it("saringan isi 'belum' melaporkan total sesuai baris yang BENAR-BENAR tersaring, bukan count mentah", async () => {
+    // Pagar yang sama dengan cacat saringan "punya paket" yang sudah dibayar
+    // (Klien): melaporkan `count` PostgREST mentah untuk saringan yang
+    // dikerjakan di JS membuat `Paginasi` menawarkan halaman yang selalu
+    // kosong begitu jumlah baris `!lengkap` lebih kecil dari total materi.
+    const { baris, total } = await ambilDaftarMateri({ cari: "", saring: { isi: "belum" }, hal: 1 });
+    expect(total).toBe(baris.length);
+  });
+});
+
+describe("ambilMateri", () => {
+  it("memulangkan null untuk id yang tidak ada", async () => {
+    expect(await ambilMateri("00000000-0000-0000-0000-000000000000")).toBeNull();
+  });
+
+  it("membawa layananId — daftar id sungguhan, bukan Omit dari BarisMateriDaftar", async () => {
+    // RULING A: `BarisMateriDaftar` (daftar) tidak boleh membawa `layananId`
+    // sama sekali (lihat dokblok tipe itu) — pemanggil yang sungguh butuh
+    // daftar id-nya wajib lewat sini.
+    const m = await ambilMateri(MATERI_EBOOK);
+    expect(m).not.toBeNull();
+    expect(m!.layananId).toContain(SVC_TERBUKA);
   });
 });

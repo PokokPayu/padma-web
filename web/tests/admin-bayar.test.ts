@@ -54,6 +54,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+import { nominalDalam } from "./helpers/nominal";
+import { PER_HAL } from "@/app/_shell/panel/daftar";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -105,13 +107,21 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/bayar",
 }));
 
-const { daftarTagihanAdmin } = await import("@/lib/admin/tagihan");
+const tagihanMod = await import("@/lib/admin/tagihan");
+const { daftarTagihanAdmin, SARING_BAYAR } = tagihanMod;
 const { hitungKlaimMenunggu } = await import("@/lib/admin/antrean");
 const { tandaiLunas, tolakKlaim } = await import("@/app/admin/bayar/aksi");
 const { TabelBayar } = await import("@/app/admin/bayar/tabel-bayar");
 const { default: BayarPage } = await import("@/app/admin/bayar/page");
 const { ambilPaket, ambilSesi } = await import("@/lib/passport/data");
 const { susunTagihan } = await import("@/lib/passport/turunan");
+
+// `daftarTagihanAdmin()` sekarang menerima `ParamDaftar` dan memulangkan
+// `{ baris, total }` alih-alih `ItemTagihanAdmin[]` telanjang. Pemanggilan
+// lama di berkas ini (dua puluhan) semuanya meminta SELURUH tagihan halaman
+// pertama tanpa saringan maupun pencarian — satu pembungkus di sini
+// menggantikan mengedit tiap pemanggilan satu per satu.
+const semuaTagihan = async () => (await daftarTagihanAdmin({ cari: "", saring: {}, hal: 1 })).baris;
 
 const sumberAksi = baca("src/app/admin/bayar/aksi.ts");
 const sumberHalaman = baca("src/app/admin/bayar/page.tsx");
@@ -239,14 +249,14 @@ afterAll(bersihkan);
 
 describe("daftar tagihan admin", () => {
   it("memuat sesi lepas dan paket klien yang menunggu verifikasi", async () => {
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     const kunci = daftar.map((t) => `${t.jenis}:${t.id}`);
     expect(kunci).toContain(`sesi:${SESI_MENUNGGU}`);
     expect(kunci).toContain(`paket:${PAKET_UJI}`);
   });
 
   it("membawa nama klien dan PADMA ID — antrean ini dibaca manusia", async () => {
-    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_MENUNGGU);
+    const item = (await semuaTagihan()).find((t) => t.id === SESI_MENUNGGU);
     expect(item).toBeDefined();
     expect(item!.namaKlien).toContain("Ananda");
     expect(item!.padmaId).toBe(PADMA_ID);
@@ -254,19 +264,19 @@ describe("daftar tagihan admin", () => {
   });
 
   it("TIDAK memuat sesi yang sudah tercakup paket (tagihan hantu)", async () => {
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     expect(daftar.map((t) => t.id)).not.toContain(SESI_PAKET);
   });
 
   it("TIDAK memuat sesi batal", async () => {
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     expect(daftar.map((t) => t.id)).not.toContain(SESI_BATAL);
   });
 
   it("invarian menyeluruh: TIAP baris sesi di daftar benar-benar lepas & tidak batal", async () => {
     // Bukan hanya baris uji — seluruh daftar. Satu sesi berpaket yang lolos
     // berarti admin bisa "melunasi" sesuatu yang kliennya tidak pernah lihat.
-    const idSesi = (await daftarTagihanAdmin())
+    const idSesi = (await semuaTagihan())
       .filter((t) => t.jenis === "sesi")
       .map((t) => t.id);
     if (idSesi.length > 0) {
@@ -286,7 +296,7 @@ describe("daftar tagihan admin", () => {
     // Bukti terkuat bahwa admin dan klien melihat daftar yang sama: item milik
     // Ananda di daftar admin harus persis sama dengan tagihan yang tersusun
     // dari sisi Ananda sendiri.
-    const milikAdmin = (await daftarTagihanAdmin())
+    const milikAdmin = (await semuaTagihan())
       .filter((t) => t.padmaId === PADMA_ID)
       .map((t) => `${t.jenis}:${t.id}`)
       .sort();
@@ -304,7 +314,7 @@ describe("daftar tagihan admin", () => {
   it("terurut menurut kemendesakan: menunggu verifikasi, belum, lunas", async () => {
     // Yang menunggu verifikasi naik ke atas — itulah pekerjaan admin hari ini.
     const urut = { menunggu_verifikasi: 0, belum: 1, lunas: 2 } as const;
-    const peringkat = (await daftarTagihanAdmin()).map((t) => urut[t.status]);
+    const peringkat = (await semuaTagihan()).map((t) => urut[t.status]);
     expect(peringkat.length).toBeGreaterThan(1);
     for (let i = 1; i < peringkat.length; i++) {
       expect(peringkat[i]).toBeGreaterThanOrEqual(peringkat[i - 1]);
@@ -316,7 +326,7 @@ describe("daftar tagihan admin", () => {
     // Badge yang berbeda dari daftarnya adalah alarm yang tidak bisa
     // dipadamkan: angkanya naik, admin membuka modulnya, tidak ada yang bisa
     // dikerjakan.
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     const menunggu = daftar.filter((t) => t.status === "menunggu_verifikasi").length;
     expect(await hitungKlaimMenunggu()).toBe(menunggu);
   });
@@ -327,10 +337,59 @@ describe("daftar tagihan admin", () => {
     expect(r.ok).toBe(true);
     expect(await hitungKlaimMenunggu()).toBe(sebelum - 1);
 
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     expect(daftar.filter((t) => t.status === "menunggu_verifikasi").length).toBe(
       sebelum - 1,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Saringan & paginasi (Task 5)
+// ---------------------------------------------------------------------------
+
+describe("daftarTagihanAdmin — saringan & paginasi", () => {
+  it("nilai saringan persis enum pay_status", () => {
+    expect([...SARING_BAYAR.status]).toEqual(["belum", "menunggu_verifikasi", "lunas"]);
+  });
+
+  it("menyaring menurut status bayar", async () => {
+    const { baris } = await daftarTagihanAdmin({
+      cari: "", saring: { status: "lunas" }, hal: 1,
+    });
+    expect(baris.length).toBeGreaterThan(0);
+    expect(baris.every((t) => t.status === "lunas")).toBe(true);
+  });
+
+  it("mencari menurut nama klien dan PADMA ID", async () => {
+    const semua = await daftarTagihanAdmin({ cari: "", saring: {}, hal: 1 });
+    expect(semua.baris.length).toBeGreaterThan(0);
+    const sasaran = semua.baris[0];
+
+    const perNama = await daftarTagihanAdmin({
+      cari: sasaran.namaKlien.slice(0, 4), saring: {}, hal: 1,
+    });
+    expect(perNama.baris.some((t) => t.id === sasaran.id)).toBe(true);
+
+    const perId = await daftarTagihanAdmin({ cari: sasaran.padmaId, saring: {}, hal: 1 });
+    expect(perId.baris.some((t) => t.id === sasaran.id)).toBe(true);
+  });
+
+  it("halaman tidak pernah melebihi PER_HAL, dan total menghitung seluruhnya", async () => {
+    const { baris, total } = await daftarTagihanAdmin({ cari: "", saring: {}, hal: 1 });
+    expect(baris.length).toBeLessThanOrEqual(PER_HAL);
+    expect(total).toBeGreaterThanOrEqual(baris.length);
+  });
+
+  it("saringan yang tidak mencocokkan apa pun memulangkan total 0, bukan total semua", async () => {
+    // Total yang tetap penuh selagi daftarnya kosong membuat paginasi
+    // menawarkan halaman yang tidak pernah ada isinya — persis cacat yang
+    // ditemukan pada saringan paket di rencana 1.
+    const { baris, total } = await daftarTagihanAdmin({
+      cari: "zzz-tidak-ada-klien-bernama-ini", saring: {}, hal: 1,
+    });
+    expect(baris).toEqual([]);
+    expect(total).toBe(0);
   });
 });
 
@@ -384,7 +443,7 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
   });
 
   it("label menyertakan nama layanan DAN label varian", async () => {
-    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN);
+    const item = (await semuaTagihan()).find((t) => t.id === SESI_VARIAN);
     expect(item).toBeDefined();
     expect(item!.label).toContain("PAD-UJI Layanan Varian Tagihan");
     expect(item!.label).toContain("VIP");
@@ -396,7 +455,7 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
     // jadi baris ini membuktikan sesi TANPA varian bernama tetap berlabel
     // persis seperti sebelum Task 7: "<nama layanan> · <tanggal>" — satu
     // pemisah " · " saja.
-    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_MENUNGGU);
+    const item = (await semuaTagihan()).find((t) => t.id === SESI_MENUNGGU);
     expect(item).toBeDefined();
     expect((item!.label.match(/ · /g) ?? []).length).toBe(1);
   });
@@ -419,7 +478,7 @@ describe("daftarTagihanAdmin — label sesi menyertakan varian", () => {
   });
 
   it("label klien dan label admin IDENTIK huruf demi huruf untuk sesi ber-varian yang sama (Ruling 13)", async () => {
-    const labelAdmin = (await daftarTagihanAdmin()).find((t) => t.id === SESI_VARIAN)!.label;
+    const labelAdmin = (await semuaTagihan()).find((t) => t.id === SESI_VARIAN)!.label;
 
     ref.sesi = sesiKlien;
     const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
@@ -475,7 +534,7 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   // --- Ruling 16: transport adalah RINCIAN pada item sesi, bukan item kedua ---
 
   it("sesi berjenjang menghasilkan SATU item; rincianTransport terisi (Ruling 16)", async () => {
-    const daftar = (await daftarTagihanAdmin()).filter((t) => t.id === SESI_TRANSPORT);
+    const daftar = (await semuaTagihan()).filter((t) => t.id === SESI_TRANSPORT);
     expect(daftar).toHaveLength(1);
     expect(daftar[0].jenis).toBe("sesi");
     // >10–15 km — LABEL_JENJANG (@/lib/transport/jarak), SATU-SATUNYA sumber.
@@ -485,13 +544,13 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   });
 
   it("rincianTransport null untuk sesi tanpa jenjang (SESI_MENUNGGU dkk.)", async () => {
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     expect(daftar.filter((t) => t.id === SESI_MENUNGGU)).toHaveLength(1);
     expect(daftar.find((t) => t.id === SESI_MENUNGGU)!.rincianTransport).toBeNull();
   });
 
   it("badge klaimMenunggu tetap sama dengan jumlah baris menunggu_verifikasi walau ADA sesi berjenjang yang menunggu", async () => {
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     // Prasyarat fixture: benar-benar berjenjang DAN menunggu_verifikasi —
     // tanpa baris ini, test bisa hijau tanpa pernah menguji apa pun.
     const baris = daftar.find((t) => t.id === SESI_TRANSPORT_MENUNGGU);
@@ -505,14 +564,14 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   // --- Ruling 17: di_atas_20 tanpa transport_khusus TIDAK dapat rincian ---
 
   it("sesi di_atas_20 TANPA transport_khusus: rincianTransport null (Ruling 17)", async () => {
-    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_JAUH_BELUM)!;
+    const item = (await semuaTagihan()).find((t) => t.id === SESI_JAUH_BELUM)!;
     expect(item.rincianTransport).toBeNull();
   });
 
   it("sesi di_atas_20 SUDAH punya transport_khusus: rincianTransport terisi, TETAP tanpa nominal", async () => {
-    const item = (await daftarTagihanAdmin()).find((t) => t.id === SESI_JAUH_SUDAH)!;
+    const item = (await semuaTagihan()).find((t) => t.id === SESI_JAUH_SUDAH)!;
     expect(item.rincianTransport).toContain(">20 km");
-    expect(item.rincianTransport).not.toMatch(/Rp/);
+    expect(nominalDalam(item.rincianTransport ?? ""), "nominal bocor").toEqual([]);
   });
 
   // --- Ruling 25 (gelombang perbaikan akhir): gagal TERTUTUP, bukan lempar ---
@@ -550,7 +609,7 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   it("view sesi_menunggu_tarif_transport gagal dibaca -> TIDAK SATU PUN sesi di_atas_20 mendapat rincianTransport (gagal tertutup, Ruling 25)", async () => {
     const sebelumnya = ref.sesi;
     ref.sesi = klienGalatMenungguTransport(sesiAdmin);
-    const daftar = await daftarTagihanAdmin();
+    const daftar = await semuaTagihan();
     ref.sesi = sebelumnya;
 
     // SESI_JAUH_BELUM (belum bertarif) DAN SESI_JAUH_SUDAH (SUDAH bertarif
@@ -588,7 +647,7 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
   // --- Parity & money firewall ---
 
   it("rincianTransport klien (susunTagihan) dan admin (daftarTagihanAdmin) IDENTIK huruf demi huruf", async () => {
-    const rincianAdmin = (await daftarTagihanAdmin()).find((t) => t.id === SESI_TRANSPORT)!
+    const rincianAdmin = (await semuaTagihan()).find((t) => t.id === SESI_TRANSPORT)!
       .rincianTransport;
     expect(rincianAdmin).not.toBeNull();
 
@@ -762,32 +821,67 @@ describe("tolakKlaim", () => {
 
 describe("halaman /admin/bayar", () => {
   it("menampilkan klien, PADMA ID, item, dan status", async () => {
-    const markup = renderToStaticMarkup(await BayarPage());
+    const markup = renderToStaticMarkup(await BayarPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toContain("Ananda");
     expect(markup).toContain(PADMA_ID);
     expect(markup).toContain("Menunggu verifikasi");
   });
 
   it("menjelaskan alurnya dan bahwa nominal disampaikan lewat WhatsApp", async () => {
-    const markup = renderToStaticMarkup(await BayarPage());
+    const markup = renderToStaticMarkup(await BayarPage({ searchParams: Promise.resolve({}) }));
     expect(markup).toMatch(/WhatsApp/);
     expect(markup).toMatch(/Menunggu verifikasi/);
   });
 
   it("TIDAK ada <select> pengubah status — status tidak pernah datang dari browser", async () => {
-    const markup = renderToStaticMarkup(await BayarPage());
+    const markup = renderToStaticMarkup(await BayarPage({ searchParams: Promise.resolve({}) }));
     expect(markup).not.toContain("<select");
     expect(sumberTabel).not.toContain("onChange");
   });
 
   it("TIDAK ada nominal uang di seluruh modul (money firewall)", async () => {
-    const markup = renderToStaticMarkup(await BayarPage());
-    expect(markup).not.toMatch(/Rp\s?\d/);
+    const markup = renderToStaticMarkup(await BayarPage({ searchParams: Promise.resolve({}) }));
+    expect(nominalDalam(markup), "nominal bocor").toEqual([]);
     for (const sumber of [sumberHalaman, sumberTabel, sumberAksi, sumberStatus, sumberData]) {
-      expect(sumber).not.toMatch(/Rp\s?\d/);
+      expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
       expect(sumber).not.toContain("honor_marks");
+    }
+  });
+
+  it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
+    // Beda kalimat, beda arti: ini BUKAN "belum ada tagihan sama sekali"
+    // (yang salah bila datanya sebenarnya ada, hanya tersaring habis).
+    const markup = renderToStaticMarkup(
+      await BayarPage({
+        searchParams: Promise.resolve({ cari: "zzz-tidak-ada-klien-bernama-ini" }),
+      }),
+    );
+    expect(markup).toContain("Tidak ada tagihan yang cocok dengan pencarian ini");
+    expect(markup).not.toContain("<table");
+  });
+
+  it("daftar kosong TANPA pencarian/saringan aktif menampilkan kalimat hari-pertama, bukan kalimat pencarian", async () => {
+    // BLOCKING 3 (review sapuan panel): sebelum perbaikan ini, page.tsx
+    // merender "tidak cocok dengan pencarian ini" UNTUK SEMUA kekosongan,
+    // termasuk klinik yang baru dipasang dan belum pernah menerima satu
+    // tagihan pun — mengeklaim ada pencarian yang gagal padahal tidak ada
+    // satu pun yang dicari. `daftarTagihanAdmin` di-spy supaya baris kosong
+    // bisa diuji tanpa mengosongkan basis data lokal yang dipakai bersama.
+    const spy = vi
+      .spyOn(tagihanMod, "daftarTagihanAdmin")
+      .mockResolvedValue({ baris: [], total: 0 });
+    try {
+      const markup = renderToStaticMarkup(
+        await BayarPage({ searchParams: Promise.resolve({}) }),
+      );
+      expect(markup).toContain(
+        "Belum ada tagihan yang perlu diverifikasi",
+      );
+      expect(markup).not.toContain("cocok dengan pencarian ini");
+    } finally {
+      spy.mockRestore();
     }
   });
 });
@@ -852,9 +946,17 @@ describe("tombol dirender BERSYARAT menurut status barisnya", () => {
     expect(b).not.toContain("Tolak klaim");
   });
 
-  it("daftar kosong menjelaskan dirinya, bukan tabel kosong", () => {
+  it("TabelBayar TIDAK LAGI memutuskan kosongnya sendiri (Task 5 — pindah ke page.tsx)", () => {
+    // Sebelumnya komponen ini menjawab `item: []` dengan pesannya sendiri.
+    // Sejak bilah cari & saring ada, kalimat yang benar berbeda menurut
+    // sebabnya — "belum ada tagihan sama sekali" vs "tidak cocok dengan
+    // pencarian ini" — dan hanya `page.tsx` yang tahu bedanya (lihat uji
+    // "pencarian yang tidak cocok…" di describe "halaman /admin/bayar").
+    // Tabel sendiri sekarang HANYA merender kerangka tabelnya, kosong atau
+    // tidak.
     const m = renderToStaticMarkup(createElement(TabelBayar, { item: [] }));
-    expect(m).toMatch(/tagihan/i);
+    expect(m).toContain("<table");
+    expect(m).not.toMatch(/tagihan yang perlu diverifikasi/i);
   });
 });
 
