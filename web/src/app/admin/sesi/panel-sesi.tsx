@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { selesaikanSesi, tetapkanJenjang } from "./aksi";
+import { PanelPembatalan } from "./panel-pembatalan";
 import { JENJANG_SAH, LABEL_STATUS_SESI } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { BarisSesiDaftar } from "@/lib/admin/sesi";
@@ -146,6 +147,15 @@ export function PanelSesi({ sesi, hrefTutup }: { sesi: BarisSesiDaftar; hrefTutu
       <a href={hrefTutup} className="text-[12px] font-bold text-panel-muted">
         Tutup tanpa menyimpan
       </a>
+
+      {sesi.status === "terjadwal" && (
+        <PanelPembatalan
+          sesiId={sesi.id}
+          tanggal={sesi.tanggal}
+          jamMulai={sesi.jamMulai}
+          jadwalUlangTerpakai={sesi.jadwalUlangTerpakai}
+        />
+      )}
     </div>
   );
 }

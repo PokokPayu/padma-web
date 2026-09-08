@@ -41,6 +41,7 @@ export type BarisSesiDaftar = {
   rekomendasi: string;
   jenjang: JenjangTransport | null;
   jenjangSumber: "otomatis" | "admin" | null;
+  jadwalUlangTerpakai: boolean;
 };
 
 type BarisDb = {
@@ -53,6 +54,7 @@ type BarisDb = {
   client_package_id: string | null;
   jenjang: JenjangTransport | null;
   jenjang_sumber: "otomatis" | "admin" | null;
+  jadwal_ulang_terpakai: boolean;
   clients: { nama: string; padma_id: string } | null;
   services: { nama: string } | null;
   partners: { nama: string } | null;
@@ -80,7 +82,7 @@ export async function ambilDaftarSesi(
   let q = supabase
     .from("sessions")
     .select(
-      "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, " +
+      "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, jadwal_ulang_terpakai, " +
         "clients!inner(nama, padma_id), services(nama), partners(nama)",
       { count: "exact" },
     )
@@ -134,6 +136,7 @@ export async function ambilDaftarSesi(
       rekomendasi: s.rekomendasi,
       jenjang: s.jenjang,
       jenjangSumber: s.jenjang_sumber,
+      jadwalUlangTerpakai: s.jadwal_ulang_terpakai,
     })),
     total: count ?? 0,
   };
