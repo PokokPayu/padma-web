@@ -444,6 +444,12 @@ declare
   peran text := public.user_role();
   staf boolean := peran in ('admin', 'owner');
   varian uuid;
+  alamat_asal text;
+  lat_asal double precision;
+  lon_asal double precision;
+  m public.partners%rowtype;
+  km double precision;
+  jenjang_hitung jenjang_transport;
   daftar_jam text;
   sesi_baru uuid;
 begin
@@ -500,15 +506,51 @@ begin
       using errcode = '23505';
   end if;
 
-  select s.variant_id into varian
+  -- SESI PENGGANTI LAHIR DARI BARIS ASALNYA, BUKAN DARI DELAPAN KOLOM SAJA.
+  --
+  -- Versi pertama fungsi ini menyisipkan delapan kolom dan berhenti di situ.
+  -- `sessions.alamat` bertipe `not null default ''`, jadi penyisipannya
+  -- BERHASIL DIAM-DIAM — dan sesi pengganti, sesi yang kliennya sudah bayar,
+  -- lahir tanpa alamat. Bidan tidak punya rumah yang dituju, dan tidak ada
+  -- satu pun galat yang menyebutkannya. Bandingkan jalur kelahiran sesi yang
+  -- sudah baku, `konfirmasi_permintaan()` (migrasi
+  -- `20260912101000_status_bayar_pagar.sql`): ia menyalin alamat & koordinat,
+  -- lalu menghitung jenjang transportnya sendiri.
+  --
+  -- Alamat DISALIN dari baris asal, TIDAK diambil ulang dari profil klien —
+  -- peringatan yang sudah tertulis di `konfirmasi_atomik.sql`: klien boleh
+  -- memesan untuk alamat lain, dan mengambil ulang akan diam-diam mengubah ke
+  -- mana bidan dikirim.
+  select s.variant_id, s.alamat, s.alamat_lat, s.alamat_lon
+    into varian, alamat_asal, lat_asal, lon_asal
     from public.sessions s
    where s.id = h.sesi_asal_id;
 
-  -- Hak yang diterbitkan tanpa sesi asal (mis. staf menerbitkannya langsung)
-  -- tidak punya varian untuk diwarisi. Jatuh ke varian BAKU layanan — bentuk
-  -- query backfill yang sama dipakai migration `varian_wajib`, ditambah
-  -- filter `aktif` seperti helper uji `varianBaku()` (`varian_wajib.sql`
-  -- sendiri TIDAK memfilter `aktif`; hanya helper uji itu yang memfilternya).
+  -- HAK TANPA SESI ASAL DITOLAK, dan penolakan itu adalah keputusan.
+  --
+  -- Alamat sebuah sesi hanya punya satu sumber yang sah: baris asalnya. Hak
+  -- yang diterbitkan tanpa sesi asal (mis. staf menerbitkannya langsung)
+  -- karena itu tidak punya alamat tujuan sama sekali. Dua jalan tersedia:
+  -- melahirkan sesi beralamat kosong, atau menolak.
+  --
+  -- Dipilih MENOLAK. Sesi beralamat kosong adalah persis kegagalan senyap yang
+  -- fungsi ini baru saja ditutup — tidak ada seorang pun yang mengetahuinya
+  -- sampai bidan berdiri di jalan tanpa tujuan, dan tidak ada layar yang bisa
+  -- memperbaikinya setelahnya. Galat di sini muncul pada saat masih bisa
+  -- diperbaiki: staf menjadwalkan sesi penggantinya langsung (formulir "Sesi
+  -- baru" meminta alamat), atau menerbitkan haknya dari sesi yang batal.
+  -- Dalam jalur yang hidup hari ini cabang ini TIDAK PERNAH terpicu: satu-
+  -- satunya penerbit hak adalah `batalkan_sesi()`, dan ia selalu mencatat
+  -- `sesi_asal_id`.
+  if not found then
+    raise exception 'hak ini tidak punya sesi asal, jadi alamat tujuannya tidak diketahui — jadwalkan sesi penggantinya langsung'
+      using errcode = '23514';
+  end if;
+
+  -- Varian yang belum terisi pada baris asal tetap jatuh ke varian BAKU
+  -- layanan — bentuk query backfill yang sama dipakai migration
+  -- `varian_wajib`, ditambah filter `aktif` seperti helper uji `varianBaku()`
+  -- (`varian_wajib.sql` sendiri TIDAK memfilter `aktif`).
   if varian is null then
     select v.id into varian
       from public.service_variants v
@@ -518,12 +560,37 @@ begin
      limit 1;
   end if;
 
+  -- Jenjang transport DIHITUNG di sini, dengan cara yang sama persis seperti
+  -- `konfirmasi_permintaan()`: jarak garis lurus antara domisili BIDAN yang
+  -- ditugaskan dan alamat tujuan. Bidannya bisa berbeda dari sesi asal, jadi
+  -- mewarisi `jenjang` apa adanya akan membayarkan transport yang salah.
+  --
+  -- Koordinat yang tidak lengkap BUKAN galat (alasan yang sama dengan
+  -- `konfirmasi_permintaan`): alamat Malang sering gagal digeocode, dan
+  -- domisili bidan boleh belum diisi. Jenjangnya tetap NULL, dan admin
+  -- menetapkannya belakangan lewat `tetapkanJenjang`.
+  select * into m from public.partners p where p.id = mitra;
+
+  if m.lat is not null and m.lon is not null
+     and lat_asal is not null and lon_asal is not null then
+    km := public.jarak_km(m.lat, m.lon, lat_asal, lon_asal);
+    jenjang_hitung := public.jenjang_dari_jarak(km);
+  end if;
+
   insert into public.sessions (
     client_id, service_id, variant_id, partner_id,
-    tanggal, jam_mulai, status, status_bayar
+    tanggal, jam_mulai,
+    alamat, alamat_lat, alamat_lon,
+    jenjang, jenjang_sumber, jenjang_alasan,
+    status, status_bayar
   ) values (
     h.client_id, h.service_id, varian, mitra,
-    tanggal_baru, jam_baru, 'terjadwal', 'lunas'
+    tanggal_baru, jam_baru,
+    alamat_asal, lat_asal, lon_asal,
+    jenjang_hitung,
+    case when jenjang_hitung is null then null else 'otomatis'::sumber_jenjang end,
+    '',
+    'terjadwal', 'lunas'
   )
   returning id into sesi_baru;
 

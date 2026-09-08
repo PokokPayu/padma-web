@@ -23,6 +23,13 @@ const ANANDA = "44444444-4444-4444-4444-444444444401";
 const RINA = "44444444-4444-4444-4444-444444444402";
 const SVC = "11111111-1111-1111-1111-111111111101";
 const MITRA = "33333333-3333-3333-3333-333333333301";
+// Bidan MILIK BERKAS INI, dengan koordinat domisili. Mitra seed
+// (`33…301`) sengaja tidak dipakai untuk uji jenjang: `lat`/`lon`-nya kosong
+// di seed, jadi jenjang yang dihitung darinya SELALU null dan ujinya tidak
+// bisa membedakan "dihitung dan hasilnya null" dari "tidak pernah dihitung".
+// Barisnya tidak menumpang seed supaya berkas uji lain yang membaca mitra
+// seed tidak ikut berubah artinya.
+const MITRA_BERKOORDINAT = "33333333-3333-3333-3333-3333333333f3";
 
 let VARIAN: string;
 let sesiKlien: SupabaseClient;
@@ -145,13 +152,25 @@ function jamRelatif(jamDariSekarang: number): { tanggal: string; jam: string } {
 
 beforeAll(async () => {
   VARIAN = await varianBaku(admin, SVC);
+  // Domisili di Malang kota — jaraknya ke ALAMAT_ASAL beberapa ratus meter,
+  // jadi jenjangnya jatuh di pita terdekat dan tetap bukan null.
+  await admin.from("partners").upsert({
+    id: MITRA_BERKOORDINAT,
+    nama: "Bidan Uji Koordinat",
+    aktif: false,
+    lat: -7.9666,
+    lon: 112.6326,
+  });
   sesiKlien = await signInAs("ananda@padma.test");
   sesiAdmin = await signInAs("admin@padma.test");
   await bersihkan();
 });
 
 beforeEach(bersihkan);
-afterAll(bersihkan);
+afterAll(async () => {
+  await bersihkan();
+  await admin.from("partners").delete().eq("id", MITRA_BERKOORDINAT);
+});
 
 describe("batalkan_sesi — jenjang menentukan akibat", () => {
   it("jenjang 1 (≥24 jam): sesi batal, TIDAK ada hak yang terbit", async () => {
@@ -649,16 +668,58 @@ describe("jadwal ulang tunduk pada pagar yang sama dengan pemesanan", () => {
   });
 });
 
+// Alamat & koordinat sesi ASAL. Nilainya harus muncul apa adanya di sesi
+// pengganti: `sessions.alamat` bertipe `not null default ''`, jadi penyisipan
+// yang lupa menyalinnya BERHASIL DIAM-DIAM dan melahirkan sesi tanpa alamat —
+// sesi yang kliennya sudah bayar, dan bidan tidak punya rumah yang dituju.
+const ALAMAT_ASAL = "Jl. Uji Pembatalan No. 7, Klojen, Malang";
+const LAT_ASAL = -7.9712;
+const LON_ASAL = 112.6301;
+
+/**
+ * Sesi asal + hak yang terbit darinya.
+ *
+ * Barisnya dibuat sungguhan, bukan hak yatim: `tukar_hak_sesi` MENOLAK hak
+ * tanpa sesi asal karena alamat tujuannya tidak diketahui dari mana pun
+ * (alamat tidak boleh diambil ulang dari profil klien). Jalur yang hidup di
+ * produksi pun selalu punya asal — satu-satunya penerbit hak adalah
+ * `batalkan_sesi()`.
+ */
+async function terbitkanHakBerasal(
+  kedaluwarsa: string,
+  klien: string = ANANDA,
+): Promise<string> {
+  const { data: asal, error: eAsal } = await admin
+    .from("sessions")
+    .insert({
+      client_id: klien,
+      service_id: SVC,
+      variant_id: VARIAN,
+      partner_id: MITRA,
+      tanggal: "2027-08-01",
+      jam_mulai: "09:00",
+      status: "dibatalkan_klien",
+      status_bayar: "lunas",
+      alamat: ALAMAT_ASAL,
+      alamat_lat: LAT_ASAL,
+      alamat_lon: LON_ASAL,
+    })
+    .select("id")
+    .single<{ id: string }>();
+  if (eAsal) throw eAsal;
+  catatSesi(asal.id);
+
+  const { data, error } = await admin
+    .from("hak_sesi")
+    .insert({ client_id: klien, service_id: SVC, kedaluwarsa, sesi_asal_id: asal.id })
+    .select("id")
+    .single<{ id: string }>();
+  if (error) throw error;
+  return data.id;
+}
+
 describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
-  async function terbitkanHak(kedaluwarsa: string): Promise<string> {
-    const { data, error } = await admin
-      .from("hak_sesi")
-      .insert({ client_id: ANANDA, service_id: SVC, kedaluwarsa })
-      .select("id")
-      .single<{ id: string }>();
-    if (error) throw error;
-    return data.id;
-  }
+  const terbitkanHak = (kedaluwarsa: string) => terbitkanHakBerasal(kedaluwarsa);
 
   it("melahirkan sesi terjadwal yang sudah LUNAS", async () => {
     // Uangnya sudah dibayar untuk sesi yang batal. Sesi penggantinya lahir
@@ -676,7 +737,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
 
     const { data: s } = await admin
       .from("sessions")
-      .select("status, status_bayar, service_id, client_id")
+      .select("status, status_bayar, service_id, client_id, alamat, alamat_lat, alamat_lon")
       .eq("id", sesiBaru)
       .single();
 
@@ -684,6 +745,61 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
     expect(s!.status_bayar).toBe("lunas");
     expect(s!.service_id).toBe(SVC);
     expect(s!.client_id).toBe(ANANDA);
+
+    // ALAMAT — kolomnya `not null default ''`, jadi penyisipan yang lupa
+    // menyalinnya berhasil tanpa satu pun galat dan melahirkan sesi berbayar
+    // yang tidak punya tujuan. Asersi kesamaan, bukan sekadar "tidak kosong":
+    // alamat yang diambil ulang dari profil klien juga tidak kosong, dan itu
+    // justru kesalahan yang dilarang (`konfirmasi_atomik.sql`).
+    expect(s!.alamat, "alamat disalin dari sesi asal").toBe(ALAMAT_ASAL);
+    expect(Number(s!.alamat_lat)).toBeCloseTo(LAT_ASAL, 6);
+    expect(Number(s!.alamat_lon)).toBeCloseTo(LON_ASAL, 6);
+  });
+
+  it("menghitung jenjang transportnya sendiri, tidak meninggalkannya kosong", async () => {
+    // Bidan sesi pengganti bisa berbeda dari sesi asal, jadi jenjang tidak
+    // diwarisi melainkan dihitung ulang dari domisili bidan yang DITUGASKAN —
+    // cara yang sama persis dengan `konfirmasi_permintaan()`. Seed memberi
+    // MITRA koordinat domisili, jadi hasilnya tidak boleh null.
+    const hak = await terbitkanHak("2027-12-31");
+
+    const { data: sesiBaru } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: hak,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "13:00",
+      mitra: MITRA_BERKOORDINAT,
+    });
+    catatSesi(sesiBaru);
+
+    const { data: s } = await admin
+      .from("sessions")
+      .select("jenjang, jenjang_sumber")
+      .eq("id", sesiBaru)
+      .single();
+
+    expect(s!.jenjang, "jenjang dihitung, bukan dibiarkan null").not.toBeNull();
+    expect(s!.jenjang_sumber).toBe("otomatis");
+  });
+
+  it("hak TANPA sesi asal ditolak — alamat tujuannya tidak diketahui", async () => {
+    // Melahirkan sesi beralamat kosong adalah kegagalan senyap yang tidak
+    // terdeteksi sampai bidan berdiri di jalan tanpa tujuan. Galat di sini
+    // muncul saat masih bisa diperbaiki.
+    const { data: h, error: eh } = await admin
+      .from("hak_sesi")
+      .insert({ client_id: ANANDA, service_id: SVC, kedaluwarsa: "2027-12-31" })
+      .select("id")
+      .single<{ id: string }>();
+    if (eh) throw eh;
+
+    const { data, error } = await sesiAdmin.rpc("tukar_hak_sesi", {
+      hak_id: h.id,
+      tanggal_baru: "2027-09-25",
+      jam_baru: "14:00",
+      mitra: MITRA,
+    });
+    catatSesi(data);
+    expect(error?.code).toBe("23514");
   });
 
   it("hak yang sudah dipakai TIDAK bisa dipakai lagi", async () => {
@@ -724,13 +840,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
 
   it("klien tidak bisa menukar hak milik orang lain", async () => {
     // Haknya milik RINA; Ananda yang login mencobanya.
-    const { data: h, error: eh } = await admin
-      .from("hak_sesi")
-      .insert({ client_id: RINA, service_id: SVC, kedaluwarsa: "2027-12-31" })
-      .select("id")
-      .single<{ id: string }>();
-    if (eh) throw eh;
-    const hak = h.id;
+    const hak = await terbitkanHakBerasal("2027-12-31", RINA);
 
     // 16:00 dan BUKAN 17:00: jam layanan seed hanya
     // 08,09,10,11,13,14,15,16. Memakai jam di luar daftar membuat uji ini
@@ -749,13 +859,7 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
 
 describe("balapan — dua panggilan bersamaan tidak boleh melahirkan dua akibat", () => {
   it("10 tukar_hak_sesi SERENTAK atas SATU hak → tepat satu sesi lahir", async () => {
-    const { data: h, error: eh } = await admin
-      .from("hak_sesi")
-      .insert({ client_id: ANANDA, service_id: SVC, kedaluwarsa: "2027-12-31" })
-      .select("id")
-      .single<{ id: string }>();
-    if (eh) throw eh;
-    const hak = h.id;
+    const hak = await terbitkanHakBerasal("2027-12-31");
 
     // Sepuluh percobaan, jam berbeda-beda supaya kegagalan bidan-bentrok tidak
     // ikut campur — satu-satunya yang boleh menggagalkan sembilan lainnya
