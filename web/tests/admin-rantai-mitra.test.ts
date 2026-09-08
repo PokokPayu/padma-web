@@ -241,8 +241,8 @@ describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
       .select("status, tenggat")
       .eq("id", id)
       .single<{ status: string; tenggat: string }>();
-    expect(sesudah.status).toBe("menunggu_bayar");
-    expect(sesudah.tenggat).toBe(pertama!.tenggat);
+    expect(sesudah!.status).toBe("menunggu_bayar");
+    expect(sesudah!.tenggat).toBe(pertama!.tenggat);
   });
 });
 

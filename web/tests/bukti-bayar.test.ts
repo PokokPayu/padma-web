@@ -5,7 +5,7 @@
  * nomor rekening, dan sering kali saldo. Yang dijaga berkas ini adalah bahwa
  * data itu tidak bisa disentuh siapa pun kecuali staf, lewat satu pintu.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { anonClient, signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
@@ -125,12 +125,12 @@ describe("rute baca bukti hanya untuk staf", () => {
     expect(posisiRole).toBeLessThan(posisiStorage);
   });
 
-  it("responsnya bertanda private & no-store", () => {
+  it("responsnya bertanda private & no-store", async () => {
     // Bukti bayar milik satu staf pada satu permintaan; CDN yang menyimpannya
     // lalu menyajikannya ke orang lain adalah kebocoran yang tidak akan pernah
     // terlihat di log mana pun.
-    const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    const path = require("node:path") as typeof import("node:path");
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
     const sumber = readFileSync(
       path.resolve(__dirname, "..", "src/app/api/bukti/[permintaan]/route.ts"),
       "utf8",

@@ -139,6 +139,19 @@ async function bersihkan() {
 
   // Sesi DULU: `sessions.booking_request_id` menahan penghapusan permintaan yang
   // melahirkannya.
+  //
+  // JEJAK AUDITNYA ikut disapu, dan itu wajib. Sesi C2 lahir langsung berstatus
+  // `lunas`, jadi trigger pencatat menulis satu baris `jejak_status_bayar`
+  // untuk setiap sesi yang lahir di sini. Tabel jejak SENGAJA tanpa foreign
+  // key — cascade akan menghapus tepat bukti yang menjelaskan penghapusan —
+  // sehingga menghapus sesinya saja meninggalkan baris yatim yang menumpuk
+  // satu per jalannya skrip ini, dan `tests/jejak-yatim.test.ts` akan merah di
+  // suite yang sama sekali tidak menyentuh pembayaran.
+  const { data: sesiLama } = await admin.from("sessions").select("id").eq("tanggal", TANGGAL);
+  const idSesi = (sesiLama ?? []).map((s) => s.id as string);
+  if (idSesi.length > 0) {
+    await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
+  }
   await admin.from("sessions").delete().eq("tanggal", TANGGAL);
   // Pengajuan sebelum skrining: `booking_requests.screening_id` menahan
   // penghapusan skrining yang menopangnya.
