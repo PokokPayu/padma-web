@@ -99,14 +99,20 @@ describe("penjaga booking_requests", () => {
     const { clientId } = await klienDanId();
     const screeningId = await skriningHijau(admin, clientId);
     // Rantai C1: konfirmasi hanya sah dari 'mitra_siap' (dengan mitra sudah
-    // tertaut) — bukan langsung dari 'diminta'. Fixture ditulis LANGSUNG pada
-    // status itu lewat INSERT (tidak dibatasi trigger perpindahan, yang hanya
-    // menahan UPDATE), supaya berkas ini tetap fokus pada penjaga peran, bukan
-    // pada seluruh rantai (yang diuji tuntas di tests/admin-rantai-mitra.test.ts).
+    // tertaut) — bukan langsung dari 'diminta'. Rantai C2 menyisipkan SATU
+    // tahap lagi: `mitra_siap -> dikonfirmasi` LANGSUNG kini DITOLAK trigger
+    // perpindahan (migration `status_bayar_pagar`) — jalannya wajib lewat
+    // 'menunggu_bayar' dengan `tenggat` terisi DAN `status_bayar = 'lunas'`.
+    // Fixture ditulis LANGSUNG pada status itu lewat INSERT (tidak dibatasi
+    // trigger perpindahan, yang hanya menahan UPDATE), supaya berkas ini
+    // tetap fokus pada penjaga peran, bukan pada seluruh rantai (yang diuji
+    // tuntas di tests/admin-rantai-mitra.test.ts).
     const { data: baru } = await admin.from("booking_requests").insert({
       client_id: clientId, service_id: SVC, variant_id: VARIAN_SVC, tanggal: "2030-09-13",
-      jam_mulai: "09:00", preferensi_waktu: "siang", status: "mitra_siap",
+      jam_mulai: "09:00", preferensi_waktu: "siang", status: "menunggu_bayar",
       partner_id: "33333333-3333-3333-3333-333333333301",
+      tenggat: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+      status_bayar: "lunas",
       screening_id: screeningId,
     }).select("id").single();
     bersihkan.push(baru!.id);

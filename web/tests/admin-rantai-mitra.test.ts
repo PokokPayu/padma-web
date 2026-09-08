@@ -40,12 +40,26 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/sesi",
 }));
 
-const { cariMitra, pilihMitra, konfirmasiPermintaan } = await import("@/app/admin/sesi/aksi");
+const { cariMitra, pilihMitra, terbitkanTagihan, konfirmasiPermintaan } = await import(
+  "@/app/admin/sesi/aksi"
+);
 
 let VARIAN: string;
 let sesiAdmin: SupabaseClient;
 
 async function bersihkan() {
+  // Jejak audit DULU dari semuanya: `konfirmasi_permintaan()` (rantai C2)
+  // melahirkan sesi LANGSUNG berstatus `status_bayar = 'lunas'`, dan trigger
+  // `catat_status_bayar` mencatatnya SEJAK INSERT (bukan hanya UPDATE, sejak
+  // migration 20260829180000). Tabel jejak SENGAJA tanpa foreign key — sesi
+  // yang dihapus tanpa jejaknya ikut dihapus meninggalkan baris YATIM, yang
+  // ditangkap tests/jejak-yatim.test.ts. `sesi_id` dibaca dulu, sebelum
+  // sesinya sendiri lenyap.
+  const { data: sesiTgl } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+  const idSesi = (sesiTgl ?? []).map((s) => s.id as string);
+  if (idSesi.length) {
+    await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
+  }
   // Sesi DULU, baru permintaannya: `sessions.booking_request_id` menahan
   // penghapusan permintaan yang sudah menjadi sesi (FK tanpa on delete).
   await admin.from("sessions").delete().eq("tanggal", TGL);
@@ -56,7 +70,11 @@ async function bersihkan() {
 }
 
 /** Membuat satu permintaan pada status tertentu, memakai service role. */
-async function permintaanPada(status: string, partnerId: string | null = null): Promise<string> {
+async function permintaanPada(
+  status: string,
+  partnerId: string | null = null,
+  extra: Record<string, unknown> = {},
+): Promise<string> {
   const screeningId = await skriningHijau(admin, KLIEN);
   const { data, error } = await admin
     .from("booking_requests")
@@ -71,11 +89,28 @@ async function permintaanPada(status: string, partnerId: string | null = null): 
       alamat: "Jl. Uji Rantai No. 7",
       status,
       screening_id: screeningId,
+      ...extra,
     })
     .select("id")
     .single<{ id: string }>();
   if (error) throw error;
   return data.id;
+}
+
+/** Tenggat 24 jam ke depan — bentuk yang sama dipakai `terbitkanTagihan`. */
+function tenggatJauh(): string {
+  return new Date(Date.now() + 24 * 3_600_000).toISOString();
+}
+
+/**
+ * Permintaan pada 'menunggu_bayar', LUNAS, siap dikonfirmasi — jalur wajib
+ * sejak C2 (`mitra_siap -> dikonfirmasi` langsung DITOLAK sekarang).
+ */
+async function permintaanSiapKonfirmasi(partnerId: string = MITRA): Promise<string> {
+  return permintaanPada("menunggu_bayar", partnerId, {
+    tenggat: tenggatJauh(),
+    status_bayar: "lunas",
+  });
 }
 
 async function statusPermintaan(id: string): Promise<string | null> {
@@ -168,7 +203,50 @@ describe("rantai admin: tetapkan bidan", () => {
   });
 });
 
-describe("konfirmasi hanya dari mitra_siap", () => {
+describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
+  it("memindahkan mitra_siap -> menunggu_bayar DAN mengisi tenggat", async () => {
+    const id = await permintaanPada("mitra_siap", MITRA);
+    const sebelum = Date.now();
+    expect(await terbitkanTagihan(id)).toEqual({ ok: true });
+
+    const { data } = await admin
+      .from("booking_requests")
+      .select("status, tenggat")
+      .eq("id", id)
+      .maybeSingle<{ status: string; tenggat: string | null }>();
+    expect(data?.status).toBe("menunggu_bayar");
+    expect(data?.tenggat).not.toBeNull();
+    // ~24 jam sejak sekarang (spec C2 P1) — batas longgar, cukup untuk
+    // membuktikan tenggatnya diisi SERVER, bukan disodorkan kosong.
+    const tenggatMs = Date.parse(data!.tenggat!);
+    expect(tenggatMs).toBeGreaterThan(sebelum + 23 * 3_600_000);
+    expect(tenggatMs).toBeLessThan(Date.now() + 25 * 3_600_000);
+  });
+
+  it("dipanggil DUA KALI tidak memperpanjang tenggat — yang kedua ditolak", async () => {
+    const id = await permintaanPada("mitra_siap", MITRA);
+    expect(await terbitkanTagihan(id)).toEqual({ ok: true });
+
+    const { data: pertama } = await admin
+      .from("booking_requests")
+      .select("tenggat")
+      .eq("id", id)
+      .single<{ tenggat: string }>();
+
+    const kedua = await terbitkanTagihan(id);
+    expect(kedua.ok).toBe(false);
+
+    const { data: sesudah } = await admin
+      .from("booking_requests")
+      .select("status, tenggat")
+      .eq("id", id)
+      .single<{ status: string; tenggat: string }>();
+    expect(sesudah.status).toBe("menunggu_bayar");
+    expect(sesudah.tenggat).toBe(pertama!.tenggat);
+  });
+});
+
+describe("konfirmasi hanya dari menunggu_bayar DAN lunas (spec C2 — inti)", () => {
   it("MENOLAK permintaan yang masih diminta — lompatan tidak boleh", async () => {
     const id = await permintaanPada("diminta");
     const hasil = await konfirmasiPermintaan(id);
@@ -176,8 +254,23 @@ describe("konfirmasi hanya dari mitra_siap", () => {
     expect(await sesiDari(id)).toEqual([]);
   });
 
+  it("MENOLAK permintaan menunggu_bayar yang status_bayar BELUM lunas", async () => {
+    // Inti C2: `mitra_siap -> dikonfirmasi` langsung sudah dihapus dari peta
+    // perpindahan, tapi itu saja tidak cukup — seseorang yang menembak
+    // `status='menunggu_bayar'` tanpa pernah membayar tidak boleh lolos lewat
+    // sini juga. Syaratnya hidup DI DALAM `konfirmasi_permintaan()` sendiri
+    // (security definer), bukan di server action.
+    const id = await permintaanPada("menunggu_bayar", MITRA, { tenggat: tenggatJauh() });
+    // status_bayar default 'belum' (migration status_bayar_pagar) — tidak
+    // ditulis eksplisit supaya test ini juga membuktikan defaultnya benar.
+    const hasil = await konfirmasiPermintaan(id);
+    expect(hasil.ok).toBe(false);
+    expect(await statusPermintaan(id)).toBe("menunggu_bayar");
+    expect(await sesiDari(id)).toEqual([]);
+  });
+
   it("sesi mewarisi mitra dan JAM dari baris permintaan", async () => {
-    const id = await permintaanPada("mitra_siap", MITRA);
+    const id = await permintaanSiapKonfirmasi();
     expect(await konfirmasiPermintaan(id)).toEqual({ ok: true });
 
     const sesi = await sesiDari(id);
@@ -191,7 +284,7 @@ describe("konfirmasi hanya dari mitra_siap", () => {
     // Pengerasan lama tidak boleh hilang saat rantai diperpanjang MAUPUN saat
     // konfirmasi pindah ke dalam fungsi Postgres. Kegagalannya berbentuk klien
     // kedatangan bidan dua kali, tanpa satu pun error.
-    const id = await permintaanPada("mitra_siap", MITRA);
+    const id = await permintaanSiapKonfirmasi();
     const hasil = await Promise.all([konfirmasiPermintaan(id), konfirmasiPermintaan(id)]);
     expect(hasil.filter((h) => h.ok).length).toBe(1);
     expect((await sesiDari(id)).length).toBe(1);
@@ -239,7 +332,7 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
   });
 
   it("menuliskan jenjang_sumber='otomatis' sendiri ketika ada saran", async () => {
-    const id = await permintaanPada("mitra_siap", MITRA);
+    const id = await permintaanSiapKonfirmasi();
     await konfirmasiPermintaan(id);
     const sesi = await sesiDari(id);
     // Bila koordinat fixture menghasilkan saran, sumbernya wajib 'otomatis';
@@ -249,7 +342,7 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
     else expect(sesi[0].jenjang_sumber).toBeNull();
   });
 
-  it("memulangkan NULL — bukan galat — ketika permintaannya sudah tidak mitra_siap", async () => {
+  it("memulangkan NULL — bukan galat — ketika permintaannya sudah tidak menunggu_bayar", async () => {
     const id = await permintaanPada("diminta");
     const { data, error } = await sesiAdmin.rpc("konfirmasi_permintaan", {
       permintaan_id: id,
@@ -275,5 +368,17 @@ describe("trigger perpindahan menahan tembakan langsung ke DB", () => {
     await expect(
       querySql("update public.booking_requests set status = 'mitra_siap' where id = $1", [id]),
     ).rejects.toThrow(/booking_requests_mitra_siap_bermitra/);
+  });
+
+  it("update mitra_siap -> dikonfirmasi ditolak — jalan wajib lewat menunggu_bayar", async () => {
+    // Seluruh inti C2: `mitra_siap -> dikonfirmasi` langsung DIHAPUS dari peta
+    // perpindahan (migration `status_bayar_pagar`). Dulu ini panah SAH — tes
+    // ini dulu membuktikan sebaliknya untuk `diminta`; sekarang ia membuktikan
+    // panah yang tadinya sah pun sudah ditutup.
+    const id = await permintaanPada("mitra_siap", MITRA);
+    await expect(
+      querySql("update public.booking_requests set status = 'dikonfirmasi' where id = $1", [id]),
+    ).rejects.toThrow(/perpindahan status permintaan tidak sah/);
+    expect(await statusPermintaan(id)).toBe("mitra_siap");
   });
 });

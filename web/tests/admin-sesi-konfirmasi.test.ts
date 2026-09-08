@@ -112,6 +112,18 @@ let sesiAdmin: SupabaseClient;
 let sesiKlien: SupabaseClient;
 
 async function bersihkan() {
+  // Jejak audit DULU dari semuanya: `konfirmasi_permintaan()` (rantai C2)
+  // melahirkan sesi LANGSUNG berstatus `status_bayar = 'lunas'`, dan trigger
+  // `catat_status_bayar` mencatatnya SEJAK INSERT (bukan hanya UPDATE, sejak
+  // migration 20260829180000). Tabel jejak SENGAJA tanpa foreign key — sesi
+  // yang dihapus tanpa jejaknya ikut dihapus meninggalkan baris YATIM, yang
+  // ditangkap tests/jejak-yatim.test.ts. `sesi_id` dibaca dulu, sebelum
+  // sesinya sendiri lenyap.
+  const { data: sesiTgl } = await admin.from("sessions").select("id").eq("tanggal", TGL);
+  const idSesi = (sesiTgl ?? []).map((s) => s.id as string);
+  if (idSesi.length) {
+    await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
+  }
   // Sesi DULU, baru permintaannya: `sessions.booking_request_id` menahan
   // penghapusan permintaan yang sudah menjadi sesi (FK tanpa on delete).
   await admin.from("sessions").delete().eq("tanggal", TGL);
@@ -184,12 +196,21 @@ beforeEach(async () => {
       jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       catatan: "Kalau bisa sebelum pukul 9.",
-      // Rantai C1: konfirmasiPermintaan() kini HANYA menerima permintaan yang
-      // sudah 'mitra_siap' (bidan sudah ditetapkan lewat cariMitra/pilihMitra
-      // — diuji tersendiri di tests/admin-rantai-mitra.test.ts). Fixture
-      // ditulis LANGSUNG pada status tujuan lewat INSERT (tidak dibatasi
-      // trigger perpindahan, yang hanya menahan UPDATE) supaya berkas ini
-      // tetap fokus pada konfirmasi itu sendiri.
+      // Rantai C1: mitra sudah ditetapkan lewat cariMitra/pilihMitra — diuji
+      // tersendiri di tests/admin-rantai-mitra.test.ts. Fixture ditulis
+      // LANGSUNG pada status tujuan lewat INSERT (tidak dibatasi trigger
+      // perpindahan, yang hanya menahan UPDATE) supaya berkas ini tetap fokus
+      // pada konfirmasi itu sendiri.
+      //
+      // Berhenti di 'mitra_siap', BUKAN 'menunggu_bayar' (rantai C2): halaman
+      // /admin/sesi (`antrean-permintaan.tsx`) masih menggambar tombol
+      // "Konfirmasi" hanya untuk keadaan ini — memindahkan dasar fixture ke
+      // 'menunggu_bayar' akan mengosongkan render describe "halaman antrean
+      // permintaan" di bawah. Describe yang sungguh memanggil
+      // `konfirmasiPermintaan` dan mengharapkannya BERHASIL menaikkan fixture
+      // ini sendiri lewat `beforeEach` tersarangnya (lihat "konfirmasi
+      // permintaan jadwal" & "konfirmasiPermintaan menghitung & menyimpan
+      // jenjang transport").
       status: "mitra_siap",
       screening_id: screeningId,
     })
@@ -199,11 +220,31 @@ beforeEach(async () => {
   permintaanId = data!.id as string;
 });
 
+/**
+ * Menaikkan fixture dari 'mitra_siap' ke 'menunggu_bayar' + lunas — jalur
+ * wajib sejak C2 (`mitra_siap -> dikonfirmasi` langsung DITOLAK sekarang).
+ * Dipakai sebagai `beforeEach` tersarang oleh describe yang benar-benar
+ * memanggil `konfirmasiPermintaan` dan mengharapkannya berhasil.
+ */
+async function naikkanKeMenungguBayarLunas() {
+  const { error } = await admin
+    .from("booking_requests")
+    .update({
+      status: "menunggu_bayar",
+      tenggat: new Date(Date.now() + 24 * 3_600_000).toISOString(),
+      status_bayar: "lunas",
+    })
+    .eq("id", permintaanId);
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // konfirmasiPermintaan
 // ---------------------------------------------------------------------------
 
 describe("konfirmasi permintaan jadwal", () => {
+  beforeEach(naikkanKeMenungguBayarLunas);
+
   it("mengubah permintaan menjadi dikonfirmasi DAN membuat satu sesi terjadwal", async () => {
     const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
@@ -336,7 +377,8 @@ describe("konfirmasi permintaan jadwal", () => {
     // (spec J8 — nilainya dipertahankan untuk riwayat lama, tapi tidak
     // terjangkau dari layar mana pun; lihat dokblok `PERPINDAHAN_PERMINTAAN`
     // di `src/lib/jadwal/status.ts`). `dibatalkan_klien` adalah keadaan akhir
-    // yang sungguh dituju sekarang, dan `mitra_siap -> dibatalkan_klien` sah.
+    // yang sungguh dituju sekarang, dan `menunggu_bayar -> dibatalkan_klien`
+    // sah (fixture describe ini sudah dinaikkan ke 'menunggu_bayar' + lunas).
     await admin
       .from("booking_requests")
       .update({ status: "dibatalkan_klien" })
@@ -384,7 +426,9 @@ describe("konfirmasi permintaan jadwal", () => {
     ref.sesi = sesiKlien;
     await expect(konfirmasiPermintaan(permintaanId)).rejects.toThrow(/REDIRECT/);
 
-    expect((await baris(permintaanId))!.status).toBe("mitra_siap");
+    // Fixture describe ini sudah dinaikkan ke 'menunggu_bayar' + lunas oleh
+    // beforeEach tersarang di atas.
+    expect((await baris(permintaanId))!.status).toBe("menunggu_bayar");
     expect(await sesiPadaTanggal()).toHaveLength(0);
   });
 });
@@ -397,6 +441,8 @@ describe("konfirmasi permintaan jadwal", () => {
 
 describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => {
   const KOORD_SAMA = { lat: -6.9175, lon: 107.6191 }; // jarak 0 km -> "0_5"
+
+  beforeEach(naikkanKeMenungguBayarLunas);
 
   // MITRA di berkas ini (Bidan Sri Wahyuni) dipakai di banyak `it()` lain yang
   // tidak peduli koordinat sama sekali — dikembalikan ke NULL supaya tidak
@@ -467,6 +513,10 @@ describe("menolak permintaan jadwal", () => {
   it("permintaan yang sudah dikonfirmasi TIDAK bisa dibatalkan lewat tolak", async () => {
     // Sesi sudah lahir; memutar status permintaan kembali ke 'ditolak' hanya
     // membuat sesi itu kehilangan asal-usulnya tanpa membatalkan apa pun.
+    // Fixture describe ini berhenti di 'mitra_siap' (lihat komentar beforeEach
+    // di atas) — dinaikkan ke jalur wajib C2 di sini, khusus test ini, supaya
+    // konfirmasinya sungguh berhasil sebelum tolakPermintaan dicoba.
+    await naikkanKeMenungguBayarLunas();
     await konfirmasiPermintaan(permintaanId);
     const r = await tolakPermintaan(permintaanId);
     expect(r.ok).toBe(false);
@@ -521,6 +571,10 @@ describe("pagar basis data yang menopang modul ini", () => {
     // Asal-usul sesi tidak boleh lenyap tanpa sesinya ikut dibereskan lebih
     // dulu — sekaligus yang membuat index unik di atas tidak bisa dilepas
     // dengan satu DELETE.
+    // Fixture berkas ini berhenti di 'mitra_siap' (lihat komentar beforeEach
+    // global) — dinaikkan ke jalur wajib C2 supaya konfirmasinya sungguh
+    // melahirkan sesi sebelum penghapusan dicoba.
+    await naikkanKeMenungguBayarLunas();
     await konfirmasiPermintaan(permintaanId);
     const { error } = await admin
       .from("booking_requests")
@@ -572,6 +626,9 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
   });
 
   it("permintaan yang sudah ditangani TIDAK muncul lagi di antrean", async () => {
+    // Idem: dinaikkan ke 'menunggu_bayar' + lunas supaya konfirmasi ini
+    // sungguh berhasil (lihat komentar beforeEach global soal fixture dasar).
+    await naikkanKeMenungguBayarLunas();
     await konfirmasiPermintaan(permintaanId);
     const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(markup).not.toContain("Kalau bisa sebelum pukul 9.");
@@ -621,11 +678,12 @@ describe("berkas server action sesi", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // cariMitra, pilihMitra (rantai C1), konfirmasiPermintaan, tolakPermintaan,
-    // jadwalkanSesi, selesaikanSesi, tetapkanJenjang (Task 7). Angkanya
-    // sengaja tepat, bukan `toBeGreaterThan`: action baru yang lupa memasang
-    // penjaganya harus memerahkan berkas ini, bukan lewat diam-diam.
-    expect(jumlahAction).toBe(7);
+    // cariMitra, pilihMitra (rantai C1), terbitkanTagihan (rantai C2),
+    // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi,
+    // tetapkanJenjang (Task 7). Angkanya sengaja tepat, bukan
+    // `toBeGreaterThan`: action baru yang lupa memasang penjaganya harus
+    // memerahkan berkas ini, bukan lewat diam-diam.
+    expect(jumlahAction).toBe(8);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -634,12 +692,15 @@ describe("berkas server action sesi", () => {
     expect(sumberStatus.trimStart().startsWith('"use server"')).toBe(false);
     expect(LABEL_WAKTU).toMatchObject({ pagi: expect.any(String) });
     expect(Object.keys(LABEL_WAKTU).sort()).toEqual(["pagi", "siang", "sore"]);
+    // Rantai C2: 'menunggu_bayar' dan 'dibatalkan_tenggat' bertambah.
     expect(Object.keys(LABEL_STATUS_PERMINTAAN).sort()).toEqual([
       "dibatalkan_klien",
+      "dibatalkan_tenggat",
       "dikonfirmasi",
       "diminta",
       "ditolak",
       "mencari_mitra",
+      "menunggu_bayar",
       "mitra_siap",
     ]);
   });
@@ -652,12 +713,31 @@ describe("berkas server action sesi", () => {
     expect(sumberAksi).toContain("createServerSupabase");
   });
 
-  it("tanggal tidak pernah dihitung dengan aritmatika Date", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberAntrean, sumberStatus]) {
+  it("tanggal (kolom date) tidak pernah dihitung dengan aritmatika Date", () => {
+    // Larangan aslinya menyapu SELURUH pemakaian `toISOString`/`setDate(`/
+    // `getDay(` di berkas ini karena satu-satunya pemakaiannya dulu adalah
+    // kolom `tanggal` (tipe `date`) — dan `new Date("2026-12-27").toISOString()`
+    // adalah tengah malam UTC, yang mundur sehari di zona mana pun sebelah
+    // barat (spec T6, lihat POLA_TANGGAL di atas berkas aksi.ts).
+    //
+    // C2 menambahkan pemakaian YANG SAH: `terbitkanTagihan` menghitung
+    // `tenggat`, kolom `timestamptz` (bukan `date`) — "24 jam dari sekarang"
+    // bukan tanggal kalender, dan tidak punya masalah zona waktu yang sama.
+    // Larangannya TIDAK dilonggarkan begitu saja; ia dipersempit supaya
+    // pemakaian sah yang satu ini tidak diam-diam membuka jalan bagi
+    // `toISOString` lain yang menyelinap pada kolom `tanggal`/`date`.
+    for (const sumber of [sumberHalaman, sumberAntrean, sumberStatus]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
       expect(sumber).not.toContain("getDay(");
     }
+    expect(sumberAksi).not.toContain("setDate(");
+    expect(sumberAksi).not.toContain("getDay(");
+    // TEPAT satu pemakaian, dan itu WAJIB `tenggat` di `terbitkanTagihan` —
+    // bukan `toBeGreaterThan`: pemakaian toISOString baru yang lupa menyebut
+    // `tenggat` harus memerahkan berkas ini.
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
   });
 
   it("tidak menuliskan data klien ke log", () => {
