@@ -36,7 +36,7 @@ export const metadata = { title: "Digital Care Passport" };
 export default async function BerandaPassport({
   searchParams,
 }: {
-  searchParams: Promise<{ skrining?: string }>;
+  searchParams: Promise<{ skrining?: string; pengajuan?: string }>;
 }) {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
@@ -125,6 +125,18 @@ export default async function BerandaPassport({
           <span className="text-[#415247]">
             Anda sudah bisa mengajukan jadwal. Bila nama di atas bukan Anda, hubungi tim PADMA —
             jangan lanjutkan pemesanan.
+          </span>
+        </div>
+      )}
+      {sp.pengajuan === "terkirim" && (
+        <div
+          className="mb-3.5 rounded-2xl border-[1.6px] border-leaf/30 bg-leaf-soft p-4 text-[13px]"
+          data-pengajuan-terkirim
+        >
+          <b className="block text-sm text-night">Permintaan jadwal terkirim</b>
+          <span className="text-[#415247]">
+            Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan bidan yang
+            datang. Permintaannya tercantum di bawah.
           </span>
         </div>
       )}

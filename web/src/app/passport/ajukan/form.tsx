@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ajukanJadwal } from "@/lib/passport/aksi";
 import { formatJam } from "@/lib/jadwal/jam";
 
@@ -38,6 +39,7 @@ export function FormAjukan({
   // bukan nilai prop ini.
   alamatDefault: string;
 }) {
+  const router = useRouter();
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
   const [jam, setJam] = useState(jamPilihan[0] ?? "");
@@ -84,8 +86,22 @@ export function FormAjukan({
           fd.set("jam", jam);
           mulai(async () => {
             const r = await ajukanJadwal(fd);
-            if (r.ok) setSelesai(true);
-            else setPesan(r.pesan);
+            if (r.ok) {
+              // BERPINDAH KE BERANDA, bukan menampilkan panel sukses di sini.
+              //
+              // Sebabnya bukan selera: begitu pengajuan berhasil, skrining yang
+              // menopangnya HANGUS (spec J3) — dan halaman ini, yang dirender
+              // ulang sesudah `revalidatePath`, sah berubah menjadi "Isi
+              // skrining keselamatan dulu". Panel sukses lalu tertimpa oleh
+              // kalimat yang berbohong: klien baru saja memesan dan disuruh
+              // mengulang skrining.
+              //
+              // Ditemukan lewat E2E yang gagal berselang-seling. Beranda juga
+              // tujuan yang lebih benar: di sanalah pengajuannya muncul.
+              router.replace("/passport?pengajuan=terkirim");
+            } else {
+              setPesan(r.pesan);
+            }
           });
         }}
       >

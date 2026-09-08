@@ -76,6 +76,17 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("notFound() terpanggil — resolusi klien gagal");
   },
+  // `FormAjukan` memakai router untuk berpindah ke beranda sesudah pengajuan
+  // berhasil (lihat komentar `router.replace` di form.tsx: skrining yang
+  // menopang pengajuan HANGUS begitu tersimpan, sehingga halaman formulir sah
+  // berubah menjadi ajakan skrining dan menimpa panel suksesnya). Render di
+  // uji ini tidak pernah menekan tombolnya, jadi cukup tiruan yang tidak
+  // melakukan apa-apa — tetapi ia HARUS ada, atau komponennya gagal dirender.
+  useRouter: () => ({
+    replace: () => {},
+    push: () => {},
+    refresh: () => {},
+  }),
 }));
 
 const { klaimSudahBayar, ajukanJadwal } = await import("@/lib/passport/aksi");

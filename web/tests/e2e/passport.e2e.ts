@@ -135,9 +135,21 @@ async function terbitkanSkriningHijau(): Promise<void> {
   if (error) throw new Error(`fixture skrining gagal: ${error.message}`);
 }
 
+/**
+ * Membuang seluruh jejak skrip ini. Dipanggil di awal (sebelum menyiapkan) dan
+ * di akhir (tanpa menyiapkan apa pun).
+ */
+async function bersihkanFixture() {
+  // Pengajuan DULU: `booking_requests.screening_id` menahan penghapusan
+  // skrining yang menopangnya.
+  await admin.from("booking_requests").delete().eq("client_id", KLIEN_UJI);
+  await admin.from("screenings").delete().like("kode", "E2E-PSP-%");
+}
+
 /** Keadaan seed untuk data yang disentuh skrip ini. */
 async function keadaanAwal() {
   await admin.from("sessions").update({ status_bayar: "belum" }).eq("id", SESI_LEPAS);
+  await bersihkanFixture();
   // SELURUH pengajuan klien uji dibuang, bukan hanya yang bertanggal uji.
   //
   // Menyaring per tanggal sudah cukup sebelum C1-b, tetapi tidak lagi: sejak
@@ -385,15 +397,20 @@ async function main() {
     await page.locator('textarea[name="alamat"]').fill("Jl. Uji E2E No. 1, Denpasar");
     await page.getByRole("button", { name: "sore", exact: true }).click();
     await page.getByRole("button", { name: /Kirim Permintaan Jadwal/i }).click();
+    // Sesudah pengajuan berhasil, klien DIPINDAHKAN ke beranda dengan
+    // konfirmasi — bukan ditinggal di formulir. Sebabnya ada di komentar
+    // `router.replace` pada `form.tsx`: skrining yang menopang pengajuan itu
+    // HANGUS begitu ia tersimpan, sehingga halaman formulir sah berubah
+    // menjadi "Isi skrining keselamatan dulu" dan menimpa panel suksesnya.
     const terkirim = await page
-      .getByText("Permintaan terkirim")
+      .locator("[data-pengajuan-terkirim]")
       .first()
       .waitFor({ state: "visible", timeout: 20_000 })
       .then(() => true, () => false);
     catat(
-      "5a. permintaan terkirim",
+      "5a. permintaan terkirim (mendarat di beranda dengan konfirmasi)",
       terkirim,
-      terkirim ? "panel sukses tampil" : `isi: ${(await teksTerlihat(page)).slice(0, 160)}`,
+      terkirim ? "konfirmasi tampil di beranda" : `isi: ${(await teksTerlihat(page)).slice(0, 160)}`,
     );
     const { data: br } = await admin
       .from("booking_requests")
@@ -423,8 +440,19 @@ async function main() {
     catat("6c. tidak ada scroll horizontal di 390px", lebar <= 0, `selisih ${lebar}px`);
   } finally {
     await browser.close();
-    // Kembalikan keadaan seed supaya skrip ini boleh diulang kapan saja.
-    await keadaanAwal();
+    // MEMBERSIHKAN, bukan menyiapkan ulang.
+    //
+    // Dulu blok ini memanggil `keadaanAwal()` supaya skrip boleh diulang kapan
+    // saja. Sejak C1-c `keadaanAwal()` juga MENERBITKAN skrining hijau, jadi
+    // memanggilnya di sini meninggalkan satu baris `screenings` setiap kali
+    // skrip selesai — dan baris itu ikut terhitung oleh uji vitest yang
+    // mengasersikan JUMLAH baris inbox skrining admin (`admin-inbox`,
+    // `admin-konversi-skrining`, `admin-agenda`). Gejalanya: suite merah tanpa
+    // satu baris kode pun berubah, dengan penyebab di berkas yang sama sekali
+    // lain.
+    //
+    // Skrip tetap boleh diulang: `keadaanAwal()` di ATAS yang menyiapkannya.
+    await bersihkanFixture();
   }
 
   const gagal = hasil.filter((h) => !h.lolos);
