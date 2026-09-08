@@ -13,7 +13,7 @@ J8, J13).
 
 | Perintah | Hasil |
 |---|---|
-| `npm test` | **147 berkas, 2.329 uji, 0 gagal** |
+| `npm test` | **149 berkas, 2.345 uji, 0 gagal** (angka akhir, sesudah putaran review di bawah) |
 | `npm run build` | lolos, termasuk typecheck seluruh `src/` dan `tests/` |
 | `npm run test:e2e` (access-matrix) | 22/22 |
 | `npm run test:e2e:passport` | 21/21 |
@@ -109,8 +109,10 @@ tulis bawaan Supabase untuk `authenticated`. Tanpa pagar itu, view hantu ini aka
 
 **Pagar yang meloloskan keduanya sudah diperlebar.**
 `tests/rantai-status-db.test.ts` semula hanya memindai `booking_status` dan hanya bentuk bercast
-(`'menunggu'::booking_status`). Ia buta terhadap `s.status <> 'batal'` tanpa cast, dan buta terhadap
-VIEW sama sekali. Kini ia menyasar katanya, mencakup kedua enum, dan memindai fungsi maupun view.
+(`'menunggu'::booking_status`), sehingga buta terhadap `s.status <> 'batal'` tanpa cast. Kini ia
+menyasar katanya dan mencakup kedua enum. Pemindaian VIEW sempat ditambahkan lalu DIHAPUS lagi di
+putaran review — lihat temuan 6 di bawah: view memperbarui dirinya sendiri saat `rename value`,
+jadi pagar itu tidak akan pernah bisa merah.
 
 ---
 
