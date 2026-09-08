@@ -294,6 +294,49 @@ double_confirm_changes = true
 #       true : confirmed_at langsung terisi, sesi LANGSUNG diberikan
 # Hanya (c) yang berubah — persis lubang yang ingin ditutup.
 #
+# ===== KASUS KEEMPAT, diuji 8 Sep 2026 (rig yang sama, v2.196.0) =====
+# Pertanyaannya bukan lagi "apakah setelan ini patah", melainkan: adakah cara
+# memperoleh SESI TERKONFIRMASI tanpa memegang kotak suratnya? Satu cara masuk
+# akal: GoTrue mencari user berdasarkan email saat login provider eksternal, dan
+# bila ketemu ia MENEMPELKAN identitas baru ke user yang SUDAH ADA. Kalau user
+# itu lahir dari pendaftaran mandiri seorang penyerang, sandi yang menempel di
+# baris itu adalah sandi penyerang — dan korban yang login Google akan
+# mengonfirmasi akun yang sandinya bukan miliknya.
+#
+#   (d) penyerang /signup `korban@…` (belum terkonfirmasi, sandi penyerang),
+#       lalu KORBAN login lewat provider eksternal dengan email yang sama:
+#       - GoTrue MEMANG menempelkan identitas provider ke user yang sudah ada;
+#         `sub` pada JWT korban = id user bikinan penyerang.
+#       - TETAPI pada langkah yang sama GoTrue MENGHAPUS identitas `email` dan
+#         mengosongkan `encrypted_password` (diverifikasi di DB:
+#         `encrypted_password is null`, `raw_app_meta_data.provider` berubah
+#         menjadi provider itu). Login `grant_type=password` dengan sandi
+#         penyerang sesudahnya: `invalid_credentials`.
+#       - Penyerang tidak pernah memegang sesi atas baris itu (signup-nya
+#         ditolak `email_not_confirmed`), jadi tidak ada refresh token tersisa.
+#       KESIMPULAN: rantainya PUTUS di GoTrue, bukan di kode PADMA. Yang
+#       tersisa hanyalah id baris yang kebetulan dipilih penyerang — bukan
+#       rahasia, dan tidak memberi hak apa pun.
+#   (e) dua /signup berturut atas email sama (korban dulu, penyerang kemudian):
+#       signup kedua TIDAK menimpa sandi user yang sudah ada. Sesudah korban
+#       mengeklik tautan konfirmasi, yang berhasil login adalah sandi KORBAN;
+#       sandi penyerang `invalid_credentials`.
+#   (f) urutan sebaliknya dari (d) — korban login provider lebih dulu, penyerang
+#       /signup sesudahnya: GoTrue memulangkan user samaran (id acak,
+#       `identities: []`) dan tidak menyentuh baris korban sama sekali.
+#   (g) kontrol negatif untuk (d): provider yang melaporkan
+#       `email_verified: false` TIDAK ditempelkan — GoTrue menolak dengan
+#       `provider_email_needs_verification` dan membuat user terpisah tanpa
+#       email. Jadi penempelan di (d) memang digerbangi verifikasi provider,
+#       bukan sekadar kecocokan alamat.
+#
+# Konsekuensi untuk pembaca berikutnya: (d) TIDAK ditambal di kode PADMA karena
+# tidak ada yang perlu ditambal — dan menambalnya (mis. menolak user yang punya
+# identitas provider lebih muda daripada barisnya) akan menolak jalur yang sah.
+# Bila GoTrue kelak BERHENTI mengosongkan sandi pada penempelan itu, kasus (d)
+# berubah menjadi lubang sungguhan. Itu sebabnya hasil uji ini ditulis di sini
+# lengkap dengan versinya, bukan disimpulkan sebagai "aman".
+#
 # Catatan operasional: sesudah mengubah baris ini, stack lokal perlu
 # `supabase stop && supabase start` agar env container GoTrue ikut berubah.
 # Test suite sengaja tidak bergantung pada setelan ini (user uji dibuat lewat
