@@ -23,6 +23,33 @@ satu pengajuan, lalu hangus.**
 
 ---
 
+## Bukti, bukan klaim
+
+| Perintah | Hasil |
+|---|---|
+| `npm test` | **153 berkas, 2.377 uji, 0 gagal** |
+| `npm run build` | lolos, termasuk typecheck `src/` dan `tests/` |
+| `npm run test:e2e:funnel` | **22/22** — corong penuh, lihat di bawah |
+| `npm run test:e2e:passport` | 21/21 (dijalankan **tiga kali** berturut-turut, lihat catatan sisa-keadaan) |
+| `npm run test:e2e` (access-matrix) | 22/22 |
+| `npm run test:e2e:daftar` | 14/14 |
+| `npm run test:e2e:admin` | 26/26 |
+| `npm run test:e2e:pelengkap` | 26/26 |
+| `npm run test:e2e:owner` | 10/10 |
+| `npm run test:e2e:materi` | 12/12 |
+| `npm run test:e2e:video` | **TIDAK DIJALANKAN** — menyentuh bucket R2 produksi klien |
+
+**Corong penuh (`funnel` skenario 6)** membuktikan lewat peramban sungguhan: skrining hijau →
+token klaim dititipkan sebagai cookie `httpOnly` → daftar → konfirmasi email dari kotak surat →
+Passport menyebut nama pada skrining → fase klien terisi (J11) → `/passport/ajukan` menampilkan
+formulir (bukan ajakan) → pengajuan tersimpan membawa `screening_id` dan jam → skrining **hangus**
+dan formulirnya tertutup lagi.
+
+Cookie `httpOnly` tidak bisa dilihat JavaScript mana pun, jadi peramban sungguhan memang
+satu-satunya cara mengujinya.
+
+---
+
 ## Keputusan, dan ongkosnya bila salah
 
 **1. Kode skrining TIDAK PERNAH menjadi kunci.**
@@ -113,3 +140,23 @@ panggilan PostgREST. Pelajaran itu tidak diulang.
 - **`/passport/skrining` tidak punya jalan masuk dari menu Passport** — ia dicapai lewat ajakan di
   `/passport/ajukan`. Cukup untuk sekarang; menu tersendiri bisa menunggu sampai ada alasan kedua
   mengunjunginya.
+
+---
+
+## Dua hal yang ditemukan pagar, bukan oleh saya
+
+**1. `&amp;` di JSX vs `&` di skrip E2E.** Saya menulis `Buat akun &amp; pesan layanan` di komponen,
+sementara skrip E2E mencari `"Buat akun & pesan layanan"`. **E2E-nya tetap hijau** — Playwright
+menormalkan entitas HTML. Yang melihat selisihnya adalah `tests/e2e-selektor.test.ts`, pagar sumber
+yang dibuat sesi lain sehari sebelumnya. Contoh bagus kenapa pagar sumber tetap perlu meski uji
+perilaku hijau: keduanya melihat hal yang berbeda.
+
+**2. Sisa keadaan antar-run di `passport.e2e.ts`.** Skenario "ajukan jadwal" mulai gagal
+BERSELANG-SELING. Sebabnya bukan kode produk: pembersihan skrip menyaring pengajuan per TANGGAL,
+dan itu cukup sebelum C1-b — tetapi sejak J3 sebuah skrining hangus begitu dipakai pengajuan mana
+pun, sehingga pengajuan sisa dari run lain (atau dari suite vitest) memegang skrining hijau klien
+uji dan menutup formulirnya. Pembersihannya kini per KLIEN, dan skripnya dijalankan tiga kali
+berturut-turut untuk membuktikan gejalanya hilang.
+
+Keduanya jenis yang sama: **kegagalan yang tidak muncul di jalur yang sedang diuji.** Itu sebabnya
+E2E dijalankan berulang, bukan sekali.
