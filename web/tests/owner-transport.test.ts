@@ -70,6 +70,10 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/owner/transport",
+  // `PanelGeser` (Task 7) memakai `useRouter` untuk tombol Escape/overlay —
+  // `renderToStaticMarkup` tidak menjalankan efeknya, tapi pemanggilan
+  // `useRouter()` sendiri di badan komponen tetap butuh mock ini.
+  useRouter: () => ({ push: () => {} }),
 }));
 
 // --- Fixture -----------------------------------------------------------------
@@ -652,15 +656,67 @@ describe("pesanKodePostgresKhusus — kalimat tersendiri, bukan pinjaman rate ca
 // ---------------------------------------------------------------------------
 // Halaman /owner/transport
 // ---------------------------------------------------------------------------
-
 describe("halaman transport (/owner/transport)", () => {
-  it("menampilkan label jenjang, nominal, dan daftar sesi menunggu", async () => {
+  const halaman = (sp: Record<string, string> = {}) => {
     ref.sesi = sesiOwner;
-    const markup = renderToStaticMarkup(await TransportPage());
+    return TransportPage({ searchParams: Promise.resolve(sp) });
+  };
+
+  it("menampilkan label jenjang, nominal, dan daftar sesi menunggu", async () => {
+    const markup = renderToStaticMarkup(await halaman());
     expect(markup).toContain("0–5 km");
     expect(markup).toContain("Rp 10.000");
     expect(markup).not.toContain(">20 km</b>"); // di_atas_20 bukan baris rate card
     expect(markup).toContain("Uji Transport Owner"); // SESI.jauh menunggu
+  });
+
+  it("TIDAK ada formulir di dalam sel tabel — hanya tautan pembuka panel", async () => {
+    const markup = renderToStaticMarkup(await halaman());
+    // Inilah keluhan klien yang ditutup rencana ini. Medan formulir hanya
+    // boleh muncul saat panelnya memang diminta lewat URL.
+    expect(markup).not.toContain('name="tarif"');
+    expect(markup).toContain('href="/owner/transport?ubah=0_5"');
+  });
+
+  it("?ubah=<jenjang> membuka panel geser berisi formulir jenjang itu", async () => {
+    const markup = renderToStaticMarkup(await halaman({ ubah: "0_5" }));
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('name="jenjang"');
+    expect(markup).toContain('name="tarif"');
+    expect(markup).toContain('name="mulai"');
+    // Panel tertutup kembali ke halaman TANPA `?ubah`.
+    expect(markup).toContain('href="/owner/transport"');
+  });
+
+  it("?ubah=sesi-<id> membuka panel geser berisi formulir tarif khusus", async () => {
+    const markup = renderToStaticMarkup(await halaman({ ubah: `sesi-${SESI.jauh}` }));
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('name="sesi"');
+    expect(markup).toContain("Uji Transport Owner");
+  });
+
+  it("?ubah asing TIDAK membuka panel apa pun", async () => {
+    // Daftar putih, bukan daftar hitam: `ubah` datang dari URL, dan panel yang
+    // terbuka atas nilai asing akan merender formulir yang menunjuk jenjang
+    // atau sesi yang tidak ada.
+    for (const nilai of ["di_atas_20", "sesi-00000000-0000-0000-0000-000000000000", "../admin"]) {
+      const markup = renderToStaticMarkup(await halaman({ ubah: nilai }));
+      expect(markup, `?ubah=${nilai}`).not.toContain('role="dialog"');
+    }
+  });
+
+  it("daftar sesi menunggu tarif dipaginasi", async () => {
+    const markup = renderToStaticMarkup(await halaman());
+    expect(sumberHalaman).toContain("Paginasi");
+    expect(markup).toMatch(/Menampilkan \d+ dari \d+/);
+  });
+
+  it("tidak ada satu pun token palet lama tersisa di kedua berkas", () => {
+    for (const sumber of [sumberHalaman, sumberForm]) {
+      expect(sumber).not.toMatch(/\b(?:text|bg|border|hover:text|hover:bg)-(?:night|paper|gold-pale)\b/);
+      expect(sumber).not.toContain("bg-white");
+      expect(sumber).not.toContain("font-serif");
+    }
   });
 
   it("judul mengandalkan template `%s · PADMA`", () => {
