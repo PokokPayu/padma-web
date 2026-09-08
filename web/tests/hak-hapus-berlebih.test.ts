@@ -157,9 +157,10 @@ beforeAll(async () => {
       service_id: LAYANAN_SEED,
       variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan",
-      status: "menunggu",
+      status: "diminta",
     })
     .select("id")
     .single();
@@ -452,7 +453,7 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
       .eq("id", permintaanUji)
       .maybeSingle();
     expect(data).not.toBeNull();
-    expect(data!.status).toBe("menunggu");
+    expect(data!.status).toBe("diminta");
   });
 
   it("klien pun tidak bisa menghapus permintaannya sendiri", async () => {
@@ -464,32 +465,40 @@ describe("permintaan jadwal tidak bisa dihapus staf", () => {
     expect(error?.code).toBe("42501");
   });
 
-  it("KONTROL: admin TETAP bisa MENOLAK permintaan, dan penolakan melepas antrean", async () => {
+  it("KONTROL: admin TETAP bisa MEMBATALKAN permintaan, dan pembatalan melepas antrean", async () => {
+    // `status: "ditolak"` tidak lagi tujuan yang sah dari perpindahan mana
+    // pun (spec C1 J8 — lihat dokblok `PERPINDAHAN_PERMINTAAN` di
+    // `src/lib/jadwal/status.ts`; tombol & jalur "Tolak" sudah dilepas dari
+    // layar). `dibatalkan_klien` sekarang yang membebaskan slot antrean, dan
+    // admin (bukan hanya klien lewat `batalkanPengajuan`) tetap boleh
+    // menuliskannya — `guard_booking_status` hanya mempersempit KLIEN.
     const a = await signInAs("admin@padma.test");
     const { data, error } = await a
       .from("booking_requests")
-      .update({ status: "ditolak" })
+      .update({ status: "dibatalkan_klien" })
       .eq("id", permintaanUji)
       .select("id, status");
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
-    expect(data![0].status).toBe("ditolak");
+    expect(data![0].status).toBe("dibatalkan_klien");
 
-    // Index antrean unik bersifat parsial (status='menunggu'), jadi penolakan
-    // benar-benar membebaskan slot yang sama untuk diajukan ulang — inilah
-    // yang membuat DELETE tidak pernah dibutuhkan.
+    // Index antrean unik bersifat parsial (status IN diminta/mencari_mitra/
+    // mitra_siap), jadi pembatalan benar-benar membebaskan slot yang sama
+    // untuk diajukan ulang — inilah yang membuat DELETE tidak pernah
+    // dibutuhkan.
     const { error: eUlang } = await svc.from("booking_requests").insert({
       client_id: KLIEN_RINA,
       service_id: LAYANAN_SEED,
       variant_id: VARIAN_SEED,
       tanggal: TGL_PERMINTAAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       catatan: "PAD-UJI permintaan ulang",
-      status: "menunggu",
+      status: "diminta",
     });
     expect(eUlang).toBeNull();
 
-    // Barisnya yang ditolak TETAP ada — itu intinya.
+    // Barisnya yang dibatalkan TETAP ada — itu intinya.
     const { data: jejak } = await svc
       .from("booking_requests")
       .select("id")

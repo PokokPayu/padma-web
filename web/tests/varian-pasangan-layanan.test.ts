@@ -49,8 +49,8 @@ describe("FK gabungan (service_id, variant_id)", () => {
       const [mitra] = (await jalankan(`select id from public.partners limit 1`)) as Array<{ id: string }>;
 
       const hasil = await jalankan(
-        `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal)
-         values ($1, $2, $3, $4, current_date) returning id`,
+        `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal, jam_mulai)
+         values ($1, $2, $3, $4, current_date, '09:00') returning id`,
         [klien.id, a.service_id, a.variant_id, mitra.id],
       );
       expect(hasil).toHaveLength(1);
@@ -135,8 +135,8 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
       await jalankan(`alter table public.sessions alter column variant_id drop not null`);
 
       const [sesi] = (await jalankan(
-        `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal)
-         values ($1, $2, null, $3, current_date) returning id`,
+        `insert into public.sessions (client_id, service_id, variant_id, partner_id, tanggal, jam_mulai)
+         values ($1, $2, null, $3, current_date, '09:00') returning id`,
         [klien.id, a.service_id, mitra.id],
       )) as Array<{ id: string }>;
 
@@ -174,8 +174,8 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
 
       const [permintaan] = (await jalankan(
         `insert into public.booking_requests
-           (client_id, service_id, variant_id, tanggal, preferensi_waktu)
-         values ($1, $2, null, current_date, 'pagi') returning id`,
+           (client_id, service_id, variant_id, tanggal, jam_mulai, preferensi_waktu)
+         values ($1, $2, null, current_date, '09:00', 'pagi') returning id`,
         [klien.id, a.service_id],
       )) as Array<{ id: string }>;
 

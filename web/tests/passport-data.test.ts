@@ -351,10 +351,13 @@ describe("ambilPermintaanJadwal", () => {
 
   it("hanya permintaan berstatus menunggu milik klien yang ditampilkan", async () => {
     const varianYoga = await varianBaku(svc, SVC_YOGA);
+    const MITRA_YOGA = "33333333-3333-3333-3333-333333333301";
     const { data: baris } = await svc.from("booking_requests").insert([
-      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-18", preferensi_waktu: "pagi", status: "menunggu" },
-      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-19", preferensi_waktu: "sore", status: "dikonfirmasi" },
-      { client_id: RINA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-17", preferensi_waktu: "siang", status: "menunggu" },
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-18", jam_mulai: "09:00", preferensi_waktu: "pagi", status: "diminta" },
+      // 'dikonfirmasi' menuntut partner_id (CHECK
+      // `booking_requests_mitra_siap_bermitra`, migration `mitra_pada_permintaan`).
+      { client_id: ANANDA, service_id: SVC_YOGA, variant_id: varianYoga, partner_id: MITRA_YOGA, tanggal: "2026-12-19", jam_mulai: "09:00", preferensi_waktu: "sore", status: "dikonfirmasi" },
+      { client_id: RINA, service_id: SVC_YOGA, variant_id: varianYoga, tanggal: "2026-12-17", jam_mulai: "09:00", preferensi_waktu: "siang", status: "diminta" },
     ]).select("id, tanggal, status");
     for (const b of baris ?? []) bersihkan.push(b.id);
 
@@ -365,7 +368,7 @@ describe("ambilPermintaanJadwal", () => {
     expect(tanggal).toContain("2026-12-18");
     expect(tanggal).not.toContain("2026-12-19"); // sudah dikonfirmasi
     expect(tanggal).not.toContain("2026-12-17"); // milik klien lain
-    expect(hasil.every((p) => p.status === "menunggu")).toBe(true);
+    expect(hasil.every((p) => p.status === "diminta")).toBe(true);
 
     const punya = hasil.find((p) => p.tanggal === "2026-12-18")!;
     expect(punya.namaLayanan).toBe("PADMA Flow Yoga - Prekonsepsi");

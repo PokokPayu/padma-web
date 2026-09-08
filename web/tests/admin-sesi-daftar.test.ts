@@ -88,6 +88,7 @@ beforeAll(async () => {
     service_id: SERVICE_FERTILITY_MASSAGE,
     variant_id: variantId,
     partner_id: partnerId,
+    jam_mulai: "09:00",
   };
 
   await admin.from("sessions").insert([
@@ -104,7 +105,7 @@ beforeAll(async () => {
     // numpang di `mendatang` — dan tidak satu uji `mendatang` pun memeriksa
     // KETIADAAN baris ini di sana.
     ...UJI_SESI.map((id) => ({ ...dasar, id, tanggal: "2026-07-15", status: "selesai" })),
-    { ...dasar, id: SESI_LAMPAU, tanggal: "2026-01-05", status: "batal" },
+    { ...dasar, id: SESI_LAMPAU, tanggal: "2026-01-05", status: "dibatalkan_padma" },
     { ...dasar, id: SESI_PEKAN, tanggal: HARI_INI, status: "terjadwal" },
     { ...dasar, id: SESI_DEPAN, tanggal: "2026-12-31", status: "terjadwal" },
     // Selesai DAN berjenjang — lihat komentar pada konstantanya di atas.
@@ -125,16 +126,22 @@ afterAll(async () => {
 
 describe("SARING_SESI", () => {
   it("nilai saringan status persis enum session_status", () => {
-    expect([...SARING_SESI.status]).toEqual(["terjadwal", "selesai", "batal"]);
+    expect([...SARING_SESI.status]).toEqual([
+      "terjadwal",
+      "berjalan",
+      "selesai",
+      "tidak_hadir",
+      "dibatalkan_padma",
+    ]);
   });
 });
 
 describe("ambilDaftarSesi — saringan", () => {
   it("menyaring menurut status", async () => {
     const { baris } = await ambilDaftarSesi(
-      { cari: "", saring: { status: "batal" }, hal: 1 }, HARI_INI);
+      { cari: "", saring: { status: "dibatalkan_padma" }, hal: 1 }, HARI_INI);
     expect(baris.length).toBeGreaterThan(0);
-    expect(baris.every((s) => s.status === "batal")).toBe(true);
+    expect(baris.every((s) => s.status === "dibatalkan_padma")).toBe(true);
   });
 
   it("saringan jenjang=kosong hanya memulangkan sesi tanpa jenjang", async () => {

@@ -76,10 +76,11 @@ beforeAll(async () => {
     status_bayar: "belum" as const,
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
     { ...dasarSesi, id: SESI.hariIni, tanggal: HARI_INI, status: "terjadwal" },
-    { ...dasarSesi, id: SESI.batalHariIni, tanggal: HARI_INI, status: "batal" },
+    { ...dasarSesi, id: SESI.batalHariIni, tanggal: HARI_INI, status: "dibatalkan_padma" },
     { ...dasarSesi, id: SESI.besok, tanggal: "2027-12-24", status: "terjadwal" },
   ]);
   await admin.from("screenings").insert({
@@ -98,7 +99,8 @@ beforeAll(async () => {
     variant_id: dasarSesi.variant_id,
     tanggal: "2027-12-24",
     preferensi_waktu: "pagi",
-    status: "menunggu",
+    status: "diminta",
+    jam_mulai: "09:00",
   });
 });
 

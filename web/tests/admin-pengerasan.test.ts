@@ -56,6 +56,7 @@ beforeAll(async () => {
       catatan: "PAD-UJI-pengerasan",
       rekomendasi: "",
       status_bayar: "belum",
+      jam_mulai: "09:00",
     },
     { onConflict: "id" },
   );
@@ -141,6 +142,7 @@ describe("hak berbahaya dicabut", () => {
         partner_id: MITRA_SRI,
         tanggal: "2026-12-30",
         status: "terjadwal",
+        jam_mulai: "09:00",
       })
       .select("id")
       .single();

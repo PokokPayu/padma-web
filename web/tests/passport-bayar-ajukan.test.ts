@@ -102,7 +102,14 @@ async function setStatusBayar(
 // pemanggilan `formulir(...)`.
 function formulir(isi: Record<string, string>): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries({ alamat: "Jl. Uji Alamat Baku No. 1", ...isi })) {
+  // `jam` WAJIB sejak C1 (spec J2) — dibubuhkan sebagai DEFAULT di sini,
+  // sama alasannya dengan `alamat`, supaya panggilan yang tidak peduli jam
+  // sama sekali tidak perlu mengulangnya di setiap `formulir(...)`.
+  for (const [k, v] of Object.entries({
+    alamat: "Jl. Uji Alamat Baku No. 1",
+    jam: "09:00",
+    ...isi,
+  })) {
     fd.set(k, v);
   }
   return fd;
@@ -143,6 +150,7 @@ beforeAll(async () => {
       variant_id: await varianBaku(admin, SVC_MASSAGE),
       partner_id: MITRA,
       tanggal: "2026-11-20",
+      jam_mulai: "09:00",
       status: "terjadwal",
       status_bayar: "belum",
     },
@@ -369,7 +377,7 @@ describe("ajukan jadwal", () => {
 
     const baris = await permintaanUji();
     expect(baris).toHaveLength(1);
-    expect(baris[0].status).toBe("menunggu");
+    expect(baris[0].status).toBe("diminta");
     expect(baris[0].preferensi_waktu).toBe("sore");
     expect(baris[0].service_id).toBe(SVC_NUTRISI);
     expect(jejak.revalidate).toContain("/passport");
@@ -391,7 +399,7 @@ describe("ajukan jadwal", () => {
     expect(r.ok).toBe(true);
     const baris = await permintaanUji();
     expect(baris).toHaveLength(1);
-    expect(baris[0].status).toBe("menunggu");
+    expect(baris[0].status).toBe("diminta");
   });
 
   it("tanggal wajib berbentuk YYYY-MM-DD (kolom `tanggal` dibandingkan sebagai string)", async () => {
@@ -469,11 +477,16 @@ describe("pagar sumber server action", () => {
     // `klaim_sudah_bayar` supaya jejak auditnya menyebut klien, bukan
     // 'service_role'. Nilai tujuannya tetap hardcoded — sekarang di SQL —
     // dan diuji pada OBJEK NYATA di describe "RPC klaim_sudah_bayar" di bawah.
-    expect(sumber).toContain('status: "menunggu"');
+    expect(sumber).toMatch(/status:\s*PERMINTAAN_AWAL/);
     // 'lunas' & 'dikonfirmasi' adalah keputusan staf; keduanya tidak boleh
-    // punya jalan masuk lewat berkas ini.
-    expect(sumber).not.toContain("lunas");
-    expect(sumber).not.toContain("dikonfirmasi");
+    // punya jalan masuk lewat berkas ini SEBAGAI NILAI STATUS yang ditulis.
+    // `batalkanPengajuan` (spec J8) menyebut "dikonfirmasi" dalam KALIMAT
+    // untuk manusia ("Pengajuan ini sudah dikonfirmasi...") — itu prosa, bukan
+    // status yang ditulis, jadi pemeriksaannya dipersempit ke pola penulisan
+    // status (mengikuti gaya `status:\s*"..."` yang dipakai seluruh berkas
+    // ini), bukan substring mentah.
+    expect(sumber).not.toMatch(/status:\s*["']lunas["']/);
+    expect(sumber).not.toMatch(/status:\s*["']dikonfirmasi["']/);
   });
 
   it("jalur klaim TIDAK memakai service role sama sekali", () => {

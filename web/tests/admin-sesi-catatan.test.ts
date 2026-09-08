@@ -152,7 +152,7 @@ function fdSelesai(catatan: string, rekomendasi = "") {
 
 /** Sesi langsung lewat service role — bahan uji, bukan jalur yang diuji. */
 async function buatSesi(
-  status: "terjadwal" | "batal" | "selesai",
+  status: "terjadwal" | "dibatalkan_padma" | "selesai",
   opsi: { denganPaket?: boolean; serviceId?: string; catatan?: string } = {},
 ) {
   const serviceId = opsi.serviceId ?? SVC_BARU;
@@ -168,6 +168,7 @@ async function buatSesi(
       catatan: opsi.catatan ?? "",
       rekomendasi: "",
       client_package_id: opsi.denganPaket ? PAKET : null,
+      jam_mulai: "09:00",
     })
     .select("id")
     .single();
@@ -352,7 +353,7 @@ describe("menyelesaikan sesi mengalir ke passport klien", () => {
       sesi: (await sesiKlienBaca()).map(petakan),
     });
 
-    await buatSesi("batal", { denganPaket: true });
+    await buatSesi("dibatalkan_padma", { denganPaket: true });
 
     const sesudah = progresPaket({
       totalSesi: 8,
@@ -397,10 +398,10 @@ describe("pagar selesaikanSesi", () => {
   });
 
   it("sesi BATAL tidak bisa dihidupkan menjadi selesai", async () => {
-    const id = await buatSesi("batal", { denganPaket: true });
+    const id = await buatSesi("dibatalkan_padma", { denganPaket: true });
     const r = await selesaikanSesi(id, fdSelesai("Coba hidupkan."));
     expect(r.ok).toBe(false);
-    expect((await sesiDb(id))!.status).toBe("batal");
+    expect((await sesiDb(id))!.status).toBe("dibatalkan_padma");
     expect((await sesiDb(id))!.catatan).toBe("");
   });
 
@@ -1081,7 +1082,8 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
           tanggal: TGL_ANTREAN,
           preferensi_waktu: "pagi",
           catatan: "Uji ruling mitra saat panel tertutup.",
-          status: "menunggu",
+          status: "diminta",
+          jam_mulai: "09:00",
         })
         .select("id")
         .single();
@@ -1113,7 +1115,7 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    expect(jumlahAction).toBe(5); // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
+    expect(jumlahAction).toBe(7); // cariMitra, pilihMitra, konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang
     expect(jumlahGuard).toBe(jumlahAction);
   });
 

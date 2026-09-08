@@ -122,7 +122,11 @@ let sesiAnanda: SupabaseClient;
 // tetap bisa ditimpa lewat `isi.alamat` oleh test yang justru menguji alamat.
 function formulir(isi: Record<string, string>): FormData {
   const fd = new FormData();
-  for (const [k, v] of Object.entries({ alamat: "Jl. Uji Alamat Baku No. 1", ...isi })) {
+  for (const [k, v] of Object.entries({
+    alamat: "Jl. Uji Alamat Baku No. 1",
+    jam: "09:00",
+    ...isi,
+  })) {
     fd.set(k, v);
   }
   return fd;
@@ -152,7 +156,7 @@ async function barisAnandaAlamat() {
 }
 
 async function menungguAnanda() {
-  return (await barisAnanda()).filter((b) => b.status === "menunggu");
+  return (await barisAnanda()).filter((b) => b.status === "diminta");
 }
 
 async function bersihkanAnanda() {
@@ -166,8 +170,9 @@ async function isiAntrean(jumlah: number) {
     service_id: SVC_YOGA,
     variant_id: VARIAN_YOGA,
     tanggal: tanggalKe(i),
+    jam_mulai: "09:00",
     preferensi_waktu: "pagi",
-    status: "menunggu",
+    status: "diminta",
   }));
   const { error } = await admin.from("booking_requests").insert(baris);
   expect(error).toBeNull();
@@ -247,7 +252,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     expect(baris).toHaveLength(BATAS);
     expect(hasil.filter((r) => r.ok)).toHaveLength(BATAS);
     // Invarian inti tetap: tak satu pun baris lolos dengan status istimewa.
-    expect(baris.every((b) => b.status === "menunggu")).toBe(true);
+    expect(baris.every((b) => b.status === "diminta")).toBe(true);
   });
 
   it("permintaan ke-(BATAS+1) lewat action ditolak dengan pesan, bukan lemparan", async () => {
@@ -269,8 +274,9 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
       service_id: SVC_NUTRISI,
       variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "sore",
-      status: "menunggu",
+      status: "diminta",
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(BATAS);
@@ -288,8 +294,9 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
           service_id: SVC_NUTRISI,
           variant_id: VARIAN_NUTRISI,
           tanggal: tanggalKe(i),
+          jam_mulai: "09:00",
           preferensi_waktu: "pagi",
-          status: "menunggu",
+          status: "diminta",
         }),
       ),
     );
@@ -301,7 +308,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     for (const r of hasil.filter((x) => x.error !== null)) {
       expect(r.error!.code).toBe("42501");
     }
-    expect(baris.every((b) => b.status === "menunggu")).toBe(true);
+    expect(baris.every((b) => b.status === "diminta")).toBe(true);
   });
 
   it("permintaan yang sudah ditangani staf membebaskan kuota", async () => {
@@ -309,9 +316,13 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     // klien boleh mengajukan lagi. Kalau tidak, klien terkunci selamanya.
     await isiAntrean(BATAS);
     const semua = await barisAnanda();
+    // `ditolak` bukan lagi tujuan UPDATE yang sah (spec C1 J8 — trigger
+    // perpindahan menahannya; lihat dokblok `PERPINDAHAN_PERMINTAAN` di
+    // `src/lib/jadwal/status.ts`). Staf membebaskan kuota lewat
+    // `dibatalkan_klien`, keadaan akhir yang sungguh dituju sekarang.
     await admin
       .from("booking_requests")
-      .update({ status: "ditolak" })
+      .update({ status: "dibatalkan_klien" })
       .eq("id", semua[0].id);
 
     const r = await ajukanJadwal(
@@ -329,8 +340,9 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
       service_id: SVC_NUTRISI,
       variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "sore",
-      status: "menunggu",
+      status: "diminta",
     });
     expect(error).toBeNull();
     expect(await barisAnanda()).toHaveLength(BATAS + 1);
@@ -356,8 +368,9 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
       service_id: SVC_NUTRISI,
       variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
-      status: "menunggu",
+      status: "diminta",
     };
     const { error: pertama } = await sesiAnanda.from("booking_requests").insert(baris);
     expect(pertama).toBeNull();
@@ -374,6 +387,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
       service_id: SVC_NUTRISI,
       variant_id: VARIAN_NUTRISI,
       tanggal: TGL_DEPAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       status: "ditolak",
     });
@@ -417,8 +431,9 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
       service_id: SVC_NONAKTIF,
       variant_id: VARIAN_NONAKTIF,
       tanggal: TGL_DEPAN,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
-      status: "menunggu",
+      status: "diminta",
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(0);
@@ -449,8 +464,9 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
       service_id: SVC_NUTRISI,
       variant_id: VARIAN_NUTRISI,
       tanggal: TGL_LAMPAU,
+      jam_mulai: "09:00",
       preferensi_waktu: "pagi",
-      status: "menunggu",
+      status: "diminta",
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(0);
@@ -710,9 +726,12 @@ describe("pagar sumber — pembatas hidup di action DAN di basis data", () => {
   it("nilai status istimewa tetap tidak punya jalan masuk lewat berkas action", () => {
     // Assertion ini juga hidup di passport-bayar-ajukan.test.ts; diulang di
     // sini supaya penambahan pembatas tidak diam-diam membuka pintunya.
-    expect(sumber).not.toContain("lunas");
-    expect(sumber).not.toContain("dikonfirmasi");
-    expect(sumber).toContain('status: "menunggu"');
+    // 'lunas'/'dikonfirmasi' dijaga sebagai NILAI STATUS yang ditulis, bukan
+    // substring mentah: `batalkanPengajuan` (spec J8) menyebut "dikonfirmasi"
+    // dalam kalimat untuk manusia, bukan sebagai status yang ditulis.
+    expect(sumber).not.toMatch(/status:\s*["']lunas["']/);
+    expect(sumber).not.toMatch(/status:\s*["']dikonfirmasi["']/);
+    expect(sumber).toMatch(/status:\s*PERMINTAAN_AWAL/);
   });
 
   it("fungsi trigger baru tidak bisa dieksekusi anon maupun PUBLIC", async () => {

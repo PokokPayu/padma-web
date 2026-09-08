@@ -191,8 +191,12 @@ describe("bentuk nilai setelan", () => {
     expect(bentuk.nomorWaTerpakai("6287778400201")).toBe("6287778400201");
   });
 
-  it("modul bentuk MURNI — tanpa satu pun impor (dipakai lintas batas server/klien)", () => {
-    expect(sumberBentuk).not.toMatch(/^\s*import\s/m);
+  it("modul bentuk MURNI — hanya boleh mengimpor modul murni lain, bukan Supabase/node:crypto (dipakai lintas batas server/klien)", () => {
+    const barisImpor = sumberBentuk.match(/^\s*import\s.*$/gm) ?? [];
+    expect(barisImpor.length).toBeGreaterThan(0);
+    for (const baris of barisImpor) {
+      expect(baris).toMatch(/@\/lib\/jadwal\/jam/);
+    }
   });
 });
 
@@ -231,12 +235,13 @@ describe("daftarSetelanAdmin", () => {
     const daftar = await daftarSetelanAdmin();
     expect(daftar.map((s) => s.key).sort()).toEqual([
       "alamat_klinik",
+      "jam_layanan",
       "jam_operasional",
       "nomor_wa",
     ]);
     for (const s of daftar) {
       expect(s.keterangan.length, `kunci ${s.key} tanpa keterangan`).toBeGreaterThan(0);
-      expect(["nomor_wa", "teks_polos"]).toContain(s.bentuk);
+      expect(["nomor_wa", "teks_polos", "daftar_jam"]).toContain(s.bentuk);
     }
   });
 

@@ -170,7 +170,7 @@ async function siapkan() {
     baris(SESI_LUNAS, { status_bayar: "lunas" }),
     // Sesi batal yang terlanjur mengklaim: bukan tagihan, tidak pernah masuk
     // daftar maupun badge.
-    baris(SESI_BATAL, { status: "batal", status_bayar: "menunggu_verifikasi" }),
+    baris(SESI_BATAL, { status: "dibatalkan_padma", status_bayar: "menunggu_verifikasi" }),
     // Sesi di dalam paket. `sessions_bayar_hanya_lepas` memaksa 'belum' —
     // status bayarnya mengikuti paketnya, dan ia tidak boleh muncul sendiri.
     baris(SESI_PAKET, { client_package_id: PAKET_UJI, status_bayar: "belum" }),
@@ -193,6 +193,7 @@ function baris(id: string, ubah: Record<string, unknown>) {
     status: "terjadwal",
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
     ...ubah,
   };
   const serviceId = dasar.service_id as string;
@@ -290,7 +291,7 @@ describe("daftar tagihan admin", () => {
         .in("id", idSesi);
       for (const s of data ?? []) {
         expect(s.client_package_id, `sesi ${s.id} berpaket`).toBeNull();
-        expect(s.status, `sesi ${s.id} batal`).not.toBe("batal");
+        expect(s.status, `sesi ${s.id} batal`).not.toBe("dibatalkan_padma");
       }
       expect((data ?? []).length).toBe(idSesi.length);
     }

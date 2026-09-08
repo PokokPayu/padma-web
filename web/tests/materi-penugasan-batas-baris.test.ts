@@ -92,6 +92,7 @@ describe("daftarPenugasan — 'otomatis' tidak terpotong PostgREST max_rows (Fix
         variant_id: variantId,
         partner_id: PARTNER_ID,
         tanggal: "2026-01-01",
+        jam_mulai: "09:00",
         status: "selesai" as const,
       })),
     );

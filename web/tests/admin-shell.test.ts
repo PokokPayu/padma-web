@@ -173,7 +173,8 @@ beforeAll(async () => {
     variant_id: varianSvc,
     tanggal: "2026-12-24",
     preferensi_waktu: "pagi",
-    status: "menunggu",
+    status: "diminta",
+    jam_mulai: "09:00",
   });
   await admin.from("sessions").insert({
     id: SESI_UJI,
@@ -184,6 +185,7 @@ beforeAll(async () => {
     tanggal: "2026-12-24",
     status: "terjadwal",
     status_bayar: "menunggu_verifikasi",
+    jam_mulai: "09:00",
   });
   await admin.from("client_packages").insert({
     id: PAKET_UJI,
@@ -346,6 +348,7 @@ describe("hitungAntrean — angka datang dari data, lewat RLS sesi pengguna", ()
           status: "selesai",
           catatan: "Kunjungan selesai, alamat tidak dikenali OSM.",
           jenjang: null,
+          jam_mulai: "09:00",
         },
         {
           id: SESI_TERJADWAL_NULL,
@@ -359,6 +362,7 @@ describe("hitungAntrean — angka datang dari data, lewat RLS sesi pengguna", ()
           status: "terjadwal",
           catatan: "",
           jenjang: null,
+          jam_mulai: "09:00",
         },
       ]);
       expect(galatInsert, galatInsert?.message).toBeNull();

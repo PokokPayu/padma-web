@@ -64,7 +64,7 @@ describe("daftarPenugasan — otomatis mengikuti aturan yang sama dengan berhak_
       client_id: klienId, service_id: serviceId,
       variant_id: await varianBaku(db, serviceId),
       partner_id: "33333333-3333-3333-3333-333333333301",
-      tanggal: "2026-01-01", status: "selesai",
+      tanggal: "2026-01-01", jam_mulai: "09:00", status: "selesai",
     });
     if (eSesi) throw eSesi;
   });

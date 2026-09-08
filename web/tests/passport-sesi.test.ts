@@ -230,10 +230,10 @@ describe("kartu sesi — perilaku per status", () => {
     return renderToStaticMarkup(createElement(KartuSesi, { sesi, berikutnya }));
   }
 
-  it("sesi batal diberi label Batal", async () => {
-    const m = await markupKartu(contoh({ status: "batal", catatan: "", rekomendasi: "" }));
-    expect(m).toContain("Batal");
-    expect(m).toContain('data-sesi-status="batal"');
+  it("sesi batal diberi label Dibatalkan", async () => {
+    const m = await markupKartu(contoh({ status: "dibatalkan_padma", catatan: "", rekomendasi: "" }));
+    expect(m).toContain("Dibatalkan");
+    expect(m).toContain('data-sesi-status="dibatalkan_padma"');
   });
 
   it("catatan berisi spasi saja dihitung kosong (kolom NOT NULL DEFAULT '')", async () => {

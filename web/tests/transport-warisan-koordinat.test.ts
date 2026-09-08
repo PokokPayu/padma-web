@@ -97,7 +97,7 @@ beforeEach(async () => {
     .from("clients")
     .update({ alamat: ALAMAT_PROFIL, alamat_lat: LAT_PIN, alamat_lon: LON_PIN })
     .eq("id", ANANDA);
-  await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "menunggu");
+  await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "diminta");
   await admin
     .from("geocode_cache")
     .delete()
@@ -109,7 +109,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "menunggu");
+  await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "diminta");
   await admin
     .from("clients")
     .update({ alamat: profilAsli.alamat, alamat_lat: profilAsli.lat, alamat_lon: profilAsli.lon })
@@ -126,6 +126,7 @@ function pengajuan(alamat: string): FormData {
   f.set("varian", variantId);
   f.set("tanggal", hariIniJakarta());
   f.set("waktu", "pagi");
+  f.set("jam", "09:00");
   f.set("alamat", alamat);
   return f;
 }
@@ -142,7 +143,7 @@ describe("pewarisan koordinat pada pengajuan klien", () => {
       .from("booking_requests")
       .select("alamat_lat, alamat_lon")
       .eq("client_id", ANANDA)
-      .eq("status", "menunggu")
+      .eq("status", "diminta")
       .single();
     expect(data!.alamat_lat).toBeCloseTo(LAT_PIN, 6);
     expect(data!.alamat_lon).toBeCloseTo(LON_PIN, 6);
@@ -166,7 +167,7 @@ describe("pewarisan koordinat pada pengajuan klien", () => {
       .from("booking_requests")
       .select("alamat_lat, alamat_lon")
       .eq("client_id", ANANDA)
-      .eq("status", "menunggu")
+      .eq("status", "diminta")
       .single();
     // Hasil geocoding, BUKAN pin profil — mitra tidak boleh dikirim ke rumahnya
     // untuk sesi yang dipesan di alamat lain.

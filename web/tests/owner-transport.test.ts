@@ -183,11 +183,12 @@ beforeAll(async () => {
     status_bayar: "belum" as const,
     catatan: "",
     rekomendasi: "",
+    jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
     { ...dasarSesi, id: SESI.jauh, status: "terjadwal", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.jauhSudah, status: "terjadwal", jenjang: "di_atas_20" },
-    { ...dasarSesi, id: SESI.jauhBatal, status: "batal", jenjang: "di_atas_20" },
+    { ...dasarSesi, id: SESI.jauhBatal, status: "dibatalkan_padma", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.biasa, status: "terjadwal", jenjang: "0_5" },
   ]);
   // SESI.jauhSudah SUDAH punya tarif khusus SEBELUM test apa pun berjalan —
