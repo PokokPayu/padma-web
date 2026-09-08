@@ -351,7 +351,10 @@ async function main() {
 
     // ================= 5. Admin menjadwalkan & menyelesaikan sesi =================
     await kerja.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
-    await kerja.getByRole("button", { name: "+ Jadwalkan sesi" }).click();
+    // "+ Sesi baru" kini TAUTAN ke `?ubah=baru`: keadaan panel hidup di URL,
+    // jadi tombol kembali peramban menutupnya seperti yang orang harapkan.
+    await kerja.getByRole("link", { name: "+ Sesi baru" }).click();
+    await tungguIsi(kerja);
     await kerja.selectOption('select[name="client_id"]', {
       label: `${NAMA_KLIEN} (${PADMA_ID})`,
     });
@@ -359,9 +362,11 @@ async function main() {
     await kerja.selectOption('select[name="partner_id"]', { label: MITRA });
     await kerja.locator('input[name="tanggal"]').fill(TANGGAL_SESI);
     await kerja.getByRole("button", { name: /Simpan jadwal/i }).click();
-    await kerja
-      .getByText("Jadwal sesi tersimpan.")
-      .waitFor({ state: "visible", timeout: 20_000 });
+    // Teks "Jadwal sesi tersimpan." SUDAH TIDAK ADA di produk: ia hidup di
+    // cabang tertutup `FormJadwalSesi` yang dibuang Tugas 3 bersama gerbang
+    // buka/tutupnya. Sukses kini menutup panel lewat `router.push(hrefTutup)`,
+    // jadi yang ditunggu adalah panelnya PERGI.
+    await kerja.locator('[role="dialog"]').waitFor({ state: "detached", timeout: 20_000 });
 
     const { data: sesiBaru } = await admin
       .from("sessions")
@@ -377,10 +382,18 @@ async function main() {
 
     await kerja.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
     const barisSesi = kerja.locator("tr", { hasText: PADMA_ID }).first();
-    await barisSesi.getByRole("button", { name: "Tandai selesai" }).click();
+    // Formulir "tandai selesai" pindah dari dalam SEL TABEL ke panel geser —
+    // itu inti keluhan yang memulai seluruh pekerjaan ini. Barisnya kini
+    // membawa tautan "Ubah" menuju `?ubah=<id>`.
+    await barisSesi.getByRole("link", { name: "Ubah" }).click();
+    await tungguIsi(kerja);
     await kerja.locator('textarea[name="catatan"]').fill(CATATAN);
     await kerja.locator('textarea[name="rekomendasi"]').fill(REKOMENDASI);
     await kerja.getByRole("button", { name: /Simpan · sesi selesai/i }).click();
+    // Panelnya TIDAK menutup diri di sini (beda dari "Simpan jadwal"):
+    // `selesaikanSesi` hanya menyetel pesan. Yang hilang adalah FORMULIRNYA —
+    // ia hanya dirender selama `status === "terjadwal"`, jadi begitu statusnya
+    // berubah, medan catatan lenyap. Itulah tanda yang ditunggu.
     await kerja
       .locator('textarea[name="catatan"]')
       .waitFor({ state: "hidden", timeout: 20_000 });
