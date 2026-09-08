@@ -5,20 +5,22 @@ Rencana: `docs/superpowers/plans/2026-09-09-padma-c3a-fondasi-pembatalan.md`
 Selesai & ter-merge: 9 September 2026. Bagian C berikutnya: **C3-b** (klien
 menekan sendiri) dan **C3-c** (permintaan refund sungguhan).
 
-Suite saat pemeriksaan Task 7 (`npx vitest run`, setelah perbaikan regresi di
-bawah): **2.560 uji di 169 berkas — 2.554 lolos, 6 gagal di 4 berkas**; keempat
-berkas itu gagal karena debris basis data lokal bersama, bukan regresi kode
-(lihat bagian tersendiri di bawah). Sebelum perbaikan, jalannya pertama
-menunjukkan 7 uji gagal di 5 berkas — satu di antaranya
-(`tests/admin-sesi-daftar.test.ts`) regresi nyata dan sudah diperbaiki.
-`npm run lint`: **0 error, 12 warning** (semuanya sudah ada sebelum C3-a,
+Suite sesudah putaran perbaikan menyeluruh (9 September 2026,
+`npx vitest run` PENUH di worktree ini): **2.591 uji di 171 berkas — seluruhnya
+lolos, 0 gagal**. Basis data lokal dihitung ulang sesudahnya dengan service
+role dan kembali ke **8 baris `sessions` seed** (0 `hak_sesi`, 0
+`jejak_jadwal`) — tidak ada debris yang ditinggalkan.
+`npm run lint`: **0 error, 11 warning** (semuanya sudah ada sebelum C3-a,
 tidak disentuh rencana ini).
-`npm run build` (Turbopack, bawaan Next 16): gagal di worktree ini karena
-Turbopack menolak symlink `node_modules` yang menunjuk keluar akar worktree
-— murni gangguan lingkungan; `next build --webpack` (type-check penuh
-termasuk `tests/`) dan `npm run build` biasa di checkout non-worktree
-keduanya **hijau, 0 error**. Rincian di bagian "Yang perlu disiapkan" dan
-laporan Task 7.
+`npm run build` (Turbopack, bawaan Next 16): **exit 0**. Kegagalan yang
+tercatat pada Task 7 (`TurbopackInternalError: Symlink [project]/node_modules
+is invalid, it points out of the filesystem root`) murni gangguan lingkungan —
+`node_modules` worktree waktu itu symlink ke checkout utama; begitu
+dependensinya dipasang sungguhan di worktree, build selesai bersih.
+
+Angka Task 7 yang lama (2.560 uji, 6 gagal di 4 berkas karena debris; build
+gagal) sudah TIDAK berlaku — keduanya selesai, dan sebabnya diuraikan di bagian
+"Debris basis data lokal" di bawah.
 
 ## Yang sekarang berlaku
 
@@ -27,10 +29,23 @@ laporan Task 7.
 ```
 terjadwal ──┬─→ berjalan ──┬─→ selesai
             │              └─→ tidak_hadir
-            ├─→ dibatalkan_padma   (staf + alasan terisi, TANPA darurat)
-            └─→ dibatalkan_klien   (klien sendiri — atau staf ATAS NAMA klien
-                                    lewat darurat medis; jenjang dari WAKTU)
+            ├─→ dibatalkan_padma   (oleh = 'padma'; staf saja, alasan WAJIB;
+            │                       SELALU jenjang 4, refund penuh)
+            └─→ dibatalkan_klien   (oleh = 'klien'; jenjang dari WAKTU, atau
+                                    jenjang 1 lewat darurat medis)
 ```
+
+**Aktornya DINYATAKAN, tidak disimpulkan.** Versi pertama `batalkan_sesi()`
+menentukan jenjang 4 dari `staf AND alasan tidak kosong AND bukan darurat`,
+sementara panel merender `alasan` sebagai kotak catatan biasa yang opsional —
+tanpa satu isyarat pun bahwa mengetiknya mengubah akibat uang. Dua kegagalan
+uang bisa dicapai dari layar yang sama: admin yang mengetik "klien minta batal"
+saat klien menelepon 6 jam sebelum sesi mengubah kredit 30 hari menjadi refund
+penuh atas nama PADMA; admin yang membiarkan alasan kosong saat bidan sakit
+membuat klien kehilangan seluruh uangnya sambil dicatat sebagai pihak yang
+membatalkan. `oleh` kini argumen tanpa nilai bawaan, tanda tangan lama dibuang,
+dan panel meminta aktornya lebih dulu dengan ringkasan jenjang yang mengikuti
+pilihan itu.
 
 `dibatalkan_klien` dan `dibatalkan_padma` **sengaja tidak disatukan** menjadi
 satu nilai `dibatalkan`, walau keduanya sama-sama "sesi ini tidak jadi
@@ -78,9 +93,22 @@ Kembaran ini **disengaja**, mengikuti pola yang sama dengan `jarak_km` vs
 **Bila keduanya berselisih, yang berlaku adalah basis data.** UI yang salah
 menampilkan jenjang adalah bug tampilan yang bisa diperbaiki tanpa menyentuh
 uang siapa pun; RPC yang salah menghitung jenjang adalah bug yang sudah
-menulis baris. Pasangan ini dijaga agar tidak diam-diam berselisih — pola yang
-sama dengan `tests/jarak-sql-vs-ts.test.ts` untuk jarak — sehingga perbaikan
-salah satu sisi tanpa sisi lain gagal di suite, bukan di produksi.
+menulis baris.
+
+Pagar kesepakatannya kini SUNGGUH ADA: `tests/jenjang-sql-vs-ts.test.ts`.
+Sampai berkas itu lahir, kalimat "dijaga uji seperti `jarak-sql-vs-ts`" muncul
+di komentar migrasi DAN di catatan ini tanpa ada ujinya — komentar yang
+menjanjikan jaminan yang tidak dibangun, kesalahan yang sama bentuknya dengan
+"dijaga indeks unik" di §5 di bawah.
+
+Kedua sisi tidak bisa disuapi INSTAN yang sama: sisi SQL membaca `now()`
+sendiri dan sengaja tidak menerimanya sebagai argumen ("sekarang" yang bisa
+dikirim pemanggil adalah "sekarang" yang bisa dikarang klien). Yang bisa
+disuapi identik adalah SELISIHNYA — dan selisih itulah satu-satunya hal yang
+dibaca kedua rumus. Pasangan `(tanggal, jam)` untuk SQL dirakit di dalam SATU
+pernyataan dari `now() at time zone 'Asia/Jakarta'`, jadi jaraknya persis
+sampai mikrodetik dan ambang 24 jam serta 2 jam benar-benar diuji TEPAT di
+titiknya, bukan di sekitarnya.
 
 ### 3. `jenjang_pembatalan` harus `stable`, bukan `immutable`
 
@@ -196,66 +224,130 @@ jejaknya sendiri sebagai bagian transaksi normal — RPC tidak pernah
 menghapus `jejak_jadwal`, hanya uji yang menghapus `sessions` dari luar
 transaksi RPC yang punya kewajiban ini).
 
-## Debris basis data lokal — bukan regresi kode
+## Debris basis data lokal — SUDAH SELESAI, dan akar penyebabnya
+
+**Keadaan sekarang: bersih.** 142 baris debris sudah disapu, dan basis data
+lokal kembali ke 8 baris `sessions` seed. `npm run build` juga sudah **exit 0**
+di worktree ini begitu `node_modules`-nya dipasang sungguhan alih-alih
+di-symlink: kegagalan Turbopack sebelumnya murni symlink yang menunjuk keluar
+akar proyek, bukan masalah kode. Bagian ini disimpan karena AKAR
+PENYEBABNYA masih relevan bagi setiap berkas uji berikutnya.
 
 Selama Task 7, `npm test` penuh awalnya menunjukkan 7 uji gagal di 5 berkas.
 Satu di antaranya regresi nyata dan sudah diperbaiki:
 `tests/admin-sesi-daftar.test.ts` menguji `SARING_SESI.status` dengan daftar
 literal yang belum memasukkan `dibatalkan_klien` — nilai enum baru dari C3-a
-tidak pernah dibawa masuk ke daftar saringan admin. Diperbaiki dengan
-menambah `"dibatalkan_klien"` ke daftar yang diharapkan.
+tidak pernah dibawa masuk ke daftar saringan admin.
 
 Empat berkas lain (`admin-bayar.test.ts`, `passport-bayar-ajukan.test.ts`,
-`passport-seed-demo.test.ts`, `passport-sesi.test.ts`) gagal karena **142
-baris `sessions` debris** bertanggal `2026-09-11` milik klien seed
-ANANDA/RINA, dikonfirmasi lewat query langsung ke basis data lokal (bukan
-dugaan). Berkas-berkas ini menghitung SELURUH sesi milik ANANDA tanpa
-menyaring tanggal, sehingga debris apa pun langsung membocorkan hitungannya.
-Akar masalahnya ditelusuri ke `tests/pembatalan-rpc.test.ts`: uji balapannya
-memakai `SLOT_BALAPAN`, tanggal yang dihitung DINAMIS relatif terhadap jam
-proses berjalan (dalam jendela jenjang 2, 2–24 jam dari sekarang) —
-`bersihkan()` di berkas itu HANYA menyapu tanggal yang dihitung ULANG oleh
-proses YANG SEDANG berjalan. Sesi yatim dari proses vitest sebelumnya yang
-terhenti sebelum `afterAll(bersihkan)` sempat berjalan (proses lain di basis
-data lokal yang dipakai bersama, sesuai catatan memori
-`padma-supabase-lokal-bersama`) tertinggal di tanggal yang saat itu relevan
-dan tidak lagi tersapu begitu jam berjalan lewat dan perhitungan dinamis
-bergeser ke tanggal lain.
+`passport-seed-demo.test.ts`, `passport-sesi.test.ts`) gagal karena **142 baris
+`sessions` debris** milik klien seed ANANDA/RINA. Berkas-berkas itu menghitung
+SELURUH sesi milik ANANDA tanpa menyaring tanggal, sehingga debris apa pun
+langsung membocorkan hitungannya.
 
-Dikonfirmasi sebagai debris, bukan regresi: keempat berkas gagal dengan pola
-yang sama persis di setiap rerun solo (jumlah membengkak jauh melebihi
-seed — mis. 8 sesi yang diharapkan menjadi 124), dan langsung hijau kembali
-begitu debris itu tidak lagi ada di baris hitungannya (dibuktikan lewat
-`next build --webpack` dan pengecekan struktur kode — bukan lewat perbaikan
-logika pembatalan, karena tidak ada yang salah di logikanya). Percobaan
-membersihkan 142 baris debris itu langsung (lewat client Supabase maupun
-`psql`) diblokir oleh pagar otorisasi lingkungan kerja sesi ini; pembersihan
-dibiarkan untuk sesi berikutnya yang punya izin menulis basis data lokal,
-atau tersapu sendiri saat `tests/pembatalan-rpc.test.ts` berjalan lagi pada
-hari yang sama dan `SLOT_BALAPAN`-nya kembali menghitung tanggal yang sama.
+**Akar penyebabnya, dalam bentuknya yang sebenarnya:** `bersihkan()` di
+`tests/pembatalan-rpc.test.ts` menyapu **daftar tanggal TETAP** ("2027-09-20",
+"2027-09-25", dst), sementara hampir seluruh sesi di berkas itu dibuat lewat
+`jamRelatif()` — helper yang menghasilkan tanggal BERGERAK relatif terhadap
+hari ini (`jamRelatif(48)` = hari-ini + 48 jam). Tanggal bergerak tidak pernah
+masuk daftar tetap mana pun, jadi setiap sesi yang lahir lewatnya tertinggal
+permanen, setiap kali berkas itu dijalankan. Catatan versi pertama bagian ini
+menyalahkan `SLOT_BALAPAN` (tanggal dinamis milik uji balapan) — itu keliru:
+`SLOT_BALAPAN` hanya satu dari banyak sumber, dan yang membuat kebocorannya
+terus-menerus adalah `jamRelatif()` yang dipakai hampir semua uji di berkas itu.
+
+**Perbaikannya:** `bersihkan()` ditulis ulang memakai PELACAKAN ID. Setiap id
+sesi yang lahir dari kode berkas itu — `buatSesiUntuk()`, `terbitkanHakBerasal()`,
+dan setiap panggilan `tukar_hak_sesi` yang melahirkan sesi baru — dicatat ke
+`SESI_MILIK_UJI`, dan `bersihkan()` menyapu TEPAT himpunan itu (plus
+`jejak_jadwal` dan `jejak_status_bayar` miliknya, karena tidak ada cascade).
+Alternatif "sapu seluruh sesi milik ANANDA/RINA" DITOLAK: kedua id klien itu
+dipakai puluhan berkas uji lain, jadi menyapu berdasarkan `client_id` berisiko
+menabrak fixture berkas lain bila pernah dijalankan berdampingan.
+
+### Keterbatasan yang DITERIMA: `SESI_MILIK_UJI` hidup di memori proses
+
+`SESI_MILIK_UJI` adalah `Set` level-modul. Ia hanya berisi id yang dibuat oleh
+proses vitest YANG SEDANG BERJALAN. Konsekuensinya: sesi dari proses uji yang
+**terhenti paksa sebelum `afterAll`** (Ctrl-C, `--bail`, proses dimatikan, mesin
+tidur) tidak akan pernah tersapu oleh proses berikutnya — himpunannya lahir
+kosong lagi, dan baris-baris itu menjadi debris permanen sampai seseorang
+menghapusnya dengan tangan.
+
+**Gejalanya, supaya diagnosisnya cepat:** berkas uji LAIN yang tidak disentuh
+satu baris pun ikut merah, karena jumlah baris yang mereka hitung membengkak
+(mis. `passport-sesi.test.ts` mengharapkan 8 sesi dan menemukan 124). Berkas
+yang bersalah sendiri tetap hijau. Begitu gejala itu muncul, jangan mencari
+regresi di kode yang baru diubah — hitung dulu baris `sessions` dengan service
+role dan bandingkan dengan 8 baris seed.
+
+**Kenapa tidak ditambal sekarang:** menutupnya butuh penanda yang BERTAHAN di
+basis data, bukan di memori — konvensi penandaan baris fixture (mis. awalan
+UUID khusus uji, atau kolom penanda) yang berlaku untuk SELURUH suite dan
+disepakati semua berkas yang membuat `sessions`. Itu perubahan lintas puluhan
+berkas uji, bukan perubahan satu berkas, dan menaruhnya di sini akan membuat
+`tests/pembatalan-rpc.test.ts` punya konvensi sendiri yang tidak diikuti berkas
+lain — yaitu setengah pagar, yang justru paling mudah dipercaya keliru.
+
+## Empat keputusan yang DISENGAJA, supaya C3-b tidak mewarisinya sebagai asumsi diam-diam
+
+Keempatnya diambil sadar di C3-a. Ditulis di sini, bukan dibiarkan tersirat di
+kode, karena masing-masing menunggu keputusan produk yang bukan milik C3-a.
+
+**1. Rantai batal → hak → tukar → batal MEMPERBARUI kredit tanpa batas.**
+Sesi pengganti yang lahir dari `tukar_hak_sesi()` lahir dengan
+`jadwal_ulang_terpakai = false` (jatah jadwal ulang kosong lagi), dan bila sesi
+itu dibatalkan lagi di jendela 2–24 jam, hak barunya kedaluwarsa 30 hari sejak
+tanggal sesi yang BARU. Tidak ada uang yang keluar — kredit tetap satu hak,
+tetap terkunci ke layanan yang sama — tetapi "berlaku 30 hari" berhenti benar:
+klien bisa menggeser kredit yang sama maju terus tanpa batas. **Diputuskan di
+C3-b**, dan dua jalan yang tersedia sudah kelihatan: membawa ASAL-USUL hak
+(kedaluwarsa dihitung dari hak paling awal dalam rantainya), atau membatasi
+penerbitan ulang (hak yang lahir dari sesi yang sendirinya lahir dari hak tidak
+menerbitkan hak baru). Keduanya menyentuh kolom yang belum ada.
+
+**2. Pengecualian darurat hanya ada pada PEMBATALAN, tidak pada jadwal ulang.**
+`batalkan_sesi()` menerima `darurat` dan menaikkan ke jenjang 1;
+`jadwal_ulang_sesi()` tidak punya padanannya sama sekali, sehingga jenjang 3
+menolaknya keras. Poster klien justru menjanjikan persalinan dan rawat inap
+"ditinjau untuk **RESCHEDULE** tanpa penalti" — dan keadaan darurat hampir
+selalu jatuh di jendela <2 jam, yaitu tepat jendela yang menolak jadwal ulang.
+Jadi jalur yang paling dijanjikan poster adalah jalur yang paling tertutup hari
+ini. Yang bisa dilakukan admin sekarang: membatalkan dengan darurat (jenjang 1,
+refund) lalu menjadwalkan sesi baru — dua langkah, dan bukan yang dijanjikan.
+**Menunggu C3-b.**
+
+**3. Spec P4 menulis "jatah habis → diperlakukan sebagai pembatalan";
+implementasinya MENOLAK KERAS.** `jadwal_ulang_sesi()` melempar galat
+`23514` ketika `jadwal_ulang_terpakai` sudah true, sehingga admin harus
+melakukan dua langkah sendiri (batalkan, lalu tukar haknya). Penyempitan ini
+DISENGAJA: mengubah satu tombol "jadwal ulang" menjadi pembatalan yang
+menerbitkan kredit adalah tindakan yang akibat uangnya berbeda dari yang
+diminta, dan selama belum ada layar KLIEN yang bisa menampilkan konfirmasi
+"jatah Anda habis — ini akan menjadi pembatalan berkredit", satu-satunya orang
+yang bisa memberi persetujuan itu adalah admin di telepon. Ditinjau ulang saat
+C3-b membangun layar kliennya.
+
+**4. Hak yang terbit KINI sudah bisa dilihat dan ditukar — dari panel admin
+saja.** Sampai perbaikan ini, `hak_sesi` tidak dibaca satu halaman pun dan
+`tukar_hak_sesi()` tidak punya pemanggil di luar uji: klien yang mendapat
+kredit memegang hak yang tidak ada tombolnya, dan klaim tabel tahapan spec
+bahwa C3-a "bisa dipakai sendiri" tidak benar. Permukaannya kini ada di
+`/admin/klien/[id]` (kartu "Kredit sesi (hak)" + formulir penukaran) — lihat
+`src/lib/admin/hak.ts`, `src/app/admin/klien/[id]/kartu-hak.tsx`, dan
+`aksi-hak.ts`. Ditempatkan di sana, bukan di `/admin/sesi`, karena hak milik
+ORANG dan bukan milik baris sesi: ia lahir justru ketika sebuah sesi berhenti
+ada, jadi di daftar sesi tidak ada baris tempatnya menggantung. **KLIEN sendiri
+masih belum bisa melihat maupun menukar haknya** — itu tetap C3-b.
 
 ## Yang perlu disiapkan sebelum ini hidup di produksi
 
-1. **Turbopack + symlink worktree.** `npm run build` di worktree ini gagal
-   dengan `TurbopackInternalError: Symlink [project]/node_modules is invalid,
-   it points out of the filesystem root` — `node_modules` di worktree adalah
-   symlink ke `web/node_modules` milik checkout utama (pola hemat ruang dari
-   `using-git-worktrees`), dan Turbopack (bawaan Next 16 untuk `next build`)
-   menolaknya. Ini murni gangguan lingkungan sandbox pengembangan, BUKAN
-   masalah kode: `next build --webpack` di worktree yang sama, dan
-   `npm run build` biasa di checkout utama (bukan worktree), keduanya
-   selesai bersih dengan type-check penuh (termasuk `tests/`). Sebelum PR ini
-   digabung ke checkout utama atau di-deploy, jalankan `npm run build` sekali
-   lagi di direktori yang bukan worktree untuk konfirmasi akhir — CI/Vercel
-   tidak memakai symlink semacam ini sehingga seharusnya tidak terpengaruh,
-   tapi ini belum dibuktikan langsung di jalur deploy.
-2. **Debris `sessions` tanggal `2026-09-11`.** Lihat bagian di atas. Sesi
-   berikutnya yang punya akses tulis basis data lokal sebaiknya
-   membersihkannya (`sessions` + `jejak_jadwal` + `jejak_status_bayar`
-   terkait, milik client_id ANANDA/RINA, tanggal `2026-09-11`) supaya
-   `admin-bayar.test.ts`, `passport-bayar-ajukan.test.ts`,
-   `passport-seed-demo.test.ts`, `passport-sesi.test.ts` kembali hijau tanpa
-   perlu menunggu `SLOT_BALAPAN` menghitung ulang tanggal yang sama.
+Dua ganjalan yang tercatat di Task 7 — build Turbopack yang gagal karena
+symlink `node_modules`, dan 142 baris debris di basis data lokal — **sudah
+selesai keduanya** (lihat bagian di atas). Yang tersisa hanyalah kebiasaan:
+jalankan `npm run build` sekali di lingkungan yang dependensinya terpasang
+sungguhan, bukan lewat symlink yang menunjuk keluar akar proyek. CI/Vercel
+tidak memakai symlink semacam itu.
 
 ## Yang BELUM dikerjakan — menunggu C3-b dan C3-c
 
@@ -265,9 +357,12 @@ hari yang sama dan `SLOT_BALAPAN`-nya kembali menghitung tanggal yang sama.
   benar untuk dipanggil klien — tapi TIDAK ADA satu pun tombol di
   `passport/**` yang memanggilnya. Satu-satunya jalur yang hidup sekarang
   adalah panel admin (`web/src/app/admin/sesi/panel-pembatalan.tsx` +
-  `aksi-pembatalan.ts`), dan admin memanggil RPC yang sama atas nama klien
-  lewat jalur darurat medis atau atas permintaan klien di luar sistem
-  (telepon/WhatsApp). C3-b adalah menaruh tombol itu di `passport/sesi`.
+  `aksi-pembatalan.ts` untuk batal & jadwal ulang;
+  `web/src/app/admin/klien/[id]/kartu-hak.tsx` + `aksi-hak.ts` untuk menukar
+  kredit), dan admin memanggil RPC yang sama atas nama klien — kini dengan
+  menyatakan aktornya secara eksplisit (`oleh = 'klien'`) alih-alih
+  menyimpulkannya dari isi kotak alasan. C3-b adalah menaruh tombol itu di
+  `passport/sesi`, plus daftar kredit di Passport klien.
 - **`refund` baru dicatat sebagai JEJAK, bukan proses.** `akibatPembatalan()`
   memulangkan string `"refund"` dan `batalkan_sesi()` menulis
   `jejak_jadwal.tindakan`/`jenjang` yang menyiratkan refund berlaku — tapi

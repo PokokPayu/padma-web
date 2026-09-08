@@ -10,7 +10,6 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ringkasanPembatalan } from "@/lib/admin/pembatalan";
-import { jamDariDb } from "@/lib/jadwal/jam";
 
 const akar = path.resolve(__dirname, "..");
 
