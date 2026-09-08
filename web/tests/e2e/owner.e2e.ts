@@ -479,6 +479,28 @@ async function main() {
       // atas build produksi dan salah menuduh baris barunya tidak lahir.
       await page.getByText(/tersimpan sebagai baris baru/).waitFor({ timeout: 10_000 });
 
+      // Temuan I2 (review menyeluruh cabang panel-owner): `form-tarif.tsx`
+      // mencetak "Riwayat di bawah ikut bertambah" pada baris ini, tapi tidak
+      // satu pun pemeriksaan sebelumnya membuktikannya DI LAYAR — hanya di
+      // basis data (`dua`/`lamaUtuh`/`baruBenar` di bawah). `tetapkanTarif`
+      // sebelumnya cuma me-revalidate `/owner/tarif`, `/owner/rekap`, dan
+      // `/owner` — bukan rute detail `/owner/tarif/[variantId]` yang sedang
+      // dibuka halaman ini, jadi tanpa `revalidatePath` tambahan itu, halaman
+      // ini (masih di tab yang sama, TANPA reload penuh) akan tetap
+      // menampilkan HANYA tarif lama sesudah simpan — router cache Next
+      // tidak pernah tahu rute ini butuh disegarkan.
+      const sesudahSimpan = await teksTerlihat(page);
+      const riwayatBertambahDiLayar =
+        sesudahSimpan.includes(HARGA_LAMA.toLocaleString("id-ID")) &&
+        sesudahSimpan.includes(HONOR_LAMA.toLocaleString("id-ID")) &&
+        sesudahSimpan.includes(HARGA_BARU.toLocaleString("id-ID")) &&
+        sesudahSimpan.includes(HONOR_BARU.toLocaleString("id-ID"));
+      catat(
+        "3b. sesudah simpan, halaman detail (TANPA reload) menampilkan tarif LAMA dan BARU sekaligus — riwayat di layar memang bertambah",
+        riwayatBertambahDiLayar,
+        `terlihat: ${sesudahSimpan.slice(0, 400)}`,
+      );
+
       const { data: barisTarif } = await admin
         .from("variant_rates")
         .select("harga_klien, honor_mitra, berlaku_sejak")

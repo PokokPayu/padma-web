@@ -129,6 +129,7 @@ export async function tetapkanTarif(formData: FormData): Promise<Berhasil | Gaga
   if ((data ?? []).length === 0) return { ok: false, pesan: PESAN.tidakTersimpan };
 
   revalidatePath("/owner/tarif");
+  revalidatePath(`/owner/tarif/${variantId}`);
   revalidatePath("/owner/rekap");
   revalidatePath("/owner");
   return { ok: true };

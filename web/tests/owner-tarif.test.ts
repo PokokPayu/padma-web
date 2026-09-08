@@ -412,7 +412,7 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
         mulai: geserHari(HARI_INI, 30),
       }),
     );
-    for (const p of ["/owner/tarif", "/owner/rekap", "/owner"]) {
+    for (const p of ["/owner/tarif", `/owner/tarif/${VARIAN_BARU}`, "/owner/rekap", "/owner"]) {
       expect(jejak.revalidate, `lupa merevalidasi ${p}`).toContain(p);
     }
   });

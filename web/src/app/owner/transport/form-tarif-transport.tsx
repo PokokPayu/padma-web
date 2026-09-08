@@ -37,6 +37,13 @@ export function FormTarifTransport({
 }) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
+  // `sukses`, bukan `terbuka`/`selesai`: panel geser ini TETAP terbuka sesudah
+  // simpan (owner boleh langsung menetapkan jenjang berikutnya), jadi
+  // formulirnya sendiri harus tetap ada di layar — pola `FormTarif`
+  // (`owner/tarif/form-tarif.tsx`), bukan pola `FormTarifKhusus` di berkas ini
+  // yang MENGGANTI seluruh formulir dengan paragraf karena sesi >20 km hanya
+  // bisa ditetapkan sekali dan lenyap dari daftar sesudahnya.
+  const [sukses, setSukses] = useState(false);
 
   return (
     <form
@@ -45,7 +52,9 @@ export function FormTarifTransport({
           const r = await tetapkanTarifTransport(fd);
           if (r.ok) {
             setPesan(null);
+            setSukses(true);
           } else {
+            setSukses(false);
             setPesan(r.pesan);
           }
         })
@@ -111,6 +120,13 @@ export function FormTarifTransport({
       </p>
 
       {pesan && <p className="text-[12px] font-semibold text-clay">{pesan}</p>}
+
+      {sukses && (
+        <p className="text-[12px] font-semibold text-leaf">
+          Tarif baru tersimpan sebagai baris baru bertanggal berlaku. Riwayat
+          jenjang ini ikut bertambah di tabel.
+        </p>
+      )}
 
       <span className="flex gap-2">
         <button type="submit" disabled={pending} className={KELAS_TOMBOL_UTAMA}>

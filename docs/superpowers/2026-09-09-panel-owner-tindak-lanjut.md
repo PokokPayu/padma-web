@@ -517,3 +517,149 @@ mendahului perbaikan ini: **dua regresi nyata lolos dari sepuluh review per-tuga
 tertangkap saat `npm test` PENUH dijalankan untuk pertama kalinya** — itulah sebabnya seluruh
 narasi "Perhatian mendesak" dan baris tabel utang di atas dipertahankan apa adanya, bukan
 dihapus, meski keduanya kini sudah ditutup.
+
+---
+
+## Gelombang perbaikan kedua — dua Important dari REVIEW MENYELURUH (2026-09-09)
+
+**Laporan lengkap:**
+`.superpowers/sdd/2026-09-09-padma-panel-owner/fix-wave-2-report.md`
+
+Sesudah gelombang penutup di atas mendarat, satu review MENYELURUH cabang `panel-owner`
+(bukan lagi per-tugas) memberi verdict **SIAP DENGAN SYARAT: nol Critical, dua Important**.
+Ini bukan pengulangan pelajaran suite-penuh di atas — kedua Important ini punya bentuk yang
+BERBEDA dan LEBIH SULIT ditangkap: keduanya lahir dari **gabungan dua tugas yang masing-masing
+benar sendiri-sendiri**, jadi tidak satu pun dari sepuluh review per-tugas (yang masing-masing
+hanya melihat diff tugasnya sendiri) *bisa* melihatnya — bukan sekadar tidak melihatnya.
+
+### I1 — `FormTarifTransport` kehilangan sinyal suksesnya
+
+`web/src/app/owner/transport/form-tarif-transport.tsx`. Tugas 7 (formulir transport pindah ke
+panel geser) membuang state `terbuka` DENGAN BENAR — sebelum tugas itu, sukses menjalankan
+`setTerbuka(false)` dan formulir mengatup kembali jadi tombol, dan itulah satu-satunya sinyal
+suksesnya. Sesudah tugas itu formulir hidup permanen di dalam `PanelGeser`, sehingga
+"mengatup" bukan lagi hal yang bisa terjadi — tapi cabang suksesnya tidak pernah diganti
+sesuatu yang lain: ia cuma `setPesan(null)`. Owner menekan "Simpan tarif", panel tetap
+terbuka, medan tetap berisi angka lama, dan tidak ada satu kata pun di layar yang bilang
+tarifnya tersimpan (tabel di belakang memang tersegarkan, tapi tertutup overlay
+`bg-black/30`). Tidak satu pun review Tugas 7 bisa menangkap ini sendirian — brief-nya benar
+tentang panel geser, dan hilangnya sinyal sukses hanya terlihat bila dibandingkan dengan
+KEADAAN SEBELUM tugas itu berjalan.
+
+**Perbaikan:** disejajarkan ke pola `FormTarif` (`owner/tarif/form-tarif.tsx`) — state
+`sukses` boolean + paragraf `text-leaf` yang muncul BERDAMPINGAN dengan formulir (bukan
+menggantinya). Dipilih ketimbang pola `FormTarifKhusus` (state `selesai`, MENGGANTI seluruh
+formulir dengan paragraf) karena alasan struktural: `FormTarifKhusus` boleh mengganti
+formulirnya karena sesi >20 km hanya bisa ditetapkan SEKALI dan lenyap dari daftar sesudahnya
+— tidak ada alasan menjaga formulir tetap ada. `FormTarifTransport` sebaliknya INSERT-ONLY
+persis seperti `FormTarif`: owner boleh langsung menetapkan tarif jenjang berikutnya di panel
+yang sama, jadi formulirnya harus tetap hidup di layar sesudah sukses. Teks suksesnya
+menyebut kenyataan yang benar untuk transport (baris baru bertanggal berlaku, bukan
+penimpaan), bukan disalin kata demi kata dari `FormTarif`.
+
+Uji baru: `tests/owner-transport.test.ts` — "FormTarifTransport punya sinyal sukses, dan
+tidak dirender sebelum ada yang tersimpan" — memeriksa bentuk sumbernya (state `sukses`,
+`setSukses(true)`, teks sukses menyebut "baris baru") DAN membuktikan `renderToStaticMarkup`
+dari state awal (belum ada aksi yang jalan) tidak pernah memuat teks sukses itu.
+
+### I2 — `tetapkanTarif` tidak menyegarkan rute detail yang lahir dari tugas lain
+
+`web/src/app/owner/tarif/aksi.ts` (fungsi `tetapkanTarif`). Aksi ini menyegarkan
+`/owner/tarif`, `/owner/rekap`, dan `/owner` — tiga rute yang sudah ada saat berkas action ini
+ditulis. Rute detail `/owner/tarif/[variantId]` lahir BELAKANGAN, di tugas lain, dan tidak ada
+brief yang menyambungkan keduanya: brief tugas action tidak tahu rute detail akan lahir; brief
+tugas rute detail tidak berwenang menyentuh berkas action milik tugas sebelumnya. Konvensi
+repo (`admin/klien/aksi.ts`, `admin/materi/aksi.ts`) justru selalu menyegarkan induk DAN anak
+dinamisnya sekaligus — celah ini adalah satu-satunya tempat di seluruh rencana panel owner
+yang menyimpang dari konvensi itu, dan hanya kelihatan bila membaca action DAN halaman detail
+BERSAMAAN.
+
+Ini lebih dari kelalaian gaya: `form-tarif.tsx` mencetak klaim di layar — *"Tarif baru
+tersimpan sebagai baris baru. Riwayat di bawah ikut bertambah."* — dan sebelum perbaikan ini
+tidak satu pun uji membuktikan riwayat di layar (bukan di database) memang bertambah sesudah
+simpan TANPA reload penuh. Router cache Next bisa saja menahan halaman detail tetap
+menampilkan tarif lama saja sesudah aksi sukses, persis karena `revalidatePath` untuk rute itu
+tidak pernah dipanggil — dan E2E pemeriksaan 3 sebelumnya menunggu teks sukses lalu langsung
+membaca BASIS DATA, melewati layar sama sekali.
+
+**Perbaikan:** `revalidatePath(\`/owner/tarif/${variantId}\`)` ditambahkan mengikuti bentuk
+`admin/klien/aksi.ts`/`admin/materi/aksi.ts` persis (induk lalu anak dinamis). Uji baru:
+`tests/owner-tarif.test.ts` — "menyegarkan rekap & beranda owner, bukan hanya halaman
+tarifnya" diperluas memeriksa rute detail ikut ke daftar `jejak.revalidate`. **Celah
+buktinya ikut ditutup**: `tests/e2e/owner.e2e.ts` pemeriksaan 3 sekarang punya pemeriksaan
+tambahan `3b.` — sesudah menunggu teks sukses, membaca teks TERLIHAT halaman (tab yang sama,
+TANPA reload) dan menegaskan tarif LAMA dan BARU (empat nominal) sama-sama tampak. Assertion
+basis data yang sudah ada (`dua`, `lamaUtuh`, `baruBenar`) TIDAK diubah — hanya ditambah.
+
+### Kenapa sepuluh review per-tugas melewatkan keduanya
+
+Pelajaran ini setara nilainya dengan pelajaran "suite penuh menemukan dua regresi" di gelombang
+pertama, tapi bentuknya berbeda dan layak dicatat terpisah:
+
+- Regresi gelombang pertama (README, helper test) tertangkap `npm test` PENUH karena
+  keduanya adalah kegagalan MEKANIS — assertion yang benar-benar merah, terlihat begitu
+  dijalankan bersama, di mana pun sumbernya.
+- I1 dan I2 TIDAK merah di satu pun uji otomatis yang ada sebelum gelombang ini — keduanya
+  cacat SEMANTIK (sinyal sukses hilang; rute yang seharusnya disegarkan tidak disegarkan) yang
+  lolos karena masing-masing setengah dari cerita benar sendirian: Tugas 7 benar tentang panel
+  geser; Tugas action benar tentang tiga rute yang ada SAAT itu ditulis. Review per-tugas
+  membaca diff SATU tugas terhadap HEAD sebelumnya — tidak satu pun dari sepuluh review itu
+  pernah diminta membandingkan Tugas 7 dengan KEADAAN SEBELUM cabang ini dimulai (untuk I1),
+  atau membaca berkas action bersama halaman detail yang lahir di tugas lain (untuk I2).
+  Satu-satunya cara menangkap kelas cacat ini adalah review yang membaca CABANG UTUH sebagai
+  satu kesatuan — persis yang dilakukan review menyeluruh ini.
+
+**Kesimpulan untuk rencana multi-tugas berikutnya:** suite penuh (`npm test`) menjaga terhadap
+regresi MEKANIS lintas-tugas; review menyeluruh di ujung cabang menjaga terhadap regresi
+SEMANTIK lintas-tugas yang tidak pernah memicu satu assertion pun sampai seseorang membaca
+gabungan dua tugas berdampingan. Keduanya perlu, dan tidak saling menggantikan.
+
+### Verifikasi gelombang kedua
+
+Lihat `.superpowers/sdd/2026-09-09-padma-panel-owner/fix-wave-2-report.md` untuk keluaran
+lengkap `npm test`, `npm run test:e2e:owner`, `npm run build`, `tsc --noEmit`, dan
+`npm run lint` sesudah I1/I2 diperbaiki.
+
+---
+
+## Tabel utang — tambahan gelombang kedua (minor, dicatat tapi ditunda)
+
+Ditemukan review menyeluruh yang sama yang menutup I1/I2. Reviewer menilai keenamnya sah
+ditunda — tidak satu pun mengancam benar/salahnya nominal atau keamanan — tapi tidak boleh
+dibiarkan tak tercatat.
+
+| # | Utang | Kenapa ditunda |
+|---|---|---|
+| 6 | Kartu sesi >20 km di `/owner/transport` dipaginasi 25/halaman, padahal alasan deviasi D2 (kartu jauh lebih tinggi daripada baris tabel, karena itu `/owner/rekap` memakai 8/halaman) berlaku SAMA PERSIS untuk kartu sesi transport — belum pernah disesuaikan. | Keputusan visual (ukuran halaman) yang sama seperti D2 sendiri — butuh persetujuan pemilik repo sebelum diubah, bukan cacat yang aman diperbaiki sepintas dalam gelombang penutup bug. |
+| 7 | `transport/page.tsx` merender "Menampilkan N dari M" DI ATAS cabang kosong, jadi halaman tanpa sesi menunggu berbunyi "Menampilkan 0 dari 0" lalu "Tidak ada sesi >20 km…" (dua kalimat yang bersaing menjelaskan hal yang sama); dan `?hal=9` (halaman di luar jangkauan) merender daftar kosong tanpa penjelasan apa pun — `/owner/tarif` dan `/owner/rekap` keduanya sudah menjelaskan diri untuk kasus ini, `/owner/transport` belum. | Perbaikan kecil tapi menyentuh urutan render & kondisi kosong yang sudah "bekerja" (tidak crash, tidak salah data) — ditunda demi tidak memperbesar gelombang perbaikan bug dengan poles UI yang tidak diminta review. |
+| 8 | Empat tempat memotong halaman (paginasi) di JavaScript dengan ejaan sedikit berbeda satu sama lain: `lib/owner/daftar-tarif.ts`, `lib/owner/daftar-rekap.ts`, `app/owner/transport/page.tsx`, dan `lib/admin/tagihan.ts` yang sudah ada sebelum rencana ini. Sebuah `potongHalaman(baris, hal, perHal)` bersama di `_shell/panel/daftar.ts` akan buta peran (admin/owner) dan merapikan keempatnya sekaligus. | Refactor lintas-modul yang menyentuh berkas admin DAN owner sekaligus — di luar bobot gelombang perbaikan bug ini; layak jadi tugas tersendiri dengan review sendiri. |
+| 9 | `tests/owner-rekap-halaman.test.ts` — uji "cari menyaring PEKAN" lebih longgar daripada padanannya di `owner-tarif.test.ts`: ia tetap HIJAU bila halaman diam-diam membuang parameter `cari` sepenuhnya, karena hanya menegaskan nama mitra yang dicari ADA di hasil, tidak pernah menegaskan nama yang TIDAK cocok memang HILANG. Padanan di `owner-tarif.test.ts` menegaskan keduanya. | Memperketat assertion ini di luar cakupan I1/I2 dan berisiko menyentuh berkas uji rekap yang tidak diminta review — dicatat sebagai utang test-coverage murni, aman ditunda karena perilaku produksinya sendiri sudah benar (dibuktikan tidak langsung oleh uji lain di berkas yang sama). |
+| 10 | Kata-kata tautan kembali di `/owner/tarif/[variantId]` ("‹ Rate Card") menyimpang dari konvensi `/admin` ("‹ Kembali ke Layanan") — pola "‹ Kembali ke X" tidak diikuti di sini. | Kosmetik murni, tidak mengubah perilaku — ditunda sebagai poles teks yang butuh keputusan penamaan (bahasa Indonesia konsisten), bukan perbaikan bug. |
+| 11 | `/owner/tarif` kehilangan spanduk "N varian aktif belum punya tarif" yang ada di rencana sebelumnya; chip `menuntut` yang menggantikannya tidak membawa angka, jadi owner harus mengklik chip itu dulu untuk tahu ada berapa varian yang menuntut tarif. | Regresi kegunaan kecil dari perubahan D3 (rate card jadi daftar datar) — perbaikannya butuh keputusan desain (di mana angka itu ditaruh di layout baru), bukan sekadar tambal kode. |
+
+---
+
+## Catatan proses — gelombang kedua
+
+Pelajaran gelombang pertama: **suite penuh (`npm test`) menangkap regresi lintas-tugas yang
+tidak tertangkap review per-tugas, karena regresinya MEKANIS** (assertion yang benar-benar
+merah begitu dijalankan bersama).
+
+Pelajaran gelombang kedua, dan levelnya SETARA — bukan pengulangan: **review MENYELURUH di
+ujung cabang menangkap dua Important yang sepuluh review per-tugas tidak mungkin lihat, karena
+regresinya SEMANTIK** — kehilangan sinyal sukses (I1) dan rute yang seharusnya disegarkan tapi
+tidak (I2) — dan keduanya lahir dari GABUNGAN dua tugas yang masing-masing benar terhadap diff
+sendirian. Review per-tugas hanya melihat diff tugasnya sendiri terhadap HEAD sebelumnya; tidak
+satu pun brief sepuluh tugas rencana ini meminta pembanding "Tugas X dibandingkan dengan
+KEADAAN SEBELUM cabang dimulai" atau "berkas action ini dibaca bersama halaman detail yang
+lahir tugas lain". Review menyeluruh di ujung cabang, yang membaca seluruh diff sebagai SATU
+kesatuan, adalah satu-satunya titik di seluruh proses yang punya sudut pandang untuk
+menangkap kelas cacat ini.
+
+**Kesimpulan gabungan kedua gelombang, untuk rencana multi-tugas berikutnya:** tiga lapis
+verifikasi menjaga terhadap tiga kelas regresi yang berbeda dan tidak saling menggantikan —
+review per-tugas (cacat lokal dalam satu diff), suite penuh (regresi mekanis lintas-tugas),
+dan review menyeluruh di ujung cabang (regresi semantik lintas-tugas, lahir dari gabungan dua
+tugas yang masing-masing benar sendirian). Melewatkan salah satu lapis bukan berarti lapis
+lain otomatis menutupnya — I1 dan I2 sama sekali tidak memicu satu uji pun sampai review
+menyeluruh ini membacanya.

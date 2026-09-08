@@ -738,6 +738,28 @@ describe("halaman transport (/owner/transport)", () => {
       expect(sumber).not.toMatch(/>\s*Hapus/);
     }
   });
+
+  // Temuan I1 (review menyeluruh cabang panel-owner): Tugas 7 membuang state
+  // `terbuka` yang dulu jadi sinyal sukses `FormTarifTransport` (formulir
+  // mengatup jadi tombol). Panel geser sekarang TETAP terbuka sesudah simpan,
+  // dan sampai temuan ini ditutup cabang suksesnya cuma `setPesan(null)` —
+  // owner menekan "Simpan tarif" dan tidak ada satu kata pun di layar yang
+  // bilang tarifnya tersimpan. `renderToStaticMarkup` selalu memakai state
+  // AWAL (`useState` belum pernah `set`), jadi pemeriksaan ini tidak bisa
+  // memicu suksesnya lewat render — ia memeriksa BENTUK sumbernya, sama
+  // seperti pemeriksaan struktur lain di describe ini.
+  it("FormTarifTransport punya sinyal sukses, dan tidak dirender sebelum ada yang tersimpan", async () => {
+    expect(sumberForm).toMatch(/\[sukses,\s*setSukses\]\s*=\s*useState/);
+    expect(sumberForm).toMatch(/setSukses\(true\)/);
+    // Teks suksesnya harus menyebut kenyataan INSERT-only: baris baru
+    // bertanggal berlaku, bukan penimpaan tarif lama.
+    expect(sumberForm).toMatch(/sukses\s*&&[\s\S]{0,200}tersimpan sebagai baris baru/);
+    // `renderToStaticMarkup` dari halaman biasa (belum ada aksi yang
+    // dijalankan) tidak boleh pernah memuat teks itu — sinyal sukses harus
+    // lahir dari `sukses === true`, bukan tampil bawaan.
+    const markupBelumSimpan = renderToStaticMarkup(await halaman({ ubah: "0_5" }));
+    expect(markupBelumSimpan).not.toContain("tersimpan sebagai baris baru");
+  });
 });
 
 // ---------------------------------------------------------------------------
