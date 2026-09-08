@@ -21,7 +21,25 @@ type Hasil = {
 
 const FASE_PILIHAN: FaseSkrining[] = ["prekonsepsi", "kehamilan", "nifas", "menopause"];
 
-export function Wizard({ nomorWaLink }: { nomorWaLink: string }) {
+export function Wizard({
+  nomorWaLink,
+  rute = "/api/skrining",
+  dalamPassport = false,
+}: {
+  nomorWaLink: string;
+  /**
+   * Rute penyimpan. Corong publik memakai `/api/skrining` (menerbitkan token
+   * klaim); Passport memakai `/api/skrining/akun` (client_id terisi sejak awal,
+   * tanpa token). Wizard-nya SATU — pertanyaan dan penilaiannya harus identik,
+   * dan dua salinan wizard adalah dua kesempatan jawabannya berbeda.
+   */
+  rute?: string;
+  /**
+   * Di dalam Passport, layar hasil hijau TIDAK menawarkan "buat akun" — orang
+   * ini sudah punya akun dan sedang berdiri di dalamnya.
+   */
+  dalamPassport?: boolean;
+}) {
   const [layar, setLayar] = useState<Layar>("intro");
   const [nama, setNama] = useState("");
   const [hp, setHp] = useState("");
@@ -42,7 +60,7 @@ export function Wizard({ nomorWaLink }: { nomorWaLink: string }) {
     const lokal = nilaiSkrining(fase, jawabanFinal);
     let kode: string | null = null;
     try {
-      const res = await fetch("/api/skrining", {
+      const res = await fetch(rute, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ nama, no_hp: hp, fase, jawaban: jawabanFinal }),
@@ -240,11 +258,54 @@ export function Wizard({ nomorWaLink }: { nomorWaLink: string }) {
           </p>
         )}
 
-        <a href={`https://wa.me/${nomorWaLink}?text=${encodeURIComponent(pesanWa)}`}
-          target="_blank" rel="noopener"
-          className="mt-5 block w-full rounded-xl bg-[#1FAF57] py-3.5 font-bold text-white">
-          {hijau ? "Lanjut booking via WhatsApp" : "Beri tahu tim PADMA (opsional)"}
-        </a>
+        {/* HIJAU KE APLIKASI, MERAH KE MANUSIA (spec C1 J5).
+            Sebelum C1-b kedua hasil berakhir di WhatsApp, dan corong ini tidak
+            punya ujung di dalam produk sama sekali. Sekarang hijau menawarkan
+            jalan yang benar-benar berlanjut: akun, lalu memesan.
+
+            Merah TIDAK diubah, dan itu keputusan: yang dibutuhkan orang dengan
+            hasil merah memang bicara dengan tim, bukan formulir pemesanan. */}
+        {hijau && dalamPassport ? (
+          <a
+            href="/passport/ajukan"
+            className="mt-5 block w-full rounded-xl bg-gold py-3.5 font-bold text-night"
+          >
+            Ajukan jadwal sekarang
+          </a>
+        ) : hijau ? (
+          <>
+            <a
+              href="/daftar"
+              className="mt-5 block w-full rounded-xl bg-gold py-3.5 font-bold text-night"
+            >
+              {"Buat akun & pesan layanan"}
+            </a>
+            <p className="mt-2.5 text-[12.5px] text-ink-soft">
+              Sudah punya akun?{" "}
+              <a href="/masuk" className="font-semibold underline underline-offset-2">
+                Masuk
+              </a>{" "}
+              — skrining ini otomatis tersambung ke akun Anda.
+            </p>
+            <a
+              href={`https://wa.me/${nomorWaLink}?text=${encodeURIComponent(pesanWa)}`}
+              target="_blank"
+              rel="noopener"
+              className="mt-3 inline-block text-[12.5px] text-ink-soft underline underline-offset-2"
+            >
+              atau tanya tim dulu via WhatsApp
+            </a>
+          </>
+        ) : (
+          <a
+            href={`https://wa.me/${nomorWaLink}?text=${encodeURIComponent(pesanWa)}`}
+            target="_blank"
+            rel="noopener"
+            className="mt-5 block w-full rounded-xl bg-[#1FAF57] py-3.5 font-bold text-white"
+          >
+            Beri tahu tim PADMA (opsional)
+          </a>
+        )}
 
         <p className="mt-4 text-[11.5px] text-ink-soft">
           Hasil ini adalah pra-skrining, bukan izin medis. Tim PADMA memverifikasi

@@ -237,6 +237,43 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
 
   const koordinat = warisan ?? (await geocodeAlamat(cekAlamat.nilai));
 
+  // SKRINING WAJIB (spec J3). Id-nya TIDAK datang dari formulir — ia dicari di
+  // sini, dari skrining HIJAU milik klien yang belum dipakai pengajuan mana
+  // pun. Menerimanya dari FormData berarti mempercayai peramban menyebut
+  // skrining mana yang menopang pengajuannya, dan satu-satunya yang menahan
+  // penyalahgunaannya tinggal trigger basis data.
+  //
+  // "Belum dipakai" cukup disaring terhadap pengajuan MILIK KLIEN INI:
+  // `guard_booking_skrining` sudah menjamin sebuah skrining hanya bisa
+  // menopang pengajuan pemiliknya sendiri, jadi tidak ada pengajuan orang lain
+  // yang bisa memegangnya.
+  const { data: skriningTerpakai } = await supabase
+    .from("booking_requests")
+    .select("screening_id")
+    .eq("client_id", clientId);
+  const sudahDipakai = new Set(
+    (skriningTerpakai ?? []).map((b) => b.screening_id as string),
+  );
+
+  const { data: skriningHijau } = await supabase
+    .from("screenings")
+    .select("id, created_at")
+    .eq("client_id", clientId)
+    .eq("hasil", "hijau")
+    // Yang TERBARU lebih dulu: bila klien skrining dua kali karena kondisinya
+    // berubah, yang menopang pemesanannya harus jawaban terakhirnya.
+    .order("created_at", { ascending: false });
+
+  const skriningPakai = (skriningHijau ?? []).find((s) => !sudahDipakai.has(s.id as string));
+
+  if (!skriningPakai) {
+    return {
+      ok: false,
+      pesan:
+        "Isi skrining keselamatan dulu sebelum mengajukan jadwal — satu skrining untuk satu pengajuan.",
+    };
+  }
+
   // Insert memakai SESI PENGGUNA, bukan service role: RLS + trigger
   // guard_booking_status menjadi lapis kedua di belakang nilai hardcoded ini.
   // Nilai apa pun yang ikut dikirim browser di FormData diabaikan — hanya
@@ -252,6 +289,7 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
     alamat: cekAlamat.nilai,
     alamat_lat: koordinat?.lat ?? null,
     alamat_lon: koordinat?.lon ?? null,
+    screening_id: skriningPakai.id,
     status: PERMINTAAN_AWAL, // hardcoded; trigger DB menolak nilai lain dari klien
   });
   if (error) return { ok: false, pesan: "Gagal mengirim permintaan." };

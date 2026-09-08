@@ -79,8 +79,10 @@ const MITRA = "33333333-3333-3333-3333-333333333301";
 const PAKET = "22222222-2222-2222-2222-222222222201";
 
 async function bersihkan() {
-  await admin.from("screenings").delete().eq("kode", KODE_SKRINING);
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await admin.from("booking_requests").delete().eq("id", PERMINTAAN_UJI);
+  await admin.from("screenings").delete().eq("kode", KODE_SKRINING);
   await admin.from("sessions").delete().eq("id", SESI_UJI);
   await admin.from("client_packages").delete().eq("id", PAKET_UJI);
   await admin.from("clients").delete().like("padma_id", "PAD-UJI%");
@@ -156,15 +158,26 @@ beforeAll(async () => {
     email: "uji-antrean@padma.test",
     phase_id: "prekonsepsi",
   });
-  await admin.from("screenings").insert({
-    kode: KODE_SKRINING,
-    nama: "Uji Antrean",
-    no_hp: "0812-0000-4444",
-    fase: "prekonsepsi",
-    jawaban: {},
-    hasil: "hijau",
-    status_tindak_lanjut: "baru",
-  });
+  // Dipakai SEKALIGUS sebagai skrining yang menopang PERMINTAAN_UJI di bawah:
+  // menerbitkan skrining kedua lewat skriningHijau() akan menaikkan
+  // `skriningBaru` DUA kali (bukan tepat satu, seperti dituntut assertion di
+  // bawah), karena hitungan itu menghitung SELURUH skrining berstatus 'baru'
+  // tanpa peduli apakah ia menopang pengajuan.
+  const { data: skriningUji, error: eSkrining } = await admin
+    .from("screenings")
+    .insert({
+      kode: KODE_SKRINING,
+      nama: "Uji Antrean",
+      no_hp: "0812-0000-4444",
+      fase: "prekonsepsi",
+      jawaban: {},
+      hasil: "hijau",
+      status_tindak_lanjut: "baru",
+      client_id: KLIEN_UJI,
+    })
+    .select("id")
+    .single<{ id: string }>();
+  if (eSkrining) throw eSkrining;
   const varianSvc = await varianBaku(admin, SVC);
   await admin.from("booking_requests").insert({
     id: PERMINTAAN_UJI,
@@ -175,6 +188,7 @@ beforeAll(async () => {
     preferensi_waktu: "pagi",
     status: "diminta",
     jam_mulai: "09:00",
+    screening_id: skriningUji.id,
   });
   await admin.from("sessions").insert({
     id: SESI_UJI,

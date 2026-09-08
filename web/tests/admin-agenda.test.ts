@@ -49,6 +49,8 @@ async function bersihkan() {
     await admin.from("sessions").delete().eq("id", id);
     await admin.from("jejak_status_bayar").delete().eq("sesi_id", id);
   }
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await admin.from("booking_requests").delete().eq("id", PERMINTAAN_UJI);
   await admin.from("screenings").delete().eq("kode", KODE_SKRINING);
   await admin.from("clients").delete().eq("id", KLIEN_UJI);
@@ -83,15 +85,23 @@ beforeAll(async () => {
     { ...dasarSesi, id: SESI.batalHariIni, tanggal: HARI_INI, status: "dibatalkan_padma" },
     { ...dasarSesi, id: SESI.besok, tanggal: "2027-12-24", status: "terjadwal" },
   ]);
-  await admin.from("screenings").insert({
-    kode: KODE_SKRINING,
-    nama: "Uji Agenda Skrining",
-    no_hp: "0812-0000-8888",
-    fase: "prekonsepsi",
-    jawaban: {},
-    hasil: "hijau",
-    status_tindak_lanjut: "baru",
-  });
+  // Dipakai SEKALIGUS sebagai skrining yang menopang PERMINTAAN_UJI di bawah
+  // (indeks unik: satu skrining hijau untuk tepat satu pengajuan).
+  const { data: skriningUji, error: eSkrining } = await admin
+    .from("screenings")
+    .insert({
+      kode: KODE_SKRINING,
+      nama: "Uji Agenda Skrining",
+      no_hp: "0812-0000-8888",
+      fase: "prekonsepsi",
+      jawaban: {},
+      hasil: "hijau",
+      status_tindak_lanjut: "baru",
+      client_id: KLIEN_UJI,
+    })
+    .select("id")
+    .single<{ id: string }>();
+  if (eSkrining) throw eSkrining;
   await admin.from("booking_requests").insert({
     id: PERMINTAAN_UJI,
     client_id: KLIEN_UJI,
@@ -101,6 +111,7 @@ beforeAll(async () => {
     preferensi_waktu: "pagi",
     status: "diminta",
     jam_mulai: "09:00",
+    screening_id: skriningUji.id,
   });
 });
 

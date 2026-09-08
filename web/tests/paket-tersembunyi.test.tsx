@@ -341,7 +341,7 @@ describe("saklar paket: halaman klien (passport) tidak menyebut paket", () => {
     // Ananda (ANANDA) memegang paket aktif di seed — kalau gerbang bocor,
     // section "Paket Aktif" akan muncul persis di sini.
     const { default: BerandaPassport } = await import("@/app/passport/page");
-    expect(await render(BerandaPassport)).not.toMatch(/paket/i);
+    expect(await render(BerandaPassport, SP())).not.toMatch(/paket/i);
   });
 
   it("halaman /passport/bayar tidak menyebut paket", async () => {

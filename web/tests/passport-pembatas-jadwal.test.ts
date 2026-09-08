@@ -37,6 +37,7 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
 import { varianBaku } from "./helpers/varian";
+import { skriningHijau } from "./helpers/skrining";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -163,8 +164,20 @@ async function bersihkanAnanda() {
   await admin.from("booking_requests").delete().eq("client_id", ANANDA);
 }
 
+/**
+ * Menerbitkan N skrining hijau BARU untuk ANANDA (spec J3, indeks unik: satu
+ * skrining menopang tepat satu pengajuan). Dipakai fixture yang menyisipkan
+ * `booking_requests` LANGSUNG (lewat `admin`/`sesiAnanda`, bukan lewat
+ * `ajukanJadwal` — yang memilih skriningnya sendiri secara otomatis dari
+ * skrining hijau klien yang belum dipakai).
+ */
+async function skriningUntukAnanda(n: number): Promise<string[]> {
+  return Promise.all(Array.from({ length: n }, () => skriningHijau(admin, ANANDA)));
+}
+
 /** Mengisi antrean sampai penuh memakai service role (menembus trigger klien). */
 async function isiAntrean(jumlah: number) {
+  const skriningIds = await skriningUntukAnanda(jumlah);
   const baris = Array.from({ length: jumlah }, (_, i) => ({
     client_id: ANANDA,
     service_id: SVC_YOGA,
@@ -173,6 +186,7 @@ async function isiAntrean(jumlah: number) {
     jam_mulai: "09:00",
     preferensi_waktu: "pagi",
     status: "diminta",
+    screening_id: skriningIds[i],
   }));
   const { error } = await admin.from("booking_requests").insert(baris);
   expect(error).toBeNull();
@@ -198,6 +212,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await bersihkanAnanda();
+  await admin.from("screenings").delete().like("kode", "UJI-%");
   // Layanan dikembalikan aktif supaya berkas test lain (katalog, formulir
   // ajukan) tidak mewarisi katalog yang dipangkas di sini.
   await admin.from("services").update({ aktif: true }).eq("id", SVC_NONAKTIF);
@@ -205,7 +220,16 @@ afterAll(async () => {
 
 beforeEach(async () => {
   ref.sesi = sesiAnanda;
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await bersihkanAnanda();
+  await admin.from("screenings").delete().like("kode", "UJI-%");
+  // `ajukanJadwal()` memilih sendiri skrining hijau BELUM DIPAKAI milik klien
+  // (spec J3). Cadangan kecil ini cukup untuk test yang memanggilnya cukup
+  // SEKALI per test; test yang memanggilnya berkali-kali atau menembak
+  // PostgREST langsung menerbitkan cadangannya sendiri lewat
+  // `skriningUntukAnanda()`.
+  await skriningUntukAnanda(5);
 });
 
 // `vi.stubGlobal` MENIMPA `globalThis.fetch` sepenuhnya — kalau ditimpa dengan
@@ -239,6 +263,10 @@ afterEach(() => {
 
 describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () => {
   it(`50 pengiriman SERENTAK lewat server action hanya menyisakan ${BATAS} baris`, async () => {
+    // `ajukanJadwal()` memilih skriningnya sendiri (auto-select, bukan lewat
+    // formulir) — cadangan pool kecil dari `beforeEach` tidak cukup untuk 50
+    // percobaan serentak, jadi ditambah di sini.
+    await skriningUntukAnanda(60);
     const hasil = await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
         ajukanJadwal(
@@ -269,6 +297,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     // Klien memegang policy INSERT: ia bisa memanggil PostgREST dengan anon key
     // + JWT-nya sendiri. Pembatas yang hanya hidup di action tidak menutup ini.
     await isiAntrean(BATAS);
+    const [screeningId] = await skriningUntukAnanda(1);
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
@@ -277,6 +306,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
       jam_mulai: "09:00",
       preferensi_waktu: "sore",
       status: "diminta",
+      screening_id: screeningId,
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(BATAS);
@@ -287,6 +317,11 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
     // terbuka: klien memegang policy INSERT, jadi ia tidak wajib lewat server
     // action. Pemeriksaan pra-insert di TypeScript tidak ikut menolong di sini
     // — yang menahan hanyalah trigger + kunci advisory per klien.
+    //
+    // Setiap percobaan butuh skriningnya SENDIRI (indeks unik screening_id):
+    // memakai satu skrining untuk 50 baris akan gagal 23505 duluan, sebelum
+    // pembatas antrean sempat diuji sama sekali.
+    const skriningIds = await skriningUntukAnanda(50);
     const hasil = await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
         sesiAnanda.from("booking_requests").insert({
@@ -297,6 +332,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
           jam_mulai: "09:00",
           preferensi_waktu: "pagi",
           status: "diminta",
+          screening_id: skriningIds[i],
         }),
       ),
     );
@@ -334,6 +370,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
 
   it("staf TIDAK ikut terkunci pembatas klien", async () => {
     await isiAntrean(BATAS);
+    const [screeningId] = await skriningUntukAnanda(1);
     const a = await signInAs("admin@padma.test");
     const { error } = await a.from("booking_requests").insert({
       client_id: ANANDA,
@@ -343,6 +380,7 @@ describe("banjir antrean admin — batas permintaan 'menunggu' per klien", () =>
       jam_mulai: "09:00",
       preferensi_waktu: "sore",
       status: "diminta",
+      screening_id: screeningId,
     });
     expect(error).toBeNull();
     expect(await barisAnanda()).toHaveLength(BATAS + 1);
@@ -363,6 +401,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
   });
 
   it("REST LANGSUNG: baris kembar ditolak unique index (23505)", async () => {
+    const [screeningId] = await skriningUntukAnanda(1);
     const baris = {
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
@@ -371,6 +410,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
       jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       status: "diminta",
+      screening_id: screeningId,
     };
     const { error: pertama } = await sesiAnanda.from("booking_requests").insert(baris);
     expect(pertama).toBeNull();
@@ -382,6 +422,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
   it("index dedup hanya mengikat antrean, bukan riwayat", async () => {
     // Permintaan lama yang sudah ditolak tidak boleh menghalangi klien
     // mengajukan hal yang sama lagi.
+    const [screeningLama] = await skriningUntukAnanda(1);
     await admin.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
@@ -390,6 +431,7 @@ describe("dedup — permintaan kembar tidak menggandakan antrean", () => {
       jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       status: "ditolak",
+      screening_id: screeningLama,
     });
     const r = await ajukanJadwal(
       formulir({ layanan: SVC_NUTRISI, varian: VARIAN_NUTRISI, tanggal: TGL_DEPAN, waktu: "pagi" }),
@@ -426,6 +468,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
   });
 
   it("REST LANGSUNG juga ditolak basis data (FK hanya menolak yang tak ada)", async () => {
+    const [screeningId] = await skriningUntukAnanda(1);
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NONAKTIF,
@@ -434,6 +477,7 @@ describe("layanan nonaktif tidak bisa dipesan", () => {
       jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       status: "diminta",
+      screening_id: screeningId,
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(0);
@@ -459,6 +503,7 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
   });
 
   it("REST LANGSUNG juga ditolak basis data", async () => {
+    const [screeningId] = await skriningUntukAnanda(1);
     const { error } = await sesiAnanda.from("booking_requests").insert({
       client_id: ANANDA,
       service_id: SVC_NUTRISI,
@@ -467,6 +512,7 @@ describe("tanggal lampau ditolak (bentuk YYYY-MM-DD saja tidak cukup)", () => {
       jam_mulai: "09:00",
       preferensi_waktu: "pagi",
       status: "diminta",
+      screening_id: screeningId,
     });
     expect(error?.code).toBe("42501");
     expect(await barisAnanda()).toHaveLength(0);

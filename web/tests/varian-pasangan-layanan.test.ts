@@ -172,11 +172,23 @@ describe("backfill varian (pernyataan migrasi, divalidasi lewat rollback)", () =
       // ini saja, lihat komentar pada test sessions di atas.
       await jalankan(`alter table public.booking_requests alter column variant_id drop not null`);
 
+      // Sejak C1-b `booking_requests.screening_id` juga `not null` (indeks
+      // UNIK, satu skrining hijau menopang tepat satu pengajuan) — fixture ini
+      // menyemai skriningnya sendiri lewat SQL mentah, sama seperti seluruh
+      // baris lain di test ini, karena berjalan di dalam transaksi rollback
+      // milik `dalamTransaksiRollback` (bukan lewat klien Supabase).
+      const [skrining] = (await jalankan(
+        `insert into public.screenings (kode, nama, no_hp, fase, jawaban, hasil, flags, client_id)
+         values ($1, 'Fixture Varian', '0800-0000-0000', 'prekonsepsi', '{}'::jsonb, 'hijau', '[]'::jsonb, $2)
+         returning id`,
+        [`UJI-VARIAN-${Date.now().toString(36)}`, klien.id],
+      )) as Array<{ id: string }>;
+
       const [permintaan] = (await jalankan(
         `insert into public.booking_requests
-           (client_id, service_id, variant_id, tanggal, jam_mulai, preferensi_waktu)
-         values ($1, $2, null, current_date, '09:00', 'pagi') returning id`,
-        [klien.id, a.service_id],
+           (client_id, service_id, variant_id, tanggal, jam_mulai, preferensi_waktu, screening_id)
+         values ($1, $2, null, current_date, '09:00', 'pagi', $3) returning id`,
+        [klien.id, a.service_id, skrining.id],
       )) as Array<{ id: string }>;
 
       // Identik dengan jaring pengaman migrasi 20260906160000_varian_wajib.sql

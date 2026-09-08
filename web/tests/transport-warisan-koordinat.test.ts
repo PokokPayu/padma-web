@@ -12,6 +12,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 import { normalkanAlamat } from "@/lib/transport/alamat";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { signInAs } from "./helpers/as-user";
+import { skriningHijau } from "./helpers/skrining";
 
 const admin = createAdminSupabase();
 
@@ -97,7 +98,13 @@ beforeEach(async () => {
     .from("clients")
     .update({ alamat: ALAMAT_PROFIL, alamat_lat: LAT_PIN, alamat_lon: LON_PIN })
     .eq("id", ANANDA);
+  // booking_requests DULU: screening_id (FK RESTRICT) menahan penghapusan
+  // screenings selama masih ditunjuk baris permintaan.
   await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "diminta");
+  await admin.from("screenings").delete().like("kode", "UJI-%");
+  // ajukanJadwal() mencari skrining hijau BELUM DIPAKAI milik klien sendiri
+  // (spec J3) — id-nya tidak pernah datang dari FormData.
+  await skriningHijau(admin, ANANDA);
   await admin
     .from("geocode_cache")
     .delete()
@@ -110,6 +117,7 @@ afterEach(() => {
 
 afterAll(async () => {
   await admin.from("booking_requests").delete().eq("client_id", ANANDA).eq("status", "diminta");
+  await admin.from("screenings").delete().like("kode", "UJI-%");
   await admin
     .from("clients")
     .update({ alamat: profilAsli.alamat, alamat_lat: profilAsli.lat, alamat_lon: profilAsli.lon })

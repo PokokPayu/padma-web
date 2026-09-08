@@ -107,13 +107,49 @@ async function login(browser: Browser, email: string): Promise<BrowserContext> {
   return context;
 }
 
+/** Klien seed yang dipakai skrip ini (Ananda). */
+const KLIEN_UJI = "44444444-4444-4444-4444-444444444401";
+
+/**
+ * Menerbitkan satu skrining HIJAU untuk klien uji, dan memulangkan id-nya.
+ *
+ * WAJIB sejak C1-b (spec J3): setiap pengajuan jadwal berdiri di atas satu
+ * skrining hijau milik pemesannya, dan `/passport/ajukan` menampilkan AJAKAN
+ * skrining — bukan formulir — bila tidak ada. Tanpa langkah ini skenario 5 di
+ * bawah menunggu medan tanggal yang memang tidak dirender.
+ *
+ * Ditulis dengan service role: klien sengaja tidak punya hak INSERT atas
+ * `screenings` (hasil & flags selalu ditentukan server).
+ */
+async function terbitkanSkriningHijau(): Promise<void> {
+  const { error } = await admin.from("screenings").insert({
+    kode: `E2E-PSP-${Date.now().toString(36)}`.toUpperCase(),
+    nama: "Uji E2E Passport",
+    no_hp: "0800-0000-0000",
+    fase: "prekonsepsi",
+    jawaban: {},
+    hasil: "hijau",
+    flags: [],
+    client_id: KLIEN_UJI,
+  });
+  if (error) throw new Error(`fixture skrining gagal: ${error.message}`);
+}
+
 /** Keadaan seed untuk data yang disentuh skrip ini. */
 async function keadaanAwal() {
   await admin.from("sessions").update({ status_bayar: "belum" }).eq("id", SESI_LEPAS);
-  await admin
-    .from("booking_requests")
-    .delete()
-    .eq("tanggal", TANGGAL_UJI);
+  // SELURUH pengajuan klien uji dibuang, bukan hanya yang bertanggal uji.
+  //
+  // Menyaring per tanggal sudah cukup sebelum C1-b, tetapi tidak lagi: sejak
+  // spec J3 sebuah skrining HANGUS begitu dipakai pengajuan mana pun, dan
+  // pengajuan sisa dari run lain — atau dari suite vitest — akan memegang
+  // skrining hijau klien ini sehingga formulirnya tertutup. Gejalanya:
+  // skenario 5 gagal BERSELANG-SELING, yang persis terjadi sebelum baris ini
+  // ditulis.
+  await admin.from("booking_requests").delete().eq("client_id", KLIEN_UJI);
+  // Baru sesudah itu skriningnya bebas dihapus (FK tanpa on delete).
+  await admin.from("screenings").delete().eq("client_id", KLIEN_UJI);
+  await terbitkanSkriningHijau();
 }
 
 async function main() {
@@ -334,6 +370,8 @@ async function main() {
     }
 
     // ---- 5. Ajukan jadwal ----
+    // Skrining hijau sudah diterbitkan `keadaanAwal()` (spec J3) — tanpa itu
+    // halaman ini menampilkan ajakan skrining dan medan tanggal tidak ada.
     await page.goto(`${BASE}/passport/ajukan`, { waitUntil: "networkidle" });
     await page.locator('input[name="tanggal"]').fill(TANGGAL_UJI);
     // Alamat WAJIB sejak modul transport: mitra harus datang ke suatu tempat,
