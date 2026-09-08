@@ -1096,7 +1096,17 @@ begin
   end if;
 
   -- Kepemilikan diperiksa DI SINI, bukan dipercayakan kepada pemanggil.
-  if not staf and s.client_id <> auth.uid() then
+  --
+  -- Menjodohkannya lewat `clients.user_id`, BUKAN `s.client_id = auth.uid()`:
+  -- `clients.id` adalah id baris klien dan TIDAK PERNAH sama dengan id
+  -- pengguna auth. Perbandingan langsung tidak menolak orang lain — ia menolak
+  -- SEMUA ORANG, termasuk pemiliknya sendiri, dan bentuk kegagalannya adalah
+  -- klien yang tidak bisa menyentuh sesinya sendiri. Pola ini disalin dari
+  -- policy "sessions: milik sendiri" (migrasi 20260828095030).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = s.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
   end if;
 
@@ -1398,7 +1408,12 @@ begin
     return null;
   end if;
 
-  if not staf and s.client_id <> auth.uid() then
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = s.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
   end if;
 
@@ -1653,7 +1668,12 @@ begin
     return null;
   end if;
 
-  if not staf and h.client_id <> auth.uid() then
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = h.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'hak ini bukan milik Anda' using errcode = '42501';
   end if;
 
