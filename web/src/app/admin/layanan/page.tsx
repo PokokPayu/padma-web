@@ -151,7 +151,7 @@ export default async function LayananPage({
 
       {panelTerbuka && (
         <PanelGeser judul="Layanan baru" hrefTutup={hrefTutup}>
-          <FormLayananBaru fase={fase} />
+          <FormLayananBaru fase={fase} hrefTutup={hrefTutup} />
         </PanelGeser>
       )}
     </main>

@@ -118,33 +118,33 @@ function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
 }
 
 /**
- * Formulir "Materi baru".
+ * Formulir "Materi baru" — ISI panel geser `?ubah=baru`, bukan gerbangnya.
  *
- * Sengaja dimulai TERTUTUP, sama seperti formulir layanan, mitra & klien: layar
- * pertama modul ini adalah DAFTAR materi, dan formulir yang selalu terbuka
- * mendorong admin mendaftarkan ulang materi yang sebenarnya hanya sedang
- * nonaktif — sementara yang benar adalah mengaktifkannya kembali.
+ * Komponen ini dulu memegang gerbang buka/tutupnya SENDIRI (`useState(false)`)
+ * karena ia duduk di header halaman daftar. Sejak sapuan rencana 2 ia dirender
+ * di dalam `<PanelGeser>`, dan panel itulah gerbangnya. Gerbang kedua berarti
+ * admin mengeklik "+ Materi baru", panel terbuka, lalu isinya tombol
+ * "+ Materi baru" lagi — dua klik untuk satu formulir. Cacat itu lolos tiga
+ * gerbang review karena berkas ini tidak ikut berubah di diff mana pun, dan
+ * lolos uji karena ujinya memeriksa TEKS SUMBER berkas (`sumberForm` memuat
+ * `name="judul"`) alih-alih markup yang benar-benar dirender panel.
+ *
+ * Alasan gerbang lama tetap sah dan kini dijawab panelnya: layar pertama modul
+ * ini adalah DAFTAR materi, supaya admin tidak mendaftarkan ulang materi yang
+ * sebenarnya hanya sedang nonaktif — yang benar adalah mengaktifkannya kembali.
  */
-export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
-  const [terbuka, setTerbuka] = useState(false);
+export function FormMateriBaru({
+  layanan,
+  hrefTutup,
+}: {
+  layanan: PilihanLayanan[];
+  /** Alamat halaman TANPA `?ubah` — ke sinilah sukses & "Batal" menuju. */
+  hrefTutup: string;
+}) {
+  const router = useRouter();
   const [tipe, setTipe] = useState<TipeMateri>("ebook");
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
-
-  if (!terbuka) {
-    return (
-      <button
-        type="button"
-        onClick={() => {
-          setPesan(null);
-          setTerbuka(true);
-        }}
-        className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
-      >
-        + Materi baru
-      </button>
-    );
-  }
 
   return (
     <form
@@ -153,17 +153,17 @@ export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
           const r = await simpanMateri(fd);
           if (r.ok) {
             setPesan(null);
-            setTerbuka(false);
+            // Menutup panel = kembali ke alamat tanpa `?ubah`. Keadaan panel
+            // hidup di URL, jadi menutupnya adalah NAVIGASI, bukan setState —
+            // pola yang sama dengan `FormJadwalSesi` dan `FormMitra`.
+            router.push(hrefTutup);
           } else {
             setPesan(r.pesan);
           }
         })
       }
-      className="w-full rounded-2xl border-[1.5px] border-dashed border-gold bg-[#FDFAF1] p-4"
     >
-      <h2 className="mb-3 text-[13.5px] font-extrabold text-ink">Materi baru</h2>
-
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3">
         <label>
           <span className={KELAS_LABEL}>Judul materi</span>
           <input
@@ -209,24 +209,20 @@ export function FormMateriBaru({ layanan }: { layanan: PilihanLayanan[] }) {
 
       {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
 
-      <div className="mt-4 flex gap-2.5">
+      <div className="mt-4 flex items-center gap-2.5">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale disabled:opacity-60"
+          className="rounded-lg bg-panel-ink px-3.5 py-2 text-[12.5px] font-bold text-panel-surface disabled:opacity-60"
         >
           {pending ? "Menyimpan…" : "Simpan materi"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setTerbuka(false);
-            setPesan(null);
-          }}
-          className="rounded-xl border border-black/15 px-4 py-2.5 text-[13px] font-bold text-ink-soft"
-        >
+        {/* `<a>` biasa, bukan tombol ber-onClick: menutup panel adalah
+            perpindahan alamat, dan jalan keluar yang bekerja tanpa JavaScript
+            adalah jalan keluar yang tidak bisa hilang bersama hidrasi. */}
+        <a href={hrefTutup} className="text-[12.5px] font-bold text-panel-muted">
           Batal
-        </button>
+        </a>
       </div>
     </form>
   );

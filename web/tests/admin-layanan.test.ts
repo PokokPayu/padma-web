@@ -107,6 +107,11 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/layanan",
+  // `FormLayananBaru`/`FormMateriBaru` memakai `useRouter` untuk menutup panel
+  // sesudah simpan. `renderToStaticMarkup` tidak menjalankan efeknya, tetapi
+  // pemanggilan `useRouter()` di badan komponen tetap butuh mock ini — pola
+  // yang sama dengan tests/admin-mitra.test.ts dan admin-layanan-detail.test.tsx.
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const {
@@ -1268,10 +1273,33 @@ describe("halaman katalog layanan (/admin/layanan)", () => {
     expect(teks).toMatch(/jumlah sesi/i);
   });
 
+  it("panel '+ Layanan baru' berisi FORMULIR, bukan tombol kedua", async () => {
+    // Asersi versi sebelumnya berbunyi `expect(sumberForm).toContain('name="nama"')`
+    // — ia membaca TEKS SUMBER berkas, bukan markup yang dirender. Medannya
+    // memang ada di berkas, tetapi duduk di cabang yang TIDAK PERNAH dirender:
+    // `FormLayananBaru` dulu memegang gerbang buka/tutupnya sendiri, sehingga
+    // panel geser terbuka berisi tombol "+ Layanan baru" LAGI — dua klik untuk
+    // satu formulir. Hijau di seluruh suite, dan tak terlihat oleh tiga gerbang
+    // review karena berkas formulirnya tidak ikut berubah di diff mana pun.
+    //
+    // Yang diperiksa sekarang ISI PANELNYA, bukan isi berkasnya.
+    const m = renderToStaticMarkup(
+      await (LayananPage as never as (p: unknown) => Promise<ReactElement>)({
+        searchParams: Promise.resolve({ ubah: "baru" }),
+      }),
+    );
+    const panel = m.match(/<aside[^>]*role="dialog"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(panel, "panel geser tidak terender sama sekali").not.toBe("");
+    expect(panel).toContain('name="phase_id"');
+    expect(panel).toContain('name="nama"');
+    expect(panel).toContain("Simpan layanan");
+  });
+
   it("menyediakan jalan menambah layanan & paket baru", () => {
     expect(markup).toContain("Layanan baru");
-    expect(sumberForm).toContain('name="phase_id"');
-    expect(sumberForm).toContain('name="nama"');
+    // `jumlah_sesi` milik FormPaketBaru, yang sejak Tugas 8 hidup di halaman
+    // DETAIL — diperiksa lewat sumber di sini, dan lewat markup sungguhan di
+    // tests/admin-layanan-detail.test.tsx.
     expect(sumberForm).toContain('name="jumlah_sesi"');
   });
 

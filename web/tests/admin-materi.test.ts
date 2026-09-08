@@ -98,6 +98,11 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/materi",
+  // `FormLayananBaru`/`FormMateriBaru` memakai `useRouter` untuk menutup panel
+  // sesudah simpan. `renderToStaticMarkup` tidak menjalankan efeknya, tetapi
+  // pemanggilan `useRouter()` di badan komponen tetap butuh mock ini — pola
+  // yang sama dengan tests/admin-mitra.test.ts dan admin-layanan-detail.test.tsx.
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const {
@@ -1030,10 +1035,26 @@ describe("halaman materi (/admin/materi)", () => {
     expect(markup).toMatch(/video/i);
   });
 
+  it("panel '+ Materi baru' berisi FORMULIR, bukan tombol kedua", async () => {
+    // Asersi versi sebelumnya berbunyi `expect(sumberForm).toContain('name="judul"')`
+    // — ia membaca TEKS SUMBER berkas, bukan markup yang dirender. Medannya
+    // memang ada di berkas, tetapi duduk di cabang yang TIDAK PERNAH dirender:
+    // `FormMateriBaru` dulu memegang gerbang buka/tutupnya sendiri, sehingga
+    // panel geser terbuka berisi tombol "+ Materi baru" LAGI — dua klik untuk
+    // satu formulir. Hijau di seluruh suite, dan tak terlihat oleh tiga gerbang
+    // review karena berkas formulirnya tidak ikut berubah di diff mana pun.
+    //
+    // Yang diperiksa sekarang ISI PANELNYA, bukan isi berkasnya.
+    const m = await markupDaftar({ ubah: "baru" });
+    const panel = m.match(/<aside[^>]*role="dialog"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(panel, "panel geser tidak terender sama sekali").not.toBe("");
+    expect(panel).toContain('name="judul"');
+    expect(panel).toContain('name="tipe"');
+    expect(panel).toContain("Simpan materi");
+  });
+
   it("menyediakan jalan menambah materi, isinya diunggah lewat PengunggahPdf/PengunggahVideo", () => {
     expect(markup).toContain("Materi baru");
-    expect(sumberForm).toContain('name="judul"');
-    expect(sumberForm).toContain('name="tipe"');
     expect(sumberForm).toContain("PengunggahPdf");
     expect(sumberForm).toContain("PengunggahVideo");
     // Medan URL video (Task 6) sudah dibongkar — video kini berkas, bukan URL.
