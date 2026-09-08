@@ -6,6 +6,8 @@ import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
 import { Paginasi } from "@/app/_shell/panel/paginasi";
 import { Bantuan } from "@/app/_shell/panel/bantuan";
 import { TabelBayar } from "./tabel-bayar";
+import { BarisTagihanPengajuan } from "./tagihan-pengajuan";
+import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
@@ -19,7 +21,11 @@ export default async function BayarPage({
 }) {
   await requireRole(["admin", "owner"]);
 
-  const param = uraikanParamDaftar(await searchParams, SARING_BAYAR);
+  const sp = await searchParams;
+  const lamaTerlihat = sp.bukti_lama === "ya";
+  const tagihanPengajuan = await daftarTagihanPengajuanAdmin({ buktiLama: lamaTerlihat });
+
+  const param = uraikanParamDaftar(sp, SARING_BAYAR);
   // Daftarnya dirakit dengan saringan yang IDENTIK dengan yang dipakai
   // passport klien — dan dengan badge antrean. Tiga tempat, satu kebenaran:
   // begitu ketiganya berpisah, badge yang tidak bisa dibersihkan lahir.
@@ -45,9 +51,43 @@ export default async function BayarPage({
           {PAKET_TAMPIL && (
             <> Sesi yang tercakup paket tidak muncul sendiri: status bayarnya mengikuti paketnya.</>
           )}{" "}
-          Nominal tidak ditampilkan — besarannya disampaikan tim PADMA lewat WhatsApp.
+          Nominal tidak ditampilkan di daftar sesi — besarannya disampaikan tim PADMA lewat
+          WhatsApp. Tagihan <b>pengajuan</b> di blok atas berbeda: ia menahan jadwal, punya
+          tenggat, dan nominalnya memang ditampilkan karena QRIS statis menuntut klien mengetik
+          jumlahnya sendiri.
         </Bantuan>
       </header>
+
+      {/* TAGIHAN PENGAJUAN (spec C2) — blok TERSENDIRI di atas, bukan dilebur.
+          Hanya yang ini menahan jadwal dan punya tenggat; meleburnya ke satu
+          daftar tanpa penanda berarti admin tidak bisa lagi membedakan mana
+          yang mendesak. */}
+      <section aria-label="Tagihan pengajuan" className="mb-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[15px] font-bold text-panel-ink">
+            Tagihan pengajuan — menahan jadwal
+          </h2>
+          <a
+            href={lamaTerlihat ? BASIS : `${BASIS}?bukti_lama=ya`}
+            className="text-[12.5px] font-semibold text-panel-muted underline underline-offset-2"
+          >
+            {lamaTerlihat ? "Tampilkan semua" : "Bukti lunas > 90 hari"}
+          </a>
+        </div>
+        {tagihanPengajuan.length === 0 ? (
+          <p className="rounded-lg border border-panel-border bg-panel-surface p-6 text-center text-[13px] italic text-panel-muted">
+            {lamaTerlihat
+              ? "Tidak ada bukti lunas yang lebih tua dari 90 hari."
+              : "Tidak ada tagihan pengajuan yang menunggu."}
+          </p>
+        ) : (
+          <ul>
+            {tagihanPengajuan.map((t) => (
+              <BarisTagihanPengajuan key={t.permintaanId} {...t} />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <BilahDaftar
         basis={BASIS}

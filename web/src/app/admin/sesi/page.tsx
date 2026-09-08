@@ -23,6 +23,7 @@ import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { STATUS_ANTRE, STATUS_SESI, LABEL_SESI } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
 import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
 import { bacaPengaturan } from "@/lib/settings";
 import type { StatusPermintaan } from "@/lib/jadwal/status";
@@ -39,6 +40,8 @@ type BarisPermintaan = {
   catatan: string;
   jam_mulai: string;
   status: StatusPermintaan;
+  status_bayar: "belum" | "menunggu_verifikasi" | "lunas";
+  tenggat: string | null;
   alamat_lat: number | null;
   alamat_lon: number | null;
   clients: { nama: string } | null;
@@ -80,7 +83,8 @@ export default async function SesiPage({
     supabase
       .from("booking_requests")
       .select(
-        "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, alamat_lat, alamat_lon, " +
+        "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, status_bayar, tenggat, " +
+          "alamat_lat, alamat_lon, " +
           "clients ( nama ), services ( nama ), partners ( nama )",
       )
       .in("status", STATUS_ANTRE)
@@ -137,6 +141,16 @@ export default async function SesiPage({
     catatan: p.catatan,
     status: p.status,
     namaMitra: p.partners?.nama ?? null,
+    // Keadaan pembayaran diformat DI SERVER: `BlokPermintaan` adalah komponen
+    // klien, dan sisa waktu yang dihitung di sana akan berbeda antara render
+    // server dan render peramban — ketidakcocokan hidrasi yang munculnya acak.
+    labelBayar:
+      p.status_bayar === "lunas"
+        ? "sudah dibayar & diverifikasi"
+        : p.status_bayar === "menunggu_verifikasi"
+          ? "bukti masuk, menunggu verifikasi"
+          : `belum dibayar · ${labelSisaWaktu(p.tenggat)}`,
+    lunas: p.status_bayar === "lunas",
   }));
 
   // Mitra diurutkan PER PERMINTAAN, bukan sekali untuk seluruh antrean:
