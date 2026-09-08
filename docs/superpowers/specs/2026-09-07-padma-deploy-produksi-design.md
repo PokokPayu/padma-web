@@ -21,11 +21,28 @@ Rancangan ini menetapkan cara menaikkan PADMA ke produksi untuk pertama kali.
 | Keputusan | Pilihan | Alasan |
 |---|---|---|
 | Sifat rilis | Produksi langsung, bukan staging | Keputusan pemilik, 7 Sep 2026 |
-| Hosting | Vercel Hobby, root directory `web/` | Keputusan 31 Ags 2026 |
+| Hosting | Vercel Hobby, root directory `web/` | Keputusan 31 Ags 2026; lihat §2b |
 | Alur deploy | **Pendekatan A** — Git integration, migrasi manual | Pasangan kode↔skema masih perlu mata manusia |
 | Database | Proyek Supabase **baru**, region `ap-southeast-1` (Singapore) | Lihat §3 |
 | Alamat | `*.vercel.app` dulu, domain sendiri menyusul | Keputusan pemilik |
 | Gerbang rilis | Rotasi kunci Supabase + R2; Google OAuth jalan | Keputusan pemilik |
+
+### 2b. Hobby menuntut repo pindah dari organisasi (8 Sep 2026)
+
+Vercel Hobby **tidak melayani repo privat milik organisasi GitHub** — hanya
+milik akun pribadi. `PokokPayu/padma-web` ada di organisasi, sehingga layar
+"New Project" menuntut naik ke Pro.
+
+**Keputusan pemilik:** bertahan di Hobby sampai benar-benar diblokir, dan
+memindahkan repo ke akun GitHub pribadi agar integrasi Git tetap bisa dipakai.
+Alur CLI manual sempat dipertimbangkan lalu ditolak ulang — alasan penolakan
+aslinya di bawah masih berlaku.
+
+**Yang harus diketahui dan tidak boleh dianggap sudah beres:** ketentuan
+Vercel Hobby melarang pemakaian komersial, sementara PADMA adalah usaha
+berbayar. Ini risiko yang diterima sadar, bukan kelalaian. Bila kelak Vercel
+memblokirnya, pilihannya naik ke Pro (~$20/bulan) atau pindah host — dan
+keputusan itu jangan diambil terburu-buru pada hari produksi mati.
 
 ### Alur deploy yang ditolak
 
