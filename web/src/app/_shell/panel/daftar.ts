@@ -18,6 +18,16 @@ export const PER_HAL = 25;
 export type ParamDaftar = {
   cari: string;
   saring: Readonly<Record<string, string>>;
+  /**
+   * Parameter yang IKUT TERBAWA di setiap tautan daftar ini, tanpa pernah
+   * mengembalikan halaman ke 1 — pada `/admin/sesi` itu `tab`.
+   *
+   * OPSIONAL dengan sengaja: tujuh daftar lain (dan 80 literal `ParamDaftar`
+   * di dalam uji) tidak punya parameter lengket, dan mewajibkan medan ini
+   * berarti menyunting kedelapan puluhnya untuk menuliskan `{}` — diff besar
+   * yang menyembunyikan perubahan yang sesungguhnya.
+   */
+  lengket?: Readonly<Record<string, string>>;
   hal: number;
 };
 
@@ -33,8 +43,14 @@ export type SaringSah = Readonly<Record<string, readonly string[]>>;
  * Bedanya bukan kosmetik: hanya perubahan pada SARINGAN yang mengembalikan
  * halaman ke 1. `hal` jelas dikecualikan; `ubah` dikecualikan karena membuka
  * lalu menutup sebuah baris tidak boleh memindahkan staf dari halamannya.
+ *
+ * `tab` dan `lihat` menyusul `ubah` dengan alasan yang sama: keduanya bukan
+ * saringan. `lihat` membuka panel detail permintaan — membuka lalu menutupnya
+ * dari halaman 3 tidak boleh memindahkan admin ke halaman 1, karena baris yang
+ * barusan diklik justru lenyap dari layar. `tab` memilih daftar mana yang
+ * tampil, dan berpindah tab sudah membuang saringannya lewat href bersih.
  */
-const BUKAN_SARINGAN = new Set(["cari", "hal", "ubah"]);
+const BUKAN_SARINGAN = new Set(["cari", "hal", "ubah", "tab", "lihat"]);
 
 function nilaiTunggal(v: string | string[] | undefined): string {
   // `?status=a&status=b` memberi array. Diambil yang pertama, bukan
@@ -44,7 +60,11 @@ function nilaiTunggal(v: string | string[] | undefined): string {
   return v ?? "";
 }
 
-export function uraikanParamDaftar(sp: ParamMentah, saringSah: SaringSah): ParamDaftar {
+export function uraikanParamDaftar(
+  sp: ParamMentah,
+  saringSah: SaringSah,
+  lengketSah: SaringSah = {},
+): ParamDaftar {
   const saring: Record<string, string> = {};
   for (const [nama, nilaiBoleh] of Object.entries(saringSah)) {
     const v = nilaiTunggal(sp[nama]).trim();
@@ -54,14 +74,30 @@ export function uraikanParamDaftar(sp: ParamMentah, saringSah: SaringSah): Param
     if (v !== "" && nilaiBoleh.includes(v)) saring[nama] = v;
   }
 
+  // Daftar putih yang sama seperti saringan: nilai `tab` asing dibuang, dan
+  // halaman jatuh ke bawaannya alih-alih merender daftar yang tidak ada.
+  const lengket: Record<string, string> = {};
+  for (const [nama, nilaiBoleh] of Object.entries(lengketSah)) {
+    const v = nilaiTunggal(sp[nama]).trim();
+    if (v !== "" && nilaiBoleh.includes(v)) lengket[nama] = v;
+  }
+
   const halMentah = nilaiTunggal(sp.hal).trim();
   const hal = /^\d+$/.test(halMentah) ? Number(halMentah) : 1;
 
-  return {
+  const result: ParamDaftar = {
     cari: nilaiTunggal(sp.cari).trim(),
     saring,
     hal: hal >= 1 ? hal : 1,
   };
+
+  // Hanya sertakan lengket jika ada nilai — menjaga kompatibilitas dengan
+  // daftar lain yang tidak punya parameter lengket.
+  if (Object.keys(lengket).length > 0) {
+    result.lengket = lengket;
+  }
+
+  return result;
 }
 
 /**
@@ -96,6 +132,16 @@ export function bangunQuery(
 ): string {
   const q = new URLSearchParams();
 
+  // PALING AWAL supaya urutan parameternya stabil dan href bisa dicocokkan
+  // sebagai string utuh. Daftar tanpa parameter lengket tidak berubah sama
+  // sekali — `param.lengket` kosong menghasilkan nol iterasi.
+  for (const [nama, nilai] of Object.entries(param.lengket ?? {})) {
+    const dipakai = nama in ubahan ? ubahan[nama] : nilai;
+    if (dipakai !== null && dipakai !== undefined && String(dipakai) !== "") {
+      q.set(nama, String(dipakai));
+    }
+  }
+
   const cari = "cari" in ubahan ? ubahan.cari : param.cari;
   if (cari !== null && String(cari) !== "") q.set("cari", String(cari));
 
@@ -127,6 +173,12 @@ export function bangunQuery(
   const ubah = "ubah" in ubahan ? ubahan.ubah : null;
   if (ubah !== null && ubah !== undefined && String(ubah) !== "") {
     q.set("ubah", String(ubah));
+  }
+
+  // `lihat` mengikuti `ubah`: ditulis paling akhir, dan hanya bila diminta.
+  const lihat = "lihat" in ubahan ? ubahan.lihat : null;
+  if (lihat !== null && lihat !== undefined && String(lihat) !== "") {
+    q.set("lihat", String(lihat));
   }
 
   const s = q.toString();

@@ -54,6 +54,13 @@ export function BilahDaftar({
           {Object.entries(param.saring).map(([nama, nilai]) => (
             <input key={nama} type="hidden" name={nama} value={nilai} />
           ))}
+          {/* Lengket ikut dibawa bersama saringan. Tanpa baris ini, mencari
+              sesuatu dari tab Sesi mengirim form tanpa `tab`, dan admin
+              mendarat di tab bawaan dengan kata cari yang benar — kegagalan
+              yang terbaca sebagai "pencariannya yang salah". */}
+          {Object.entries(param.lengket ?? {}).map(([nama, nilai]) => (
+            <input key={nama} type="hidden" name={nama} value={nilai} />
+          ))}
           <input
             type="search"
             name="cari"
