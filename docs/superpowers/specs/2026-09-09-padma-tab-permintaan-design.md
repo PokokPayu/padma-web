@@ -242,29 +242,41 @@ kenapa namanya hilang.
 
 ---
 
-## Rencana uji
+## Rencana uji — DIPANGKAS ATAS KEPUTUSAN PEMILIK REPO (9 September 2026)
 
-Semua tanpa jsdom, mengikuti pola suite yang ada.
+Keputusannya: **tidak ada uji baru yang ditulis dalam pekerjaan ini.** Pembuktian dilakukan pemilik
+repo secara manual, demi kecepatan pengerjaan. Bagian ini merekam apa yang tetap dikerjakan dan apa
+yang sengaja dibiarkan terbuka — supaya tidak ada yang mengira cakupannya pernah ada lalu hilang.
 
-**Murni**
-- `urutan-mitra.test.ts`: tiga keluaran label (K8); mitra tanpa domisili tetap ada, di urutan
-  belakang.
-- `panel-daftar.test.ts`: `tab` dan `lihat` tidak mengembalikan halaman ke 1; pindah tab membuang
-  saringan.
+### Tetap dikerjakan
 
-**Lapisan data**
-- `ambilDaftarPermintaan`: bawaan memulangkan tepat `STATUS_ANTRE`; `riwayat` memulangkan tepat
-  komplemennya; `total` benar saat hasilnya dipaginasi; kata cari diperlakukan sebagai huruf, bukan
-  wildcard SQL.
+Bukan uji baru, melainkan menjaga suite yang ada tetap hijau. Dua perubahan di dokumen ini memecah
+uji yang sudah berdiri:
 
-**Server action**
-- `tetapkanKoordinatPermintaan`: menyimpan pin yang sah; menolak koordinat di luar rentang; menolak
-  permintaan yang sudah `dikonfirmasi`; **ditolak untuk sesi klien**.
-- Uji rantai: sesudah pin dipasang, `konfirmasi_permintaan` melahirkan sesi **dengan** `jenjang` dan
-  `jenjang_sumber = 'otomatis'`, bukan NULL. Inilah uji yang membuktikan bug asalnya tertutup.
+- **K8** mengubah bentuk `formatKm` → `tests/urutan-mitra.test.ts` diperbarui mengikuti tanda tangan
+  barunya.
+- **K6** membongkar `BlokPermintaan` → `tests/pagar-batas-server-klien.test.ts` harus tetap hijau;
+  bila pembongkarannya memindahkan sesuatu melewati batas server/klien, yang dibetulkan adalah
+  kodenya, bukan pagarnya.
 
-**Render (`renderToStaticMarkup`)**
-- Baris daftar menaut ke `?tab=permintaan&lihat=<id>`.
-- Panel memuat peringatan koordinat + pemilih pin saat koordinatnya kosong, dan peta + pin saat ada.
-- Tombol yang muncul cocok dengan status; tidak ada tombol "Tolak".
-- Pagar `tests/pagar-batas-server-klien.test.ts` tetap hijau sesudah `BlokPermintaan` dibongkar.
+### Sengaja dibiarkan terbuka
+
+Keduanya **tidak bisa** ditangkap pembuktian manual — bukan karena kurang teliti, melainkan karena
+bentuk kegagalannya tidak muncul di layar admin:
+
+1. **RLS `tetapkanKoordinatPermintaan` di sesi klien.** Kebocoran di sini tidak terlihat saat
+   diklik sebagai admin; ia terlihat saat seorang klien memanggil endpoint-nya langsung dengan anon
+   key + JWT-nya sendiri — persis skenario yang membuat `guard_booking_status` ada. Dan kegagalan
+   RLS di repo ini pulang sebagai `null`/`[]`, bukan galat: layarnya tetap tampak normal.
+   Penangkal sementara: empat pagar di K7 dikerjakan lengkap, termasuk pemeriksaan **jumlah baris**
+   pada UPDATE.
+2. **`riwayat` sebagai himpunan turunan (K4).** Ini tidak gagal sekarang; ia gagal saat nilai enum
+   kesembilan lahir, dan gagalnya diam-diam. Penangkal sementara: himpunannya dihitung dengan
+   pengurangan dari `STATUS_PERMINTAAN`, tidak pernah ditulis sebagai daftar tangan.
+
+Satu lagi yang hilang bersamanya: **uji rantai pin → `konfirmasi_permintaan` melahirkan sesi dengan
+`jenjang` terisi**. Itu tadinya uji yang membuktikan bug asal benar-benar tertutup. Tanpa uji itu,
+yang membuktikannya adalah pembuktian manual pemilik repo — dan pembuktian itu perlu dilakukan
+sekali secara sadar, bukan disimpulkan dari "panelnya sudah muncul".
+
+Ketiganya masuk daftar tindak lanjut, bukan dianggap selesai.
