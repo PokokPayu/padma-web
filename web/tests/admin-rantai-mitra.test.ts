@@ -204,8 +204,32 @@ describe("rantai admin: tetapkan bidan", () => {
 });
 
 describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
+  // Sejak gerbang Task 4, kedua uji di bawah BUTUH titik mitra yang nyata —
+  // bukan hanya alamat permintaannya. `MITRA` adalah baris SEED bersama
+  // seluruh suite (`33333333-…301`), dan berkas lain (mis.
+  // `admin-sesi-konfirmasi.test.ts`) sengaja me-NULL-kannya di `afterEach`
+  // masing-masing untuk menguji jalur "belum berpin". Saat `npm test` PENUH
+  // menjalankan berkas-berkas itu lebih dulu, titiknya bisa tiba di sini
+  // sudah kosong — bukan karena kode gerbangnya salah, tapi karena baris
+  // SEED yang dipakai bersama dibiarkan tercemar. Dipulihkan di sini supaya
+  // dua uji ini deterministik terlepas dari urutan berkas.
+  beforeEach(async () => {
+    await admin
+      .from("partners")
+      .update({ lat: -7.96662, lon: 112.632632 })
+      .eq("id", MITRA);
+  });
+
   it("memindahkan mitra_siap -> menunggu_bayar DAN mengisi tenggat", async () => {
-    const id = await permintaanPada("mitra_siap", MITRA);
+    // Koordinat WAJIB disertakan sejak Task 4: gerbang di `terbitkanTagihan()`
+    // menolak tagihan yang totalnya belum bisa dihitung, dan tanpa titik
+    // alamat jenjangnya tidak pernah diketahui. Pasangan koordinat ini sama
+    // dengan yang dipakai `tests/tagihan-baca-hak.test.ts` — sudah terbukti
+    // menghasilkan jenjang berjarak yang tarifnya ada di seed.
+    const id = await permintaanPada("mitra_siap", MITRA, {
+      alamat_lat: -7.9666,
+      alamat_lon: 112.6966,
+    });
     const sebelum = Date.now();
     expect(await terbitkanTagihan(id)).toEqual({ ok: true });
 
@@ -224,7 +248,12 @@ describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
   });
 
   it("dipanggil DUA KALI tidak memperpanjang tenggat — yang kedua ditolak", async () => {
-    const id = await permintaanPada("mitra_siap", MITRA);
+    // Lihat catatan pada uji sebelumnya: koordinat ini WAJIB supaya gerbang
+    // Task 4 tidak menolak penerbitan yang pertama.
+    const id = await permintaanPada("mitra_siap", MITRA, {
+      alamat_lat: -7.9666,
+      alamat_lon: 112.6966,
+    });
     expect(await terbitkanTagihan(id)).toEqual({ ok: true });
 
     const { data: pertama } = await admin

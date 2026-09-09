@@ -8,6 +8,8 @@ import { saranJenjang } from "@/lib/transport/saran";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
 import type { JenjangTransport } from "@/lib/transport/jarak";
+import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
+import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
@@ -157,6 +159,30 @@ export async function pilihMitra(
 export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
+
+  // GERBANG: tagihan tanpa nominal tidak boleh terbit.
+  //
+  // Alasannya bukan kerapian. Fungsi ini memasang tenggat 24 jam, dan lewat
+  // dari tenggat itu `batalkan_lewat_tenggat()` melepas slotnya. Tagihan tanpa
+  // angka di atas tenggat 24 jam adalah jebakan: klien tidak pernah diberi tahu
+  // berapa yang harus ia bayar, lalu kehilangan jadwalnya karena tidak
+  // membayarnya.
+  //
+  // Diperiksa SEBELUM satu baris pun berubah, jadi tidak ada yang perlu
+  // dikompensasi bila gerbangnya menutup. Dibaca lewat cabang `permintaanId`
+  // (Step 4) karena baris ini BELUM `menunggu_bayar` — inilah fungsi yang
+  // memindahkannya ke sana.
+  const rincianAwal = (await daftarTagihanPengajuanAdmin({ permintaanId }))[0] ?? null;
+  if (rincianAwal && rincianAwal.total === null) {
+    return {
+      ok: false,
+      pesan: `Tagihan belum bisa terbit. ${
+        rincianAwal.sebab
+          ? KALIMAT_SEBAB_ADMIN[rincianAwal.sebab]
+          : "Totalnya belum bisa dihitung."
+      }`,
+    };
+  }
 
   const tenggat = new Date(Date.now() + JAM_TENGGAT_BAYAR * 3_600_000).toISOString();
 

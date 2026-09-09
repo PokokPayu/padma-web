@@ -67,9 +67,9 @@ type BarisDb = {
  *   rekening orang.
  */
 export async function daftarTagihanPengajuanAdmin(
-  opsi: { buktiLama?: boolean } = {},
+  opsi: { buktiLama?: boolean; permintaanId?: string } = {},
 ): Promise<BarisTagihanPengajuanAdmin[]> {
-  const { buktiLama = false } = opsi;
+  const { buktiLama = false, permintaanId } = opsi;
   const supabase = await createServerSupabase();
 
   let q = supabase
@@ -80,7 +80,14 @@ export async function daftarTagihanPengajuanAdmin(
     )
     .limit(100);
 
-  if (buktiLama) {
+  if (permintaanId) {
+    // SATU permintaan, APA PUN statusnya. Dipakai gerbang `terbitkanTagihan()`,
+    // yang harus tahu totalnya SEBELUM status berpindah ke `menunggu_bayar` —
+    // saringan status di cabang ketiga justru menyembunyikan baris yang sedang
+    // hendak diperiksa, dan gerbang yang tidak pernah menemukan barisnya adalah
+    // gerbang yang tidak pernah menutup.
+    q = q.eq("id", permintaanId);
+  } else if (buktiLama) {
     // Lunas, masih memegang bukti, dan tenggatnya sudah lewat 90 hari.
     // `tenggat` dipakai sebagai penanda waktu karena ia satu-satunya cap waktu
     // yang pasti ada pada tagihan yang pernah terbit.

@@ -9,6 +9,9 @@ const CONTOH = {
   namaLayanan: "Garbha Relief",
   tanggal: "20 Mei 2027",
   jam: "09.00 WIB",
+  hargaLayanan: "Rp 174.000",
+  hargaTransport: "Rp 20.000",
+  labelJenjang: ">10–15 km",
   total: "Rp194.000",
   sisaWaktu: "24 jam lagi",
 };
@@ -96,8 +99,15 @@ describe("antrean admin tidak boleh menagih ke nomor klinik", () => {
       "utf8",
     );
     expect(sumber).not.toMatch(/tautanWaTagihan\(\s*nomorWaLink/);
-    // Nomor klien harus benar-benar ikut terbaca; tanpa kolomnya, tautannya
-    // hanya bisa benar secara kebetulan.
-    expect(sumber).toMatch(/clients\s*\(\s*nama,\s*no_hp\s*\)/);
+    // Nomor klien harus benar-benar ikut terbaca. Baris permintaan yang dipakai
+    // panel Lihat kini datang dari `ambilDaftarPermintaan()`
+    // (`@/lib/admin/permintaan`), bukan dari `page.tsx` sendiri — jadi
+    // kolomnya diperiksa di sumber query itu; tanpa kolomnya, tautannya hanya
+    // bisa benar secara kebetulan.
+    const sumberPermintaan = readFileSync(
+      path.resolve(__dirname, "..", "src/lib/admin/permintaan.ts"),
+      "utf8",
+    );
+    expect(sumberPermintaan).toMatch(/clients!inner\s*\(\s*nama,\s*padma_id,\s*no_hp\s*\)/);
   });
 });

@@ -17,6 +17,13 @@
  * Lima unsur WAJIB ada, dan itu diuji: nama, layanan, kapan, berapa, dan sampai
  * kapan. Pesan tagihan tanpa batas waktu adalah pesan yang membuat orang
  * kehilangan slotnya tanpa pernah tahu ada tenggatnya.
+ *
+ * "Berapa" sekarang berarti RINCIAN, bukan satu angka. Klien yang hanya
+ * menerima total tidak punya cara memeriksa apa pun, dan pertanyaan "kok
+ * segini?" berakhir sebagai percakapan WhatsApp yang dijawab admin satu per
+ * satu — jadi layanan dan transport ditulis sebagai baris terpisah, dengan
+ * label jenjang menyertai transport supaya klien tahu itu berubah menurut
+ * jarak bidan ke alamatnya, bukan harga layanan yang naik.
  */
 
 export function pesanTagihan(input: {
@@ -26,19 +33,47 @@ export function pesanTagihan(input: {
   tanggal: string;
   /** Sudah diformat, mis. "09.00 WIB". */
   jam: string;
-  /** Sudah diformat, mis. "Rp194.000". `null` bila totalnya belum lengkap. */
+  /** Sudah diformat, mis. "Rp 395.000". `null` bila tarifnya belum ada. */
+  hargaLayanan: string | null;
+  /** Sudah diformat, mis. "Rp 25.000". `null` bila jenjangnya belum diketahui. */
+  hargaTransport: string | null;
+  /** Mis. ">10–15 km". `null` bila jenjangnya belum diketahui. */
+  labelJenjang: string | null;
+  /** Sudah diformat, mis. "Rp 420.000". `null` bila totalnya belum lengkap. */
   total: string | null;
   /** Sudah diformat, mis. "24 jam lagi". */
   sisaWaktu: string;
 }): string {
-  const { namaKlien, namaLayanan, tanggal, jam, total, sisaWaktu } = input;
+  const {
+    namaKlien,
+    namaLayanan,
+    tanggal,
+    jam,
+    hargaLayanan,
+    hargaTransport,
+    labelJenjang,
+    total,
+    sisaWaktu,
+  } = input;
+
+  // RINCIAN, bukan satu angka. Klien yang hanya menerima total tidak punya
+  // cara memeriksa apa pun, dan pertanyaan "kok segini?" berakhir sebagai
+  // percakapan WhatsApp yang dijawab admin satu per satu. Transport khususnya
+  // WAJIB terlihat terpisah: ia berubah menurut jarak bidan ke alamat, dan
+  // klien yang tidak tahu itu membacanya sebagai harga layanan yang naik.
+  const baris: string[] = [];
+  if (hargaLayanan) baris.push(`• Layanan: ${hargaLayanan}`);
+  if (hargaTransport) {
+    baris.push(`• Transport${labelJenjang ? ` (${labelJenjang})` : ""}: ${hargaTransport}`);
+  }
 
   return [
     `Halo ${namaKlien}, bidan untuk sesi Anda sudah siap 🌸`,
     "",
     `Layanan: ${namaLayanan}`,
     `Jadwal: ${tanggal}, ${jam}`,
-    total ? `Total: ${total} (sudah termasuk transport)` : "Total: menyusul dari tim",
+    ...(baris.length > 0 ? ["", ...baris] : []),
+    total ? `Total: ${total}` : "Total: menyusul dari tim",
     "",
     `Mohon selesaikan pembayaran dalam ${sisaWaktu}, lalu unggah bukti transfernya di menu Bayar pada Passport Anda.`,
     "QRIS-nya ada di halaman yang sama — nominalnya diketik sendiri sesuai total di atas.",

@@ -159,7 +159,10 @@ export default async function SesiPage({
   // WhatsApp tetap tersusun rapi, hanya saja nominalnya hilang, dan klien
   // menerima tagihan tanpa angka.
   const tagihanAdmin = tab === "permintaan" ? await daftarTagihanPengajuanAdmin() : [];
-  const totalPerPermintaan = new Map(tagihanAdmin.map((t) => [t.permintaanId, t.total]));
+  // Barisnya UTUH, bukan hanya totalnya: panel detail kini menampilkan rincian
+  // dan sebab, dan pesan WhatsApp merangkai dari medan yang sama. Dua peta
+  // untuk satu baris hanya menambah tempat keduanya bisa berselisih.
+  const tagihanPerPermintaan = new Map(tagihanAdmin.map((t) => [t.permintaanId, t]));
 
   // KESAHIHAN `lihat` DIBUKTIKAN DENGAN MENEMUKAN BARISNYA, bukan dengan
   // mempercayai URL — persis pola `ubah` di atas.
@@ -188,6 +191,8 @@ export default async function SesiPage({
   // bicaranya PADMA sendiri. Klien tidak pernah ditagih dan tenggat 24 jamnya
   // tetap berjalan. `nomorWaKlien` sengaja TANPA nomor cadangan — lihat
   // alasannya di `@/lib/pengaturan/bentuk`.
+  const tagihanLihat = barisLihat ? (tagihanPerPermintaan.get(barisLihat.id) ?? null) : null;
+
   const tautanWaUntukLihat =
     barisLihat &&
     barisLihat.status === PERMINTAAN_MENUNGGU_BAYAR &&
@@ -199,7 +204,10 @@ export default async function SesiPage({
             namaLayanan: barisLihat.namaLayanan,
             tanggal: formatTanggalID(barisLihat.tanggal),
             jam: formatJam(jamDariDb(barisLihat.jamMulai)),
-            total: totalPerPermintaan.get(barisLihat.id) ?? null,
+            hargaLayanan: tagihanLihat?.hargaLayanan ?? null,
+            hargaTransport: tagihanLihat?.hargaTransport ?? null,
+            labelJenjang: tagihanLihat?.labelJenjang ?? null,
+            total: tagihanLihat?.total ?? null,
             sisaWaktu: labelSisaWaktu(barisLihat.tenggat),
           }),
         )
