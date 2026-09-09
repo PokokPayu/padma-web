@@ -47,6 +47,13 @@ export type VarianKelola = {
   aktif: boolean;
   /** Berapa sesi yang sudah tercatat memakai varian ini. */
   sesiTercatat: number;
+  /**
+   * Harga klien yang berlaku hari ini, dari view `varian_harga_staf`.
+   * `null` berarti varian itu belum punya tarif berlaku — bukan galat, dan
+   * bukan "gratis".
+   */
+  hargaKlien: number | null;
+  hargaCoret: number | null;
 };
 
 export type LayananKelola = {
@@ -116,6 +123,7 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
     { data: paketKlien },
     { data: sesi },
     { data: varian },
+    { data: hargaStaf, error: errorHargaStaf },
   ] = await Promise.all([
     supabase
       .from("phases")
@@ -154,7 +162,25 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
       .from("service_variants")
       .select("id, service_id, label, durasi_menit, format, urutan, aktif")
       .returns<BarisVarian[]>(),
+    // `varian_harga_staf`, BUKAN tabel tarif mentahnya. Nama tabel dasar itu
+    // sengaja tidak pernah disebut modul admin — pagar di
+    // tests/admin-layanan.test.ts memang memeriksa itu, dan pagar itu tetap
+    // benar sesudah pekerjaan ini.
+    supabase
+      .from("varian_harga_staf")
+      .select("variant_id, harga_klien, harga_coret")
+      .returns<{ variant_id: string; harga_klien: number; harga_coret: number | null }[]>(),
   ]);
+
+  // GALAT DIBACA, BUKAN DIBUANG. Query yang ditolak memulangkan `data: null`,
+  // dan `data ?? []` mengubahnya menjadi seluruh kolom harga kosong — tidak
+  // bisa dibedakan dari "tarifnya memang belum diisi".
+  if (errorHargaStaf) throw errorHargaStaf;
+
+  const hargaPerVarian = new Map<string, { harga: number; coret: number | null }>();
+  for (const h of hargaStaf ?? []) {
+    hargaPerVarian.set(h.variant_id, { harga: h.harga_klien, coret: h.harga_coret });
+  }
 
   const dipakaiPer = new Map<string, number>();
   for (const p of paketKlien ?? []) {
@@ -185,6 +211,7 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
   const varianPerLayanan = new Map<string, VarianKelola[]>();
   for (const v of varian ?? []) {
     const daftar = varianPerLayanan.get(v.service_id) ?? [];
+    const harga = hargaPerVarian.get(v.id);
     daftar.push({
       id: v.id,
       label: v.label,
@@ -193,6 +220,10 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
       urutan: v.urutan,
       aktif: v.aktif,
       sesiTercatat: sesiPerVarian.get(v.id) ?? 0,
+      // Varian tanpa baris di `varian_harga_staf` belum punya tarif berlaku —
+      // itu bukan galat, dan bukan "gratis".
+      hargaKlien: harga?.harga ?? null,
+      hargaCoret: harga?.coret ?? null,
     });
     varianPerLayanan.set(v.service_id, daftar);
   }
