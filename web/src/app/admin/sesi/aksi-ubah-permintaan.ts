@@ -28,6 +28,7 @@ type BarisSebelum = {
   alamat: string;
   alamat_lat: number | null;
   alamat_lon: number | null;
+  tanggal: string;
 };
 
 export async function perbaruiPermintaan(
@@ -54,11 +55,6 @@ export async function perbaruiPermintaan(
   if (!POLA_TANGGAL.test(tanggal)) {
     return { ok: false, pesan: "Tanggal tidak sah." };
   }
-  // Kalender ASIA/JAKARTA, bukan jam server: Vercel berjalan UTC, dan antara
-  // 17:00–24:00 UTC tanggal Jakarta sudah besok.
-  if (tanggal < hariIniJakarta()) {
-    return { ok: false, pesan: "Tanggal tidak boleh di masa lalu." };
-  }
 
   const { jamLayanan } = await bacaPengaturan();
   if (!jamLayanan.includes(jam)) {
@@ -72,12 +68,21 @@ export async function perbaruiPermintaan(
   // pilihannya tinggal selalu menggeocode ulang — membakar kuota Nominatim
   // untuk alamat yang tidak berubah — atau tidak pernah, yang meninggalkan
   // koordinat menunjuk tempat lain.
-  const { data: sebelum } = await supabase
+  //
+  // `error` ikut didestruktur (bukan dibuang) supaya kegagalan PostgREST/jaringan
+  // yang transien tidak jatuh ke cabang "tidak bisa diubah lagi" di bawah —
+  // itu diagnosis untuk baris yang GENUINE tidak ditemukan/berstatus lain,
+  // bukan untuk permintaan yang gagal dibaca dan berhak dicoba ulang.
+  const { data: sebelum, error: errorBaca } = await supabase
     .from("booking_requests")
-    .select("alamat, alamat_lat, alamat_lon")
+    .select("alamat, alamat_lat, alamat_lon, tanggal")
     .eq("id", permintaanId)
     .in("status", [...STATUS_UBAH_PERMINTAAN])
     .maybeSingle<BarisSebelum>();
+
+  if (errorBaca) {
+    return { ok: false, pesan: "Gagal memuat data permintaan. Coba lagi." };
+  }
 
   if (!sebelum) {
     return {
@@ -85,6 +90,19 @@ export async function perbaruiPermintaan(
       pesan:
         "Permintaan ini tidak bisa diubah lagi — tagihannya mungkin sudah terbit, atau sudah ditangani.",
     };
+  }
+
+  // Kalender ASIA/JAKARTA, bukan jam server: Vercel berjalan UTC, dan antara
+  // 17:00–24:00 UTC tanggal Jakarta sudah besok.
+  //
+  // Ditolak HANYA bila tanggal yang diminta BERBEDA dari tanggal tersimpan.
+  // Permintaan `diminta` dari kemarin yang belum ditangani tidak boleh
+  // terkunci total — admin masih berhak membetulkan alamatnya (Finding 5)
+  // tanpa dipaksa sekaligus menggeser tanggalnya ke masa depan. Tanggal masa
+  // lalu yang BARU dipilih tetap ditolak; hanya tanggal lama yang dibiarkan
+  // lewat apa adanya.
+  if (tanggal < hariIniJakarta() && tanggal !== sebelum.tanggal) {
+    return { ok: false, pesan: "Tanggal tidak boleh di masa lalu." };
   }
 
   // ===== PIN MENANG (konvensi yang sama dengan form mitra) =====
@@ -100,7 +118,12 @@ export async function perbaruiPermintaan(
   //
   // Alamat yang SAMA mempertahankan koordinat lama apa adanya; tidak ada yang
   // perlu ditanyakan ulang.
-  const pin = koordinatDariFormData(formData);
+  // Pin hanya dianggap "dijatuhkan manusia" bila petanya benar-benar disentuh.
+  // `PemilihLokasi` menyemai medan lat/lon dari koordinat tersimpan sejak cat
+  // pertama, jadi tanpa bendera ini SETIAP simpan terlihat seperti membawa pin —
+  // dan cabang "alamat berubah → geocode ulang" tidak pernah tercapai, sehingga
+  // alamat baru tersimpan bersama koordinat lama tanpa satu pun galat.
+  const pin = formData.get("pin_disentuh") ? koordinatDariFormData(formData) : null;
   const alamatBerubah = normalkanAlamat(alamat) !== normalkanAlamat(sebelum.alamat);
   const koordinatLama =
     sebelum.alamat_lat !== null && sebelum.alamat_lon !== null

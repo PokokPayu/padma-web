@@ -100,6 +100,12 @@ const sumberHalaman = baca("src/app/admin/sesi/page.tsx");
 // saja berarti separuh layar tidak terjaga.
 const sumberPanelPermintaan = baca("src/app/admin/sesi/panel-permintaan.tsx");
 const sumberAksiPermintaan = baca("src/app/admin/sesi/aksi-permintaan.tsx");
+// Jalur tulis utama untuk alamat/tanggal/jam sebuah permintaan (spec K3) sejak
+// `perbaruiPermintaan` menggantikan `tetapkanKoordinatPermintaan` — dan yang
+// satu-satunya menyentuh kolom `tanggal` (tipe `date`) di modul sesi. Pagar
+// sumber di bawah yang tidak menyertakan berkas ini akan buta terhadap
+// pelanggarannya sendiri.
+const sumberAksiUbahPermintaan = baca("src/app/admin/sesi/aksi-ubah-permintaan.ts");
 const migrasi = baca("supabase/migrations/20260829170000_sesi_dari_permintaan.sql");
 const migrasiKonfirmasiAtomik = baca("supabase/migrations/20260909135000_konfirmasi_atomik.sql");
 
@@ -716,7 +722,7 @@ describe("halaman permintaan jadwal (/admin/sesi)", () => {
   it("TIDAK ada nominal uang di modul sesi (money firewall)", async () => {
     const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(nominalDalam(markup), "nominal bocor").toEqual([]);
-    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberAksi, sumberStatus]) {
+    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberAksi, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
@@ -773,7 +779,7 @@ describe("berkas server action sesi", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
@@ -793,7 +799,7 @@ describe("berkas server action sesi", () => {
     // Larangannya TIDAK dilonggarkan begitu saja; ia dipersempit supaya
     // pemakaian sah yang satu ini tidak diam-diam membuka jalan bagi
     // `toISOString` lain yang menyelinap pada kolom `tanggal`/`date`.
-    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
+    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
       expect(sumber).not.toContain("getDay(");
@@ -808,7 +814,7 @@ describe("berkas server action sesi", () => {
   });
 
   it("tidak menuliskan data klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(sumber).not.toContain("console.");
     }
   });

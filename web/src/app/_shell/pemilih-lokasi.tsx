@@ -68,6 +68,13 @@ export function PemilihLokasi({
   const [koordinat, setKoordinat] = useState<Titik | null>(awal);
   const [status, setStatus] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
+  // `koordinat` diseed dari `awal` sejak cat pertama (lihat dokblok di atas),
+  // jadi ia TIDAK bisa dipakai untuk membedakan "pin ini dijatuhkan manusia"
+  // dari "pin ini cuma prefill dari basis data". `disentuh` menjawab
+  // pertanyaan itu secara terpisah: mulai `false`, dan HANYA menjadi `true`
+  // lewat interaksi manusia yang sebenarnya — klik peta, geser marker, hasil
+  // "Cari alamat di peta", atau hasil "Gunakan lokasi saat ini".
+  const [disentuh, setDisentuh] = useState(false);
 
   useEffect(() => {
     if (!wadah.current || peta.current) return;
@@ -100,6 +107,7 @@ export function PemilihLokasi({
         penanda.current.on("dragend", (e) => {
           const t = (e.target as MarkerLeaflet).getLatLng();
           setKoordinat({ lat: t.lat, lon: t.lng });
+          setDisentuh(true);
           setStatus("Pin dipindahkan.");
         });
       };
@@ -109,6 +117,7 @@ export function PemilihLokasi({
       p.on("click", (e) => {
         pasang(e.latlng.lat, e.latlng.lng);
         setKoordinat({ lat: e.latlng.lat, lon: e.latlng.lng });
+        setDisentuh(true);
         setStatus("Pin dijatuhkan. Geser untuk menyesuaikan.");
       });
 
@@ -126,9 +135,16 @@ export function PemilihLokasi({
     };
   }, [awal]);
 
-  /** Menggeser peta & pin ke koordinat baru, tanpa membuat ulang petanya. */
+  /**
+   * Menggeser peta & pin ke koordinat baru, tanpa membuat ulang petanya.
+   *
+   * Dipanggil HANYA dari `cariAlamat` dan `lokasiSaatIni` — dua jalur yang
+   * sama-sama berasal dari tindakan admin, jadi `disentuh` ditandai di sini
+   * sekali untuk keduanya.
+   */
   async function pindahkan(lat: number, lon: number) {
     setKoordinat({ lat, lon });
+    setDisentuh(true);
     const p = peta.current;
     if (!p) return;
     p.setView([lat, lon], ZOOM_TITIK);
@@ -148,6 +164,7 @@ export function PemilihLokasi({
     penanda.current.on("dragend", (e) => {
       const t = (e.target as MarkerLeaflet).getLatLng();
       setKoordinat({ lat: t.lat, lon: t.lng });
+      setDisentuh(true);
       setStatus("Pin dipindahkan.");
     });
   }
@@ -246,6 +263,12 @@ export function PemilihLokasi({
           petanya tidak disentuh jatuh ke jalur geocoding lama. */}
       <input ref={medanLat} type="hidden" name="lat" value={koordinat?.lat ?? ""} readOnly />
       <input type="hidden" name="lon" value={koordinat?.lon ?? ""} readOnly />
+      {/* Dikirim di KEEMPAT formulir (mitra/klien/permintaan) supaya bentuk
+          kirimannya seragam, tapi hanya `perbaruiPermintaan` yang membacanya —
+          lihat dokblok `disentuh` di atas untuk alasannya. Mitra & klien
+          terus membaca `lat`/`lon` langsung lewat `koordinatDariFormData`
+          seperti sebelumnya; medan ini lewat begitu saja di form mereka. */}
+      <input type="hidden" name="pin_disentuh" value={disentuh ? "1" : ""} readOnly />
 
       <p className="mt-1 text-[11px] text-ink-soft/70">
         {koordinat

@@ -2,7 +2,7 @@ import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 import { TombolPermintaan, FormUbahPermintaan, type MitraPilihan } from "./aksi-permintaan";
 import type { BarisPermintaanDaftar } from "@/lib/admin/permintaan";
 import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
-import { formatJam } from "@/lib/jadwal/jam";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 
 /**
  * Isi panel geser untuk SATU permintaan.
@@ -45,6 +45,16 @@ export function PanelPermintaan({
 }) {
   const berkoordinat = permintaan.alamatLat !== null && permintaan.alamatLon !== null;
   const bisaDiubah = STATUS_UBAH_PERMINTAAN.includes(permintaan.status);
+  // Jam permintaan ini SEKARANG, dibaca lewat `jamDariDb` (bukan `slice(0,5)`
+  // sendiri) — lihat dokblok fungsi itu untuk kenapa keduanya harus dibedakan.
+  const jamSekarang = jamDariDb(permintaan.jamMulai);
+  // `jamLayanan` bisa berubah runtime lewat /admin/pengaturan. Bila jam
+  // permintaan ini sudah tidak ada di daftar (jam itu dihapus/digeser SETELAH
+  // permintaan dibuat), `<select defaultValue={jamSekarang}>` jatuh diam-diam
+  // ke opsi PERTAMA — admin yang cuma bermaksud membetulkan alamat menekan
+  // Simpan dan tanpa sadar menggeser jam sesi. Opsi tambahan ini menjaga jam
+  // aslinya tetap terpilih sampai admin benar-benar memilih yang lain.
+  const jamTidakLagiDitawarkan = !jamPilihan.includes(jamSekarang);
 
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
@@ -148,9 +158,14 @@ export function PanelPermintaan({
                         jalur tidak melahirkan dua kebiasaan jam yang berbeda. */}
                     <select
                       name="jam"
-                      defaultValue={permintaan.jamMulai.slice(0, 5)}
+                      defaultValue={jamSekarang}
                       className="mt-1 w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px] text-panel-ink"
                     >
+                      {jamTidakLagiDitawarkan && (
+                        <option value={jamSekarang}>
+                          {formatJam(jamSekarang)} — di luar jam layanan sekarang
+                        </option>
+                      )}
                       {jamPilihan.map((j) => (
                         <option key={j} value={j}>
                           {formatJam(j)}
