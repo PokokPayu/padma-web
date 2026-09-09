@@ -335,16 +335,27 @@ export default async function BerandaPassport({
         ) : (
           <div className="flex flex-wrap gap-3.5 rounded-2xl border border-black/10 bg-white p-5">
             {badge.map((b) => (
-              <div
+              <Link
                 key={b.serviceId}
+                href={`/passport/sertifikat/${b.serviceId}`}
                 data-badge={b.serviceId}
                 className="w-[104px] text-center text-[11px] font-bold leading-tight text-[#6B5A2E]"
               >
-                <span className="mx-auto mb-2 flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-gold bg-[radial-gradient(circle_at_35%_30%,#FDF6E4,#F3E6C4)] text-gold shadow-[inset_0_0_0_3px_#fff,inset_0_0_0_4px_rgba(217,179,106,.28)]">
+                <span className="relative mx-auto mb-2 flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-gold bg-[radial-gradient(circle_at_35%_30%,#FDF6E4,#F3E6C4)] text-gold shadow-[inset_0_0_0_3px_#fff,inset_0_0_0_4px_rgba(217,179,106,.28)]">
                   <Lotus className="w-[34px]" />
+                  {/* Angka muncul mulai kunjungan KEDUA. "×1" pada setiap badge
+                      menambah keramaian tanpa memberi kabar baru. */}
+                  {b.jumlah > 1 && (
+                    <span
+                      data-badge-jumlah={b.jumlah}
+                      className="absolute -right-1 -top-1 flex h-[22px] min-w-[22px] items-center justify-center rounded-full border-2 border-paper bg-night px-1 text-[10.5px] font-bold text-gold-pale"
+                    >
+                      ×{b.jumlah}
+                    </span>
+                  )}
                 </span>
                 {b.nama}
-              </div>
+              </Link>
             ))}
           </div>
         )}

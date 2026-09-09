@@ -101,12 +101,24 @@ export function gridStempel(input: {
   return slot;
 }
 
-export function badgeDari(sesi: SesiRingkas[]): Array<{ serviceId: string; nama: string }> {
-  const peta = new Map<string, string>();
+/**
+ * Badge per LAYANAN yang pernah dijalani sampai selesai, beserta BERAPA KALI.
+ *
+ * Angkanya adalah hitungan, bukan gerbang: tidak ada ambang yang menerbitkan
+ * apa pun pada kunjungan ke-lima. Kapan sertifikat pantas terbit adalah
+ * keputusan klinik, dan yang menerbitkannya adalah admin, bukan angka ini.
+ */
+export function badgeDari(
+  sesi: SesiRingkas[],
+): Array<{ serviceId: string; nama: string; jumlah: number }> {
+  const peta = new Map<string, { nama: string; jumlah: number }>();
   for (const s of sesi) {
-    if (s.status === "selesai") peta.set(s.serviceId, s.namaLayanan);
+    if (s.status !== "selesai") continue;
+    const ada = peta.get(s.serviceId);
+    if (ada) ada.jumlah += 1;
+    else peta.set(s.serviceId, { nama: s.namaLayanan, jumlah: 1 });
   }
-  return [...peta].map(([serviceId, nama]) => ({ serviceId, nama }));
+  return [...peta].map(([serviceId, v]) => ({ serviceId, ...v }));
 }
 
 export type ItemTagihan = {
