@@ -470,12 +470,27 @@ export default async function SesiPage({
                         </span>
                       </Td>
                       <Td>
-                        <Link
-                          href={`${BASIS}${bangunQuery(param, { ubah: s.id })}`}
-                          className="text-[12px] font-bold text-panel-ink underline"
-                        >
-                          Ubah
-                        </Link>
+                        {/* DUA aksi, dan yang kedua bukan hiasan: halaman
+                            `/admin/sesi/[id]` memuat skrining, catatan bidan,
+                            dan — untuk sesi yang selesai — pengunggah
+                            sertifikat. Sebelum tautan ini ada, satu-satunya
+                            jalan ke sana adalah lewat Klien lalu memilih
+                            sesinya, sehingga pengunggah sertifikat praktis
+                            tidak bisa ditemukan dari daftar sesi. */}
+                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                          <Link
+                            href={`/admin/sesi/${s.id}`}
+                            className="text-[12px] font-bold text-panel-ink underline"
+                          >
+                            Detail
+                          </Link>
+                          <Link
+                            href={`${BASIS}${bangunQuery(param, { ubah: s.id })}`}
+                            className="text-[12px] font-bold text-panel-ink underline"
+                          >
+                            Ubah
+                          </Link>
+                        </div>
                       </Td>
                     </tr>
                   ))}
