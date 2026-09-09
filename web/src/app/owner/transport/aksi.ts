@@ -7,7 +7,6 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import {
   JENJANG_SAH,
-  JENJANG_TARIF_RATE_CARD,
   PESAN,
   periksaNominal,
   periksaTanggal,
@@ -74,13 +73,17 @@ export async function tetapkanTarifTransport(formData: FormData): Promise<Berhas
   if (!JENJANG_SAH.includes(jenjang as JenjangTransport)) {
     return { ok: false, pesan: PESAN.jenjangTakDikenal };
   }
-  // Ruling 6 (migrasi `tarif_transport`): `di_atas_20` BUKAN tarif rate
-  // card — CHECK `transport_rates_bukan_per_kasus` menolaknya di basis data.
-  // Diperiksa DI SINI DULU supaya jawabannya kalimat yang menjelaskan
-  // KENAPA, bukan sekadar "gagal menyimpan".
-  if (!JENJANG_TARIF_RATE_CARD.includes(jenjang as JenjangTransport)) {
-    return { ok: false, pesan: PESAN.jenjangPerKasus };
-  }
+  // Sampai migrasi `tarif_dasar_di_atas_20`, ada gerbang KEDUA di sini yang
+  // menolak `di_atas_20` khusus dengan kalimat "bukan tarif rate card —
+  // nominalnya per kasus" (Ruling 6, CHECK `transport_rates_bukan_per_kasus`
+  // di basis data). Gerbang itu digugurkan, BUKAN lupa dihapus: sejak migrasi
+  // itu `JENJANG_TARIF_RATE_CARD` sama persis dengan `JENJANG_SAH` (keduanya
+  // memuat kelima jenjang), jadi `!JENJANG_TARIF_RATE_CARD.includes(jenjang)`
+  // di titik ini TIDAK PERNAH bisa true lagi — nilai yang lolos pemeriksaan
+  // `JENJANG_SAH` di atas otomatis lolos di sini juga. Mempertahankannya
+  // hanya akan menyisakan kalimat penolakan yang tidak pernah terbaca siapa
+  // pun DAN yang isinya sudah salah (owner sekarang BOLEH menetapkan tarif
+  // dasar `di_atas_20` lewat formulir ini — lihat komentar migrasi).
   if (!tarif.ok) return { ok: false, pesan: tarif.pesan };
   if (!honor.ok) return { ok: false, pesan: honor.pesan };
   if (!mulai.ok) return { ok: false, pesan: mulai.pesan };

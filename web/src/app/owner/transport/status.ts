@@ -90,8 +90,12 @@ export const PESAN = {
   // --- Rate card (tetapkanTarifTransport) ---
   jenjangWajib: "Jenjang wajib dipilih.",
   jenjangTakDikenal: "Jenjang tidak dikenal. Pilih salah satu jenjang yang tersedia.",
-  jenjangPerKasus:
-    "Jenjang >20 km bukan tarif rate card — nominalnya ditetapkan owner per kasus lewat daftar sesi menunggu, bukan lewat formulir ini.",
+  // `jenjangPerKasus` DIHAPUS di sini (bukan dilupakan): sejak migrasi
+  // `tarif_dasar_di_atas_20`, `di_atas_20` adalah anggota SAH
+  // `JENJANG_TARIF_RATE_CARD` — tidak ada lagi jalur di `aksi.ts` yang bisa
+  // memulangkan pesan "bukan tarif rate card, per kasus" untuknya. Lihat
+  // komentar di `tetapkanTarifTransport` (`aksi.ts`) untuk kenapa gerbangnya
+  // sendiri ikut digugurkan, bukan cuma kalimatnya.
   kembar: "Sudah ada tarif untuk jenjang ini pada tanggal tersebut.",
   mundur: "Tarif baru harus berlaku setelah tarif terakhir jenjang ini",
   takWajar: "Nilai tarif tidak wajar.",
