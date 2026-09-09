@@ -136,28 +136,28 @@ describe("transport_rates — pagar uang", () => {
   });
 
   /**
-   * >>> Ruling 6 (coordinator, 7 Sep 2026) <<<
+   * DOKTRINNYA BERUBAH di migrasi `tarif_dasar_di_atas_20`, dan uji ini berubah
+   * bersamanya — bukan dihapus.
    *
-   * Versi sebelumnya cuma menghitung baris `di_atas_20` dan mengasersi "0" —
-   * itu hanya menjaga SEED, bukan invariannya. Reviewer membuktikan
-   * celahnya langsung: sebagai `authenticated` berklaim JWT owner, INSERT
-   * `di_atas_20` BERHASIL tanpa constraint apa pun, dan karena tabel ini
-   * append-only dengan DELETE tercabut, baris itu PERMANEN untuk peran API —
-   * menciptakan sumber kebenaran kedua (menandingi `transport_khusus`) untuk
-   * nominal yang sama, yang cuma bisa dibersihkan lewat service role.
+   * Yang dulu dijaga: `di_atas_20` TIDAK BOLEH punya baris di sini, karena
+   * nominalnya per kasus di `transport_khusus`. Itu benar untuk kebocoran yang
+   * dilihat Ruling 6, dan salah untuk kebuntuan yang belum terlihat waktu itu:
+   * `transport_khusus` berkunci `session_id`, sesi lahir sesudah lunas, dan
+   * lunas menuntut tagihan yang tidak pernah bisa terbit.
    *
-   * Uji ini menggantinya dengan uji PENOLAKAN atas nama constraint
-   * `transport_rates_bukan_per_kasus`: doktrin "di_atas_20 bukan tarif" kini
-   * hidup sebagai CHECK, bukan cuma komentar tabel.
+   * Yang dijaga SEKARANG: barisnya boleh ada, dan seluruh pagar uang lain
+   * tabel ini TIDAK ikut longgar bersamanya — append-only tetap append-only.
    */
-  it("menolak baris di_atas_20 — tarifnya per kasus, bukan per jenjang", async () => {
-    await dalamTransaksiRollback(async (jalankan) => {
-      await expect(
-        jalankan(
-          `insert into public.transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
+  it("menerima baris di_atas_20 sebagai tarif dasar", async () => {
+    await expect(
+      querySql(
+        `insert into transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
            values ('di_atas_20', 99999, 88888, '2099-01-01')`,
-        ),
-      ).rejects.toThrow(/transport_rates_bukan_per_kasus/);
-    });
+      ),
+    ).resolves.toBeDefined();
+
+    await querySql(
+      `delete from transport_rates where jenjang = 'di_atas_20' and berlaku_sejak = '2099-01-01'`,
+    );
   });
 });

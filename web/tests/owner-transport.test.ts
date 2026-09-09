@@ -6,15 +6,16 @@
  *
  *  1. Rate card per JENJANG jarak (`transport_rates`) — INSERT-ONLY, sama
  *     persis pola `variant_rates`/`owner/tarif`: tarif baru = baris baru,
- *     tanggal berlaku tidak boleh mundur, dan jenjang `di_atas_20` DITOLAK
- *     sama sekali (CHECK `transport_rates_bukan_per_kasus`) — nominalnya
- *     bukan rate card, melainkan ketiadaan tarif.
+ *     tanggal berlaku tidak boleh mundur. Jenjang `di_atas_20` BERGABUNG di
+ *     sini sejak migrasi `tarif_dasar_di_atas_20` (CHECK
+ *     `transport_rates_bukan_per_kasus` dicabut) — ia memberi tarif DASAR
+ *     supaya tagihan selalu bisa terbit; tanpanya sesi >20 km tersangkut
+ *     permanen (lihat komentar migrasi untuk lingkaran tertutupnya).
  *
  *  2. Tarif KHUSUS per sesi >20 km (`transport_khusus`) — ditetapkan owner
  *     SEKALI per sesi, dan HANYA untuk sesi yang benar-benar berjenjang
- *     `di_atas_20`. Menetapkannya untuk sesi berjenjang biasa akan
- *     menciptakan sumber kebenaran KEDUA untuk nominal yang seharusnya
- *     datang dari `transport_rates`.
+ *     `di_atas_20`. Ia PENIMPA opsional atas tarif dasar di atas, bukan lagi
+ *     satu-satunya sumber nominal >20 km — dan penimpa selalu menang.
  *
  * Ditambah SATU pagar lintas-panel yang tidak dimiliki modul tarif varian:
  * `hitungMenungguTarifTransport()` di `lib/admin/antrean.ts` menghitung badge
@@ -129,7 +130,9 @@ async function bersihkan() {
   // id-nya baru diketahui SESUDAH insert. Tanpa ini proses yang terhenti di
   // tengah jalan menumpuk baris fixture selamanya (append-only, DELETE
   // tercabut dari peran API — hanya service role yang bisa membersihkannya).
-  for (const jenjang of ["10_15", "15_20"]) {
+  // `di_atas_20` MASUK daftar ini sejak migrasi tarif_dasar_di_atas_20 — test
+  // "menerima jenjang di_atas_20" di bawah kini juga menyisipkan baris nyata.
+  for (const jenjang of ["10_15", "15_20", "di_atas_20"]) {
     await admin
       .from("transport_rates")
       .delete()
@@ -274,12 +277,15 @@ describe("tetapkanTarifTransport — rate card per jenjang", () => {
     expect(r.ok).toBe(true);
   });
 
-  it("menolak jenjang di_atas_20 dengan kalimat — bukan tarif rate card", async () => {
+  it("menerima jenjang di_atas_20 — tarif DASAR sejak migrasi tarif_dasar_di_atas_20", async () => {
+    // Doktrin lama ("di_atas_20 bukan tarif rate card, per kasus di
+    // transport_khusus") membuntukan pemesanan: sesi baru lahir sesudah
+    // lunas, dan lunas menuntut tagihan yang tidak pernah bisa terbit tanpa
+    // baris ini. Owner tetap boleh menimpanya per kasus lewat transport_khusus.
     const r = await tetapkanTarifTransport(
       formOf({ jenjang: "di_atas_20", tarif: "1000", honor: "1000", mulai: DEPAN_B }),
     );
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.pesan).toMatch(/per kasus/i);
+    expect(r.ok).toBe(true);
   });
 
   it("menolak jenjang kosong & jenjang tak dikenal", async () => {
@@ -352,7 +358,7 @@ describe("tetapkanTarifTransport — rate card per jenjang", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ambilTarifTransport — subsidi TERHITUNG, tanpa jenjang di_atas_20
+// ambilTarifTransport — subsidi TERHITUNG, kelima jenjang termasuk di_atas_20
 // ---------------------------------------------------------------------------
 
 describe("ambilTarifTransport", () => {
@@ -364,9 +370,12 @@ describe("ambilTarifTransport", () => {
     expect(baris.subsidi).toBe(10000);
   });
 
-  it("jenjang di_atas_20 TIDAK PERNAH muncul di rate card", async () => {
+  it("jenjang di_atas_20 MUNCUL di rate card — tarif dasar, bukan lagi ketiadaan tarif", async () => {
+    // Migrasi tarif_dasar_di_atas_20 membuka kebuntuan: sesi >20 km butuh
+    // tagihan yang bisa terbit SEBELUM lunas menuntut sesi lahir, jadi baris
+    // dasarnya kini bagian normal rate card, ditimpa transport_khusus bila ada.
     const jenjangMuncul = (await ambilTarifTransport(HARI_INI)).map((b) => b.jenjang);
-    expect(jenjangMuncul).not.toContain("di_atas_20");
+    expect(jenjangMuncul).toContain("di_atas_20");
   });
 
   it("dibaca pada tanggal MASA DEPAN, tarif yang baru ditetapkan pun muncul", async () => {
@@ -698,8 +707,11 @@ describe("halaman transport (/owner/transport)", () => {
   it("?ubah asing TIDAK membuka panel apa pun", async () => {
     // Daftar putih, bukan daftar hitam: `ubah` datang dari URL, dan panel yang
     // terbuka atas nilai asing akan merender formulir yang menunjuk jenjang
-    // atau sesi yang tidak ada.
-    for (const nilai of ["di_atas_20", "sesi-00000000-0000-0000-0000-000000000000", "../admin"]) {
+    // atau sesi yang tidak ada. `di_atas_20` KELUAR dari daftar ini sejak
+    // migrasi tarif_dasar_di_atas_20 — ia kini anggota sah
+    // `JENJANG_TARIF_RATE_CARD`, jadi `?ubah=di_atas_20` MEMBUKA panel (diuji
+    // di "?ubah=<jenjang> membuka panel geser berisi formulir jenjang itu").
+    for (const nilai of ["sesi-00000000-0000-0000-0000-000000000000", "../admin"]) {
       const markup = renderToStaticMarkup(await halaman({ ubah: nilai }));
       expect(markup, `?ubah=${nilai}`).not.toContain('role="dialog"');
     }
