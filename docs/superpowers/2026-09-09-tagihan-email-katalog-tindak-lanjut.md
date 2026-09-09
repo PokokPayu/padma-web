@@ -202,3 +202,79 @@ Tanpa uji baru, inilah satu-satunya yang membuktikan pekerjaan ini benar.
    mereka menyandarkan diri pada pilihan awal formulir, yang di katalog tetap ada (varian pertama
    dari layanan pertama yang punya varian). Secara pembacaan kode ketiganya aman, tetapi itu
    **pembacaan, bukan bukti**: jalankan sekali di lingkungan yang mengizinkannya.
+
+## F. Utang yang SENGAJA dibiarkan saat merge — dan kenapa
+
+Ketiganya ditemukan re-review gelombang perbaikan, sesudah seluruh temuan
+Critical & Important ditutup. Dicatat di sini karena utang yang hanya hidup di
+ruang kerja sementara adalah utang yang diputuskan untuk dilupakan.
+
+### F1. Dua asersi jadi HAMPA di `tests/owner-transport.test.ts`
+
+`SESI.jauhSudah` ("sesi yang SUDAH punya transport_khusus tidak muncul") dan
+`SESI.jauhBatal` ("sesi BATAL tidak pernah muncul") keduanya bertanggal
+`HARI_INI`. Sejak migrasi `20260914130000` menambahkan anti-join tarif dasar,
+dan seed memuat tarif `di_atas_20` yang berlaku hari ini, KEDUANYA kini
+dikecualikan view karena alasan yang salah — tanpa memandang `transport_khusus`
+maupun status. Keduanya tetap hijau sambil berhenti menguji apa pun.
+
+Ini penting justru karena rencana ini dikerjakan dalam **mode nol uji baru**:
+uji yang sudah ada adalah satu-satunya jaring yang tersisa, dan dua di antaranya
+kini bolong. Perbaikannya kecil — geser `tanggal` kedua fixture itu ke SEBELUM
+`berlaku_sejak` tarif dasar, supaya anti-join tarif tidak menyala dan uji
+kembali mendiskriminasi hal yang memang ingin dijaganya.
+
+### F2. Dua dokblok masih menyatakan doktrin mati sebagai fakta
+
+- `src/lib/owner/data.ts` (dokblok `ambilSesiMenungguTarif`) masih menyebut view
+  `sesi_menunggu_tarif_transport` sebagai "sesi `di_atas_20` yang BELUM punya
+  baris `transport_khusus`", dan hanya menyebut migrasi `20260907140000`. Sejak
+  `20260914130000` definisinya bertambah satu anti-join.
+- `src/lib/admin/tagihan.ts` masih menulis "(Task 9, Ruling 17) Sesi
+  `di_atas_20` yang BELUM punya tarif per-kasus … satu-satunya definisi
+  'menunggu tarif khusus'".
+
+Kelas cacat yang sama persis dengan yang gelombang perbaikan ini tutup di
+`rekap.ts` — dan di repo ini komentar yang berbohong dihitung sebagai cacat,
+bukan urusan gaya.
+
+### F3. Divergensi kosmetik admin vs klien pada `di_atas_20` tanpa nominal
+
+`lib/passport/turunan.ts` kini menampilkan sub-baris transport untuk seluruh
+jenjang; `lib/admin/tagihan.ts` masih menahannya untuk `di_atas_20` yang
+tercatat "menunggu" di view. Pada sesi yang benar-benar tanpa nominal — dan
+pada SELURUH sesi `di_atas_20` bila view gagal dibaca (pagar gagal-tertutup
+Ruling 25) — klien melihat baris itu, admin tidak. Tanpa nominal di kedua sisi,
+jadi akibatnya kosmetik. Dibiarkan SADAR: menyamakannya menuntut pencabutan
+pagar gagal-tertutup Ruling 25, dan itu pertukaran yang lebih buruk.
+
+## G. E2E `test:e2e:bayar` SUDAH RUSAK SEBELUM pekerjaan ini — bukan regresi
+
+`npm run test:e2e:bayar` gagal di langkah admin: ia mencari tombol "Cari bidan"
+di dalam `[data-permintaan="…"]`, sementara tab Permintaan sudah dirombak
+sehingga `data-permintaan` menempel pada `<tr>` daftar dan tombolnya hidup di
+panel geser. Dibuktikan bukan regresi cabang ini: pada basis cabang (`62bfbb1`)
+strukturnya sudah begitu, dan `git diff` cabang ini terhadap baris tersebut NOL.
+
+Yang SUDAH terverifikasi di peramban sungguhan: `npm run test:e2e:passport`
+**21/21 lolos**, termasuk "permintaan terkirim" — jadi katalog pesan layanan
+yang baru benar-benar mengirim pengajuan lewat peramban, dan `fd.set("layanan",
+…)` terbukti hidup.
+
+Yang BELUM pernah dilihat peramban: rincian pada kartu tagihan klien
+(`[data-total]`). Hanya `test:e2e:bayar` yang melihatnya. Memperbaiki skrip itu
+adalah pekerjaan tab Permintaan, bukan pekerjaan ini.
+
+## H. Peringatan koordinasi basis data lokal
+
+Selama pengerjaan, sesi lain menjalankan `db reset` dari checkout utama. Itu
+memutar ulang migrasi `main` SAJA, sehingga ketiga migrasi cabang ini lenyap
+dari basis data lokal dan 20 uji memerah sekaligus — termasuk constraint
+`transport_rates_bukan_per_kasus` yang hidup kembali. Pulihnya: `npx supabase
+migration up --include-all` (WAJIB `--include-all`, lihat §C) lalu menerapkan
+ulang tarif `di_atas_20` dan koordinat mitra seed lewat SQL langsung.
+
+Ini bukan kejadian sekali. Selama beberapa sesi berbagi satu Supabase lokal,
+suite yang tiba-tiba memerah dalam jumlah besar lebih mungkin berarti skema
+basis datanya bergeser daripada kodenya rusak — periksa
+`supabase_migrations.schema_migrations` lebih dulu.
