@@ -485,3 +485,37 @@ export async function ambilPermintaanJadwal(clientId: string): Promise<Permintaa
     status: r.status,
   }));
 }
+
+/**
+ * Sertifikat TERBARU milik satu klien untuk satu layanan.
+ *
+ * Dibaca lewat sesi pengguna: policy "sertifikat: klien baca miliknya" yang
+ * memutuskan, jadi serviceId karangan memulangkan null — bukan galat.
+ */
+export async function ambilSertifikatLayanan(
+  clientId: string,
+  serviceId: string,
+): Promise<{ sessionId: string; tanggal: string; mime: string } | null> {
+  const supabase = await createServerSupabase();
+  const { data } = await supabase
+    .from("certificates")
+    .select("session_id, mime, sessions(tanggal)")
+    .eq("client_id", clientId)
+    .eq("service_id", serviceId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      session_id: string;
+      mime: string;
+      sessions: { tanggal: string } | null;
+    }>();
+
+  if (!data) return null;
+  return {
+    sessionId: data.session_id,
+    // Embed yang tertolak RLS memulangkan NULL, bukan galat — halaman tetap
+    // terbit dengan tanggal kosong alih-alih meledak.
+    tanggal: data.sessions?.tanggal ?? "",
+    mime: data.mime,
+  };
+}
