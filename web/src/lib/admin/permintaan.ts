@@ -24,11 +24,25 @@ import type { PreferensiWaktu } from "@/app/admin/sesi/status";
 export const TAB_SESI = { tab: ["permintaan", "sesi"] } satisfies SaringSah;
 
 /**
+ * Dua nilai saringan yang BUKAN status — keduanya nama HIMPUNAN.
+ *
+ * Ditulis sebagai konstanta bernama, bukan literal di dalam
+ * `SARING_PERMINTAAN`, karena "menunggu" pernah menjadi nilai enum
+ * `booking_status` dan mati di C1. Literalnya berdampingan dengan kata
+ * `status` terbaca — oleh manusia maupun oleh pagar
+ * tests/status-satu-sumber.test.ts — sebagai status lama yang bangkit lagi.
+ * Namanya menyatakan namespace-nya: ini nilai SARINGAN, dan
+ * `statusUntukSaring` di bawah yang menerjemahkannya ke status sungguhan.
+ */
+export const SARING_MENUNGGU = "menunggu";
+export const SARING_RIWAYAT = "riwayat";
+
+/**
  * Saringan status. Dua nilai pertama adalah HIMPUNAN, sisanya satu status
  * persis.
  */
 export const SARING_PERMINTAAN = {
-  status: ["menunggu", "riwayat", ...STATUS_PERMINTAAN],
+  status: [SARING_MENUNGGU, SARING_RIWAYAT, ...STATUS_PERMINTAAN],
 } satisfies SaringSah;
 
 /**
@@ -41,10 +55,10 @@ export const SARING_PERMINTAAN = {
  * lahir — yang mana memang artinya "bukan lagi menunggu".
  */
 export function statusUntukSaring(nilai: string): readonly StatusPermintaan[] {
-  if (nilai === "riwayat") {
+  if (nilai === SARING_RIWAYAT) {
     return STATUS_PERMINTAAN.filter((s) => !STATUS_ANTRE.includes(s));
   }
-  if (nilai === "" || nilai === "menunggu") return STATUS_ANTRE;
+  if (nilai === "" || nilai === SARING_MENUNGGU) return STATUS_ANTRE;
   return [nilai as StatusPermintaan];
 }
 

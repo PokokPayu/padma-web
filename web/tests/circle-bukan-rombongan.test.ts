@@ -26,7 +26,7 @@ const JALUR_PEMESANAN = [
   "src/app/passport/ajukan/form.tsx",
   "src/app/passport/ajukan/page.tsx",
   "src/app/admin/sesi/aksi.ts",
-  "src/app/admin/sesi/antrean-permintaan.tsx",
+  "src/app/admin/sesi/panel-permintaan.tsx",
 ];
 
 /**

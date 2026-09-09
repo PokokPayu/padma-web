@@ -86,7 +86,14 @@ const { default: SesiPage } = await import("@/app/admin/sesi/page");
 const sumberAksi = baca("src/app/admin/sesi/aksi.ts");
 const sumberStatus = baca("src/app/admin/sesi/status.ts");
 const sumberHalaman = baca("src/app/admin/sesi/page.tsx");
-const sumberAntrean = baca("src/app/admin/sesi/antrean-permintaan.tsx");
+// Sejak /admin/sesi menjadi dua tab, penyajian permintaan dirender
+// `panel-permintaan.tsx` (komponen server) dan tombolnya `aksi-permintaan.tsx`
+// (komponen klien); komponen antrean blok emas yang dulu menampung keduanya
+// sudah dihapus. KEDUANYA diperiksa, bukan salah satu — pagar sumber di bawah
+// menjaga SELURUH kode yang menyentuh permintaan, dan memeriksa satu berkas
+// saja berarti separuh layar tidak terjaga.
+const sumberPanelPermintaan = baca("src/app/admin/sesi/panel-permintaan.tsx");
+const sumberAksiPermintaan = baca("src/app/admin/sesi/aksi-permintaan.tsx");
 const migrasi = baca("supabase/migrations/20260829170000_sesi_dari_permintaan.sql");
 const migrasiKonfirmasiAtomik = baca("supabase/migrations/20260909135000_konfirmasi_atomik.sql");
 
@@ -203,7 +210,7 @@ beforeEach(async () => {
       // pada konfirmasi itu sendiri.
       //
       // Berhenti di 'mitra_siap', BUKAN 'menunggu_bayar' (rantai C2): halaman
-      // /admin/sesi (`antrean-permintaan.tsx`) masih menggambar tombol
+      // /admin/sesi (`aksi-permintaan.tsx`) masih menggambar tombol
       // "Konfirmasi" hanya untuk keadaan ini — memindahkan dasar fixture ke
       // 'menunggu_bayar' akan mengosongkan render describe "halaman antrean
       // permintaan" di bawah. Describe yang sungguh memanggil
@@ -649,7 +656,7 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
   it("TIDAK ada nominal uang di modul sesi (money firewall)", async () => {
     const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
     expect(nominalDalam(markup), "nominal bocor").toEqual([]);
-    for (const sumber of [sumberHalaman, sumberAntrean, sumberAksi, sumberStatus]) {
+    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberAksi, sumberStatus]) {
       expect(nominalDalam(sumber), "nominal bocor").toEqual([]);
       expect(sumber).not.toContain("service_rates");
       expect(sumber).not.toContain("variant_rates");
@@ -706,7 +713,7 @@ describe("berkas server action sesi", () => {
   });
 
   it("memakai sesi pengguna, bukan service role", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberAntrean, sumberStatus]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
       expect(sumber).not.toContain("createAdminSupabase");
       expect(sumber).not.toContain("SERVICE_ROLE");
     }
@@ -726,7 +733,7 @@ describe("berkas server action sesi", () => {
     // Larangannya TIDAK dilonggarkan begitu saja; ia dipersempit supaya
     // pemakaian sah yang satu ini tidak diam-diam membuka jalan bagi
     // `toISOString` lain yang menyelinap pada kolom `tanggal`/`date`.
-    for (const sumber of [sumberHalaman, sumberAntrean, sumberStatus]) {
+    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
       expect(sumber).not.toContain("getDay(");
@@ -741,7 +748,7 @@ describe("berkas server action sesi", () => {
   });
 
   it("tidak menuliskan data klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberAntrean, sumberStatus]) {
+    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus]) {
       expect(sumber).not.toContain("console.");
     }
   });

@@ -1067,15 +1067,15 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
     }
   });
 
-  // RULING (menggantikan draf Langkah 5 di brief Task 3): `BlokPermintaan`
-  // (antrean permintaan, tampil DI ATAS bilah daftar) menerima prop `mitra`
-  // yang sama dengan panel "Sesi baru", dan punya cabang sendiri yang
-  // menampilkan "Belum ada mitra aktif —
+  // RULING (menggantikan draf Langkah 5 di brief Task 3): panel permintaan
+  // (sejak dua tab: `panel-permintaan.tsx`, dibuka lewat `?lihat=`) menerima
+  // prop `mitra` yang sama dengan panel "Sesi baru", dan punya cabang sendiri
+  // yang menampilkan "Belum ada mitra aktif —
   // daftarkan mitra dulu di menu Mitra" bila `mitra.length === 0`. Draf awal
   // brief menarik `pilihanMitra()` HANYA saat `ubah === "baru"`, yang berarti
-  // kalimat itu muncul setiap kali panel tertutup — walau mitra aktif
-  // sungguhan ada — karena `page.tsx` mengirim array kosong ke antreannya
-  // sendiri. Tanpa pagar ini, koreksi tersebut bisa lenyap lagi di edit
+  // kalimat itu muncul setiap kali panel sesi tertutup — walau mitra aktif
+  // sungguhan ada — karena `page.tsx` mengirim array kosong ke tab
+  // Permintaan. Tanpa pagar ini, koreksi tersebut bisa lenyap lagi di edit
   // berikutnya tanpa satu test pun menjadi merah.
   describe("mitra tetap tersedia untuk antrean permintaan walau panel tertutup", () => {
     const TGL_ANTREAN = "2026-12-29";

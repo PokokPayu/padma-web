@@ -251,7 +251,7 @@ export async function konfirmasiPermintaan(permintaanId: string): Promise<Berhas
  *
  * Klien memutuskan admin untuk sementara tidak menolak pengajuan: yang
  * membatalkan adalah kliennya sendiri, lewat `batalkanPengajuan` di Passport.
- * Tombolnya sudah hilang dari `antrean-permintaan.tsx`, dan
+ * Tombolnya sudah hilang dari layar permintaan admin, dan
  * tests/pembatalan-klien.test.ts menjaga agar tidak ada berkas di `src/` yang
  * memanggil fungsi ini.
  *
