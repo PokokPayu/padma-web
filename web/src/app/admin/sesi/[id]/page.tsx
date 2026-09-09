@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
+import { createServerSupabase } from "@/lib/supabase/server";
 import { ambilDetailSesi, type SkriningPenopang } from "@/lib/admin/sesi-detail";
 import { bacaPengaturan } from "@/lib/settings";
 import { formatTanggalID } from "@/lib/passport/waktu";
@@ -9,6 +10,7 @@ import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { PanelSesi } from "../panel-sesi";
 import { LABEL_STATUS_SESI, KELAS_PILL_SESI } from "../status";
+import { PengunggahSertifikat } from "./pengunggah-sertifikat";
 
 export const metadata = { title: "Detail Sesi" };
 
@@ -38,6 +40,15 @@ export default async function DetailSesiPage({
   // berakhir sama. Membedakannya di layar akan membocorkan keberadaan sesi
   // yang tidak boleh dilihat pemanggilnya.
   if (!sesi) notFound();
+
+  // Dibaca lewat sesi pengguna: policy "sertifikat: staf kelola" yang
+  // memutuskan, bukan service role.
+  const supabase = await createServerSupabase();
+  const { data: sertifikat } = await supabase
+    .from("certificates")
+    .select("objek, created_at")
+    .eq("session_id", sesi.id)
+    .maybeSingle<{ objek: string; created_at: string }>();
 
   return (
     <main>
@@ -95,6 +106,22 @@ export default async function DetailSesiPage({
               identik selamanya adalah persis jenis kembaran yang akhirnya
               menyimpang. */}
           <PanelSesi sesi={sesi} jamPilihan={jamLayanan} />
+
+          {/* Hanya untuk sesi yang SELESAI. Sertifikat kunjungan yang belum
+              terjadi adalah pernyataan yang tidak benar — digerbang di sini demi
+              layar yang jujur, dan di trigger basis data demi kebenaran yang tidak
+              bergantung pada layar. */}
+          {sesi.status === "selesai" && (
+            <div className="mt-5 border-t border-panel-border pt-4">
+              <h2 className="mb-1 text-[13px] font-bold text-panel-ink">Sertifikat</h2>
+              <p className="mb-3 text-[12px] text-panel-muted">
+                {sertifikat
+                  ? "Sudah terbit — klien bisa membukanya dari badge Pencapaian dan halaman Materi."
+                  : "Belum ada. PDF, JPEG, atau WEBP, maksimal 5 MB."}
+              </p>
+              <PengunggahSertifikat sessionId={sesi.id} sudahAda={Boolean(sertifikat)} />
+            </div>
+          )}
         </section>
       </div>
     </main>
