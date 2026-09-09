@@ -693,10 +693,10 @@ describe("dashboard admin", () => {
   it("tile 'Sesi selesai tanpa jenjang' menaut ke DAFTAR TERSARING, bukan ke modulnya", async () => {
     // Tile yang hanya memberi angka lalu menurunkan admin di daftar penuh
     // meninggalkannya memindai ratusan baris untuk menemukan tiga sesi.
-    // Urutan parameter mengikuti `bangunQuery`: saringan menurut abjad
-    // kemunculan, `hal` tidak ditulis untuk halaman 1.
+    // Urutan parameter mengikuti `bangunQuery`: tab ditulis lebih dulu
+    // (sticky params), lalu saringan menurut abjad kemunculan.
     const m = await markupDashboard();
-    expect(m).toContain('href="/admin/sesi?status=selesai&amp;jenjang=kosong"');
+    expect(m).toContain('href="/admin/sesi?tab=sesi&amp;status=selesai&amp;jenjang=kosong"');
   });
 
   it("tile transport owner TIDAK ikut berubah — ia milik panel lain", async () => {
@@ -731,7 +731,7 @@ describe("dashboard admin", () => {
     // tombol menutup celah itu.
     for (const [label, href] of [
       ["+ Klien baru", "/admin/klien"],
-      ["+ Sesi baru", "/admin/sesi"],
+      ["+ Sesi baru", "/admin/sesi?tab=sesi"],
     ] as const) {
       const tag = (m.match(/<a[^>]*>[\s\S]*?<\/a>/g) ?? []).find((t) => t.includes(label));
       expect(tag, `tombol aksi cepat "${label}" tidak ditemukan`).toBeTruthy();
