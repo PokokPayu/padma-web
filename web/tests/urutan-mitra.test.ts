@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
+import { urutkanMitraMenurutJarak, labelJarak } from "@/lib/jadwal/urutan-mitra";
 
 const MALANG = { lat: -7.9666, lon: 112.6326 };
 
@@ -57,13 +57,18 @@ describe("urutan mitra menurut jarak", () => {
 
 describe("format jarak untuk layar admin", () => {
   it("satu angka desimal dengan koma, bukan titik", () => {
-    expect(formatKm(4.234)).toBe("4,2 km");
-    expect(formatKm(0)).toBe("0,0 km");
+    expect(labelJarak({ km: 4.234, sebab: null })).toBe("4,2 km");
+    expect(labelJarak({ km: 0, sebab: null })).toBe("0,0 km");
   });
 
-  it("mitra tanpa koordinat mengatakan APA yang kurang, bukan menampilkan angka palsu", () => {
+  it("menyebut APA yang kurang dan PADA SIAPA, bukan satu kalimat untuk dua sebab", () => {
     // "0 km" untuk mitra tanpa domisili akan membuatnya selalu tampak paling
     // dekat — kebohongan yang persis membalik urutan yang sedang dibangun.
-    expect(formatKm(null)).toBe("domisili belum diisi");
+    expect(labelJarak({ km: null, sebab: "domisili_mitra" })).toBe("domisili bidan belum diisi");
+    // Dan yang ini dulunya juga berbunyi "domisili belum diisi": alamat
+    // permintaan yang gagal digeocode menuduh mitra yang datanya sudah benar.
+    expect(labelJarak({ km: null, sebab: "alamat_permintaan" })).toBe(
+      "alamat permintaan belum berkoordinat",
+    );
   });
 });
