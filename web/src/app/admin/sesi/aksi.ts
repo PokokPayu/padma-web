@@ -252,16 +252,21 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
 async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
   try {
     // GAGAL TERTUTUP juga untuk basis URL: tautan bayar dibangun dari
-    // `NEXT_PUBLIC_BASIS_URL`, dan URL kosong menghasilkan href RELATIF yang
-    // mati di kotak masuk klien ("Bayar & unggah bukti transfer di:
-    // /passport/bayar") — sementara `kirimEmail()` tetap memulangkan
-    // `ok: true`, `email_tagihan_pada` tetap tertulis, dan panel tetap
-    // berbunyi "sudah terkirim ke klien". Klien kehilangan satu-satunya jalan
-    // membayar sementara tenggat 24 jam berjalan, tanpa satu baris pun di
-    // log. Diperiksa di sini, SEBELUM email dirakit, supaya env yang lupa
-    // diisi gagal sejelas `RESEND_API_KEY`/`EMAIL_PENGIRIM` kosong — bukan
-    // gagal senyap sebagai "berhasil".
-    const basisUrl = process.env.NEXT_PUBLIC_BASIS_URL;
+    // `NEXT_PUBLIC_BASIS_URL`, dan URL kosong ATAU BERISI SPASI SAJA
+    // menghasilkan href RELATIF (atau berawal spasi) yang mati di kotak
+    // masuk klien ("Bayar & unggah bukti transfer di: /passport/bayar")
+    // — sementara `kirimEmail()` tetap memulangkan `ok: true`,
+    // `email_tagihan_pada` tetap tertulis, dan panel tetap berbunyi "sudah
+    // terkirim ke klien". Klien kehilangan satu-satunya jalan membayar
+    // sementara tenggat 24 jam berjalan, tanpa satu baris pun di log.
+    // `.trim()` WAJIB sebelum pemeriksaan: `!" "` bernilai `false`, jadi env
+    // yang salah-ISI (spasi) lolos gerbang naif yang hanya menguji salah-
+    // KOSONG. Hasil trim-nya jugalah yang dipakai merangkai `tautanBayar` di
+    // bawah, supaya spasi di ujung tidak ikut masuk ke URL pada kasus yang
+    // lolos. Diperiksa di sini, SEBELUM email dirakit, supaya env yang lupa
+    // diisi (atau salah diisi) gagal sejelas `RESEND_API_KEY`/`EMAIL_PENGIRIM`
+    // kosong — bukan gagal senyap sebagai "berhasil".
+    const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
     if (!basisUrl) {
       console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");
       return false;
