@@ -710,16 +710,45 @@ describe("halaman ajukan jadwal — bentuk formulir", () => {
     const m = await markup();
     expect(m).toContain("Sankalpa Fertility Massage");
     expect(m).toContain('name="tanggal"');
-    expect(m).toContain('name="layanan"');
     for (const w of ["pagi", "siang", "sore"]) expect(m).toContain(w);
+
+    // DISESUAIKAN saat `<select name="layanan">` diganti katalog berharga:
+    // tombol katalog tidak menyumbang medan apa pun ke FormData, jadi
+    // `name="layanan"` memang TIDAK ADA lagi di markup. Yang menggantikannya
+    // sebagai jaminan kontrak adalah `fd.set("layanan", …)` di handler
+    // `action` — dan tanpa baris itu `ajukanJadwal` menerima layanan kosong
+    // lalu menolak SETIAP pengajuan. Karena itu barisnya yang diperiksa di
+    // sumber, bukan atribut `name` yang sudah tidak relevan.
+    const form = baca("src/app/passport/ajukan/form.tsx");
+    expect(form).toMatch(/fd\.set\(\s*["']layanan["']\s*,\s*layananId\s*\)/);
+    // Layanan memang dirender sebagai tombol yang bisa ditekan, bukan daftar
+    // nama yang mati.
+    expect(m).toMatch(/<button[^>]*type="button"[^>]*aria-pressed=/);
+
+    // Layar ini kini menampilkan angka, dan angkanya diringkas sebagai
+    // PERKIRAAN — bukan "Total". Transport dihitung dari domisili bidan ke
+    // alamat klien, dan bidannya belum dipilih saat memesan; "Total" akan
+    // menjadi janji yang pasti dilanggar sebelum tagihan terbit.
+    expect(m).toMatch(/Rp\s?\d/);
+    expect(m).toContain("Perkiraan");
+    expect(m).toContain("dihitung setelah bidan ditetapkan");
+    expect(m).not.toContain(">Total<");
   });
 
   it("menawarkan varian sebagai pilihan kedua (Task 9)", async () => {
     // Sejak `variant_id` wajib, klien harus memilih variannya sendiri — bukan
     // hanya layanan. Setiap layanan wajib punya minimal satu varian aktif
-    // (V3 spec), jadi select ini tidak pernah kosong untuk katalog seed.
+    // (V3 spec), jadi katalog ini tidak pernah kosong untuk katalog seed.
+    //
+    // DISESUAIKAN bersama katalog: varian kini tombol ber-`aria-pressed`, dan
+    // nilainya dikirim lewat `fd.set("varian", …)` di handler `action`.
+    const form = baca("src/app/passport/ajukan/form.tsx");
+    expect(form).toMatch(/fd\.set\(\s*["']varian["']\s*,\s*varianId\s*\)/);
     const m = await markup();
-    expect(m).toContain('name="varian"');
+    // Varian baku berlabel kosong dari `labelVarian()` tampil "Standar" —
+    // persis seperti <option> yang digantikannya.
+    expect(m).toContain("Standar");
+    expect(m).toContain('aria-pressed="true"');
   });
 
   it("mengisi awal medan alamat dari alamat profil klien (Ruling 9 T6 / spec T7)", async () => {

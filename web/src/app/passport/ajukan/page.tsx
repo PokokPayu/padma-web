@@ -5,7 +5,9 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { bacaPengaturan } from "@/lib/settings";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
+import { formatRupiah } from "@/lib/rupiah-publik";
 import { FormAjukan } from "./form";
+import type { LayananKatalogAjukan } from "./katalog";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Ajukan Jadwal" };
@@ -39,6 +41,18 @@ type BarisVarian = {
   format: FormatVarian | null;
 };
 
+type BarisLayanan = { id: string; nama: string; phase_id: string };
+
+type BarisFase = { id: string; nama_sanskrit: string; nama: string; urutan: number };
+
+/** Baris view `harga_publik` — proyeksi berkolom sempit, TANPA `honor_mitra`. */
+type BarisHargaPublik = {
+  variant_id: string;
+  harga_klien: number;
+  harga_coret: number | null;
+  berlaku_sejak: string;
+};
+
 export default async function HalamanAjukan() {
   const klien = await ambilKlien();
   if (!klien) notFound(); // layout sudah menangani; ini penjaga tipe
@@ -62,9 +76,21 @@ export default async function HalamanAjukan() {
   // SERVER — nilai yang sama dipakai ulang sebagai pagar di `ajukanJadwal`,
   // sehingga apa yang ditawarkan layar dan apa yang diterima server tidak
   // pernah bisa berselisih.
-  const [{ jamLayanan }, { data: layanan }, { data: varian }, { data: profil }] = await Promise.all([
+  const [
+    { jamLayanan },
+    { data: layanan },
+    { data: varian },
+    { data: profil },
+    { data: fase },
+    { data: harga },
+  ] = await Promise.all([
     bacaPengaturan(),
-    supabase.from("services").select("id, nama").eq("aktif", true).order("nama"),
+    supabase
+      .from("services")
+      .select("id, nama, phase_id")
+      .eq("aktif", true)
+      .order("nama")
+      .returns<BarisLayanan[]>(),
     supabase
       .from("service_variants")
       .select("id, service_id, label, durasi_menit, format")
@@ -76,6 +102,23 @@ export default async function HalamanAjukan() {
       .select("alamat")
       .eq("id", klien.id) // operator setara, tidak pernah pola
       .maybeSingle<{ alamat: string }>(),
+    supabase
+      .from("phases")
+      .select("id, nama_sanskrit, nama, urutan")
+      .order("urutan")
+      .returns<BarisFase[]>(),
+    // View `harga_publik` — SUDAH ADA dan sudah dipakai landing sejak spec V4
+    // §4.4 memutuskan harga klien tampil publik. Nol permukaan data baru, nol
+    // pelonggaran money firewall: `honor_mitra` tidak pernah diproyeksikan
+    // view ini, dan daftar kolomnya dikunci tests/harga-publik.test.ts.
+    //
+    // Dibaca lewat SESI PENGGUNA, bukan `bacaKatalog()` yang memakai anon key:
+    // halaman ini berautentikasi, dan mencampur dua jenis klien Supabase dalam
+    // satu halaman hanya menambah satu jalur yang bisa berselisih.
+    supabase
+      .from("harga_publik")
+      .select("variant_id, harga_klien, harga_coret, berlaku_sejak")
+      .returns<BarisHargaPublik[]>(),
   ]);
 
   // LAPIS PERTAMA GERBANG SKRINING (spec J3, K5).
@@ -118,22 +161,82 @@ export default async function HalamanAjukan() {
     );
   }
 
-  // Label dirangkai lewat `labelVarian()` — SATU-SATUNYA perangkai label
-  // varian di proyek ini — supaya pilihan di wizard klien terbaca sama persis
-  // dengan yang admin dan landing tampilkan untuk varian yang sama.
-  const varianTampil = (varian ?? []).map((v) => ({
-    id: v.id,
-    serviceId: v.service_id,
-    label: labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format }),
-  }));
+  // Harga yang BERLAKU HARI INI: `berlaku_sejak` terbesar yang masih ≤ hari
+  // ini menurut kalender Jakarta. Aturannya sama persis dengan
+  // `tarifPadaTanggal()` dan `tarifTransportPadaTanggal()`; ditulis di sini
+  // karena bentuk barisnya berbeda (view, bukan tabel tarif) dan karena yang
+  // dikunci di sini adalah HARI INI, bukan tanggal sesi — katalog memperlihatkan
+  // harga saat memesan, sementara tagihan dikunci tanggal sesinya.
+  const hariIni = hariIniJakarta();
+  const hargaPerVarian = new Map<string, { harga: number; coret: number | null; sejak: string }>();
+  for (const h of harga ?? []) {
+    const sejak = h.berlaku_sejak;
+    if (sejak > hariIni) continue;
+    const ada = hargaPerVarian.get(h.variant_id);
+    if (ada && ada.sejak >= sejak) continue;
+    hargaPerVarian.set(h.variant_id, {
+      harga: h.harga_klien,
+      coret: h.harga_coret ?? null,
+      sejak,
+    });
+  }
+
+  const fasePerId = new Map((fase ?? []).map((f) => [f.id, f]));
+
+  // Urutan tampil per LAYANAN, dicatat saat fasenya masih diketahui. Layanan
+  // yang fasenya tak terbaca jatuh ke belakang, bukan ke depan — halaman tetap
+  // memesan, cuma kelompoknya yang tak bertajuk.
+  const urutanPerLayanan = new Map<string, number>(
+    (layanan ?? []).map((l) => [
+      l.id,
+      fasePerId.get(l.phase_id)?.urutan ?? Number.MAX_SAFE_INTEGER,
+    ]),
+  );
+
+  const katalog: LayananKatalogAjukan[] = (layanan ?? []).map((l) => {
+    const f = fasePerId.get(l.phase_id);
+    return {
+      id: l.id,
+      nama: l.nama,
+      namaFase: f ? `${f.nama_sanskrit} · ${f.nama}` : "",
+      varian: (varian ?? [])
+        .filter((v) => v.service_id === l.id)
+        .map((v) => {
+          const h = hargaPerVarian.get(v.id);
+          return {
+            id: v.id,
+            serviceId: v.service_id,
+            // `labelVarian()` — SATU-SATUNYA perangkai label varian di proyek
+            // ini. Varian baku memulangkan string kosong, dan itu SAH; katalog
+            // menampilkannya sebagai "Standar", persis seperti <select> yang
+            // digantikannya. Dipakai di sini supaya pilihan di wizard klien
+            // terbaca sama persis dengan yang admin dan landing tampilkan
+            // untuk varian yang sama.
+            label: labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format }),
+            hargaKlien: h ? formatRupiah(h.harga) : null,
+            hargaCoret: h?.coret != null ? formatRupiah(h.coret) : null,
+          };
+        }),
+    };
+  });
+
+  // Kelompok fase tampil dalam URUTAN PERJALANAN yang sama dengan landing
+  // (`phases.urutan`), bukan urutan abjad nama layanan: klien yang sudah
+  // melihat lini layanan di landing menemukan kembali susunan yang sama.
+  // `Array.prototype.sort` stabil, jadi di DALAM satu fase urutan abjad dari
+  // `.order("nama")` tetap terjaga.
+  katalog.sort(
+    (a, b) =>
+      (urutanPerLayanan.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+      (urutanPerLayanan.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+  );
 
   // `min` hanyalah kenyamanan pemakai — penolakan tanggal lampau yang sungguh
   // mengikat ada di server action dan di trigger basis data. Atribut HTML bisa
   // dihapus siapa saja lewat devtools.
   return (
     <FormAjukan
-      layanan={(layanan ?? []) as Array<{ id: string; nama: string }>}
-      varian={varianTampil}
+      katalog={katalog}
       jamPilihan={jamLayanan}
       tanggalPalingAwal={hariIniJakarta()}
       alamatDefault={profil?.alamat ?? ""}

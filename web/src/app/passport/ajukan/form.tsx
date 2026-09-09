@@ -5,26 +5,26 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ajukanJadwal } from "@/lib/passport/aksi";
 import { formatJam } from "@/lib/jadwal/jam";
+import { Katalog, type LayananKatalogAjukan } from "./katalog";
+import { Ringkasan } from "./ringkasan";
 
 // Formulir hanya mengirim keinginan klien (layanan, tanggal, preferensi waktu,
 // catatan). Status permintaan bukan urusan formulir ini: ia ditetapkan server
 // dan dikunci trigger basis data.
 const WAKTU = ["pagi", "siang", "sore"] as const;
 
-export type VarianPilihan = { id: string; serviceId: string; label: string };
-
 export function FormAjukan({
-  layanan,
-  varian,
+  katalog,
   jamPilihan,
   tanggalPalingAwal,
   alamatDefault,
 }: {
-  layanan: Array<{ id: string; nama: string }>;
-  // Varian AKTIF seluruh layanan, disaring per layanan terpilih di klien —
-  // wizard butuh keduanya bersamaan supaya pilihan kedua bisa berubah tanpa
-  // round-trip ke server saat layanan diganti.
-  varian: VarianPilihan[];
+  // Katalog LENGKAP (layanan aktif, varian aktif, harga yang berlaku hari ini)
+  // sudah dirakit di server. Dioper utuh, bukan dipecah jadi dua prop
+  // `layanan` + `varian` seperti sebelumnya: pilihan layanan dan pilihan
+  // varian adalah SATU keputusan di layar ini, dan memisahkan datanya kembali
+  // hanya melahirkan lagi kemungkinan pasangan yang tidak cocok.
+  katalog: LayananKatalogAjukan[];
   // Jam mulai yang boleh dipilih, dari `app_settings.jam_layanan` (spec J2).
   // Dibaca di server dan dipakai ULANG sebagai pagar di `ajukanJadwal`, jadi
   // apa yang ditawarkan di sini dan apa yang diterima server tidak pernah bisa
@@ -43,11 +43,41 @@ export function FormAjukan({
   const [pending, mulai] = useTransition();
   const [waktu, setWaktu] = useState<(typeof WAKTU)[number]>("pagi");
   const [jam, setJam] = useState(jamPilihan[0] ?? "");
-  const [layananId, setLayananId] = useState(layanan[0]?.id ?? "");
-  const varianLayanan = varian.filter((v) => v.serviceId === layananId);
-  const [varianId, setVarianId] = useState(varianLayanan[0]?.id ?? "");
+  // Pilihan awal = varian pertama dari layanan pertama yang PUNYA varian.
+  // Layanan tanpa varian aktif tidak dirender katalog, jadi memilihnya sebagai
+  // nilai awal akan menghasilkan formulir yang menunjuk sesuatu yang tidak
+  // terlihat di layar — dan pengajuan yang ditolak FK gabungan.
+  const layananPertama = katalog.find((l) => l.varian.length > 0);
+  const [layananId, setLayananId] = useState(layananPertama?.id ?? "");
+  const [varianId, setVarianId] = useState(layananPertama?.varian[0]?.id ?? "");
   const [selesai, setSelesai] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
+
+  /**
+   * SATU penyetel untuk KEDUA nilai — bukan dua penyetel terpisah.
+   *
+   * Varian layanan lain tidak sah untuk layanan yang sedang terpilih: FK
+   * gabungan (service_id, variant_id) di basis data menolaknya, dan
+   * penolakannya sampai ke klien sebagai kalimat galat untuk kombinasi yang
+   * tidak pernah ia maksud. Selama keduanya bergerak bersama-sama dalam satu
+   * fungsi, kombinasi itu tidak punya jalan untuk lahir.
+   */
+  function pilihVarian(serviceId: string, idVarian: string) {
+    setLayananId(serviceId);
+    setVarianId(idVarian);
+  }
+
+  const layananTerpilih = katalog.find((l) => l.id === layananId) ?? null;
+  const varianTerpilih = layananTerpilih?.varian.find((v) => v.id === varianId) ?? null;
+  // Nama yang dibaca ulang klien di blok ringkasan. Varian baku berlabel
+  // kosong (sah — lihat `labelVarian()`), dan untuk varian itu nama layanannya
+  // sendiri sudah menjadi nama yang lengkap.
+  const namaTerpilih =
+    layananTerpilih === null
+      ? ""
+      : varianTerpilih && varianTerpilih.label !== ""
+        ? `${layananTerpilih.nama} · ${varianTerpilih.label}`
+        : layananTerpilih.nama;
 
   if (selesai) {
     return (
@@ -82,6 +112,18 @@ export function FormAjukan({
       <form
         action={(fd) => {
           fd.set("waktu", waktu);
+          // KONTRAK FormData KE `ajukanJadwal` TIDAK BERUBAH: medannya tetap
+          // layanan, varian, tanggal, jam, waktu, alamat, catatan. Itulah yang
+          // menjaga seluruh pagar server, gerbang skrining tiga lapis, dan
+          // trigger basis data tetap utuh tanpa disentuh.
+          //
+          // `layanan` DISETEL DI SINI dan barisnya wajib ada: dulu medan itu
+          // disediakan otomatis oleh `<select name="layanan">`, dan select itu
+          // sudah tidak ada — digantikan katalog yang tombol-tombolnya tidak
+          // menyumbang medan apa pun ke FormData. Tanpa baris di bawah,
+          // `ajukanJadwal` menerima `layanan` kosong dan MENOLAK SETIAP
+          // PENGAJUAN.
+          fd.set("layanan", layananId);
           fd.set("varian", varianId);
           fd.set("jam", jam);
           mulai(async () => {
@@ -105,48 +147,14 @@ export function FormAjukan({
           });
         }}
       >
-        <label className="mb-4 block text-sm">
-          <span className="font-semibold text-ink-soft">Layanan</span>
-          <select
-            name="layanan"
-            required
-            value={layananId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setLayananId(id);
-              // Varian terpilih ikut direset ke pilihan pertama layanan baru
-              // — varian layanan sebelumnya tidak sah untuk layanan ini (FK
-              // gabungan bakal menolaknya, dan pesannya sebaiknya tidak pernah
-              // sampai lahir dari kombinasi yang tidak pernah dimaksud klien).
-              setVarianId(varian.find((v) => v.serviceId === id)?.id ?? "");
-            }}
-            className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
-          >
-            {layanan.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.nama}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Tiga kelompok, tiga pertanyaan: APA, KAPAN, KE MANA. Urutannya sama
+            dengan urutan medan sebelumnya (spec J2) — yang berubah hanya
+            tajuknya, supaya formulir yang kini jauh lebih panjang tetap bisa
+            dibaca sebagai tiga keputusan, bukan tujuh kotak berderet. */}
+        <h2 className="mb-3 text-sm font-semibold text-ink-soft">Layanan</h2>
+        <Katalog layanan={katalog} varianId={varianId} onPilih={pilihVarian} />
 
-        <label className="mb-4 block text-sm">
-          <span className="font-semibold text-ink-soft">Varian</span>
-          <select
-            name="varian"
-            required
-            value={varianId}
-            onChange={(e) => setVarianId(e.target.value)}
-            disabled={varianLayanan.length === 0}
-            className="mt-1 min-h-[44px] w-full rounded-lg border border-black/15 px-3 py-2.5"
-          >
-            {varianLayanan.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label === "" ? "Standar" : v.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <h2 className="mb-3 mt-7 text-sm font-semibold text-ink-soft">Kapan</h2>
 
         <label className="mb-4 block text-sm">
           <span className="font-semibold text-ink-soft">Tanggal yang diinginkan</span>
@@ -211,6 +219,8 @@ export function FormAjukan({
           </span>
         </fieldset>
 
+        <h2 className="mb-3 mt-7 text-sm font-semibold text-ink-soft">Ke mana</h2>
+
         <label className="mb-4 block text-sm">
           <span className="font-semibold text-ink-soft">Alamat kunjungan</span>
           {/* `defaultValue`, bukan `value` terkendali: sekali diisi dari
@@ -243,6 +253,16 @@ export function FormAjukan({
             className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
           />
         </label>
+
+        {/* Ringkasan berdiri TEPAT di atas tombol kirim: ia jawaban terakhir
+            atas "berapa" sebelum klien menekan kirim, dan di situlah orang
+            mencarinya. */}
+        <div className="mb-4">
+          <Ringkasan
+            hargaLayanan={varianTerpilih?.hargaKlien ?? null}
+            namaTerpilih={namaTerpilih}
+          />
+        </div>
 
         {pesan && <p className="mb-3 text-sm text-clay">{pesan}</p>}
 
