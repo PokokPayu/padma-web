@@ -106,7 +106,8 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/sesi` | Klien | Riwayat sesi; tiap kartu menaut ke detail kunjungannya |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
 | `/passport/materi/[id]` | Klien | Reader e-book/video berwatermark identitas, tanpa unduhan |
-| `/passport/bayar` | Klien | STATUS tagihan (tanpa nominal) + klaim "saya sudah bayar" |
+| `/passport/bayar/[id]` | Klien | Satu tagihan pengajuan: nominal, tenggat, QRIS, dan unggah bukti dalam satu layar |
+| `/passport/bayar` | Klien | Daftar tagihan: pengajuan bertenggat menaut ke halamannya sendiri, tagihan sesi + klaim "saya sudah bayar", QRIS terlipat |
 | `/passport/ajukan` | Klien | Ajukan jadwal: varian, tanggal, JAM, alamat — selalu berstatus `diminta`. Tanpa skrining hijau yang belum terpakai: ajakan skrining, bukan formulir |
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |

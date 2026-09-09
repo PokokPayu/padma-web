@@ -1,20 +1,29 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ambilKlien, ambilPaket, ambilSesi } from "@/lib/passport/data";
 import { susunTagihan, type PayStatus } from "@/lib/passport/turunan";
 import { bacaPengaturan } from "@/lib/settings";
 import { TombolKlaim } from "./tombol-klaim";
 import { ambilTagihanPengajuan } from "@/lib/tagihan/baca";
-import { KartuTagihan } from "./kartu-tagihan";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { formatRupiah } from "@/lib/rupiah-publik";
+import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
+import { CaraBayar, LangkahBayar } from "./cara-bayar";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
 
-// Halaman ini menampilkan STATUS, bukan angka: nominal uang hidup di
-// `variant_rates`/`honor_marks` dan tidak pernah sampai ke layar klien —
-// besarannya disampaikan tim PADMA lewat WhatsApp (keputusan #10).
+/**
+ * DAFTAR tagihan — bukan lagi tempat membayar.
+ *
+ * Halaman ini dulu menumpuk empat seksi dalam satu gulungan: tagihan
+ * pengajuan yang bertenggat, tagihan sesi, QRIS, dan tiga langkah pembayaran.
+ * Dua yang terakhir statis dan panjang, sehingga yang paling mendesak justru
+ * terdorong keluar dari layar pertama. Sejak `/passport/bayar/[id]` lahir,
+ * membayar SATU tagihan punya layarnya sendiri dan halaman ini cukup menjawab
+ * satu pertanyaan: apa saja yang belum beres.
+ */
 const LABEL: Record<PayStatus, { teks: string; kelas: string }> = {
   lunas: { teks: "Lunas", kelas: "bg-leaf-soft text-leaf border-leaf/25" },
   menunggu_verifikasi: {
@@ -35,44 +44,66 @@ export default async function HalamanBayar() {
     ambilTagihanPengajuan(klien.id),
   ]);
   const tagihan = susunTagihan({ paket, sesi });
-  const { qrisGambar, qrisMerchant, qrisNmid } = pengaturan;
 
   return (
     <>
       {/* TAGIHAN PENGAJUAN (spec C2) — di ATAS tagihan sesi, dan itu disengaja:
-          hanya yang ini punya tenggat, dan hanya yang ini menahan jadwal.
-          Menaruhnya di bawah daftar lain berarti hal paling mendesak di halaman
-          ini adalah hal yang terakhir terlihat. */}
+          hanya yang ini punya tenggat, dan hanya yang ini menahan jadwal. */}
       {tagihanPengajuan.length > 0 && (
         <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
           <h2 className="mb-1 font-serif text-xl text-night">Menunggu pembayaran</h2>
           <p className="mb-4 text-[12.5px] text-ink-soft">
-            Jadwal terkunci setelah pembayaran diverifikasi tim.
+            Jadwal terkunci setelah pembayaran diverifikasi tim. Ketuk satu tagihan untuk
+            membayarnya.
           </p>
-          {tagihanPengajuan.map((t) => (
-            <KartuTagihan
-              key={t.permintaanId}
-              permintaanId={t.permintaanId}
-              namaLayanan={t.namaLayanan}
-              tanggal={formatTanggalID(t.tanggal)}
-              jam={formatJam(jamDariDb(t.jamMulai))}
-              total={t.rincian.total === null ? null : formatRupiah(t.rincian.total)}
-              menungguTarifKhusus={t.rincian.menungguTarifKhusus}
-              statusBayar={t.statusBayar}
-              tenggat={t.tenggat}
-              adaBukti={t.adaBukti}
-            />
-          ))}
+          <div className="grid gap-3">
+            {tagihanPengajuan.map((t) => (
+              <Link
+                key={t.permintaanId}
+                href={`/passport/bayar/${t.permintaanId}`}
+                data-tagihan={t.permintaanId}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[1.6px] border-dashed border-gold bg-[#FDFAF1] p-4"
+              >
+                <span className="min-w-0">
+                  <b className="block text-sm text-night">{t.namaLayanan}</b>
+                  <span className="block text-[12px] text-ink-soft">
+                    {formatTanggalID(t.tanggal)} · {formatJam(jamDariDb(t.jamMulai))}
+                  </span>
+                  {t.statusBayar === "belum" && t.tenggat && (
+                    <span className="mt-1 block text-[12px] text-clay">
+                      Bayar dalam {labelSisaWaktu(t.tenggat)}
+                    </span>
+                  )}
+                  {t.statusBayar === "menunggu_verifikasi" && (
+                    <span className="mt-1 block text-[12px] text-[#8A6A1B]">
+                      Bukti diterima, menunggu verifikasi
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2 whitespace-nowrap">
+                  <b className="text-[15px] text-night">
+                    {t.rincian.menungguTarifKhusus || t.rincian.total === null
+                      ? "Menunggu total"
+                      : formatRupiah(t.rincian.total)}
+                  </b>
+                  <svg width="8" viewBox="0 0 8 14" aria-hidden className="text-ink-soft">
+                    <path
+                      d="M1 1l6 6-6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+              </Link>
+            ))}
+          </div>
         </section>
       )}
 
       <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
-        <h1 className="mb-4 font-serif text-xl text-night">
-          Tagihan Anda{" "}
-          <span className="font-sans text-xs font-semibold text-ink-soft">
-            nominal disampaikan tim PADMA via WhatsApp
-          </span>
-        </h1>
+        <h1 className="mb-4 font-serif text-xl text-night">Tagihan Anda</h1>
 
         {tagihan.length === 0 ? (
           <p className="text-[13px] italic text-ink-soft">Belum ada tagihan.</p>
@@ -120,52 +151,25 @@ export default async function HalamanBayar() {
         )}
       </section>
 
-      <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
-        <h2 className="mb-4 font-serif text-xl text-night">Cara Pembayaran</h2>
-        <div className="flex flex-wrap items-center gap-5">
-          {/* QRIS SUNGGUHAN (spec J12) — bukan lagi pola dekoratif.
-              Alamat gambarnya dibaca dari `app_settings`: kode QRIS bisa
-              berganti, dan penggantiannya tidak boleh menuntut deploy. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={qrisGambar}
-            alt={`Kode QRIS ${qrisMerchant}`}
-            width={220}
-            height={220}
-            className="h-[220px] w-[220px] rounded-xl border border-black/10 bg-white object-contain p-2"
+      {/* TERLIPAT, bukan dihapus. Tagihan sesi lepas di atas ditagih lewat
+          WhatsApp dan tidak punya halaman sendiri, jadi kliennya tetap butuh
+          kode untuk dipindai dari sini. Yang tidak boleh lagi terjadi adalah
+          dua seksi statis sepanjang layar mendorong tagihan bertenggat keluar
+          dari pandangan pertama. */}
+      <details className="rounded-2xl border border-black/10 bg-white p-6">
+        <summary className="cursor-pointer font-serif text-xl text-night">
+          QRIS &amp; cara membayar
+        </summary>
+        <div className="mt-4">
+          <CaraBayar
+            qrisGambar={pengaturan.qrisGambar}
+            qrisMerchant={pengaturan.qrisMerchant}
+            qrisNmid={pengaturan.qrisNmid}
           />
-          <div className="min-w-[220px] flex-1 text-[13.5px] text-[#3C4C42]">
-            <b className="mb-1 block text-[15px] text-ink">Scan QRIS di samping</b>
-            Bisa dengan aplikasi bank atau e-wallet apa pun. Setelah membayar, kirim bukti ke
-            WhatsApp admin — tim kami memverifikasi secara manual.
-            {/* NAMA MERCHANT & NMID ditampilkan, dan itu bukan hiasan: QRIS
-                statis tidak menyebut nominal, jadi satu-satunya yang bisa
-                diperiksa mata sebelum mengirim uang adalah nama penerimanya. */}
-            <span className="mt-3 block rounded-xl border border-black/10 bg-paper p-3 text-[12px] leading-relaxed">
-              <span className="block text-ink-soft">Pastikan nama penerima cocok:</span>
-              <b className="block text-ink">{qrisMerchant}</b>
-              <span className="block text-ink-soft">NMID {qrisNmid}</span>
-            </span>
-          </div>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-black/10 bg-white p-6">
-        <h2 className="mb-3 font-serif text-xl text-night">Langkah pembayaran</h2>
-        {[
-          ["01", "Scan QRIS di atas, atau transfer sesuai arahan admin"],
-          ["02", "Kirim bukti pembayaran ke WhatsApp PADMA"],
-          ["03", "Tim memverifikasi & jadwal Anda terkunci"],
-        ].map(([no, teks]) => (
-          <p
-            key={no}
-            className="flex items-center gap-3 border-b border-dashed border-black/10 py-3 text-[13.5px] text-[#3C4C42] last:border-0"
-          >
-            <span className="w-6 flex-none font-mono text-[11px] text-gold">{no}</span>
-            {teks}
-          </p>
-        ))}
-      </section>
+        <h2 className="mb-1 mt-6 font-serif text-lg text-night">Langkah pembayaran</h2>
+        <LangkahBayar unggahDiSini={false} />
+      </details>
     </>
   );
 }

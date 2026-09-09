@@ -160,6 +160,29 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
   return hasil;
 }
 
+/**
+ * SATU tagihan pengajuan milik klien ini — untuk `/passport/bayar/[id]`.
+ *
+ * Sengaja menyaring hasil `ambilTagihanPengajuan` alih-alih menulis query
+ * kedua. Fungsi di atas bukan sekadar SELECT: ia menghitung jenjang transport
+ * lewat RPC, membaca tarif khusus, dan merangkai rincian. Salinan kedua yang
+ * harus sepakat selamanya dengan yang pertama adalah persis cara nominal di
+ * halaman daftar dan nominal di halaman tagihan mulai berbeda — dan klien
+ * yang membaca dua angka untuk satu tagihan tidak punya alasan mempercayai
+ * satu pun. Daftarnya pendek: hanya pengajuan MILIK SATU KLIEN yang sedang
+ * menunggu bayar.
+ *
+ * `null` berarti tidak ada, sudah tidak menunggu bayar, ATAU bukan miliknya —
+ * ketiganya berakhir `notFound()` di halaman.
+ */
+export async function ambilTagihanPengajuanSatu(
+  clientId: string,
+  permintaanId: string,
+): Promise<TagihanPengajuan | null> {
+  const semua = await ambilTagihanPengajuan(clientId);
+  return semua.find((t) => t.permintaanId === permintaanId) ?? null;
+}
+
 async function jarak(
   admin: ReturnType<typeof createAdminSupabase>,
   lat1: number,
