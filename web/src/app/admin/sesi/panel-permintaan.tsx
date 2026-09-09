@@ -31,6 +31,7 @@ export function PanelPermintaan({
   jamPilihan,
   tanggalIso,
   tagihan,
+  emailTerkirim,
 }: {
   permintaan: BarisPermintaanDaftar;
   mitra: MitraPilihan[];
@@ -53,6 +54,8 @@ export function PanelPermintaan({
    * serta dasbor/agenda/tren — bukan berkas ini.
    */
   tagihan: BarisTagihanPengajuanAdmin | null;
+  /** `email_tagihan_pada != null` — apakah email tagihan sudah pernah terkirim. */
+  emailTerkirim: boolean;
 }) {
   const berkoordinat = permintaan.alamatLat !== null && permintaan.alamatLon !== null;
   const bisaDiubah = STATUS_UBAH_PERMINTAAN.includes(permintaan.status);
@@ -252,6 +255,11 @@ export function PanelPermintaan({
                 </div>
               </dl>
             )}
+            <p className="mt-1.5 text-[11.5px] text-panel-muted">
+              {emailTerkirim
+                ? "Email tagihan sudah terkirim ke klien."
+                : "Email tagihan belum pernah terkirim — kirim manual dengan tombol di bawah."}
+            </p>
           </div>
         )}
       </section>
@@ -263,6 +271,7 @@ export function PanelPermintaan({
         mitra={mitra}
         lunas={lunas}
         tautanWa={tautanWa}
+        emailTerkirim={emailTerkirim}
       />
     </div>
   );

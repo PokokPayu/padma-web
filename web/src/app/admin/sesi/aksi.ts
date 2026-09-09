@@ -18,6 +18,9 @@ import {
   STATUS_ANTRE,
 } from "@/lib/jadwal/status";
 import { JAM_TENGGAT_BAYAR } from "@/lib/tagihan/tenggat";
+import { kirimEmail } from "@/lib/email/kirim";
+import { emailTagihan, subjekTagihan } from "@/lib/tagihan/email-tagihan";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -203,6 +206,110 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
   revalidatePath("/admin");
   revalidatePath("/passport");
   revalidatePath("/passport/bayar");
+
+  // Email dikirim SESUDAH statusnya berpindah, dan kegagalannya TIDAK
+  // menggagalkan penerbitan. Tagihannya sudah terbit dan tenggatnya sudah
+  // berjalan; membatalkan itu karena penyedia email sedang bermasalah menukar
+  // masalah kecil dengan masalah besar. Panel menampilkan status kirimnya dan
+  // menyediakan tombol kirim ulang.
+  await kirimEmailTagihan(permintaanId);
+
+  return { ok: true };
+}
+
+/**
+ * Mengirim email tagihan untuk satu permintaan. Memulangkan apakah berhasil.
+ *
+ * TIDAK PERNAH melempar dan TIDAK PERNAH menggagalkan pemanggilnya — lihat
+ * dokblok `kirimEmail`. Tujuannya diambil dari `clients.email` baris pengajuan
+ * itu, TIDAK PERNAH dari input: pelajaran yang sama yang dibayar tautan
+ * WhatsApp yang dulu menunjuk nomor klinik alih-alih nomor klien.
+ */
+async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
+  const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
+  const t = daftar[0];
+  if (!t || t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
+    return false;
+  }
+
+  const supabase = await createServerSupabase();
+  const { data: baris } = await supabase
+    .from("booking_requests")
+    .select("tenggat, jam_mulai, clients ( nama, email )")
+    .eq("id", permintaanId)
+    .maybeSingle<{
+      tenggat: string | null;
+      jam_mulai: string;
+      clients: { nama: string; email: string } | null;
+    }>();
+
+  const email = baris?.clients?.email ?? "";
+  if (email === "") return false;
+
+  const { html, teks } = emailTagihan({
+    namaKlien: baris?.clients?.nama ?? t.namaKlien,
+    namaLayanan: t.namaLayanan,
+    tanggal: t.tanggal,
+    jam: formatJam(jamDariDb(baris!.jam_mulai)),
+    hargaLayanan: t.hargaLayanan,
+    hargaTransport: t.hargaTransport,
+    labelJenjang: t.labelJenjang ?? "",
+    total: t.total,
+    tenggatAbsolut: formatTenggatAbsolut(baris?.tenggat ?? null),
+    tautanBayar: `${process.env.NEXT_PUBLIC_BASIS_URL ?? ""}/passport/bayar`,
+  });
+
+  const hasil = await kirimEmail({
+    ke: email,
+    subjek: subjekTagihan({ namaLayanan: t.namaLayanan, tanggal: t.tanggal }),
+    html,
+    teks,
+  });
+
+  if (hasil.ok) {
+    await supabase
+      .from("booking_requests")
+      .update({ email_tagihan_pada: new Date().toISOString() })
+      .eq("id", permintaanId);
+  }
+  return hasil.ok;
+}
+
+/**
+ * Tenggat sebagai kalimat ABSOLUT dalam kalender Jakarta. Email dibaca ulang
+ * berhari-hari kemudian; "24 jam lagi" di sana adalah kalimat yang berbohong.
+ */
+function formatTenggatAbsolut(iso: string | null): string {
+  if (!iso) return "—";
+  // `timeZone` WAJIB disebut. Tanpa itu Node memakai zona server — Vercel
+  // berjalan di UTC, dan tenggat pukul 14.30 WIB akan tercetak 07.30 di email
+  // klien. Bukan galat, hanya angka yang salah tujuh jam.
+  const teks = new Intl.DateTimeFormat("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  }).format(new Date(iso));
+  return `${teks} WIB`;
+}
+
+/** Mengirim ulang email tagihan. Dipakai ketika kiriman otomatisnya gagal. */
+export async function kirimUlangEmailTagihan(
+  permintaanId: string,
+): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+  const ok = await kirimEmailTagihan(permintaanId);
+  if (!ok) {
+    return {
+      ok: false,
+      pesan:
+        "Email tidak terkirim. Periksa alamat email klien di menu Klien, dan pastikan RESEND_API_KEY & domain pengirim sudah terpasang.",
+    };
+  }
+  revalidatePath("/admin/sesi");
   return { ok: true };
 }
 

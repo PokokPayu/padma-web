@@ -549,6 +549,7 @@ export default async function SesiPage({
             jamPilihan={jamLayanan}
             tanggalIso={barisLihat.tanggal}
             tagihan={tagihanLihat}
+            emailTerkirim={barisLihat?.emailTagihanPada != null}
           />
         </PanelGeser>
       )}

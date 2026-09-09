@@ -753,10 +753,11 @@ describe("berkas server action sesi", () => {
     ].length;
     // cariMitra, pilihMitra (rantai C1), terbitkanTagihan (rantai C2),
     // konfirmasiPermintaan, tolakPermintaan, jadwalkanSesi, selesaikanSesi,
-    // tetapkanJenjang (Task 7). Angkanya sengaja tepat, bukan
-    // `toBeGreaterThan`: action baru yang lupa memasang penjaganya harus
-    // memerahkan berkas ini, bukan lewat diam-diam.
-    expect(jumlahAction).toBe(8);
+    // tetapkanJenjang (Task 7), kirimUlangEmailTagihan (Task 6 — email
+    // tagihan lewat Resend). Angkanya sengaja tepat, bukan `toBeGreaterThan`:
+    // action baru yang lupa memasang penjaganya harus memerahkan berkas ini,
+    // bukan lewat diam-diam.
+    expect(jumlahAction).toBe(9);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -796,9 +797,11 @@ describe("berkas server action sesi", () => {
     // C2 menambahkan pemakaian YANG SAH: `terbitkanTagihan` menghitung
     // `tenggat`, kolom `timestamptz` (bukan `date`) — "24 jam dari sekarang"
     // bukan tanggal kalender, dan tidak punya masalah zona waktu yang sama.
-    // Larangannya TIDAK dilonggarkan begitu saja; ia dipersempit supaya
-    // pemakaian sah yang satu ini tidak diam-diam membuka jalan bagi
-    // `toISOString` lain yang menyelinap pada kolom `tanggal`/`date`.
+    // Task 6 menambah pemakaian sah KEDUA: `kirimEmailTagihan` mencatat
+    // `email_tagihan_pada` (`timestamptz` juga) sebagai "sekarang". Larangannya
+    // TIDAK dilonggarkan begitu saja; ia dipersempit supaya pemakaian sah yang
+    // satu ini tidak diam-diam membuka jalan bagi `toISOString` lain yang
+    // menyelinap pada kolom `tanggal`/`date`.
     for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
@@ -806,11 +809,13 @@ describe("berkas server action sesi", () => {
     }
     expect(sumberAksi).not.toContain("setDate(");
     expect(sumberAksi).not.toContain("getDay(");
-    // TEPAT satu pemakaian, dan itu WAJIB `tenggat` di `terbitkanTagihan` —
-    // bukan `toBeGreaterThan`: pemakaian toISOString baru yang lupa menyebut
-    // `tenggat` harus memerahkan berkas ini.
-    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    // TEPAT dua pemakaian, `tenggat` di `terbitkanTagihan` dan
+    // `email_tagihan_pada` di `kirimEmailTagihan` — bukan `toBeGreaterThan`:
+    // pemakaian toISOString baru yang lupa menyebut salah satu keduanya harus
+    // memerahkan berkas ini.
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(2);
     expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
+    expect(sumberAksi).toMatch(/email_tagihan_pada:\s*new Date\(\)\.toISOString\(\)/);
   });
 
   it("tidak menuliskan data klien ke log", () => {

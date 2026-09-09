@@ -90,6 +90,8 @@ export type BarisPermintaanDaftar = {
   status: StatusPermintaan;
   statusBayar: "belum" | "menunggu_verifikasi" | "lunas";
   tenggat: string | null;
+  /** Kapan email tagihan terakhir BERHASIL terkirim. `null` = belum pernah. */
+  emailTagihanPada: string | null;
 };
 
 type BarisMentah = {
@@ -104,6 +106,7 @@ type BarisMentah = {
   status: StatusPermintaan;
   status_bayar: "belum" | "menunggu_verifikasi" | "lunas";
   tenggat: string | null;
+  email_tagihan_pada: string | null;
   clients: { nama: string; padma_id: string; no_hp: string } | null;
   services: { nama: string } | null;
   service_variants: { label: string } | null;
@@ -123,7 +126,7 @@ export async function ambilDaftarPermintaan(
     .from("booking_requests")
     .select(
       "id, tanggal, jam_mulai, preferensi_waktu, catatan, alamat, alamat_lat, alamat_lon, " +
-        "status, status_bayar, tenggat, " +
+        "status, status_bayar, tenggat, email_tagihan_pada, " +
         "clients!inner ( nama, padma_id, no_hp ), services ( nama ), " +
         "service_variants ( label ), partners ( nama )",
       { count: "exact" },
@@ -172,6 +175,7 @@ export async function ambilDaftarPermintaan(
       status: p.status,
       statusBayar: p.status_bayar,
       tenggat: p.tenggat,
+      emailTagihanPada: p.email_tagihan_pada,
     })),
     total: count ?? 0,
   };

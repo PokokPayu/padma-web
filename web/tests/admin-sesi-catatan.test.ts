@@ -1175,9 +1175,10 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // + terbitkanTagihan (rantai C2): cariMitra, pilihMitra, terbitkanTagihan,
+    // + kirimUlangEmailTagihan (Task 6 — email tagihan lewat Resend):
+    // cariMitra, pilihMitra, terbitkanTagihan, kirimUlangEmailTagihan,
     // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang.
-    expect(jumlahAction).toBe(8);
+    expect(jumlahAction).toBe(9);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -1201,11 +1202,13 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // barat (spec T6). Rantai C2 (`@/app/admin/sesi/aksi.ts`) menambahkan
     // pemakaian YANG SAH: `terbitkanTagihan` menghitung `tenggat`, kolom
     // `timestamptz` (bukan `date`) — "24 jam dari sekarang", bukan tanggal
-    // kalender, sehingga tidak kena bug zona waktu yang sama. Larangannya
-    // TIDAK dilonggarkan; ia dipersempit di `sumberAksi` supaya pemakaian sah
-    // ini tidak diam-diam membuka jalan bagi `toISOString` lain yang
-    // menyelinap pada kolom `tanggal`/`date`. Lihat pagar yang sama & lebih
-    // rinci di tests/admin-sesi-konfirmasi.test.ts.
+    // kalender, sehingga tidak kena bug zona waktu yang sama. Task 6 menambah
+    // pemakaian sah KEDUA: `kirimEmailTagihan` mencatat `email_tagihan_pada`
+    // (`timestamptz` juga) sebagai "sekarang", bukan tanggal kalender.
+    // Larangannya TIDAK dilonggarkan; ia dipersempit di `sumberAksi` supaya
+    // pemakaian sah ini tidak diam-diam membuka jalan bagi `toISOString` lain
+    // yang menyelinap pada kolom `tanggal`/`date`. Lihat pagar yang sama &
+    // lebih rinci di tests/admin-sesi-konfirmasi.test.ts.
     for (const sumber of [sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
@@ -1213,8 +1216,9 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     }
     expect(sumberAksi).not.toContain("setDate(");
     expect(sumberAksi).not.toContain("getDay(");
-    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(2);
     expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
+    expect(sumberAksi).toMatch(/email_tagihan_pada:\s*new Date\(\)\.toISOString\(\)/);
   });
 
   it("tidak menuliskan data klien ke log", () => {
