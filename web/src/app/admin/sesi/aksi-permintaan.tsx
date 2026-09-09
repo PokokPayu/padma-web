@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { cariMitra, pilihMitra, konfirmasiPermintaan, terbitkanTagihan } from "./aksi";
-import { tetapkanKoordinatPermintaan } from "./aksi-koordinat";
+import { perbaruiPermintaan } from "./aksi-ubah-permintaan";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
@@ -179,17 +179,19 @@ export function TombolPermintaan({
 }
 
 /**
- * Formulir pin alamat permintaan.
+ * Pembungkus formulir "Ubah permintaan".
  *
- * `PemilihLokasi` menaruh dua input tersembunyi bernama `lat`/`lon`; formulir
- * ini hanya membungkusnya dan menyerahkan FormData-nya ke server action.
+ * SELURUH medannya — alamat, tanggal, jam, dan peta — dirender halaman di
+ * SERVER lalu dioper masuk sebagai `anak`. Yang klien di sini hanya `<form>`,
+ * tombolnya, dan tempat pesan galat mendarat. Suite proyek ini berjalan tanpa
+ * jsdom, jadi apa pun yang hanya lahir sesudah hidrasi tidak bisa diperiksa
+ * sama sekali.
  */
-export function FormPinPermintaan({
+export function FormUbahPermintaan({
   permintaanId,
   anak,
 }: {
   permintaanId: string;
-  /** `PemilihLokasi`, dirender halaman di server lalu dioper masuk. */
   anak: ReactNode;
 }) {
   const [pending, mulai] = useTransition();
@@ -199,14 +201,14 @@ export function FormPinPermintaan({
     <form
       action={(formData) =>
         mulai(async () => {
-          const r = await tetapkanKoordinatPermintaan(permintaanId, formData);
-          setPesan(r.ok ? "Pin tersimpan." : r.pesan);
+          const r = await perbaruiPermintaan(permintaanId, formData);
+          setPesan(r.ok ? "Perubahan tersimpan." : r.pesan);
         })
       }
     >
       {anak}
       <button type="submit" disabled={pending} className={`mt-2 ${KELAS_UTAMA}`}>
-        {pending ? "Menyimpan…" : "Simpan pin"}
+        {pending ? "Menyimpan…" : "Simpan perubahan"}
       </button>
       {pesan && <p className="mt-1 text-[12px] font-semibold text-ink-soft">{pesan}</p>}
     </form>

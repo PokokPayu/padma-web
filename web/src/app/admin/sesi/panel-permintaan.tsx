@@ -1,7 +1,8 @@
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
-import { TombolPermintaan, FormPinPermintaan, type MitraPilihan } from "./aksi-permintaan";
+import { TombolPermintaan, FormUbahPermintaan, type MitraPilihan } from "./aksi-permintaan";
 import type { BarisPermintaanDaftar } from "@/lib/admin/permintaan";
-import { LABEL_PERMINTAAN } from "@/lib/jadwal/status";
+import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
+import { formatJam } from "@/lib/jadwal/jam";
 
 /**
  * Isi panel geser untuk SATU permintaan.
@@ -24,6 +25,8 @@ export function PanelPermintaan({
   labelBayar,
   lunas,
   tautanWa,
+  jamPilihan,
+  tanggalIso,
 }: {
   permintaan: BarisPermintaanDaftar;
   mitra: MitraPilihan[];
@@ -34,8 +37,12 @@ export function PanelPermintaan({
   labelBayar: string;
   lunas: boolean;
   tautanWa: string;
+  jamPilihan: string[];
+  /** Nilai `YYYY-MM-DD` mentah, untuk `<input type="date">`. */
+  tanggalIso: string;
 }) {
   const berkoordinat = permintaan.alamatLat !== null && permintaan.alamatLon !== null;
+  const bisaDiubah = STATUS_UBAH_PERMINTAAN.includes(permintaan.status);
 
   return (
     <div className="flex flex-col gap-4 px-4 py-4">
@@ -65,46 +72,87 @@ export function PanelPermintaan({
 
       <section>
         <p className="text-[12.5px] font-bold text-panel-muted">Alamat kunjungan</p>
-        <p className="mt-1 whitespace-pre-line text-[12.5px] text-panel-ink">
-          {permintaan.alamat || "—"}
-        </p>
-
-        {berkoordinat ? (
-          <p className="mt-1 text-[11px] text-panel-muted">
-            Pin: {permintaan.alamatLat!.toFixed(6)}, {permintaan.alamatLon!.toFixed(6)}
-          </p>
-        ) : (
+        {!bisaDiubah ? (
           <>
-            {/* Kalimat menyebut AKIBATNYA, bukan hanya keadaannya. "Belum
-                berkoordinat" saja tidak memberi tahu admin bahwa sesi yang
-                lahir dari sini akan menuntut jenjang transport ditetapkan
-                tangan belakangan. */}
-            <p className="mt-2 rounded-lg bg-clay/10 px-3 py-2 text-[12px] font-semibold text-clay">
-              Alamat ini belum berkoordinat. Jarak ke bidan tidak bisa dihitung, dan sesi yang lahir
-              darinya tidak akan punya jenjang transport.
+            <p className="mt-1 whitespace-pre-line text-[12.5px] text-panel-ink">
+              {permintaan.alamat || "—"}
             </p>
-            <FormPinPermintaan
-              permintaanId={permintaan.id}
-              anak={
-                <>
-                  {/* `PemilihLokasi` membaca alamat lewat
-                      `namedItem("alamat")` pada FORMULIR yang sama — tapi di
-                      panel ini alamatnya cuma teks tampilan di atas, di luar
-                      formulir. Tanpa medan tersembunyi ini, tombol "Cari
-                      alamat di peta" selalu menganggap alamatnya kosong dan
-                      menyalahkan admin ("Isi alamatnya lebih dulu.") padahal
-                      alamatnya terlihat jelas dua baris di atas. JANGAN
-                      dihapus sebagai "duplikat" — ia satu-satunya jalan
-                      alamat itu sampai ke pencarian peta. */}
-                  <input type="hidden" name="alamat" value={permintaan.alamat} />
-                  <PemilihLokasi
-                    awal={null}
-                    kalimatKosong="Belum ada pin. Klik di peta untuk menandai lokasinya — tanpa pin, jarak ke bidan tetap tidak bisa dihitung."
-                  />
-                </>
-              }
-            />
+            {berkoordinat ? (
+              <p className="mt-1 text-[11px] text-panel-muted">
+                Pin: {permintaan.alamatLat!.toFixed(6)}, {permintaan.alamatLon!.toFixed(6)}
+              </p>
+            ) : (
+              <p className="mt-2 rounded-lg bg-clay/10 px-3 py-2 text-[12px] font-semibold text-clay">
+                Alamat ini belum berkoordinat, dan tidak bisa diubah lagi dari layar ini.
+              </p>
+            )}
           </>
+        ) : (
+          <FormUbahPermintaan
+            permintaanId={permintaan.id}
+            anak={
+              <>
+                {!berkoordinat && (
+                  /* Kalimat menyebut AKIBATNYA, bukan hanya keadaannya. "Belum
+                     berkoordinat" saja tidak memberi tahu admin bahwa sesi yang
+                     lahir dari sini akan menuntut jenjang transport ditetapkan
+                     tangan belakangan. */
+                  <p className="mb-2 rounded-lg bg-clay/10 px-3 py-2 text-[12px] font-semibold text-clay">
+                    Alamat ini belum berkoordinat. Jarak ke bidan tidak bisa dihitung, dan sesi yang
+                    lahir darinya tidak akan punya jenjang transport.
+                  </p>
+                )}
+
+                <label className="block">
+                  <span className="text-[12px] font-bold text-panel-muted">Alamat</span>
+                  <textarea
+                    name="alamat"
+                    rows={2}
+                    defaultValue={permintaan.alamat}
+                    className="mt-1 w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px] text-panel-ink"
+                  />
+                </label>
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <label className="flex-1">
+                    <span className="text-[12px] font-bold text-panel-muted">Tanggal</span>
+                    <input
+                      type="date"
+                      name="tanggal"
+                      defaultValue={tanggalIso}
+                      className="mt-1 w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px] text-panel-ink"
+                    />
+                  </label>
+                  <label className="flex-1">
+                    <span className="text-[12px] font-bold text-panel-muted">Jam</span>
+                    {/* Daftarnya sama dengan yang ditawarkan ke klien, supaya dua
+                        jalur tidak melahirkan dua kebiasaan jam yang berbeda. */}
+                    <select
+                      name="jam"
+                      defaultValue={permintaan.jamMulai.slice(0, 5)}
+                      className="mt-1 w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px] text-panel-ink"
+                    >
+                      {jamPilihan.map((j) => (
+                        <option key={j} value={j}>
+                          {formatJam(j)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {/* Peta SELALU ada di sini, tidak lagi hanya saat koordinat
+                    kosong: pin salah klik sebelumnya tidak bisa dikoreksi dari
+                    layar mana pun, dan pin yang salah menghasilkan jenjang
+                    transport yang percaya diri dan salah — bukan NULL yang akan
+                    tertangkap StatTile "menunggu jenjang". */}
+                <PemilihLokasi
+                  awal={berkoordinat ? { lat: permintaan.alamatLat!, lon: permintaan.alamatLon! } : null}
+                  kalimatKosong="Belum ada pin. Klik di peta untuk menandai lokasinya — bila teks alamat diubah, sistem mencoba menebak koordinatnya sekali."
+                />
+              </>
+            }
+          />
         )}
         {/* Lisensi ODbL menuntut atribusi tampak di layar yang memakai
             hasilnya, bukan cukup di komentar kode. */}
@@ -112,6 +160,17 @@ export function PanelPermintaan({
           Peta &amp; lokasi dari data © OpenStreetMap contributors.
         </p>
       </section>
+
+      {permintaan.namaMitra !== null && bisaDiubah && (
+        /* Bidan TIDAK dilepas otomatis saat jadwal atau alamat berubah (spec
+           K2): sistem tidak tahu jadwal, cuti, maupun kesediaan bidan, jadi ia
+           tidak berhak melepas orang berdasarkan pengetahuan yang tidak
+           dimilikinya. Yang bisa ia lakukan adalah mengatakannya. */
+        <p className="rounded-lg bg-gold/15 px-3 py-2 text-[12px] font-semibold text-[#8A6A16]">
+          {permintaan.namaMitra} ditetapkan untuk jadwal &amp; alamat sebelum perubahan. Pastikan
+          ulang ke beliau, atau tekan “Ganti bidan”.
+        </p>
+      )}
 
       <section>
         <p className="text-[12.5px] font-bold text-panel-muted">Pembayaran</p>

@@ -524,6 +524,8 @@ export default async function SesiPage({
             labelBayar={labelBayarPermintaan(barisLihat)}
             lunas={barisLihat.statusBayar === "lunas"}
             tautanWa={tautanWaUntukLihat}
+            jamPilihan={jamLayanan}
+            tanggalIso={barisLihat.tanggal}
           />
         </PanelGeser>
       )}
