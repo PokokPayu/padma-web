@@ -27,11 +27,18 @@ export type MitraJarak = {
  */
 export type SebabTanpaJarak = "alamat_permintaan" | "domisili_mitra";
 
-export type MitraTerurut = MitraJarak & {
-  km: number | null;
-  /** Null ketika `km` ada. Selalu terisi ketika `km` null. */
-  sebab: SebabTanpaJarak | null;
-};
+/**
+ * Jarak sebuah baris, sebagai UNION TERDISKRIMINASI: `km` yang terisi selalu
+ * berarti `sebab` null, dan sebaliknya. Ditulis begini, bukan sebagai dua medan
+ * nullable yang berdiri sendiri, karena bentuk yang kedua mengizinkan
+ * `{ km: null, sebab: null }` — dan `labelJarak` atas nilai itu MENGARANG
+ * sebabnya alih-alih menolaknya.
+ */
+export type JarakTerukur =
+  | { km: number; sebab: null }
+  | { km: null; sebab: SebabTanpaJarak };
+
+export type MitraTerurut = MitraJarak & JarakTerukur;
 
 export function urutkanMitraMenurutJarak(
   mitra: readonly MitraJarak[],
@@ -43,9 +50,9 @@ export function urutkanMitraMenurutJarak(
     // dan satu pin memperbaiki seluruh baris sekaligus. Menyebut domisili
     // mitra lebih dulu akan mengirim admin membetulkan sepuluh data mitra
     // untuk satu koordinat yang hilang.
-    if (tujuan === null) return { ...m, km: null, sebab: "alamat_permintaan" as const };
+    if (tujuan === null) return { ...m, km: null, sebab: "alamat_permintaan" };
     if (m.lat === null || m.lon === null) {
-      return { ...m, km: null, sebab: "domisili_mitra" as const };
+      return { ...m, km: null, sebab: "domisili_mitra" };
     }
     return { ...m, km: haversineKm({ lat: m.lat, lon: m.lon }, tujuan), sebab: null };
   });
@@ -79,7 +86,7 @@ export function urutkanMitraMenurutJarak(
  * seberang sungai berarti 9 km memutar yang memutuskan — dan angka yang sudah
  * dijadikan jenjang menyembunyikan justru bagian yang ia butuhkan.
  */
-export function labelJarak(m: Pick<MitraTerurut, "km" | "sebab">): string {
+export function labelJarak(m: JarakTerukur): string {
   if (m.km !== null) return `${m.km.toFixed(1).replace(".", ",")} km`;
   if (m.sebab === "alamat_permintaan") return "alamat permintaan belum berkoordinat";
   return "domisili bidan belum diisi";
