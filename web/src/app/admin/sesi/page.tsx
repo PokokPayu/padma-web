@@ -33,7 +33,7 @@ import {
 } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
-import { pesanTagihan, tautanWaTagihan } from "@/lib/tagihan/pesan-tagihan";
+import { pesanTagihan, tautanWaTagihan, tautanWaPercakapan } from "@/lib/tagihan/pesan-tagihan";
 import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
 import { urutkanMitraMenurutJarak, labelJarak } from "@/lib/jadwal/urutan-mitra";
@@ -203,6 +203,19 @@ export default async function SesiPage({
             sisaWaktu: labelSisaWaktu(barisLihat.tenggat),
           }),
         )
+      : "";
+
+  // Tersedia di SEMUA status, termasuk permintaan yang sudah batal — menghubungi
+  // klien tidak pernah berbahaya, dan justru permintaan yang batal karena tenggat
+  // itulah yang paling perlu dijelaskan.
+  //
+  // Nomornya lewat `nomorWaKlien`, yang sengaja TANPA nomor cadangan klinik:
+  // versi sebelumnya memakai setelan `nomor_wa` dan bentuk kegagalannya tidak
+  // terlihat sebagai galat — WhatsApp terbuka rapi, hanya saja lawan bicaranya
+  // PADMA sendiri.
+  const tautanWaKosongUntukLihat =
+    barisLihat && nomorWaKlien(barisLihat.noHpKlien)
+      ? tautanWaPercakapan(nomorWaKlien(barisLihat.noHpKlien))
       : "";
 
   const pilihanKlien: PilihanKlien[] = klien.map((k) => ({
@@ -524,6 +537,7 @@ export default async function SesiPage({
             labelBayar={labelBayarPermintaan(barisLihat)}
             lunas={barisLihat.statusBayar === "lunas"}
             tautanWa={tautanWaUntukLihat}
+            tautanWaKosong={tautanWaKosongUntukLihat}
             jamPilihan={jamLayanan}
             tanggalIso={barisLihat.tanggal}
           />

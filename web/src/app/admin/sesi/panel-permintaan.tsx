@@ -25,6 +25,7 @@ export function PanelPermintaan({
   labelBayar,
   lunas,
   tautanWa,
+  tautanWaKosong,
   jamPilihan,
   tanggalIso,
 }: {
@@ -37,6 +38,7 @@ export function PanelPermintaan({
   labelBayar: string;
   lunas: boolean;
   tautanWa: string;
+  tautanWaKosong: string;
   jamPilihan: string[];
   /** Nilai `YYYY-MM-DD` mentah, untuk `<input type="date">`. */
   tanggalIso: string;
@@ -55,6 +57,23 @@ export function PanelPermintaan({
             </span>
           )}
         </p>
+        {tautanWaKosong ? (
+          <a
+            href={tautanWaKosong}
+            target="_blank"
+            rel="noopener"
+            className="mt-2 inline-block rounded-lg border border-black/15 px-3 py-1.5 text-[12px] font-bold text-ink-soft"
+          >
+            Hubungi klien via WA
+          </a>
+        ) : (
+          <>
+            {/* Tombolnya HILANG ketika nomor klien tidak sah, dan kalimat ini yang membuat hilangnya terlihat. Tanpa kalimat, admin membaca layar yang sama persis seperti layar yang benar dan menyimpulkan nomornya ada. */}
+            <p className="mt-2 text-[12px] font-semibold text-clay">
+              Nomor WhatsApp klien belum sah — lengkapi di menu Klien.
+            </p>
+          </>
+        )}
         <p className="mt-0.5 text-[12px] text-panel-muted">
           {permintaan.namaLayanan}
           {permintaan.namaVarian ? ` · ${permintaan.namaVarian}` : ""} · {tanggal} ·{" "}

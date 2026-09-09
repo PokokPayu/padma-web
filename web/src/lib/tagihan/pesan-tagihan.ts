@@ -51,3 +51,15 @@ export function pesanTagihan(input: {
 export function tautanWaTagihan(nomorWa: string, pesan: string): string {
   return `https://wa.me/${nomorWa}?text=${encodeURIComponent(pesan)}`;
 }
+
+/**
+ * Percakapan WhatsApp KOSONG — tanpa `?text=` sama sekali.
+ *
+ * Sengaja tanpa template (spec K6). Repo ini sudah dua kali salah menuliskan
+ * kebijakan pembatalan dari ingatan, dan pesan siap-tempel yang menyebut aturan
+ * adalah cara tercepat mengulanginya. Tagihan tetap bertemplat karena nominal
+ * dan sisa waktunya DIHITUNG SERVER, bukan diingat manusia.
+ */
+export function tautanWaPercakapan(nomorWa: string): string {
+  return `https://wa.me/${nomorWa}`;
+}
