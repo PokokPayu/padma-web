@@ -5,9 +5,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { koordinatDariFormData } from "@/lib/transport/koordinat-form";
 import { geocodeAlamat } from "@/lib/transport/geocode";
+import { normalkanAlamat } from "@/lib/transport/alamat";
 import { STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
 import { bacaPengaturan } from "@/lib/settings";
 import { hariIniJakarta } from "@/lib/passport/waktu";
+import { POLA_TANGGAL } from "@/lib/jadwal/jam";
 
 /**
  * Mengubah alamat, tanggal, dan jam sebuah PERMINTAAN — satu aksi, satu
@@ -49,7 +51,7 @@ export async function perbaruiPermintaan(
   // di masa lalu atau jam di luar jam layanan. Kalau kedua pemeriksaan di bawah
   // dihapus atau dilewati jalur tulis lain, tidak ada jaring apa pun di
   // bawahnya, dan kegagalannya SENYAP.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+  if (!POLA_TANGGAL.test(tanggal)) {
     return { ok: false, pesan: "Tanggal tidak sah." };
   }
   // Kalender ASIA/JAKARTA, bukan jam server: Vercel berjalan UTC, dan antara
@@ -99,7 +101,7 @@ export async function perbaruiPermintaan(
   // Alamat yang SAMA mempertahankan koordinat lama apa adanya; tidak ada yang
   // perlu ditanyakan ulang.
   const pin = koordinatDariFormData(formData);
-  const alamatBerubah = alamat !== sebelum.alamat;
+  const alamatBerubah = normalkanAlamat(alamat) !== normalkanAlamat(sebelum.alamat);
   const koordinatLama =
     sebelum.alamat_lat !== null && sebelum.alamat_lon !== null
       ? { lat: sebelum.alamat_lat, lon: sebelum.alamat_lon }

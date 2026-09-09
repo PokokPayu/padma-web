@@ -32,7 +32,7 @@
 const OFFSET_WIB = "+07:00";
 
 const POLA_JAM = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const POLA_TANGGAL = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+export const POLA_TANGGAL = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /**
  * Jam cadangan bila `app_settings.jam_layanan` belum diisi atau isinya tidak
