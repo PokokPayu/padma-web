@@ -8,6 +8,8 @@ import { saranJenjang } from "@/lib/transport/saran";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
 import type { JenjangTransport } from "@/lib/transport/jarak";
+import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
+import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
@@ -16,6 +18,9 @@ import {
   STATUS_ANTRE,
 } from "@/lib/jadwal/status";
 import { JAM_TENGGAT_BAYAR } from "@/lib/tagihan/tenggat";
+import { kirimEmail } from "@/lib/email/kirim";
+import { emailTagihan, subjekTagihan } from "@/lib/tagihan/email-tagihan";
+import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -158,6 +163,71 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
+  // GERBANG: tagihan tanpa nominal tidak boleh terbit.
+  //
+  // Alasannya bukan kerapian. Fungsi ini memasang tenggat 24 jam, dan lewat
+  // dari tenggat itu `batalkan_lewat_tenggat()` melepas slotnya. Tagihan tanpa
+  // angka di atas tenggat 24 jam adalah jebakan: klien tidak pernah diberi tahu
+  // berapa yang harus ia bayar, lalu kehilangan jadwalnya karena tidak
+  // membayarnya.
+  //
+  // Diperiksa SEBELUM satu baris pun berubah, jadi tidak ada yang perlu
+  // dikompensasi bila gerbangnya menutup. Dibaca lewat cabang `permintaanId`
+  // (Step 4) karena baris ini BELUM `menunggu_bayar` — inilah fungsi yang
+  // memindahkannya ke sana.
+  // GAGAL TERTUTUP, TERMASUK PADA GALAT BACA (Ruling 26, gelombang perbaikan
+  // akhir). Sebelumnya baris ini berbunyi `(await daftar...)[0] ?? null` dan
+  // gerbang di bawahnya hanya menutup bila `rincianAwal` ADA dan totalnya
+  // null. Dua keadaan lolos begitu saja:
+  //
+  //   1. `daftarTagihanPengajuanAdmin` membuang galat PostgREST-nya dan
+  //      memulangkan `[]` (sudah diperbaiki di modul itu — ia MELEMPAR
+  //      sekarang);
+  //   2. `rincianAwal === null` apa pun sebabnya.
+  //
+  // Keduanya berujung sama: gerbang dilewati, status pindah ke
+  // `menunggu_bayar`, tenggat 24 jam berjalan, dan klien menerima tagihan
+  // tanpa angka. Yang benar adalah kebalikannya — bila totalnya tidak bisa
+  // DIPASTIKAN, penerbitan ditolak. Menahan penerbitan bisa dicoba lagi satu
+  // menit kemudian; tenggat yang sudah berjalan atas tagihan tanpa angka
+  // tidak bisa ditarik kembali.
+  //
+  // Galatnya ditangkap di sini, bukan dibiarkan melempar ke Next.js: server
+  // action yang melempar sampai ke admin sebagai layar galat generik tanpa
+  // satu kalimat pun tentang apa yang harus ia lakukan, sementara yang
+  // dibutuhkan justru "coba lagi" yang eksplisit.
+  let rincianAwal: Awaited<ReturnType<typeof daftarTagihanPengajuanAdmin>>[number] | null = null;
+  try {
+    rincianAwal = (await daftarTagihanPengajuanAdmin({ permintaanId }))[0] ?? null;
+  } catch (e) {
+    console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);
+    return {
+      ok: false,
+      pesan:
+        "Tagihan belum bisa terbit: rincian totalnya gagal dibaca dari basis data. " +
+        "Ini kegagalan sistem, bukan data yang kurang — jangan mengubah tarif atau " +
+        "pin peta. Coba lagi beberapa saat lagi; bila tetap gagal, laporkan ke teknis.",
+    };
+  }
+  if (rincianAwal === null) {
+    return {
+      ok: false,
+      pesan:
+        "Tagihan belum bisa terbit: baris permintaannya tidak terbaca. " +
+        "Muat ulang halaman — kemungkinan besar permintaan ini sudah ditangani orang lain.",
+    };
+  }
+  if (rincianAwal.total === null) {
+    return {
+      ok: false,
+      pesan: `Tagihan belum bisa terbit. ${
+        rincianAwal.sebab
+          ? KALIMAT_SEBAB_ADMIN[rincianAwal.sebab]
+          : "Totalnya belum bisa dihitung."
+      }`,
+    };
+  }
+
   const tenggat = new Date(Date.now() + JAM_TENGGAT_BAYAR * 3_600_000).toISOString();
 
   const { data } = await supabase
@@ -177,6 +247,247 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
   revalidatePath("/admin");
   revalidatePath("/passport");
   revalidatePath("/passport/bayar");
+
+  // Email dikirim SESUDAH statusnya berpindah, dan kegagalannya TIDAK
+  // menggagalkan penerbitan. Tagihannya sudah terbit dan tenggatnya sudah
+  // berjalan; membatalkan itu karena penyedia email sedang bermasalah menukar
+  // masalah kecil dengan masalah besar. Panel menampilkan status kirimnya dan
+  // menyediakan tombol kirim ulang.
+  await kirimEmailTagihan(permintaanId);
+
+  return { ok: true };
+}
+
+/**
+ * Sebab kegagalan kirim email tagihan, sebagai KALIMAT — bukan boolean.
+ *
+ * (Ruling 26, gelombang perbaikan akhir) `kirimEmailTagihan()` dulu memulangkan
+ * `boolean`, dan `kirimUlangEmailTagihan()` menerjemahkan SETIAP `false` jadi
+ * satu kalimat yang sama: "Periksa alamat email klien di menu Klien, dan
+ * pastikan RESEND_API_KEY & domain pengirim sudah terpasang." Kalimat itu benar
+ * untuk dua dari ENAM jalan keluar `false` di fungsi ini, dan menyesatkan untuk
+ * empat sisanya — termasuk gerbang `NEXT_PUBLIC_BASIS_URL` yang lahir belakangan
+ * dan tidak pernah disebut siapa pun, serta `total === null` yang sudah punya
+ * kalimatnya sendiri di `KALIMAT_SEBAB_ADMIN`. Admin yang menekan "kirim ulang"
+ * lalu memeriksa alamat email klien yang sebenarnya sudah benar, berulang kali,
+ * untuk kegagalan yang letaknya di environment server.
+ *
+ * Gerbang yang tak terlihat oleh orang yang memicunya bukan gerbang.
+ */
+type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
+
+/**
+ * Mengirim email tagihan untuk satu permintaan. Memulangkan hasil BERKALIMAT.
+ *
+ * TIDAK PERNAH MELEMPAR dan TIDAK PERNAH menggagalkan pemanggilnya. Berbeda
+ * dari `kirimEmail()` (yang murni HTTP dan gagalnya memang selalu berbentuk
+ * nilai balik), badan fungsi INI memanggil beberapa hal yang BISA melempar:
+ * `daftarTagihanPengajuanAdmin` menyentuh klien service role di modulnya
+ * sendiri (melempar bila kunci layanannya hilang dari environment) dan dua
+ * pemanggilan RPC tarif, `formatJam` melempar untuk jam tak sah, dan
+ * `Intl.DateTimeFormat().format` melempar `RangeError` untuk tanggal tak sah.
+ * Tanpa `try/catch` di sini, lemparan itu terjadi SESUDAH `terbitkanTagihan()`
+ * sudah memindahkan status
+ * dan menulis tenggat — admin melihat action gagal, menekan ulang, dan
+ * mendapat "Permintaan sudah ditangani atau tidak ditemukan" untuk tagihan
+ * yang sebetulnya sudah terbit dengan baik. Galatnya dicatat, bukan ditelan
+ * senyap.
+ *
+ * PAGAR STATUS: bacaan `booking_requests` DIKUNCI ke `menunggu_bayar`.
+ * `daftarTagihanPengajuanAdmin({ permintaanId })` sengaja mengabaikan status
+ * (dipakai gerbang `terbitkanTagihan()` yang membaca SEBELUM transisi), tetapi
+ * fungsi ini punya DUA pemanggil: `terbitkanTagihan()` sendiri (baris sudah
+ * `menunggu_bayar` pada titik ini) dan server action `kirimUlangEmailTagihan`
+ * — endpoint POST tersendiri (aturan #1 dokblok atas berkas ini) yang bisa
+ * dipanggil langsung atau diklik ganda pada panel yang kadung basi sesudah
+ * `batalkan_lewat_tenggat()` melepas slotnya. Tanpa pagar ini, POST semacam
+ * itu mengirim "Mohon selesaikan pembayaran paling lambat <tenggat lama>"
+ * untuk jadwal yang sudah tidak dipegang siapa pun.
+ *
+ * Tujuannya diambil dari `clients.email` baris pengajuan itu, TIDAK PERNAH
+ * dari input: pelajaran yang sama yang dibayar tautan WhatsApp yang dulu
+ * menunjuk nomor klinik alih-alih nomor klien.
+ */
+async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail> {
+  try {
+    // GAGAL TERTUTUP juga untuk basis URL: tautan bayar dibangun dari
+    // `NEXT_PUBLIC_BASIS_URL`, dan URL kosong ATAU BERISI SPASI SAJA
+    // menghasilkan href RELATIF (atau berawal spasi) yang mati di kotak
+    // masuk klien ("Bayar & unggah bukti transfer di: /passport/bayar")
+    // — sementara `kirimEmail()` tetap memulangkan `ok: true`,
+    // `email_tagihan_pada` tetap tertulis, dan panel tetap berbunyi "sudah
+    // terkirim ke klien". Klien kehilangan satu-satunya jalan membayar
+    // sementara tenggat 24 jam berjalan, tanpa satu baris pun di log.
+    // `.trim()` WAJIB sebelum pemeriksaan: `!" "` bernilai `false`, jadi env
+    // yang salah-ISI (spasi) lolos gerbang naif yang hanya menguji salah-
+    // KOSONG. Hasil trim-nya jugalah yang dipakai merangkai `tautanBayar` di
+    // bawah, supaya spasi di ujung tidak ikut masuk ke URL pada kasus yang
+    // lolos. Diperiksa di sini, SEBELUM email dirakit, supaya env yang lupa
+    // diisi (atau salah diisi) gagal sejelas `RESEND_API_KEY`/`EMAIL_PENGIRIM`
+    // kosong — bukan gagal senyap sebagai "berhasil".
+    const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
+    if (!basisUrl) {
+      console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum " +
+          "terpasang di server, jadi tautan bayar di badan email akan patah. Ini " +
+          "setelan environment — bukan data klien. Laporkan ke teknis; sementara " +
+          "itu kirimkan tagihannya lewat WhatsApp.",
+      };
+    }
+
+    const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
+    const t = daftar[0];
+    if (!t) {
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: baris permintaannya tidak terbaca. Muat ulang " +
+          "halaman — kemungkinan besar tagihan ini sudah tidak berstatus menunggu bayar.",
+      };
+    }
+    // `total === null` PUNYA kalimatnya sendiri, dan kalimat itu menyebut layar
+    // yang memperbaikinya (`KALIMAT_SEBAB_ADMIN`) — sama persis dengan yang
+    // dipakai gerbang `terbitkanTagihan()` di atas. Memakainya ulang di sini
+    // menjaga satu keadaan tidak dijelaskan dengan dua kalimat berbeda
+    // tergantung tombol mana yang ditekan admin.
+    if (t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
+      return {
+        ok: false,
+        pesan: `Email tidak dikirim: tagihannya belum bernominal. ${
+          t.sebab ? KALIMAT_SEBAB_ADMIN[t.sebab] : "Totalnya belum bisa dihitung."
+        }`,
+      };
+    }
+
+    const supabase = await createServerSupabase();
+    const { data: baris } = await supabase
+      .from("booking_requests")
+      .select("tenggat, jam_mulai, clients ( nama, email )")
+      .eq("id", permintaanId)
+      // Lihat dokblok: mengunci bacaan ini ke `menunggu_bayar` melindungi
+      // KEDUA jalur pemanggil (`terbitkanTagihan` dan `kirimUlangEmailTagihan`)
+      // sekaligus, sejajar dengan `.eq("status", PERMINTAAN_SIAP_KONFIRMASI)`
+      // pada `terbitkanTagihan` di atas.
+      .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
+      .maybeSingle<{
+        tenggat: string | null;
+        jam_mulai: string;
+        clients: { nama: string; email: string } | null;
+      }>();
+
+    if (!baris) {
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: permintaan ini sudah tidak berstatus menunggu bayar. " +
+          "Muat ulang halaman — tenggatnya mungkin sudah lewat dan slotnya dilepas.",
+      };
+    }
+
+    const email = baris.clients?.email ?? "";
+    if (email === "") {
+      return {
+        ok: false,
+        pesan: "Email tidak dikirim: klien ini belum punya alamat email. Lengkapi di menu Klien.",
+      };
+    }
+
+    const { html, teks } = emailTagihan({
+      namaKlien: baris.clients?.nama ?? t.namaKlien,
+      namaLayanan: t.namaLayanan,
+      tanggal: t.tanggal,
+      jam: formatJam(jamDariDb(baris.jam_mulai)),
+      hargaLayanan: t.hargaLayanan,
+      hargaTransport: t.hargaTransport,
+      labelJenjang: t.labelJenjang ?? "",
+      total: t.total,
+      tenggatAbsolut: formatTenggatAbsolut(baris.tenggat),
+      tautanBayar: `${basisUrl}/passport/bayar`,
+    });
+
+    const hasil = await kirimEmail({
+      ke: email,
+      subjek: subjekTagihan({ namaLayanan: t.namaLayanan, tanggal: t.tanggal }),
+      html,
+      teks,
+    });
+
+    if (hasil.ok) {
+      // Galat di sini DIBUANG dengan sengaja, bukan menggagalkan pemanggil:
+      // emailnya sudah SAMPAI. Tetap dicatat ke log — bukan ditelan senyap —
+      // supaya operator tahu kolom jejaknya bisa berselisih dengan kenyataan,
+      // tanpa membuat kegagalan tulis satu kolom terlihat seperti kegagalan
+      // kirim (yang akan mendorong admin mengirim ulang dan menagih klien
+      // dua kali untuk satu email yang sama).
+      const { error } = await supabase
+        .from("booking_requests")
+        .update({ email_tagihan_pada: new Date().toISOString() })
+        .eq("id", permintaanId);
+      if (error) {
+        console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);
+      }
+    }
+    if (!hasil.ok) {
+      return {
+        ok: false,
+        pesan:
+          "Email ditolak penyedia (Resend). Pastikan RESEND_API_KEY dan domain " +
+          "pengirim EMAIL_PENGIRIM sudah terverifikasi. Sebab teknisnya ada di log server.",
+      };
+    }
+    return { ok: true };
+  } catch (e) {
+    // Lihat dokblok: beberapa langkah di atas BISA melempar (service role
+    // hilang, jam tak sah, tanggal tak sah). Menelan di sini membuat jaminan
+    // "TIDAK PERNAH menggagalkan pemanggilnya" sungguhan, bukan sekadar
+    // klaim di komentar.
+    console.error("[email] kirimEmailTagihan gagal tak terduga:", e);
+    return {
+      ok: false,
+      pesan:
+        "Email gagal dikirim karena galat tak terduga di server (sebabnya tercatat " +
+        "di log). Tagihannya sendiri TIDAK terpengaruh — ia tetap terbit dan tenggatnya " +
+        "tetap berjalan. Kirimkan tagihan lewat WhatsApp lalu laporkan ke teknis.",
+    };
+  }
+}
+
+/**
+ * Tenggat sebagai kalimat ABSOLUT dalam kalender Jakarta. Email dibaca ulang
+ * berhari-hari kemudian; "24 jam lagi" di sana adalah kalimat yang berbohong.
+ */
+function formatTenggatAbsolut(iso: string | null): string {
+  if (!iso) return "—";
+  // `timeZone` WAJIB disebut. Tanpa itu Node memakai zona server — Vercel
+  // berjalan di UTC, dan tenggat pukul 14.30 WIB akan tercetak 07.30 di email
+  // klien. Bukan galat, hanya angka yang salah tujuh jam.
+  const teks = new Intl.DateTimeFormat("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  }).format(new Date(iso));
+  return `${teks} WIB`;
+}
+
+/** Mengirim ulang email tagihan. Dipakai ketika kiriman otomatisnya gagal. */
+export async function kirimUlangEmailTagihan(
+  permintaanId: string,
+): Promise<Berhasil | Gagal> {
+  await requireRole(["admin", "owner"]);
+  // Kalimatnya datang dari tempat kegagalannya TERJADI, bukan dirangkai di
+  // sini: hanya `kirimEmailTagihan()` yang tahu gerbang mana yang menutup, dan
+  // menebaknya dari `false` adalah persis yang membuat versi sebelumnya selalu
+  // menyalahkan alamat email klien (lihat dokblok `HasilKirimEmail`).
+  const hasil = await kirimEmailTagihan(permintaanId);
+  if (!hasil.ok) return { ok: false, pesan: hasil.pesan };
+  revalidatePath("/admin/sesi");
   return { ok: true };
 }
 

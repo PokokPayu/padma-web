@@ -55,11 +55,22 @@ export type SesiRekap = {
 };
 
 /**
- * Nominal transport >20 km, DITETAPKAN OWNER PER KASUS (`transport_khusus`,
- * Task 8) — bukan rate card per jenjang. Satu baris per SESI, bukan per
- * jenjang: jenjang `di_atas_20` sengaja tidak pernah punya baris
- * `transport_rates` (CHECK `transport_rates_bukan_per_kasus`), jadi
- * `tarifTransportPadaTanggal()` tidak pernah bisa menjawabnya.
+ * Nominal transport >20 km yang ditetapkan owner PER KASUS
+ * (`transport_khusus`, Task 8). Satu baris per SESI, bukan per jenjang.
+ *
+ * (Ruling 26, gelombang perbaikan akhir) Komentar sebelumnya di sini
+ * menyatakan CHECK `transport_rates_bukan_per_kasus` sebagai fakta skema yang
+ * hidup — "`di_atas_20` sengaja tidak pernah punya baris `transport_rates`,
+ * jadi `tarifTransportPadaTanggal()` tidak pernah bisa menjawabnya". Kalimat
+ * itu SUDAH TIDAK BENAR sejak migrasi `20260914100000_tarif_dasar_di_atas_20`
+ * MENCABUT constraint itu, dan ia bukan sekadar komentar basi: ialah dasar
+ * tertulis yang membuat cabang `di_atas_20` di `hitungRekap()` di bawah
+ * terlihat benar padahal ia membuang tarif dasar yang KLIENNYA SUDAH BAYAR.
+ *
+ * Yang berlaku sekarang, sama persis dengan lapisan tagihan
+ * (`hitungTagihanPengajuan()`, `lib/tagihan/pengajuan.ts`): baris ini adalah
+ * PENIMPA yang MENANG bila ada, dan ketiadaannya berarti tarif DASAR
+ * `di_atas_20` dari `transport_rates` yang berlaku — bukan "tarif hilang".
  */
 export type TransportKhususRingkas = {
   sessionId: string;
@@ -240,7 +251,9 @@ export function hitungRekap(input: {
 
       // (3a) Komponen TRANSPORT (Task 9), dicari TERPISAH dari tarif varian
       //      di atas — tabel sumbernya berbeda (`transport_rates` per
-      //      jenjang, `transport_khusus` per SESI untuk `di_atas_20`) dan
+      //      jenjang — TERMASUK `di_atas_20` sejak migrasi
+      //      `tarif_dasar_di_atas_20`; `transport_khusus` per SESI sebagai
+      //      PENIMPA `di_atas_20` yang menang bila ada) dan
       //      keduanya harus dikonsultasikan sebelum honor sesi ini dianggap
       //      lengkap.
       //
@@ -281,11 +294,40 @@ export function hitungRekap(input: {
       //      ditetapkan.
       let transport: { tarifKlien: number; honorMitra: number } | null = null;
       let transportHilang = false;
-      if (s.jenjang === "di_atas_20") {
-        const khusus = petaKhusus.get(s.id);
-        if (khusus) transport = { tarifKlien: khusus.tarifKlien, honorMitra: khusus.honorMitra };
-        else transportHilang = true;
-      } else if (s.jenjang !== null) {
+      if (s.jenjang !== null) {
+        // PENIMPA DULU, BARU TARIF DASAR — urutan yang SAMA PERSIS dengan
+        // lapisan tagihan (`hitungTagihanPengajuan()`, `lib/tagihan/pengajuan.ts`).
+        //
+        // (Ruling 26, gelombang perbaikan akhir) Sebelumnya `di_atas_20` punya
+        // cabangnya SENDIRI di sini: penimpa `transport_khusus` atau
+        // `transportHilang = true`, tanpa pernah menengok `transport_rates`.
+        // Cabang itu benar selama CHECK `transport_rates_bukan_per_kasus`
+        // hidup, dan salah sejak migrasi `tarif_dasar_di_atas_20` mencabutnya.
+        // Akibatnya bukan kosmetik: klien 25 km membayar tagihan LUNAS berisi
+        // transport dasar, sesinya lahir ber-`jenjang = 'di_atas_20'`, lalu
+        // rekap owner menjatuhkannya ke `sesiTakBertarif` sebab "transport" —
+        // dan karena kebijakan "honor separuh lebih berbahaya" di (3b) di
+        // bawah, honor VARIAN yang sah pun ikut tidak disumkan. BIDAN TIDAK
+        // DIBAYAR untuk sesi yang kliennya sudah membayar penuh, dan
+        // `totalHarga` pekan itu kehilangan seluruh nominal sesi tersebut.
+        //
+        // `transportHilang` karena itu kini berarti apa yang seharusnya selalu
+        // ia berarti: TIDAK ADA nominal di mana pun — bukan penimpa, bukan
+        // tarif dasar. Itu pula definisi yang dipakai view
+        // `sesi_menunggu_tarif_transport` sejak migrasi
+        // `20260914130000_menunggu_tarif_hanya_tanpa_nominal`, sehingga
+        // "menunggu tarif" di dasbor dan "tak-bertarif" di rekap tidak bisa
+        // berpisah diam-diam.
+        //
+        // Penimpa hanya dicari untuk `di_atas_20`: `transport_khusus`
+        // ber-primary-key `session_id` DAN dijaga `tetapkanTarifKhusus()`
+        // (`app/owner/transport/aksi.ts`) yang menolak sesi berjenjang lain,
+        // jadi mencarinya untuk jenjang lain hanya menambah jalur yang tidak
+        // pernah bisa benar.
+        const khusus = s.jenjang === "di_atas_20" ? petaKhusus.get(s.id) : undefined;
+        if (khusus) {
+          transport = { tarifKlien: khusus.tarifKlien, honorMitra: khusus.honorMitra };
+        } else {
         // (Ruling 19, Task 9 fix round 1) Sesi lebih tua dari tarif transport
         // paling awal jenjangnya JATUH TAK-BERTARIF PERMANEN — tidak ada jalur
         // retroaktif: `guard_tarif_transport_maju` menolak SETIAP tarif baru
@@ -297,16 +339,21 @@ export function hitungRekap(input: {
         // memperlebar jalur mundur adalah keputusan tingkat spec rate card,
         // bukan keputusan kalkulasi rekap.
         const tt = tarifTransportPadaTanggal(tarifTransport, s.jenjang, s.tanggal);
+        // `honorMitra` ikut dari baris tarif dasar ini, bukan nol: mitralah
+        // yang menempuh perjalanannya, dan `di_atas_20` tidak lagi punya
+        // alasan struktural untuk dikecualikan dari honor transport.
         if (tt) transport = { tarifKlien: tt.tarifKlien, honorMitra: tt.honorMitra };
         else transportHilang = true;
+        }
       }
 
       if (t === null || transportHilang) {
         // (3b) Sesi tak-bertarif — TIDAK dihitung nol diam-diam, dalam DUA
         //      keadaan yang sejajar persis: tarif varian hilang (t === null,
         //      seperti sebelum Task 9), ATAU tarif transport hilang padahal
-        //      jenjangnya diketahui (di_atas_20 tanpa transport_khusus, atau
-        //      jenjang lain yang rate card-nya belum mencakup tanggal sesi).
+        //      jenjangnya diketahui — yaitu jenjang mana pun (`di_atas_20`
+        //      termasuk) yang rate card-nya belum mencakup tanggal sesi DAN,
+        //      untuk `di_atas_20`, tidak punya penimpa `transport_khusus`.
         //      Honor separuh yang terlihat lengkap — honor varian dibayar,
         //      transport ditelan senyap — lebih berbahaya daripada sesi yang
         //      jujur dilaporkan tertunda: yang pertama tidak punya jejak yang

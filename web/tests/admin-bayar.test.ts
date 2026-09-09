@@ -582,11 +582,24 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
     expect(await hitungKlaimMenunggu()).toBe(menunggu);
   });
 
-  // --- Ruling 17: di_atas_20 tanpa transport_khusus TIDAK dapat rincian ---
+  // --- Ruling 26: yang menentukan bukan penimpa, melainkan ADA/TIDAKNYA nominal ---
 
-  it("sesi di_atas_20 TANPA transport_khusus: rincianTransport null (Ruling 17)", async () => {
+  it("sesi di_atas_20 TANPA transport_khusus tapi bertarif DASAR: rincianTransport TERISI (Ruling 26)", async () => {
+    // Uji ini DIBALIK, bukan dihapus. Ruling 17 dulu memakai "tidak punya
+    // `transport_khusus`" sebagai definisi "belum bertarif" — benar selama
+    // CHECK `transport_rates_bukan_per_kasus` hidup. Sejak migrasi
+    // `tarif_dasar_di_atas_20` mencabutnya dan `seed.sql` mengisi tarif DASAR
+    // `di_atas_20`, sesi ini SUDAH punya nominal (klien pun sudah ditagih
+    // dengannya), jadi menyembunyikan rinciannya berarti panel admin
+    // menyangkal apa yang sudah dibayar klien.
+    //
+    // Gerbangnya sendiri tidak diubah: ia tetap bertanya lewat view
+    // `sesi_menunggu_tarif_transport`. Yang berubah adalah arti view itu
+    // (migrasi `20260914130000_menunggu_tarif_hanya_tanpa_nominal`), dan
+    // uji ini mengunci arti barunya dari sisi konsumennya.
     const item = (await semuaTagihan()).find((t) => t.id === SESI_JAUH_BELUM)!;
-    expect(item.rincianTransport).toBeNull();
+    expect(item.rincianTransport).toContain(">20 km");
+    expect(nominalDalam(item.rincianTransport ?? ""), "nominal bocor").toEqual([]);
   });
 
   it("sesi di_atas_20 SUDAH punya transport_khusus: rincianTransport terisi, TETAP tanpa nominal", async () => {
@@ -651,18 +664,22 @@ describe("daftarTagihanAdmin & susunTagihan — baris transport (Task 9, fix rou
     expect(dekat.rincianTransport).toContain(">10–15 km");
   });
 
-  it("klien TIDAK PERNAH mendapat rincian transport untuk di_atas_20 — bahkan yang sudah bertarif khusus", async () => {
-    // Keputusan konservatif (Ruling 17): klien tidak punya, dan tidak boleh
-    // punya, cara memverifikasi `transport_khusus` sudah ditetapkan (RLS
-    // "hanya owner" menutup tabel itu dari klien MAUPUN admin) — beda dengan
-    // admin yang punya anti-join `sesi_menunggu_tarif_transport`. Rate-card
-    // jenjang lain tidak punya masalah ini: sekali owner menetapkan SATU
-    // tarif jenjang, ia otomatis berlaku untuk SETIAP sesi jenjang itu.
+  it("klien MENDAPAT rincian transport untuk di_atas_20, tanpa nominal (Ruling 26 mencabut Ruling 17)", async () => {
+    // Dibalik bersama gerbang di `susunTagihan()`. Keputusan konservatif
+    // Ruling 17 ("klien tidak punya cara memverifikasi apakah tarifnya sudah
+    // ditetapkan") berdiri di atas doktrin `di_atas_20` = ketiadaan tarif.
+    // Sejak tarif DASAR ada, `di_atas_20` tidak lagi berbeda dari
+    // `0_5`..`15_20` bagi klien — dan klien yang sama sudah membaca nominal
+    // transport >20 km di kartu tagihan pengajuan pada halaman yang SAMA.
+    //
+    // Klien tetap TIDAK menerima satu nominal pun lewat baris ini: yang
+    // dirakit hanya label jenjang + tanggal.
     ref.sesi = sesiKlien;
     const [paket, sesi] = await Promise.all([ambilPaket(KLIEN), ambilSesi(KLIEN)]);
     ref.sesi = sesiAdmin;
     const item = susunTagihan({ paket, sesi }).find((t) => t.id === SESI_JAUH_SUDAH);
-    expect(item?.rincianTransport ?? null).toBeNull();
+    expect(item?.rincianTransport).toContain(">20 km");
+    expect(nominalDalam(item?.rincianTransport ?? ""), "nominal bocor ke klien").toEqual([]);
   });
 
   // --- Parity & money firewall ---

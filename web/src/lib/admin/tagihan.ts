@@ -21,8 +21,16 @@ export type ItemTagihanAdmin = {
   /**
    * Rincian transport (Task 9, Ruling 16 — fix round 1). `null` untuk setiap
    * item paket, dan untuk item sesi yang tidak berjenjang, atau berjenjang
-   * `di_atas_20` tapi tarif per-kasusnya BELUM ditetapkan owner (lihat
-   * gerbang di `daftarTagihanAdmin()`).
+   * `di_atas_20` yang TIDAK PUNYA NOMINAL SAMA SEKALI — tidak ada penimpa per
+   * kasus MAUPUN tarif dasar jenjang yang berlaku pada tanggalnya (lihat
+   * gerbang di `daftarTagihanAdmin()`; definisinya hidup di view
+   * `sesi_menunggu_tarif_transport`, migrasi
+   * `20260914130000_menunggu_tarif_hanya_tanpa_nominal`).
+   *
+   * Nama tabel nominalnya SENGAJA tidak ditulis di berkas ini: pemindai money
+   * firewall di `tests/admin-bayar.test.ts` memerah bila modul ini menyebut
+   * salah satunya, dan pemindai itu tidak bisa — dan tidak seharusnya —
+   * membedakan sebutan di komentar dari `.from()` yang sungguhan.
    *
    * SENGAJA sebuah MEDAN pada item sesi yang sudah ada — BUKAN item kedua
    * ber-`id` yang sama. Draf pertama Task 9 menambahkan item transport KEDUA
@@ -239,13 +247,24 @@ export async function daftarTagihanAdmin(
     // (`@/lib/transport/jarak`), SATU-SATUNYA sumber. Dikunci lewat uji
     // parity di tests/admin-bayar.test.ts.
     //
-    // `di_atas_20` yang MASIH di `sesi_menunggu_tarif_transport` (Ruling 17)
-    // TIDAK mendapat rincian: view itu adalah satu-satunya definisi "tarif
-    // per-kasusnya belum ditetapkan", dan menampilkan rincian untuk sesi yang
-    // nominalnya belum pernah ditetapkan siapa pun berarti menagih admin
-    // untuk sesuatu yang tidak ada. Begitu owner menetapkannya, sesi itu
-    // lenyap dari view — dan rincian ini muncul, TETAP tanpa nominal apa pun
-    // (hanya label ">20 km").
+    // `di_atas_20` yang MASIH di `sesi_menunggu_tarif_transport` TIDAK
+    // mendapat rincian: view itu adalah satu-satunya definisi "sesi ini tidak
+    // punya nominal di mana pun", dan menampilkan rincian untuk sesi seperti
+    // itu berarti menagih admin untuk sesuatu yang tidak ada.
+    //
+    // (Ruling 26, gelombang perbaikan akhir) Arti view itu BERUBAH bersama
+    // migrasi `20260914130000_menunggu_tarif_hanya_tanpa_nominal`: dulu
+    // "belum punya penimpa per kasus" — yang sesudah tarif dasar lahir berarti
+    // SETIAP sesi jarak jauh yang normal — sekarang "tidak punya penimpa DAN
+    // tidak punya tarif dasar yang berlaku pada tanggalnya".
+    // Gerbang di sini SENGAJA tidak diubah bersamanya: ia sudah menanyakan
+    // pertanyaan yang benar ("apakah sesi ini punya nominal?"), dan yang
+    // salah adalah jawaban yang diberikan view lama. Efeknya, sesi jarak jauh
+    // bertarif dasar kini MENDAPAT rincian ini — sejajar dengan sisi klien
+    // (`susunTagihan()`, `lib/passport/turunan.ts`) yang pengecualian
+    // `di_atas_20`-nya dicabut pada gelombang yang sama, dan sejajar dengan
+    // kartu tagihan pengajuan yang sudah lebih dulu menampilkannya. Rincian
+    // ini TETAP tanpa nominal apa pun (hanya label ">20 km").
     //
     // `menungguTransportId === null` (Ruling 25 — view gagal dibaca) membuat
     // kondisi ini TRUE untuk SETIAP sesi `di_atas_20`, apa pun `s.id`-nya:

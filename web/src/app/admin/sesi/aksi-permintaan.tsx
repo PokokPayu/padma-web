@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { cariMitra, pilihMitra, konfirmasiPermintaan, terbitkanTagihan } from "./aksi";
+import {
+  cariMitra,
+  pilihMitra,
+  konfirmasiPermintaan,
+  terbitkanTagihan,
+  kirimUlangEmailTagihan,
+} from "./aksi";
 import { perbaruiPermintaan } from "./aksi-ubah-permintaan";
 import {
   PERMINTAAN_AWAL,
@@ -47,6 +53,7 @@ export function TombolPermintaan({
   mitra,
   lunas,
   tautanWa,
+  emailTerkirim,
 }: {
   permintaanId: string;
   status: StatusPermintaan;
@@ -54,6 +61,7 @@ export function TombolPermintaan({
   mitra: MitraPilihan[];
   lunas: boolean;
   tautanWa: string;
+  emailTerkirim: boolean;
 }) {
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
@@ -170,6 +178,14 @@ export function TombolPermintaan({
               {pending ? "Memproses…" : "Konfirmasi jadwal"}
             </button>
           )}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => jalankan(() => kirimUlangEmailTagihan(permintaanId))}
+            className={KELAS_KEDUA}
+          >
+            {pending ? "Memproses…" : emailTerkirim ? "Kirim ulang email" : "Kirim email tagihan"}
+          </button>
         </>
       )}
 

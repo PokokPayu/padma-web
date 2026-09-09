@@ -580,9 +580,14 @@ type BarisTransportRateDb = {
 
 /**
  * Rate card transport yang berlaku pada `hariIni`, satu baris per jenjang
- * yang SUDAH punya tarif. Jenjang `di_atas_20` tidak pernah muncul di sini —
- * CHECK `transport_rates_bukan_per_kasus` menolaknya di basis data karena
- * nominalnya ditetapkan owner PER KASUS (`ambilSesiMenungguTarif()` di bawah).
+ * yang SUDAH punya tarif. Jenjang `di_atas_20` KINI BOLEH muncul di sini
+ * sejak migrasi `tarif_dasar_di_atas_20` (CHECK `transport_rates_bukan_per_kasus`
+ * dicabut) — ia memberi tarif DASAR supaya tagihan sesi >20 km selalu bisa
+ * terbit, bukan tersangkut menunggu sesi yang baru lahir sesudah lunas.
+ * `transport_khusus` (`ambilSesiMenungguTarif()` di bawah) TETAP HIDUP
+ * sebagai PENIMPA per kasus di atas tarif dasar ini, dan penimpa itu selalu
+ * menang — urutannya ditetapkan di `hitungTagihanPengajuan()`
+ * (`lib/tagihan/pengajuan.ts`).
  *
  * `hariIni` WAJIB diberikan pemanggil (halaman meneruskan `hariIniJakarta()`),
  * alasan yang SAMA dengan `ambilRateCard()`: fungsi yang membaca jam sistem

@@ -119,8 +119,11 @@ insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
       where vr.variant_id = v.id and vr.berlaku_sejak = current_date
    );
 
--- Tarif transport soft launch, dari materi klien. `di_atas_20` sengaja tidak
--- ada: tarifnya ditetapkan owner per kasus (lihat transport_khusus).
+-- Tarif transport soft launch, dari materi klien. `di_atas_20` IKUT di sini
+-- sejak migrasi `tarif_dasar_di_atas_20` — sebagai tarif DASAR, sementara
+-- `transport_khusus` tinggal sebagai penimpa per kasus milik owner. (Komentar
+-- lama di baris ini masih berbunyi "`di_atas_20` sengaja tidak ada", padahal
+-- barisnya sudah ditulis dua puluh baris di bawah; dikoreksi Ruling 26.)
 --
 -- Perhatikan 0–5 km: klien Rp0, mitra Rp10.000. Itu BUKAN salah ketik — ia
 -- subsidi PADMA, dan angka ketiganya (selisih) sengaja tidak disimpan.
@@ -134,18 +137,31 @@ insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
 -- adalah unique BIASA (bukan sebagian/parsial), jadi ON CONFLICT DO NOTHING
 -- sudah idempoten terhadap pengulangan `seed.sql` pada hari yang sama.
 insert into transport_rates (jenjang, tarif_klien, honor_mitra) values
-  ('0_5',       0, 10000),
-  ('5_10',  10000, 10000),
-  ('10_15', 20000, 15000),
-  ('15_20', 30000, 20000)
+  ('0_5',           0, 10000),
+  ('5_10',      10000, 10000),
+  ('10_15',     20000, 15000),
+  ('15_20',     30000, 20000),
+  -- Tarif DASAR >20 km (migrasi tarif_dasar_di_atas_20). Angka pengembangan;
+  -- produksi menetapkannya sendiri lewat /owner/transport. Owner menimpanya
+  -- per kasus di `transport_khusus` untuk jarak yang menuntutnya.
+  ('di_atas_20', 45000, 30000)
   on conflict (jenjang, berlaku_sejak) do nothing;
 
 insert into packages (id, service_id, nama, jumlah_sesi) values
   ('22222222-2222-2222-2222-222222222201','11111111-1111-1111-1111-111111111101','Sankalpa Prima',8);
 
-insert into partners (id, nama, no_hp) values
-  ('33333333-3333-3333-3333-333333333301','Bidan Sri Wahyuni','0811-0000-0001'),
-  ('33333333-3333-3333-3333-333333333302','Bidan Dewi Lestari','0811-0000-0002');
+-- KOORDINAT WAJIB, bukan hiasan. Tanpa `lat`/`lon`, jenjang transport tidak
+-- bisa dihitung, `hitungTagihanPengajuan()` memulangkan total NULL, dan SETIAP
+-- pesan tagihan berbunyi "Total: menyusul dari tim". Mitra seed sebelumnya
+-- tidak punya keduanya, dan itulah sebab langsung gejala tersebut di seluruh
+-- lingkungan pengembangan & demo.
+--
+-- Titiknya di Malang, sekitar wilayah layanan PADMA. Untuk produksi berlaku
+-- aturan yang sama dan lebih keras: setiap mitra wajib punya pin di peta
+-- (form /admin/mitra sudah punya pemilihnya) SEBELUM tagihan pertama terbit.
+insert into partners (id, nama, no_hp, lat, lon) values
+  ('33333333-3333-3333-3333-333333333301','Bidan Sri Wahyuni','0811-0000-0001',-7.966620,112.632632),
+  ('33333333-3333-3333-3333-333333333302','Bidan Dewi Lestari','0811-0000-0002',-7.947500,112.615000);
 
 insert into app_settings (key, value) values ('nomor_wa','6287778400200');
 

@@ -469,7 +469,15 @@ describe("ambilRekap() — transport (Task 9)", () => {
     expect(a.totalHonor).toBe(HONOR + TARIF_TRANSPORT_HONOR);
   });
 
-  it("sesi di_atas_20 tanpa transport_khusus jatuh ke sesiTakBertarif dengan sebab 'transport'", async () => {
+  // (Ruling 26) Fixture ini TETAP sah sesudah `di_atas_20` punya tarif dasar,
+  // dan alasannya harus tertulis supaya tidak dikira kebetulan: PEKAN_T9
+  // bertanggal 2024, jauh lebih tua daripada baris tarif dasar `di_atas_20`
+  // mana pun (`seed.sql` menulisnya ber-`berlaku_sejak = current_date`, dan
+  // `guard_tarif_transport_maju` menolak `berlaku_sejak` yang mundur). Jadi
+  // SESI_JAUH benar-benar tidak punya nominal di mana pun — bukan sekadar
+  // tidak punya penimpa — dan itulah satu-satunya keadaan yang masih
+  // tak-bertarif sejak gelombang perbaikan akhir.
+  it("sesi di_atas_20 tanpa nominal MANA PUN jatuh ke sesiTakBertarif dengan sebab 'transport'", async () => {
     const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9)!;
     const tak = pekan.sesiTakBertarif.find((s) => s.id === SESI_JAUH);
     expect(tak, "sesi >20 km tanpa tarif khusus seharusnya tak-bertarif").toBeDefined();

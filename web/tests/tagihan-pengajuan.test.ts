@@ -119,8 +119,11 @@ describe("ketidaktahuan TIDAK PERNAH menjadi nol", () => {
   });
 
   it(">20 km tanpa tarif khusus: MENUNGGU owner, bukan Rp0", () => {
-    // `di_atas_20` sengaja tidak punya tarif rate card — "konfirmasi admin"
-    // berarti ketiadaan tarif, dan nominalnya ditetapkan owner per kasus.
+    // `di_atas_20` PUNYA tarif dasar sejak migrasi `tarif_dasar_di_atas_20`.
+    // Uji ini lulus bukan karena strukturnya melarang baris `di_atas_20`,
+    // melainkan semata karena fixture `TARIF_TRANSPORT` di atas kebetulan
+    // tidak memuatnya — jadi hasilnya tetap `null` seperti tarif dasar mana
+    // pun yang belum ditetapkan owner.
     const r = hitungTagihanPengajuan({
       variantId: VARIAN,
       tanggal: "2026-09-20",
@@ -158,7 +161,7 @@ describe("honor mitra tidak pernah lewat lapisan ini", () => {
       tarifTransport: TARIF_TRANSPORT,
     });
     expect(Object.keys(r).sort()).toEqual(
-      ["layanan", "menungguTarifKhusus", "total", "transport"].sort(),
+      ["jenjang", "layanan", "menungguTarifKhusus", "sebab", "total", "transport"].sort(),
     );
   });
 });

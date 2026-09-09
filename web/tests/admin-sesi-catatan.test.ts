@@ -1175,9 +1175,10 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     const jumlahGuard = [
       ...sumberAksi.matchAll(/await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/g),
     ].length;
-    // + terbitkanTagihan (rantai C2): cariMitra, pilihMitra, terbitkanTagihan,
+    // + kirimUlangEmailTagihan (Task 6 — email tagihan lewat Resend):
+    // cariMitra, pilihMitra, terbitkanTagihan, kirimUlangEmailTagihan,
     // konfirmasi, tolak, jadwalkan, selesaikan, tetapkanJenjang.
-    expect(jumlahAction).toBe(8);
+    expect(jumlahAction).toBe(9);
     expect(jumlahGuard).toBe(jumlahAction);
   });
 
@@ -1201,11 +1202,13 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // barat (spec T6). Rantai C2 (`@/app/admin/sesi/aksi.ts`) menambahkan
     // pemakaian YANG SAH: `terbitkanTagihan` menghitung `tenggat`, kolom
     // `timestamptz` (bukan `date`) — "24 jam dari sekarang", bukan tanggal
-    // kalender, sehingga tidak kena bug zona waktu yang sama. Larangannya
-    // TIDAK dilonggarkan; ia dipersempit di `sumberAksi` supaya pemakaian sah
-    // ini tidak diam-diam membuka jalan bagi `toISOString` lain yang
-    // menyelinap pada kolom `tanggal`/`date`. Lihat pagar yang sama & lebih
-    // rinci di tests/admin-sesi-konfirmasi.test.ts.
+    // kalender, sehingga tidak kena bug zona waktu yang sama. Task 6 menambah
+    // pemakaian sah KEDUA: `kirimEmailTagihan` mencatat `email_tagihan_pada`
+    // (`timestamptz` juga) sebagai "sekarang", bukan tanggal kalender.
+    // Larangannya TIDAK dilonggarkan; ia dipersempit di `sumberAksi` supaya
+    // pemakaian sah ini tidak diam-diam membuka jalan bagi `toISOString` lain
+    // yang menyelinap pada kolom `tanggal`/`date`. Lihat pagar yang sama &
+    // lebih rinci di tests/admin-sesi-konfirmasi.test.ts.
     for (const sumber of [sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("toISOString");
       expect(sumber).not.toContain("setDate(");
@@ -1213,12 +1216,38 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     }
     expect(sumberAksi).not.toContain("setDate(");
     expect(sumberAksi).not.toContain("getDay(");
-    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(2);
     expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
+    expect(sumberAksi).toMatch(/email_tagihan_pada:\s*new Date\(\)\.toISOString\(\)/);
   });
 
   it("tidak menuliskan data klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
+    // Larangan aslinya menyapu TOTAL keberadaan `console.` di `sumberAksi`
+    // karena sebelum Task 6 tidak ada satu pun pemakaian yang legit. Task 6
+    // (ronde perbaikan 1, temuan 3 & 5) menambah TIGA pemakaian yang legit:
+    // mencatat kegagalan kirim email tagihan (env basis URL kosong, galat
+    // menulis `email_tagihan_pada` sesudah email SUDAH sampai, dan exception
+    // tak terduga dari langkah yang bisa melempar). Ketiganya adalah
+    // PESAN TETAP diikuti objek galat generik (`error`/`e`) — tidak satu pun
+    // menyebut `email`, `nama`, atau medan klien lain sebagai argumen. Diuji
+    // dengan KECOCOKAN PERSIS, bukan pola longgar, supaya `console.` baru di
+    // luar tiga ini — apalagi yang menyisipkan data klien — memerahkan uji.
+    // (Ruling 26, gelombang perbaikan akhir) Baris KEEMPAT masuk daftar ini:
+    // gerbang penerbitan tagihan kini menangkap galat baca rincian dan
+    // menolak penerbitan alih-alih melewatinya. Argumennya `e` — objek galat
+    // generik, tanpa satu pun medan klien — sama seperti tiga baris lainnya.
+    const KONSOL_SAH = [
+      'console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);',
+      'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
+      'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
+      'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',
+    ];
+    for (const baris of KONSOL_SAH) {
+      expect(sumberAksi).toContain(baris);
+    }
+    expect([...sumberAksi.matchAll(/console\./g)]).toHaveLength(KONSOL_SAH.length);
+
+    for (const sumber of [sumberHalaman, sumberFormSesi, sumberPanelSesi]) {
       expect(sumber).not.toContain("console.");
     }
   });

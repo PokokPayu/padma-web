@@ -136,28 +136,36 @@ describe("transport_rates — pagar uang", () => {
   });
 
   /**
-   * >>> Ruling 6 (coordinator, 7 Sep 2026) <<<
+   * DOKTRINNYA BERUBAH di migrasi `tarif_dasar_di_atas_20`, dan uji ini berubah
+   * bersamanya — bukan dihapus.
    *
-   * Versi sebelumnya cuma menghitung baris `di_atas_20` dan mengasersi "0" —
-   * itu hanya menjaga SEED, bukan invariannya. Reviewer membuktikan
-   * celahnya langsung: sebagai `authenticated` berklaim JWT owner, INSERT
-   * `di_atas_20` BERHASIL tanpa constraint apa pun, dan karena tabel ini
-   * append-only dengan DELETE tercabut, baris itu PERMANEN untuk peran API —
-   * menciptakan sumber kebenaran kedua (menandingi `transport_khusus`) untuk
-   * nominal yang sama, yang cuma bisa dibersihkan lewat service role.
+   * Yang dulu dijaga: `di_atas_20` TIDAK BOLEH punya baris di sini, karena
+   * nominalnya per kasus di `transport_khusus`. Itu benar untuk kebocoran yang
+   * dilihat Ruling 6, dan salah untuk kebuntuan yang belum terlihat waktu itu:
+   * `transport_khusus` berkunci `session_id`, sesi lahir sesudah lunas, dan
+   * lunas menuntut tagihan yang tidak pernah bisa terbit.
    *
-   * Uji ini menggantinya dengan uji PENOLAKAN atas nama constraint
-   * `transport_rates_bukan_per_kasus`: doktrin "di_atas_20 bukan tarif" kini
-   * hidup sebagai CHECK, bukan cuma komentar tabel.
+   * Yang dijaga SEKARANG: barisnya boleh ada, dan seluruh pagar uang lain
+   * tabel ini TIDAK ikut longgar bersamanya — append-only tetap append-only.
    */
-  it("menolak baris di_atas_20 — tarifnya per kasus, bukan per jenjang", async () => {
+  it("menerima baris di_atas_20 sebagai tarif dasar", async () => {
+    // DIBUNGKUS `dalamTransaksiRollback` seperti seluruh uji lain di berkas
+    // ini (Ruling 26). Versi sebelumnya menyisipkan barisnya lewat `querySql`
+    // lalu menghapusnya dengan `querySql` kedua DI LUAR transaksi: bila
+    // asersinya gagal, `delete`-nya tidak pernah dijalankan dan baris
+    // `di_atas_20 @ 2099-01-01` MENETAP di basis data lokal yang DIPAKAI
+    // BERSAMA sesi lain. Ia tidak menetap dengan sopan, pula: `berlaku_sejak`
+    // 2099 lolos `guard_tarif_transport_maju` (ia hanya menolak tanggal yang
+    // MUNDUR), dan sejak view `sesi_menunggu_tarif_transport` menanyakan
+    // `berlaku_sejak <= s.tanggal` baris itu ikut mengubah jawaban uji lain.
+    // Rollback membuat kegagalan uji ini merugikan uji ini saja.
     await dalamTransaksiRollback(async (jalankan) => {
       await expect(
         jalankan(
-          `insert into public.transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
-           values ('di_atas_20', 99999, 88888, '2099-01-01')`,
+          `insert into transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
+             values ('di_atas_20', 99999, 88888, '2099-01-01')`,
         ),
-      ).rejects.toThrow(/transport_rates_bukan_per_kasus/);
+      ).resolves.toBeDefined();
     });
   });
 });

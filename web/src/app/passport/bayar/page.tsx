@@ -14,6 +14,18 @@ import { CaraBayar, LangkahBayar } from "./cara-bayar";
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
 
+// KOMENTAR INI DIKOREKSI (Ruling 26). Sebelumnya di sini berdiri kalimat
+// "halaman ini menampilkan STATUS, bukan angka (keputusan #10)" — padahal
+// halaman ini sudah lama merender nominal. Yang berlaku: keputusan #10
+// digantikan spec V4, harga klien memang tampil publik karena QRIS PADMA
+// statis dan klien mengetik sendiri jumlahnya. Alasan lengkapnya di dokblok
+// `lib/tagihan/baca.ts` — jangan menuliskannya kedua kali, cukup jangan
+// bertentangan dengannya.
+//
+// Yang TIDAK berubah, dan itulah money firewall yang sesungguhnya:
+// `honor_mitra` tidak pernah keluar dari tabel tarif menuju permukaan mana
+// pun — klien maupun admin.
+
 /**
  * DAFTAR tagihan — bukan lagi tempat membayar.
  *
@@ -82,9 +94,7 @@ export default async function HalamanBayar() {
                 </span>
                 <span className="flex items-center gap-2 whitespace-nowrap">
                   <b className="text-[15px] text-night">
-                    {t.rincian.menungguTarifKhusus || t.rincian.total === null
-                      ? "Menunggu total"
-                      : formatRupiah(t.rincian.total)}
+                    {t.rincian.total === null ? "Menunggu total" : formatRupiah(t.rincian.total)}
                   </b>
                   <svg width="8" viewBox="0 0 8 14" aria-hidden className="text-ink-soft">
                     <path

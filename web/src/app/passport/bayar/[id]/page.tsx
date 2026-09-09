@@ -6,6 +6,8 @@ import { bacaPengaturan } from "@/lib/settings";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { formatRupiah } from "@/lib/rupiah-publik";
+import { KALIMAT_SEBAB_KLIEN } from "@/lib/tagihan/pengajuan";
+import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
 import { CaraBayar, LangkahBayar } from "../cara-bayar";
 import { UnggahBukti } from "./unggah-bukti";
@@ -65,19 +67,43 @@ export default async function HalamanBayarSatu({
           {formatTanggalID(tagihan.tanggal)} · {formatJam(jamDariDb(tagihan.jamMulai))}
         </span>
 
-        {rincian.menungguTarifKhusus ? (
+        {rincian.total === null ? (
           <p className="mt-3 text-[13px] text-[#77321F]">
-            Jarak ke alamat Anda di atas 20 km, jadi ongkos transportnya ditetapkan tim lebih
-            dulu. Kami menghubungi Anda dengan totalnya.
-          </p>
-        ) : rincian.total === null ? (
-          <p className="mt-3 text-[13px] text-[#77321F]">
-            Totalnya sedang dilengkapi tim PADMA. Kami menghubungi Anda sebentar lagi.
+            {rincian.sebab
+              ? KALIMAT_SEBAB_KLIEN[rincian.sebab]
+              : "Totalnya sedang dilengkapi tim PADMA."}
           </p>
         ) : (
-          <p className="mt-3 text-[26px] font-bold leading-none text-night" data-total>
-            {formatRupiah(rincian.total)}
-          </p>
+          // RINCIAN, bukan satu angka: klien mengetik sendiri jumlahnya ke QRIS
+          // statis, dan angka yang tidak bisa ditelusuri asalnya adalah angka
+          // yang ditanyakan lewat WhatsApp satu per satu.
+          //
+          // `data-total` DIPERTAHANKAN pada elemen totalnya. E2E
+          // `tests/e2e/bayar-pengajuan.e2e.ts` mencarinya, dan penanda itu
+          // justru yang dulu menangkap cacat embed RLS yang membuat setiap
+          // klien melihat "Totalnya sedang dilengkapi tim".
+          <dl className="mt-3 text-[13.5px]">
+            <div className="flex justify-between">
+              <dt className="text-ink-soft">Layanan</dt>
+              <dd className="text-night">
+                {rincian.layanan === null ? "—" : formatRupiah(rincian.layanan)}
+              </dd>
+            </div>
+            <div className="mt-0.5 flex justify-between">
+              <dt className="text-ink-soft">
+                Transport{rincian.jenjang ? ` · ${LABEL_JENJANG[rincian.jenjang]}` : ""}
+              </dt>
+              <dd className="text-night">
+                {rincian.transport === null ? "—" : formatRupiah(rincian.transport)}
+              </dd>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between border-t border-black/10 pt-2">
+              <dt className="font-bold text-night">Total</dt>
+              <dd className="text-[26px] font-bold leading-none text-night" data-total>
+                {formatRupiah(rincian.total)}
+              </dd>
+            </div>
+          </dl>
         )}
 
         {tagihan.statusBayar === "lunas" ? (

@@ -52,8 +52,12 @@ describe("Circle tidak punya perlakuan khusus di jalur pemesanan (spec J13)", ()
     // Circle adalah varian berformat lain dengan harga lebih murah; formulir
     // memperlakukannya persis seperti varian mana pun. Bila suatu saat ada
     // medan "jumlah peserta", uji ini merah — dan itulah maksudnya.
+    // DISESUAIKAN saat kedua <select> diganti katalog berharga: medan `varian`
+    // tidak lagi lahir dari atribut `name`, melainkan dari `fd.set("varian",
+    // …)` di handler `action`. Yang dijaga uji ini tidak berubah sedikit pun —
+    // formulir memilih VARIAN, dan tidak pernah menghitung orang.
     const form = readFileSync(path.join(AKAR, "src/app/passport/ajukan/form.tsx"), "utf8");
-    expect(form).toContain('name="varian"');
+    expect(form).toMatch(/fd\.set\(\s*["']varian["']\s*,/);
     expect(form).not.toMatch(/name="(jumlah|peserta|orang)"/);
   });
 });
