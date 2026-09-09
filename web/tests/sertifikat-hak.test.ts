@@ -3,10 +3,19 @@
  * terlihat mata. Tampilan badge dan kartu materi diverifikasi manual; yang
  * diuji di sini adalah siapa boleh membaca lembar milik siapa.
  */
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
+
+// Sesi klien sungguhan untuk uji rute di bawah — RLS yang menjadi penjaga
+// lewat sesi pengguna yang di-mock ke `createServerSupabase`, sama seperti
+// tests/materi-route-halaman.test.ts.
+const ref = vi.hoisted(() => ({ klien: null as SupabaseClient | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.klien!,
+}));
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,5 +109,20 @@ describe("sertifikat — hak baca", () => {
 
     // Tidak ada policy INSERT untuk klien — ditolak, bukan diterima diam-diam.
     expect(error).not.toBeNull();
+  });
+
+  it("rute baca menolak sertifikat milik klien lain dengan 404", async () => {
+    // Dipanggil LANGSUNG (bukan lewat HTTP): `createServerSupabase` di-mock
+    // di atas berkas ini untuk memulangkan sesi Ananda — pemilik SESI_LAIN
+    // adalah KLIEN_LAIN, bukan Ananda, jadi RLS memulangkan nol baris dan
+    // rutenya menjawab 404. Pola meniru tests/materi-route-halaman.test.ts.
+    ref.klien = await signInAs("ananda@padma.test");
+
+    const { GET } = await import("@/app/api/sertifikat/[sesi]/route");
+    const res = await GET(new Request("http://localhost/api/sertifikat/x"), {
+      params: Promise.resolve({ sesi: SESI_LAIN }),
+    });
+
+    expect(res.status).toBe(404);
   });
 });
