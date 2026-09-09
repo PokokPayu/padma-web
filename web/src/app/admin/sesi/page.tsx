@@ -264,6 +264,14 @@ export default async function SesiPage({
               {
                 nama: "status",
                 label: "Status",
+                // Tanpa `?status` di URL, `ambilDaftarPermintaan` (lewat
+                // `statusUntukSaring("")`) SUDAH menyaring ke STATUS_ANTRE —
+                // persis seperti chip "Menunggu" dipilih. `bawaan` di sini
+                // hanya membuat chipnya IKUT menyala saat itu terjadi, supaya
+                // "Menampilkan 3 dari 3" tidak terbaca sebagai "seluruh
+                // permintaan" padahal riwayat batal/tolak sengaja disaring
+                // keluar.
+                bawaan: SARING_MENUNGGU,
                 pilihan: [
                   { nilai: SARING_MENUNGGU, label: "Menunggu", menuntut: true },
                   { nilai: SARING_RIWAYAT, label: "Riwayat" },
@@ -299,24 +307,49 @@ export default async function SesiPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {daftarPermintaan.baris.map((p) => (
-                    <tr key={p.id} data-permintaan={p.id} data-status={p.status}>
-                      <Td>
-                        <Link
-                          href={`${BASIS}${bangunQuery(param, { lihat: p.id })}`}
-                          className="font-bold text-panel-ink underline-offset-2 hover:underline"
-                        >
-                          {p.namaKlien}
-                        </Link>
-                      </Td>
-                      <Td>{p.namaLayanan}</Td>
-                      <Td>
-                        {formatTanggalID(p.tanggal)} · {formatJam(jamDariDb(p.jamMulai))}
-                      </Td>
-                      <Td>{LABEL_PERMINTAAN[p.status]}</Td>
-                      <Td>{labelBayarPermintaan(p)}</Td>
-                    </tr>
-                  ))}
+                  {daftarPermintaan.baris.map((p) => {
+                    // Href SATU kali per baris, dipakai lagi di kelima sel —
+                    // spec K5 & kalimat Bantuan ("klik satu baris") menjanjikan
+                    // seluruh baris bisa dibuka, bukan cuma nama klien. `<tr>`
+                    // sendiri tidak bisa jadi tautan, jadi tiap `<Td>` dapat
+                    // tautannya sendiri yang MEMENUHI selnya (margin negatif
+                    // menutup padding `Td`) supaya target kliknya area sel,
+                    // bukan cuma glyph teksnya.
+                    const href = `${BASIS}${bangunQuery(param, { lihat: p.id })}`;
+                    const kelasTautanSel = "-mx-3 -my-2.5 block px-3 py-2.5";
+                    return (
+                      <tr key={p.id} data-permintaan={p.id} data-status={p.status}>
+                        <Td>
+                          <Link
+                            href={href}
+                            className={`${kelasTautanSel} font-bold text-panel-ink underline-offset-2 hover:underline`}
+                          >
+                            {p.namaKlien}
+                          </Link>
+                        </Td>
+                        <Td>
+                          <Link href={href} className={kelasTautanSel}>
+                            {p.namaLayanan}
+                          </Link>
+                        </Td>
+                        <Td>
+                          <Link href={href} className={kelasTautanSel}>
+                            {formatTanggalID(p.tanggal)} · {formatJam(jamDariDb(p.jamMulai))}
+                          </Link>
+                        </Td>
+                        <Td>
+                          <Link href={href} className={kelasTautanSel}>
+                            {LABEL_PERMINTAAN[p.status]}
+                          </Link>
+                        </Td>
+                        <Td>
+                          <Link href={href} className={kelasTautanSel}>
+                            {labelBayarPermintaan(p)}
+                          </Link>
+                        </Td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </Tabel>
             </div>

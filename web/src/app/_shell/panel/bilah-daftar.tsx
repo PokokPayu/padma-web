@@ -13,6 +13,17 @@ export type KelompokSaring = {
   nama: string;
   label: string;
   pilihan: readonly PilihanSaring[];
+  /**
+   * Nilai yang dianggap aktif ketika `param.saring[nama]` TIDAK ADA di URL —
+   * untuk saringan yang server-nya sendiri sudah menjatuhkan bawaan diam-diam
+   * (mis. tab Permintaan menyaring ke "menunggu" walau `?status` kosong).
+   * HANYA memengaruhi chip mana yang menyala di sini; TIDAK pernah dioper ke
+   * `bangunQuery` atau ke medan tersembunyi formulir cari di atas — kalau
+   * ikut ke sana, setiap tautan yang dibangun ulang mulai membawa
+   * `status=menunggu` secara eksplisit padahal keadaan bawaan seharusnya
+   * tidak tampil sama sekali di URL.
+   */
+  bawaan?: string;
 };
 
 /**
@@ -73,7 +84,7 @@ export function BilahDaftar({
 
         {kelompok.map((k) =>
           k.pilihan.map((p) => {
-            const menyala = param.saring[k.nama] === p.nilai;
+            const menyala = (param.saring[k.nama] ?? k.bawaan) === p.nilai;
             // Chip yang menyala menaut untuk MELEPAS dirinya. Chip yang hanya
             // bisa dipasang adalah saringan yang tidak bisa dibatalkan tanpa
             // mengetik ulang URL.

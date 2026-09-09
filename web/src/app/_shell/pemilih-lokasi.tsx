@@ -44,7 +44,22 @@ const HTML_PIN =
 
 type Titik = { lat: number; lon: number };
 
-export function PemilihLokasi({ awal = null }: { awal?: Titik | null }) {
+/** Kalimat lama, benar untuk keempat formulir mitra/klien: pin kosong di
+ * sana masih jatuh ke geocoding server-side, jadi "diperkirakan otomatis"
+ * bukan bualan. */
+const KALIMAT_KOSONG_BAWAAN =
+  "Belum ada pin. Tanpa pin, lokasi diperkirakan otomatis dari teks alamat.";
+
+export function PemilihLokasi({
+  awal = null,
+  kalimatKosong = KALIMAT_KOSONG_BAWAAN,
+}: {
+  awal?: Titik | null;
+  /** Teks saat belum ada pin. Boleh dioper beda oleh pemanggil yang, tidak
+   * seperti mitra/klien, TIDAK jatuh ke geocoding otomatis bila pin dibiarkan
+   * kosong — lihat panel permintaan. */
+  kalimatKosong?: string;
+}) {
   const wadah = useRef<HTMLDivElement | null>(null);
   const peta = useRef<PetaLeaflet | null>(null);
   const penanda = useRef<MarkerLeaflet | null>(null);
@@ -235,7 +250,7 @@ export function PemilihLokasi({ awal = null }: { awal?: Titik | null }) {
       <p className="mt-1 text-[11px] text-ink-soft/70">
         {koordinat
           ? `Pin: ${koordinat.lat.toFixed(6)}, ${koordinat.lon.toFixed(6)}`
-          : "Belum ada pin. Tanpa pin, lokasi diperkirakan otomatis dari teks alamat."}
+          : kalimatKosong}
       </p>
       {status && <p className="mt-1 text-[11px] text-ink-soft">{status}</p>}
       <p className="mt-1 block text-[11px] text-ink-soft/70">

@@ -85,7 +85,24 @@ export function PanelPermintaan({
             </p>
             <FormPinPermintaan
               permintaanId={permintaan.id}
-              anak={<PemilihLokasi awal={null} />}
+              anak={
+                <>
+                  {/* `PemilihLokasi` membaca alamat lewat
+                      `namedItem("alamat")` pada FORMULIR yang sama — tapi di
+                      panel ini alamatnya cuma teks tampilan di atas, di luar
+                      formulir. Tanpa medan tersembunyi ini, tombol "Cari
+                      alamat di peta" selalu menganggap alamatnya kosong dan
+                      menyalahkan admin ("Isi alamatnya lebih dulu.") padahal
+                      alamatnya terlihat jelas dua baris di atas. JANGAN
+                      dihapus sebagai "duplikat" — ia satu-satunya jalan
+                      alamat itu sampai ke pencarian peta. */}
+                  <input type="hidden" name="alamat" value={permintaan.alamat} />
+                  <PemilihLokasi
+                    awal={null}
+                    kalimatKosong="Belum ada pin. Klik di peta untuk menandai lokasinya — tanpa pin, jarak ke bidan tetap tidak bisa dihitung."
+                  />
+                </>
+              }
             />
           </>
         )}
