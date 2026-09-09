@@ -158,7 +158,7 @@ describe("honor mitra tidak pernah lewat lapisan ini", () => {
       tarifTransport: TARIF_TRANSPORT,
     });
     expect(Object.keys(r).sort()).toEqual(
-      ["layanan", "menungguTarifKhusus", "total", "transport"].sort(),
+      ["jenjang", "layanan", "menungguTarifKhusus", "sebab", "total", "transport"].sort(),
     );
   });
 });
