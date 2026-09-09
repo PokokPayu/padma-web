@@ -1,0 +1,1007 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Katalog Pemesanan PADMA — mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" />
+<style>
+/* Palet & tipografi diambil apa adanya dari web/src/app/globals.css.
+   Mockup ini sengaja satu tema (terang), sama seperti /passport. */
+:root {
+  --night: #0a2b1f;
+  --pine: #11382a;
+  --leaf: #2f6a48;
+  --leaf-soft: #e9f1e9;
+  --gold: #b58a3c;
+  --gold-pale: #f0e3c3;
+  --paper: #fbf8f0;
+  --paper-warm: #f5efe1;
+  --ink: #1f2e26;
+  --ink-soft: #5d6c61;
+  --garis: rgba(0, 0, 0, 0.1);
+  --garis-tipis: rgba(0, 0, 0, 0.07);
+  --serif: "Marcellus", ui-serif, Georgia, serif;
+  --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper-warm);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.halaman {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 20px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ---------- kepala mockup (bukan bagian dari aplikasi) ---------- */
+.kepala { display: flex; flex-direction: column; gap: 10px; }
+.kepala h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--night);
+  text-wrap: balance;
+}
+.kepala p { margin: 0; max-width: 62ch; color: var(--ink-soft); }
+
+.kendali {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.sakelar {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 999px;
+}
+.sakelar button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+.sakelar button[aria-pressed="true"] { background: var(--night); color: var(--paper); }
+.sakelar button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.ukur {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.ukur b { color: var(--night); font-weight: 600; }
+
+/* ---------- bingkai ponsel ---------- */
+.bingkai {
+  width: 100%;
+  max-width: 412px;
+  height: 720px;
+  border: 1px solid var(--garis);
+  border-radius: 26px;
+  background: var(--paper);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 18px 40px -28px rgba(10, 43, 31, 0.55);
+}
+.gulir {
+  position: relative; /* jadi offsetParent bagi target guliran */
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+.gulir::-webkit-scrollbar { width: 9px; }
+.gulir::-webkit-scrollbar-thumb { background: rgba(10, 43, 31, 0.28); border-radius: 9px; }
+
+.isi { padding: 18px 16px 20px; }
+.isi.punya-bilah { padding-bottom: 92px; }
+
+.label-layar {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 0 10px;
+}
+
+/* ---------- tajuk fase ---------- */
+.fase {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.fase h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1;
+  margin: 0;
+  color: var(--night);
+}
+.fase span { font-size: 12px; color: var(--ink-soft); }
+.fase i { display: block; flex: 1; height: 1px; background: rgba(181, 138, 60, 0.35); }
+
+/* Ikon fase menumpang pada garis rambut emas yang sudah ada — warnanya sama,
+   jadi ia terbaca sebagai ujung garis itu, bukan sebagai benda baru. */
+.ikon-fase { flex: none; align-self: center; color: var(--gold); }
+section + section { margin-top: 26px; }
+
+/* ---------- kartu layanan ---------- */
+.kartu {
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.kartu + .kartu { margin-top: 12px; }
+
+.kartu > h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.3;
+  margin: 0;
+  padding: 14px 16px 10px;
+  color: var(--night);
+}
+
+.varian { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--garis-tipis); }
+.varian li + li { border-top: 1px solid var(--garis-tipis); }
+
+.baris {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 11px 16px;
+  text-align: left;
+  font: inherit;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.baris:hover { background: var(--paper); }
+.baris[aria-pressed="true"] { background: var(--leaf-soft); }
+.baris:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+.penanda {
+  width: 3px;
+  height: 32px;
+  flex: none;
+  border-radius: 999px;
+  background: transparent;
+}
+.baris[aria-pressed="true"] .penanda { background: var(--gold); }
+
+.teks { flex: 1; min-width: 0; }
+.nama-varian { display: block; font-size: 13.5px; font-weight: 600; color: var(--night); }
+.terpilih-ket { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--leaf); }
+
+.harga { flex: none; text-align: right; font-variant-numeric: tabular-nums; }
+.harga b {
+  display: block;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.15;
+  color: var(--night);
+}
+.harga s { display: block; margin-top: 2px; font-size: 11px; color: rgba(93, 108, 97, 0.8); }
+
+/* ---------- versi usulan: alat di atas ---------- */
+.alat {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--paper);
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--garis-tipis);
+}
+
+.cari { position: relative; display: block; }
+.cari svg {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-soft);
+}
+.cari input {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 12px;
+  padding: 11px 14px 11px 40px;
+}
+.cari input::placeholder { color: var(--ink-soft); }
+.cari input:focus-visible { outline: 2px solid var(--gold); outline-offset: -1px; }
+
+.chip-baris {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.chip-baris::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pine);
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 999px;
+  padding: 6px 13px 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip small { font-weight: 500; color: var(--ink-soft); }
+.ikon-chip { flex: none; width: 17px; height: 17px; color: var(--gold); }
+.chip[aria-pressed="true"] { background: var(--night); border-color: var(--night); color: var(--paper); }
+.chip[aria-pressed="true"] small { color: var(--gold-pale); }
+.chip[aria-pressed="true"] .ikon-chip { color: var(--gold-pale); }
+.chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ---------- versi usulan: baris layanan yang bisa dibuka ---------- */
+.buka {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 13px 14px 13px 16px;
+  text-align: left;
+  font: inherit;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+}
+.buka:hover { background: var(--paper); }
+.buka:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+.judul-layanan {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--serif);
+  font-size: 16.5px;
+  line-height: 1.25;
+  color: var(--night);
+}
+/* Baris kecil di bawah nama layanan: kalau layanan ini yang sedang dipilih,
+   pilihannya tetap terbaca meski varian lain tersembunyi. */
+.pilihan-ringkas {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--leaf);
+}
+.rentang {
+  flex: none;
+  text-align: right;
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rentang em { display: block; font-family: var(--sans); font-style: normal; font-size: 10.5px; }
+.kartu.terpilih .rentang b { color: var(--night); }
+
+.chevron { flex: none; color: var(--ink-soft); transition: transform 0.18s ease; }
+.kartu.terbuka .chevron { transform: rotate(180deg); }
+.kartu.terpilih { border-color: rgba(181, 138, 60, 0.55); }
+
+.lipatan { display: none; }
+.kartu.terbuka .lipatan { display: block; }
+
+/* ---------- sisa formulir (Kapan, Ke mana) ---------- */
+.lanjutan { margin-top: 30px; }
+.tajuk-blok {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin: 0 0 12px;
+}
+.lanjutan .tajuk-blok + * { margin-top: 0; }
+.medan { display: block; border: 0; padding: 0; margin: 0 0 16px; font-size: 13px; }
+.medan > span, .medan > legend { font-weight: 600; color: var(--ink-soft); padding: 0; }
+.medan input, .medan select, .medan textarea {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 9px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.medan :is(input, select, textarea):focus-visible { outline: 2px solid var(--gold); outline-offset: -1px; }
+.tiga { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.tiga button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 44px;
+  border-radius: 11px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.tiga button[aria-pressed="true"] { border-color: var(--night); background: var(--leaf-soft); color: var(--night); }
+.tiga button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ---------- penanda dua langkah ---------- */
+.langkah-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.langkah {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.langkah .nomor {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--garis);
+  background: #fff;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+/* Langkah yang sedang dibuka: nomornya terisi hijau tua. Warna dipakai untuk
+   MENUNJUKKAN POSISI, bukan menghias — langkah lain tetap bisa diketuk. */
+.langkah[aria-current="step"] { color: var(--night); }
+.langkah[aria-current="step"] .nomor {
+  background: var(--night);
+  border-color: var(--night);
+  color: var(--paper);
+}
+.langkah:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 6px; }
+.antara { flex: 1; height: 1px; background: var(--garis); }
+
+/* ---------- pilihan yang terbawa ke langkah 2 ---------- */
+.pilihan-terbawa {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  margin-bottom: 24px;
+  background: var(--leaf-soft);
+  border: 1px solid rgba(47, 106, 72, 0.22);
+  border-radius: 16px;
+}
+.pilihan-terbawa .rincian { flex: 1; min-width: 0; }
+.pilihan-terbawa h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 15.5px;
+  line-height: 1.25;
+  margin: 0;
+  color: var(--night);
+}
+.pilihan-terbawa p { margin: 2px 0 0; font-size: 12px; color: var(--leaf); font-weight: 600; }
+.pilihan-terbawa .angka { text-align: right; font-variant-numeric: tabular-nums; }
+.pilihan-terbawa .angka b {
+  display: block;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 15px;
+  color: var(--night);
+}
+.pilihan-terbawa .angka s { display: block; font-size: 10.5px; color: rgba(93, 108, 97, 0.85); }
+.ganti {
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--night);
+  background: #fff;
+  border: 1px solid rgba(10, 43, 31, 0.2);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.ganti:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.medan .ket { display: block; margin-top: 8px; font-size: 11.5px; font-weight: 400; color: var(--ink-soft); }
+
+/* ---------- layar setelah pengajuan terkirim ---------- */
+.terkirim {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 40px;
+  padding: 24px 20px;
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 18px;
+}
+.terkirim svg { color: var(--leaf); }
+.terkirim h3 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 20px;
+  margin: 0;
+  color: var(--night);
+}
+.terkirim p { margin: 0; font-size: 13px; color: var(--ink-soft); max-width: 40ch; }
+.terkirim button {
+  margin-top: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--night);
+  background: transparent;
+  border: 1px solid rgba(10, 43, 31, 0.25);
+  border-radius: 999px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+.terkirim button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+.kosong {
+  margin: 24px 4px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 14px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.kosong b { display: block; color: var(--night); font-size: 14px; margin-bottom: 4px; }
+
+/* ---------- bilah pilihan yang menempel ---------- */
+.bilah {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 14px;
+  background: rgba(251, 248, 240, 0.96);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--garis);
+}
+.bilah .ringkas { flex: 1; min-width: 0; }
+.bilah .ringkas span {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.bilah .ringkas strong {
+  display: block;
+  font-size: 13px;
+  color: var(--night);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bilah .ringkas b { font-family: var(--serif); font-weight: 400; font-size: 15px; color: var(--night); }
+.bilah button {
+  flex: none;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--paper);
+  background: var(--night);
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 20px;
+  cursor: pointer;
+}
+.bilah button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ---------- catatan di bawah bingkai ---------- */
+.catatan {
+  background: #fff;
+  border: 1px solid var(--garis);
+  border-radius: 16px;
+  padding: 20px 22px;
+  max-width: 640px;
+}
+.catatan h2 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 19px;
+  margin: 0 0 12px;
+  color: var(--night);
+}
+.catatan ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 9px; }
+.catatan li { max-width: 60ch; }
+.catatan strong { color: var(--night); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<div class="halaman">
+
+  <header class="kepala">
+    <h1>Katalog pemesanan, dua versi</h1>
+    <p>Bingkai di bawah setinggi layar ponsel sungguhan. Isinya sama persis — 22 layanan di lima fase — jadi selisih panjang gulirannya bisa dirasakan, bukan cuma dibaca. Semuanya bisa diketuk.</p>
+    <div class="kendali">
+      <div class="sakelar" role="group" aria-label="Pilih versi">
+        <button type="button" id="tab-sekarang" aria-pressed="false">Sekarang</button>
+        <button type="button" id="tab-usulan" aria-pressed="true">Usulan</button>
+      </div>
+      <p class="ukur">Tinggi halaman: <b id="ukur-nilai">—</b></p>
+    </div>
+  </header>
+
+  <div class="bingkai">
+    <div class="gulir" id="gulir">
+      <div id="layar"></div>
+    </div>
+    <!-- Bilah bawah berganti isi menurut langkah: di langkah 1 ia merangkum
+         pilihan dan membuka langkah 2; di langkah 2 ia mengirim pengajuan. -->
+    <div class="bilah" id="bilah" hidden>
+      <div class="ringkas">
+        <span id="bilah-label">Pilihan Anda</span>
+        <strong id="bilah-nama">—</strong>
+      </div>
+      <b id="bilah-harga"></b>
+      <button type="button" id="bilah-tombol">Isi data</button>
+    </div>
+  </div>
+
+  <section class="catatan">
+    <h2>Apa yang berubah</h2>
+    <ul>
+      <li><strong>Kotak cari.</strong> Klien yang sudah tahu nama layanannya berhenti menggulir sama sekali; ia mengetik “yoga” dan daftarnya tinggal empat baris.</li>
+      <li><strong>Chip fase.</strong> Fase klien terpilih otomatis dari profilnya, jadi ia mendarat langsung di layanan yang relevan. “Semua” tetap ada untuk yang ingin menjelajah.</li>
+      <li><strong>Layanan terlipat, harga tidak.</strong> Baris tertutup tetap menyebut rentang harganya, jadi perbandingan kasar bisa dilakukan tanpa satu ketukan pun. Varian persisnya muncul saat baris diketuk.</li>
+      <li><strong>Pilihan tidak pernah hilang.</strong> Layanan yang sedang dipilih menampilkan varian dan harganya di baris tertutup, dan bilah bawah membawa pilihan itu ke mana pun klien menggulir.</li>
+    </ul>
+  </section>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Data contoh. Angka dan nama mengikuti katalog klien yang sudah tampil di
+// layar pengajuan hari ini, ditambah fase lain supaya panjangnya realistis.
+// ---------------------------------------------------------------------------
+// Ikon fase digambar dari ARTI nama Sanskertanya, bukan dari kategori umum
+// "kesehatan": Sankalpa = niat yang ditanam (tunas), Garbha = kandungan
+// (lengkung perut), Sutika = ibu baru bersalin (purnama, seperti nama
+// layanannya sendiri), Sandhya = senja (matahari di garis cakrawala),
+// Shishu = bayi (telapak kaki). Semua satu bahasa: goresan 1,4 px, tanpa isi.
+const IKON = {
+  semua:
+    '<path d="M10 3.4c2 1.9 2 4.6 0 6.5-2-1.9-2-4.6 0-6.5Z"/><path d="M10 9.9c2.5-1 5 0 5.8 2.3-2.5 1-5 0-5.8-2.3Z"/><path d="M10 9.9c-2.5-1-5 0-5.8 2.3 2.5 1 5 0 5.8-2.3Z"/><path d="M10 9.9v6.7"/>',
+  prekonsepsi:
+    '<path d="M10 16.6v-5.2"/><path d="M10 11.4c0-2.6 1.9-4.7 4.4-4.9-.2 2.7-2 4.7-4.4 4.9Z"/><path d="M10 13.1c-2.1-.2-3.7-1.9-3.9-4.1 2.1.2 3.7 1.9 3.9 4.1Z"/>',
+  kehamilan:
+    '<path d="M6.5 3.5v13"/><path d="M6.5 6.9c3.6 0 6.5 2.2 6.5 4.9s-2.9 4.7-6.5 4.7"/><circle cx="9.1" cy="11.6" r="1.5"/>',
+  nifas:
+    '<circle cx="10" cy="10" r="6.3"/><path d="M10 3.7a6.3 6.3 0 0 0 0 12.6"/>',
+  menopause:
+    '<path d="M3.4 15.4h13.2"/><path d="M6.5 15.4a3.5 3.5 0 0 1 7 0"/><path d="M10 4.2v2.2M4.9 6.6l1.5 1.5M15.1 6.6l-1.5 1.5"/>',
+  newborn:
+    '<path d="M12.6 15.2c-2.3.9-4.6-.4-4.6-2.7 0-1.9 1.5-3 1.5-5.1 0-1.6 1-2.6 2.4-2.6 1.6 0 2.7 1.4 2.7 3.4 0 3-1.5 6.1-2 7Z"/><circle cx="6.4" cy="8.2" r="1.2"/><circle cx="5.5" cy="11.4" r="1"/>',
+};
+
+const FASE = [
+  { id: "prekonsepsi", sanskerta: "Sankalpa", indonesia: "Prekonsepsi" },
+  { id: "kehamilan", sanskerta: "Garbha", indonesia: "Kehamilan" },
+  { id: "nifas", sanskerta: "Sutika", indonesia: "Nifas" },
+  { id: "menopause", sanskerta: "Sandhya", indonesia: "Menopause" },
+  { id: "newborn", sanskerta: "Shishu", indonesia: "Bayi baru lahir" },
+];
+
+function ikon(id, kelas) {
+  return `<svg class="${kelas}" width="20" height="20" viewBox="0 0 20 20" fill="none"
+    stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true">${IKON[id] || ""}</svg>`;
+}
+
+const v = (label, harga, coret) => ({ label, harga, coret });
+
+const LAYANAN = [
+  { fase: "prekonsepsi", nama: "Sankalpa Fertility Massage", varian: [v("90 menit · Private", 179000, 199000), v("90 menit · Circle", 109000, 119000)] },
+  { fase: "prekonsepsi", nama: "PADMA Flow Yoga Prekonsepsi", varian: [v("60 menit · Private", 139000, 159000), v("60 menit · Circle", 99000, 109000)] },
+  { fase: "prekonsepsi", nama: "Konsultasi Nutrisi Prekonsepsi", varian: [v("45 menit · Private", 129000, null)] },
+  { fase: "prekonsepsi", nama: "Sankalpa Partner Lab", varian: [v("120 menit · Private", 219000, 239000), v("120 menit · Circle", 119000, 129000)] },
+
+  { fase: "kehamilan", nama: "Garbha Couple Yoga", varian: [v("120 menit · Private", 219000, 239000), v("120 menit · Circle", 119000, 129000)] },
+  { fase: "kehamilan", nama: "Garbha Flow Yoga Basic", varian: [v("60 menit · Private", 139000, 159000), v("60 menit · Circle", 99000, 109000)] },
+  { fase: "kehamilan", nama: "Garbha Flow Yoga Complete", varian: [v("120 menit · Private", 219000, 239000), v("120 menit · Circle", 119000, 129000)] },
+  { fase: "kehamilan", nama: "Garbha Partner Lab Basic", varian: [v("90 menit · Private", 179000, 199000), v("90 menit · Circle", 109000, 119000)] },
+  { fase: "kehamilan", nama: "Garbha Partner Lab Extended+", varian: [v("120 menit · Private", 219000, 239000), v("120 menit · Circle", 119000, 129000)] },
+  { fase: "kehamilan", nama: "Garbha Relief Massage", varian: [v("90 menit · Private", 189000, 209000), v("60 menit · Private", 149000, null)] },
+  { fase: "kehamilan", nama: "Prenatal Gentle Yoga", varian: [v("60 menit · Circle", 99000, 109000)] },
+
+  { fase: "nifas", nama: "Lactation Hero", varian: [v("90 menit · Private", 189000, 209000), v("60 menit · Private", 139000, null)] },
+  { fase: "nifas", nama: "Purnama Recovery Massage", varian: [v("120 menit · Private", 239000, 269000), v("90 menit · Private", 179000, 199000)] },
+  { fase: "nifas", nama: "Sutika Belly Binding", varian: [v("45 menit · Private", 119000, null)] },
+  { fase: "nifas", nama: "Kelas Pemulihan Pascasalin", varian: [v("75 menit · Circle", 109000, 119000)] },
+
+  { fase: "menopause", nama: "Sandhya Balance Care", varian: [v("90 menit · Private", 179000, 199000), v("90 menit · Circle", 109000, 119000)] },
+  { fase: "menopause", nama: "Sandhya Slow Flow Yoga", varian: [v("60 menit · Circle", 99000, null)] },
+  { fase: "menopause", nama: "Konsultasi Nutrisi Menopause", varian: [v("45 menit · Private", 129000, null)] },
+
+  { fase: "newborn", nama: "Shishu Parent Touch", varian: [v("60 menit · Private", 149000, 169000), v("60 menit · Circle", 99000, 109000)] },
+  { fase: "newborn", nama: "Baby Massage Class", varian: [v("75 menit · Circle", 119000, 129000)] },
+  { fase: "newborn", nama: "Shishu Sleep Clinic", varian: [v("60 menit · Private", 159000, null)] },
+  { fase: "newborn", nama: "Perawatan Tali Pusat", varian: [v("30 menit · Private", 89000, null)] },
+];
+
+LAYANAN.forEach((l, i) => { l.id = "l" + i; l.varian.forEach((x, j) => (x.id = "l" + i + "v" + j)); });
+
+const rupiah = (n) => "Rp " + n.toLocaleString("id-ID");
+
+// Fase klien datang dari `clients.phase_id`; di mockup ini kita anggap
+// klien sedang di fase kehamilan.
+const FASE_KLIEN = "kehamilan";
+
+const state = {
+  versi: "usulan",
+  fase: FASE_KLIEN,
+  cari: "",
+  layananId: "l5",
+  varianId: "l5v1",
+  terbuka: new Set(["l5"]),
+  // 1 = pilih layanan, 2 = isi data, "kirim" = layar setelah pengajuan
+  // terkirim. Dua langkah tinggal DI HALAMAN YANG SAMA, bukan dua rute:
+  // pilihan layanan hidup di state komponen, dan memindahkannya lewat rute
+  // menuntut query param atau draf di server tanpa imbalan bagi klien.
+  langkah: 1,
+};
+
+const layar = document.getElementById("layar");
+const gulir = document.getElementById("gulir");
+const bilah = document.getElementById("bilah");
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function barisVarian(l, x) {
+  const dipilih = x.id === state.varianId;
+  return `<li><button type="button" class="baris" aria-pressed="${dipilih}" data-layanan="${l.id}" data-varian="${x.id}">
+    <span class="penanda" aria-hidden="true"></span>
+    <span class="teks">
+      <span class="nama-varian">${esc(x.label)}</span>
+      ${dipilih ? '<span class="terpilih-ket">Pilihan Anda</span>' : ""}
+    </span>
+    <span class="harga">
+      <b>${rupiah(x.harga)}</b>
+      ${x.coret ? `<s aria-label="harga sebelumnya ${rupiah(x.coret)}">${rupiah(x.coret)}</s>` : ""}
+    </span>
+  </button></li>`;
+}
+
+// --------------------------- versi SEKARANG ---------------------------------
+function renderSekarang() {
+  return FASE.map((f) => {
+    const isi = LAYANAN.filter((l) => l.fase === f.id);
+    if (!isi.length) return "";
+    return `<section>
+      <div class="fase">${ikon(f.id, "ikon-fase")}<h2>${f.sanskerta}</h2><span>${f.indonesia}</span><i aria-hidden="true"></i></div>
+      ${isi.map((l) => `<article class="kartu">
+        <h3>${esc(l.nama)}</h3>
+        <ul class="varian">${l.varian.map((x) => barisVarian(l, x)).join("")}</ul>
+      </article>`).join("")}
+    </section>`;
+  }).join("");
+}
+
+// --------------------------- versi USULAN -----------------------------------
+function cocok(l) {
+  const q = state.cari.trim().toLowerCase();
+  if (q === "") return true;
+  return l.nama.toLowerCase().includes(q) || l.varian.some((x) => x.label.toLowerCase().includes(q));
+}
+
+function rentang(l) {
+  const angka = l.varian.map((x) => x.harga);
+  const min = Math.min(...angka), max = Math.max(...angka);
+  return min === max ? rupiah(min) : `${rupiah(min)}–${rupiah(max).replace("Rp ", "")}`;
+}
+
+// Dua langkah, satu halaman. Penanda ini bukan hiasan: ia menyatakan ADA
+// BERAPA langkah dan di mana klien berada — tanpa itu, layar yang tiba-tiba
+// berganti isi terasa seperti halaman yang hilang.
+function penandaLangkah() {
+  const l = [
+    { n: 1, teks: "Pilih layanan" },
+    { n: 2, teks: "Isi data" },
+  ];
+  return `<div class="langkah-bar">
+    ${l.map((x) => `<button type="button" class="langkah" data-langkah="${x.n}"
+      aria-current="${state.langkah === x.n ? "step" : "false"}">
+      <span class="nomor">${x.n}</span>${x.teks}
+    </button>`).join('<span class="antara" aria-hidden="true"></span>')}
+  </div>`;
+}
+
+function renderUsulan() {
+  if (state.langkah === "kirim") return renderTerkirim();
+  return state.langkah === 2 ? renderLangkahData() : renderLangkahLayanan();
+}
+
+// --------------------------- langkah 1: pilih layanan -----------------------
+function renderLangkahLayanan() {
+  const mencari = state.cari.trim() !== "";
+  const chips = [{ id: "semua", teks: "Semua" }].concat(FASE.map((f) => ({ id: f.id, teks: f.sanskerta })));
+
+  const alat = `<div class="alat">
+    ${penandaLangkah()}
+    <label class="cari">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <input id="kotak-cari" type="search" placeholder="Cari layanan atau durasi" value="${esc(state.cari)}" aria-label="Cari layanan" />
+    </label>
+    <div class="chip-baris" role="group" aria-label="Saring menurut fase">
+      ${chips.map((c) => {
+        const jml = c.id === "semua" ? LAYANAN.length : LAYANAN.filter((l) => l.fase === c.id).length;
+        const aktif = !mencari && state.fase === c.id;
+        return `<button type="button" class="chip" aria-pressed="${aktif}" data-fase="${c.id}">${ikon(c.id, "ikon-chip")}${c.teks}<small>${jml}</small></button>`;
+      }).join("")}
+    </div>
+  </div>`;
+
+  // Saat mencari, chip fase tidak menyaring: hasil pencarian melintasi fase,
+  // dan menyembunyikan hasil di fase lain justru membuat pencarian terasa rusak.
+  const daftar = LAYANAN.filter((l) => cocok(l) && (mencari || state.fase === "semua" || l.fase === state.fase));
+
+  if (!daftar.length) {
+    return alat + `<div class="isi punya-bilah"><div class="kosong">
+      <b>Tidak ada layanan bernama “${esc(state.cari)}”</b>
+      Coba kata yang lebih pendek, atau ketuk “Semua” untuk melihat seluruh katalog.
+    </div></div>`;
+  }
+
+  const perFase = FASE.map((f) => ({ f, isi: daftar.filter((l) => l.fase === f.id) })).filter((g) => g.isi.length);
+
+  const badan = perFase.map(({ f, isi }) => `<section>
+    <div class="fase">${ikon(f.id, "ikon-fase")}<h2>${f.sanskerta}</h2><span>${f.indonesia}</span><i aria-hidden="true"></i></div>
+    ${isi.map((l) => {
+      const terbuka = state.terbuka.has(l.id) || mencari;
+      const terpilih = l.id === state.layananId;
+      const xTerpilih = terpilih ? l.varian.find((x) => x.id === state.varianId) : null;
+      return `<article class="kartu${terbuka ? " terbuka" : ""}${terpilih ? " terpilih" : ""}">
+        <button type="button" class="buka" data-buka="${l.id}" aria-expanded="${terbuka}">
+          <span class="judul-layanan">${esc(l.nama)}${
+            xTerpilih && !terbuka ? `<span class="pilihan-ringkas">${esc(xTerpilih.label)} · ${rupiah(xTerpilih.harga)}</span>` : ""
+          }</span>
+          <span class="rentang"><b>${rentang(l)}</b><em>${l.varian.length} pilihan</em></span>
+          <svg class="chevron" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M3 5.5 7 9.5 11 5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="lipatan"><ul class="varian">${l.varian.map((x) => barisVarian(l, x)).join("")}</ul></div>
+      </article>`;
+    }).join("")}
+  </section>`).join("");
+
+  return alat + `<div class="isi punya-bilah">${badan}</div>`;
+}
+
+// --------------------------- langkah 2: isi data ----------------------------
+function renderLangkahData() {
+  const l = LAYANAN.find((x) => x.id === state.layananId);
+  const x = l && l.varian.find((y) => y.id === state.varianId);
+  const f = FASE.find((y) => y.id === (l && l.fase));
+
+  // Pilihan dari langkah 1 dibawa serta dan bisa DIUBAH DARI SINI. Tanpa kartu
+  // ini, satu-satunya cara memastikan "tadi saya pilih yang mana" adalah
+  // menekan tombol kembali — dan setiap klien yang menekannya kehilangan
+  // tempatnya di daftar.
+  const kartuPilihan = `<article class="pilihan-terbawa">
+    ${f ? ikon(f.id, "ikon-fase") : ""}
+    <div class="rincian">
+      <h3>${esc(l ? l.nama : "—")}</h3>
+      <p>${esc(x ? x.label : "")}</p>
+    </div>
+    <div class="angka"><b>${x ? rupiah(x.harga) : ""}</b>
+      ${x && x.coret ? `<s aria-label="harga sebelumnya ${rupiah(x.coret)}">${rupiah(x.coret)}</s>` : ""}
+    </div>
+    <button type="button" data-langkah="1" class="ganti">Ganti</button>
+  </article>`;
+
+  return `<div class="alat">${penandaLangkah()}</div>
+    <div class="isi punya-bilah">${kartuPilihan}${sisaFormulir()}</div>`;
+}
+
+// Bagian SESUDAH katalog, apa adanya dari form.tsx: Kapan lalu Ke mana.
+function sisaFormulir() {
+  return `<section id="kapan" class="lanjutan">
+    <h2 class="tajuk-blok">Kapan</h2>
+    <label class="medan"><span>Tanggal yang diinginkan</span><input type="date" value="2026-09-15" /></label>
+    <label class="medan"><span>Jam mulai</span><select><option>09.00</option><option>11.00</option><option>14.00</option></select></label>
+    <fieldset class="medan">
+      <legend>Kalau jam itu penuh, saya lebih suka</legend>
+      <div class="tiga">
+        <button type="button" aria-pressed="true">Pagi</button>
+        <button type="button" aria-pressed="false">Siang</button>
+        <button type="button" aria-pressed="false">Sore</button>
+      </div>
+      <span class="ket">Tim PADMA memakai ini saat menawarkan jam pengganti — jadwal Anda tetap jam yang dipilih di atas.</span>
+    </fieldset>
+
+    <h2 class="tajuk-blok">Ke mana</h2>
+    <label class="medan"><span>Alamat kunjungan</span><textarea rows="3">Jl. Ijen Boulevard No. 12, Klojen, Malang</textarea></label>
+    <label class="medan"><span>Catatan untuk terapis</span><textarea rows="2" placeholder="Mis. rumah pagar hijau, tolong jangan bel"></textarea></label>
+  </section>`;
+}
+
+// Sesudah "Ajukan jadwal", aplikasi asli BERPINDAH ke beranda passport, bukan
+// menampilkan panel sukses di halaman ini — skrining yang menopang pengajuan
+// hangus begitu pengajuan masuk, dan halaman ini sah berubah jadi "isi
+// skrining dulu". Layar di bawah mewakili beranda itu.
+function renderTerkirim() {
+  const l = LAYANAN.find((x) => x.id === state.layananId);
+  const x = l && l.varian.find((y) => y.id === state.varianId);
+  return `<div class="isi"><div class="terkirim">
+    <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor"
+      stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="17" cy="17" r="13"/><path d="m11.5 17.4 3.8 3.8 7.2-7.6"/>
+    </svg>
+    <h3>Pengajuan terkirim</h3>
+    <p>${esc(l ? l.nama : "")} · ${esc(x ? x.label : "")}, Senin 15 September pukul 09.00.
+    Tim PADMA mengabari lewat WhatsApp setelah jadwalnya dipastikan.</p>
+    <button type="button" data-langkah="1">Kembali ke katalog</button>
+  </div></div>`;
+}
+
+// --------------------------- perakitan --------------------------------------
+function render(jagaGulir) {
+  const atas = gulir.scrollTop;
+  const usulan = state.versi === "usulan";
+  // Kedua versi memuat sisa formulir yang sama, supaya angka tinggi halaman
+  // membandingkan halaman utuh lawan halaman utuh.
+  layar.innerHTML = usulan
+    ? renderUsulan()
+    : `<div class="isi">${renderSekarang()}${sisaFormulir()}</div>`;
+
+  // Bilah menghilang di layar "terkirim": di sana tidak ada lagi yang bisa
+  // dikirim, dan tombol yang tersisa hanya bisa membingungkan.
+  bilah.hidden = !usulan || state.langkah === "kirim";
+
+  if (!bilah.hidden) {
+    const l = LAYANAN.find((x) => x.id === state.layananId);
+    const x = l && l.varian.find((y) => y.id === state.varianId);
+    const langkahData = state.langkah === 2;
+    // Isi bilah TIDAK berganti antar langkah — yang berganti hanya tombolnya.
+    // Sempat ada kalimat soal kapan tagihan terbit di sini; itu kebijakan
+    // klien, dan mockup bukan tempat mengarangnya.
+    document.getElementById("bilah-label").textContent = "Pilihan Anda";
+    document.getElementById("bilah-nama").textContent = x ? `${l.nama} · ${x.label}` : "Belum ada pilihan";
+    document.getElementById("bilah-harga").textContent = x ? rupiah(x.harga) : "";
+    document.getElementById("bilah-tombol").textContent = langkahData ? "Ajukan jadwal" : "Isi data";
+  }
+
+  if (jagaGulir) gulir.scrollTop = atas;
+  else gulir.scrollTop = 0;
+
+  requestAnimationFrame(() => {
+    document.getElementById("ukur-nilai").textContent =
+      gulir.scrollHeight.toLocaleString("id-ID") + " px · " +
+      (gulir.scrollHeight / gulir.clientHeight).toFixed(1) + "× tinggi layar";
+  });
+}
+
+layar.addEventListener("click", (e) => {
+  const varian = e.target.closest("[data-varian]");
+  if (varian) {
+    state.layananId = varian.dataset.layanan;
+    state.varianId = varian.dataset.varian;
+    render(true);
+    return;
+  }
+  const buka = e.target.closest("[data-buka]");
+  if (buka) {
+    const id = buka.dataset.buka;
+    state.terbuka.has(id) ? state.terbuka.delete(id) : state.terbuka.add(id);
+    render(true);
+    return;
+  }
+  const pindah = e.target.closest("[data-langkah]");
+  if (pindah) {
+    state.langkah = Number(pindah.dataset.langkah);
+    render(false);
+    return;
+  }
+  const chip = e.target.closest("[data-fase]");
+  if (chip) {
+    state.fase = chip.dataset.fase;
+    state.cari = "";
+    render(false);
+  }
+});
+
+layar.addEventListener("input", (e) => {
+  if (e.target.id !== "kotak-cari") return;
+  state.cari = e.target.value;
+  const posisi = e.target.selectionStart;
+  render(true);
+  const baru = document.getElementById("kotak-cari");
+  if (baru) { baru.focus(); baru.setSelectionRange(posisi, posisi); }
+});
+
+document.getElementById("bilah-tombol").addEventListener("click", () => {
+  state.langkah = state.langkah === 2 ? "kirim" : 2;
+  render(false);
+});
+
+const tabSekarang = document.getElementById("tab-sekarang");
+const tabUsulan = document.getElementById("tab-usulan");
+function pilihVersi(versi) {
+  state.versi = versi;
+  tabSekarang.setAttribute("aria-pressed", String(versi === "sekarang"));
+  tabUsulan.setAttribute("aria-pressed", String(versi === "usulan"));
+  render(false);
+}
+tabSekarang.addEventListener("click", () => pilihVersi("sekarang"));
+tabUsulan.addEventListener("click", () => pilihVersi("usulan"));
+
+// Pintasan mockup: buka berkas dengan #data untuk mendarat di langkah 2.
+if (location.hash === "#data") state.langkah = 2;
+
+render(false);
+</script>
+</body>
+</html>

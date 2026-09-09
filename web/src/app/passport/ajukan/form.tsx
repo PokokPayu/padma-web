@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ajukanJadwal } from "@/lib/passport/aksi";
 import { formatJam } from "@/lib/jadwal/jam";
@@ -15,6 +15,7 @@ const WAKTU = ["pagi", "siang", "sore"] as const;
 
 export function FormAjukan({
   katalog,
+  faseKlien,
   jamPilihan,
   tanggalPalingAwal,
   alamatDefault,
@@ -25,6 +26,9 @@ export function FormAjukan({
   // varian adalah SATU keputusan di layar ini, dan memisahkan datanya kembali
   // hanya melahirkan lagi kemungkinan pasangan yang tidak cocok.
   katalog: LayananKatalogAjukan[];
+  // `clients.phase_id`, boleh null. Diteruskan apa adanya ke katalog, yang
+  // memakainya untuk memilih chip fase mana yang terbuka lebih dulu.
+  faseKlien: string | null;
   // Jam mulai yang boleh dipilih, dari `app_settings.jam_layanan` (spec J2).
   // Dibaca di server dan dipakai ULANG sebagai pagar di `ajukanJadwal`, jadi
   // apa yang ditawarkan di sini dan apa yang diterima server tidak pernah bisa
@@ -50,6 +54,19 @@ export function FormAjukan({
   const layananPertama = katalog.find((l) => l.varian.length > 0);
   const [layananId, setLayananId] = useState(layananPertama?.id ?? "");
   const [varianId, setVarianId] = useState(layananPertama?.varian[0]?.id ?? "");
+  // DUA LANGKAH, SATU HALAMAN — bukan dua rute.
+  //
+  // Pilihan layanan hidup di state komponen ini. Memindahkannya ke rute kedua
+  // menuntut ia dititipkan lewat query param atau draf di server, dan bagi
+  // klien hasilnya persis sama. Yang dicari klien dari "halaman terpisah"
+  // adalah layar yang tidak lagi menampilkan katalog sepanjang lima fase; itu
+  // yang diberikan di sini.
+  //
+  // Kedua langkah TETAP TERPASANG di DOM (disembunyikan dengan atribut
+  // `hidden`, bukan dilepas): medan tanggal/jam/alamat tak terkendali, dan
+  // melepasnya saat klien mundur ke langkah 1 akan menghapus apa yang sudah
+  // diketiknya.
+  const [langkah, setLangkah] = useState<1 | 2>(1);
   const [selesai, setSelesai] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -142,6 +159,11 @@ export function FormAjukan({
               // tujuan yang lebih benar: di sanalah pengajuannya muncul.
               router.replace("/passport?pengajuan=terkirim");
             } else {
+              // Galat server selalu tentang isian langkah 2 (tanggal lampau,
+              // jam di luar jam layanan, alamat terlalu pendek) atau tentang
+              // skrining. Klien DIBIARKAN di langkah 2 supaya kalimat galatnya
+              // berdiri di sebelah medan yang menyebabkannya.
+              setLangkah(2);
               setPesan(r.pesan);
             }
           });
@@ -151,10 +173,97 @@ export function FormAjukan({
             dengan urutan medan sebelumnya (spec J2) — yang berubah hanya
             tajuknya, supaya formulir yang kini jauh lebih panjang tetap bisa
             dibaca sebagai tiga keputusan, bukan tujuh kotak berderet. */}
-        <h2 className="mb-3 text-sm font-semibold text-ink-soft">Layanan</h2>
-        <Katalog layanan={katalog} varianId={varianId} onPilih={pilihVarian} />
+        {/* Penanda dua langkah. Bukan hiasan: ia menyatakan ADA BERAPA langkah
+            dan di mana klien berada — tanpa itu, layar yang berganti isi
+            terasa seperti halaman yang hilang. Keduanya bisa diketuk, jadi
+            klien bisa mundur tanpa mencari tombol kembali. */}
+        <div className="mb-5 flex items-center gap-2">
+          {([1, 2] as const).map((n, i) => (
+            <Fragment key={n}>
+              {i > 0 && <span aria-hidden className="h-px flex-1 bg-black/10" />}
+              <button
+                type="button"
+                onClick={() => setLangkah(n)}
+                aria-current={langkah === n ? "step" : false}
+                className={`flex items-center gap-2 text-[12.5px] font-semibold ${
+                  langkah === n ? "text-night" : "text-ink-soft"
+                }`}
+              >
+                <span
+                  className={`grid h-5 w-5 place-items-center rounded-full border text-[11.5px] ${
+                    langkah === n
+                      ? "border-night bg-night text-paper"
+                      : "border-black/10 bg-white text-ink-soft"
+                  }`}
+                >
+                  {n}
+                </span>
+                {n === 1 ? "Pilih layanan" : "Isi data"}
+              </button>
+            </Fragment>
+          ))}
+        </div>
 
-        <h2 className="mb-3 mt-7 text-sm font-semibold text-ink-soft">Kapan</h2>
+        <div hidden={langkah !== 1}>
+          <Katalog
+            layanan={katalog}
+            varianId={varianId}
+            faseKlien={faseKlien}
+            onPilih={pilihVarian}
+          />
+
+          {/* Bilah pilihan menempel di bawah layar sepanjang katalog digulir:
+              di daftar sepanjang ini, jawaban atas "saya sudah pilih apa, dan
+              berapa" tidak boleh ikut tergulir naik. `bottom` di mobile
+              menghindari nav bawah yang `fixed` di layout passport. */}
+          <div className="sticky bottom-[76px] z-40 mt-5 flex items-center gap-3 rounded-2xl border border-black/10 bg-paper/95 px-4 py-3 backdrop-blur sm:bottom-3">
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] text-ink-soft">Pilihan Anda</span>
+              <span className="block truncate text-[13px] text-night">
+                {namaTerpilih === "" ? "Belum ada pilihan" : namaTerpilih}
+              </span>
+            </span>
+            {varianTerpilih?.hargaKlien && (
+              <b className="shrink-0 font-serif text-[15px] font-normal text-night">
+                {varianTerpilih.hargaKlien}
+              </b>
+            )}
+            <button
+              type="button"
+              onClick={() => setLangkah(2)}
+              className="min-h-[44px] shrink-0 rounded-full bg-night px-5 text-[13.5px] font-semibold text-paper"
+            >
+              Isi data
+            </button>
+          </div>
+        </div>
+
+        <div hidden={langkah !== 2}>
+        {/* Pilihan dari langkah 1 ikut terbawa, dan bisa diganti dari sini.
+            Tanpa kartu ini, satu-satunya cara memastikan "tadi saya pilih yang
+            mana" adalah mundur — dan yang mundur kehilangan tempatnya di
+            daftar. */}
+        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-leaf/25 bg-leaf-soft px-4 py-3">
+          <span className="min-w-0 flex-1">
+            <span className="block font-serif text-[15.5px] leading-snug text-night">
+              {namaTerpilih === "" ? "Belum ada pilihan" : namaTerpilih}
+            </span>
+            {varianTerpilih?.hargaKlien && (
+              <span className="mt-0.5 block font-serif text-[13px] text-leaf">
+                {varianTerpilih.hargaKlien}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => setLangkah(1)}
+            className="min-h-[36px] shrink-0 rounded-full border border-night/20 bg-white px-3.5 text-[12px] font-semibold text-night"
+          >
+            Ganti
+          </button>
+        </div>
+
+        <h2 className="mb-3 text-sm font-semibold text-ink-soft">Kapan</h2>
 
         <label className="mb-4 block text-sm">
           <span className="font-semibold text-ink-soft">Tanggal yang diinginkan</span>
@@ -277,6 +386,7 @@ export function FormAjukan({
           Ini permintaan, bukan booking final — jadwal pasti dikonfirmasi tim PADMA
           bersama Anda via WhatsApp.
         </p>
+        </div>
       </form>
     </section>
   );

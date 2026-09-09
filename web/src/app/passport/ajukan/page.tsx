@@ -199,6 +199,10 @@ export default async function HalamanAjukan() {
       id: l.id,
       nama: l.nama,
       namaFase: f ? `${f.nama_sanskrit} · ${f.nama}` : "",
+      // Id fase, BUKAN namanya: ia yang memilih ikon dan yang dicocokkan
+      // dengan `clients.phase_id` saat menentukan chip mana yang terbuka
+      // lebih dulu. Nama fase bisa diganti klien lewat panel; idnya tidak.
+      faseId: l.phase_id,
       varian: (varian ?? [])
         .filter((v) => v.service_id === l.id)
         .map((v) => {
@@ -215,6 +219,10 @@ export default async function HalamanAjukan() {
             label: labelVarian({ label: v.label, durasiMenit: v.durasi_menit, format: v.format }),
             hargaKlien: h ? formatRupiah(h.harga) : null,
             hargaCoret: h?.coret != null ? formatRupiah(h.coret) : null,
+            // Angka mentah ikut dikirim HANYA untuk menghitung rentang harga
+            // di baris layanan yang tertutup. Formatnya tetap satu pintu:
+            // yang tampil sebagai harga selalu hasil `formatRupiah()`.
+            hargaAngka: h ? h.harga : null,
           };
         }),
     };
@@ -237,6 +245,7 @@ export default async function HalamanAjukan() {
   return (
     <FormAjukan
       katalog={katalog}
+      faseKlien={klien.faseId}
       jamPilihan={jamLayanan}
       tanggalPalingAwal={hariIniJakarta()}
       alamatDefault={profil?.alamat ?? ""}
