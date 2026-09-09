@@ -153,7 +153,30 @@ dengan menjadwal ulang berulang kali — aturannya jadi bohong tanpa satu pun ga
 perpindahannya tidak hilang: ia hidup di `jejak_jadwal` (P6).
 
 Di jenjang 1 jadwal ulang **gratis dan tidak memakai jatah** — poster memberi pilihan bebas antara
-refund penuh dan jadwal ulang. Jatah hanya relevan di jenjang 2.
+refund penuh dan jadwal ulang. Jatah hanya relevan di jenjang 2. Konsekuensinya, klien yang mengubah
+jadwalnya jauh-jauh hari boleh melakukannya sesering apa pun; jatah baru menggigit ketika
+perubahannya sendiri dilakukan di dekat hari-H.
+
+**Jatah habis: DITAWARI jalan keluarnya, bukan sekadar ditolak** (keputusan pemilik, 9 Sep 2026).
+Ketika jatah sudah terpakai dan klien meminta perubahan kedua di jendela 2–24 jam, layar
+menjelaskan bahwa jatah gratisnya habis lalu menawarkan SATU langkah: melanjutkan berarti sesi ini
+dibatalkan dan dananya menjadi kredit 30 hari untuk layanan yang sama.
+
+Alasannya waktu. Menolak dengan galat lalu menyuruh klien menghubungi WhatsApp terdengar lebih
+hati-hati, tetapi yang sedang berjalan adalah jam: bila admin kebetulan tidak memegang HP dan
+tenggat dua jam keburu lewat, klien jatuh ke jenjang 3 dan uangnya benar-benar hangus — hukuman
+yang lahir dari waktu balas admin, bukan dari keputusan klien. Penawarannya tetap menuntut
+klien menekan sekali lagi dengan akibatnya tertulis; ia TIDAK pernah membatalkan otomatis, karena
+klien menekan tombol yang menurutnya memindahkan jadwal.
+
+**Rantai kredit berhenti setelah satu putaran** (keputusan pemilik, 9 Sep 2026). Sesi yang lahir
+dari penukaran kredit, bila dibatalkan lagi di jendela 2–24 jam, **TIDAK menerbitkan kredit kedua**.
+Satu pemesanan asli menghasilkan paling banyak satu kredit, berlaku 30 hari, sesudah itu hangus.
+
+Tanpa aturan ini masa berlaku 30 hari berhenti benar: tiap putaran menerbitkan kredit baru yang
+kedaluwarsanya dihitung dari tanggal sesi yang BARU, sehingga kredit memperbarui dirinya sendiri
+tanpa batas dan slot bidan tersandera selamanya oleh satu pembayaran. Penegakannya menuntut sesi
+tahu ia lahir dari hak — rujukan itu belum ada di C3-a dan lahir di C3-b.
 
 ### P5 — Semua perubahan lewat RPC; klien TETAP tanpa hak UPDATE atas `sessions`
 
@@ -200,6 +223,19 @@ Wujudnya: admin dapat menaikkan sebuah tindakan ke **perlakuan jenjang 1** denga
 yang **wajib diisi** dan tercatat di `jejak_jadwal` beserta namanya. Tanpa alasan, tombolnya menolak.
 Ini satu-satunya jalan jenjang bisa menyimpang dari hitungan waktu, dan hanya staf yang memilikinya —
 klien tidak pernah bisa menyatakan dirinya darurat.
+
+**Darurat berlaku untuk JADWAL ULANG juga, bukan hanya pembatalan** (keputusan pemilik, 9 Sep 2026).
+Admin dapat memindahkan sesi darurat walau sudah di bawah 2 jam, dengan alasan tertulis wajib, dan
+**tanpa memakai jatah** jadwal ulang klien.
+
+Ini yang paling dekat dengan bunyi poster, dan bunyinya memang menyebut *reschedule*: "persalinan
+dan rawat inap ditinjau untuk **reschedule** tanpa penalti". Tanpa jalur ini, satu-satunya yang
+tersedia bagi klien yang masuk rumah sakit satu jam sebelum sesinya adalah batal-darurat → refund
+penuh → memesan ulang dari nol. Itu bukan hal yang sama: uang keluar lalu masuk lagi, bidannya
+lepas, dan orang yang sedang di rumah sakit disuruh mengisi ulang formulir pemesanan.
+
+C3-a hanya memasang `darurat` pada `batalkan_sesi`; memasangnya pada `jadwal_ulang_sesi` adalah
+pekerjaan C3-b.
 
 ### P8 — Klien mengusulkan waktu; bidannya dipertahankan
 
