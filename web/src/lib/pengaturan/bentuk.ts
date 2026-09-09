@@ -115,6 +115,31 @@ export function nomorWaTerpakai(tersimpan: string | null | undefined): string {
 }
 
 /**
+ * Nomor WhatsApp SEORANG KLIEN — kembarannya `nomorWaTerpakai`, dan
+ * PERBEDAANNYA ADALAH INTINYA: ketiadaan nomor cadangan.
+ *
+ * `nomorWaTerpakai` menjaga halaman publik, dan di sana nomor cadangan memang
+ * jawaban yang benar: yang dituju selalu PADMA sendiri, jadi nomor klinik yang
+ * agak basi tetap lebih baik daripada `https://wa.me/` yang rusak.
+ *
+ * Di sini yang dituju ORANG LAIN, dan cadangan berubah dari jaring pengaman
+ * menjadi cacat. Itu bukan kekhawatiran teoretis: tautan "Kirim tagihan via WA"
+ * di antrean admin pernah dirakit dengan `nomorWaTerpakai` atas setelan klinik,
+ * sehingga setiap tagihan terbuka sebagai percakapan PADMA dengan dirinya
+ * sendiri — berisi nama klien, jadwalnya, dan nominalnya. Admin yang tidak
+ * memperhatikan mengira tagihan sudah terkirim, kliennya tidak pernah menerima
+ * apa pun, dan tenggat 24 jam tetap berjalan sampai jadwalnya lepas.
+ *
+ * Karena itu nomor yang tidak sah memulangkan `""`, dan pemanggilnya WAJIB
+ * memperlakukan itu sebagai "tidak ada tautan" — bukan sebagai tautan kosong
+ * yang tetap dipasang.
+ */
+export function nomorWaKlien(tersimpan: string | null | undefined): string {
+  const digit = keInternasional(tersimpan ?? "");
+  return nomorWaSah(digit) ? digit : "";
+}
+
+/**
  * Teks setelan yang BENAR-BENAR dipajang halaman publik.
  *
  * Pasangan `nomorWaTerpakai` untuk kunci bertipe `teks_polos`, dan dijaga

@@ -193,7 +193,7 @@ export function BlokPermintaan({
               menambahkannya berarti satu penyedia baru beserta jalur
               kegagalannya — sementara admin memang sudah punya percakapan
               berjalan dengan klien itu. */}
-          {permintaan.tautanWa && (
+          {permintaan.tautanWa ? (
             <a
               href={permintaan.tautanWa}
               target="_blank"
@@ -202,6 +202,16 @@ export function BlokPermintaan({
             >
               Kirim tagihan via WA
             </a>
+          ) : (
+            /* Tombolnya HILANG ketika nomor klien tidak sah, dan kalimat ini
+               yang membuat hilangnya terlihat. Tanpa kalimat, admin membaca
+               layar yang sama persis seperti layar yang benar dan menyimpulkan
+               tagihannya sudah terkirim — sementara tenggat 24 jam berjalan.
+               Nomornya disunting di Klien; menagih ke nomor cadangan klinik
+               adalah cacat yang justru sedang ditutup di sini. */
+            <span className="text-[12px] font-semibold text-clay">
+              Nomor WhatsApp klien belum sah — lengkapi di menu Klien.
+            </span>
           )}
           {permintaan.lunas && (
             <button

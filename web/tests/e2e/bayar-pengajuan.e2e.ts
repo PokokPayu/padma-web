@@ -304,6 +304,39 @@ async function main() {
       "tombol konfirmasi tidak dirender",
     );
 
+    // TUJUAN TAUTANNYA, bukan sekadar keberadaannya. Cacat yang memunculkan
+    // pemeriksaan ini tidak bisa dilihat uji murni atas `tautanWaTagihan`:
+    // fungsinya benar, yang salah nomor yang disodorkan pemanggilnya —
+    // `nomorWaLink`, yaitu setelan `nomor_wa` KLINIK. Tautannya terbit rapi
+    // dan membuka percakapan PADMA dengan dirinya sendiri, berisi nama,
+    // jadwal, dan nominal kliennya. Admin mengira sudah menagih; kliennya tidak
+    // pernah ditagih, dan tenggat 24 jamnya tetap berjalan.
+    const { data: barisKlien } = await admin
+      .from("clients")
+      .select("no_hp")
+      .eq("id", KLIEN)
+      .single();
+    const { data: setelanKlinik } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "nomor_wa")
+      .maybeSingle();
+    const waKlien = String(barisKlien?.no_hp ?? "").replace(/\D/g, "").replace(/^0/, "62");
+    const waKlinik = String(setelanKlinik?.value ?? "").replace(/\D/g, "").replace(/^0/, "62");
+    const href =
+      (await kartu.getByRole("link", { name: "Kirim tagihan via WA" }).getAttribute("href")) ?? "";
+
+    catat(
+      "3d. tautan tagihan menuju nomor KLIEN",
+      waKlien.length > 0 && href.startsWith(`https://wa.me/${waKlien}?text=`),
+      `href=${href.slice(0, 40)}… nomor klien=${waKlien}`,
+    );
+    catat(
+      "3e. tautan tagihan BUKAN ke nomor klinik sendiri",
+      waKlinik.length > 0 && waKlien !== waKlinik && !href.startsWith(`https://wa.me/${waKlinik}?`),
+      `nomor klinik=${waKlinik}`,
+    );
+
     // ---- 4. Klien melihat nominal & tenggat ----
     await klien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
     const kartuTagihan = klien.locator(`[data-tagihan="${idPermintaan}"]`);

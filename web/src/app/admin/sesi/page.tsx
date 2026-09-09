@@ -29,6 +29,7 @@ import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
 import { urutkanMitraMenurutJarak, formatKm } from "@/lib/jadwal/urutan-mitra";
 import { bacaPengaturan } from "@/lib/settings";
+import { nomorWaKlien } from "@/lib/pengaturan/bentuk";
 import type { StatusPermintaan } from "@/lib/jadwal/status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -47,7 +48,7 @@ type BarisPermintaan = {
   tenggat: string | null;
   alamat_lat: number | null;
   alamat_lon: number | null;
-  clients: { nama: string } | null;
+  clients: { nama: string; no_hp: string } | null;
   services: { nama: string } | null;
   partners: { nama: string } | null;
 };
@@ -86,7 +87,7 @@ export default async function SesiPage({
   const hariIni = hariIniJakarta();
 
   const supabase = await createServerSupabase();
-  const [{ jamLayanan, nomorWaLink }, { baris, total }, { data: permintaan }] = await Promise.all([
+  const [{ jamLayanan }, { baris, total }, { data: permintaan }] = await Promise.all([
     bacaPengaturan(),
     ambilDaftarSesi(param, hariIni),
     supabase
@@ -94,7 +95,7 @@ export default async function SesiPage({
       .select(
         "id, tanggal, jam_mulai, preferensi_waktu, catatan, status, status_bayar, tenggat, " +
           "alamat_lat, alamat_lon, " +
-          "clients ( nama ), services ( nama ), partners ( nama )",
+          "clients ( nama, no_hp ), services ( nama ), partners ( nama )",
       )
       .in("status", STATUS_ANTRE)
       // Yang paling dekat tanggalnya paling mendesak dijawab.
@@ -167,10 +168,16 @@ export default async function SesiPage({
     // Pesannya dirakit DI SERVER: `pesanTagihan` murni, tetapi nominal dan
     // sisa waktunya butuh tarif & jam server. Merakitnya di komponen klien
     // berarti angka yang berbeda antara render server dan peramban.
+    // Tujuannya nomor KLIEN, bukan setelan `nomor_wa` klinik. Versi
+    // sebelumnya memakai yang kedua, dan bentuk kegagalannya tidak terlihat
+    // sebagai galat: WhatsApp terbuka dengan pesan tagihan yang rapi, hanya
+    // saja lawan bicaranya PADMA sendiri. Klien tidak pernah ditagih dan
+    // tenggat 24 jamnya tetap berjalan. `nomorWaKlien` sengaja TANPA nomor
+    // cadangan — lihat alasannya di `@/lib/pengaturan/bentuk`.
     tautanWa:
-      p.status === PERMINTAAN_MENUNGGU_BAYAR
+      p.status === PERMINTAAN_MENUNGGU_BAYAR && nomorWaKlien(p.clients?.no_hp)
         ? tautanWaTagihan(
-            nomorWaLink,
+            nomorWaKlien(p.clients?.no_hp),
             pesanTagihan({
               namaKlien: p.clients?.nama ?? "Ibu",
               namaLayanan: p.services?.nama ?? "Layanan",
