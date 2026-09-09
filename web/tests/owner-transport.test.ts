@@ -193,7 +193,20 @@ beforeAll(async () => {
     jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
-    { ...dasarSesi, id: SESI.jauh, status: "terjadwal", jenjang: "di_atas_20" },
+    // TANGGAL JAUH DI MASA LALU, dan itu bagian dari fixture — bukan detail.
+    //
+    // Sejak migrasi `20260914130000_menunggu_tarif_hanya_tanpa_nominal`,
+    // "menunggu tarif" berarti TIDAK ADA NOMINAL SAMA SEKALI: tanpa penimpa
+    // `transport_khusus` DAN tanpa baris `transport_rates` berjenjang
+    // `di_atas_20` yang berlaku pada tanggal sesi. `seed.sql` sudah memuat
+    // tarif DASAR `di_atas_20` yang berlaku sejak hari seed dijalankan, jadi
+    // sesi ber-`tanggal: HARI_INI` TIDAK LAGI menunggu apa pun — itu justru
+    // keadaan sehat yang seluruh migrasi itu ada untuk mengembalikannya.
+    // Sesi yang benar-benar tanpa nominal karena itu harus bertanggal LEBIH
+    // TUA daripada tarif dasar paling awal, dan append-only
+    // (`guard_tarif_transport_maju` menolak `berlaku_sejak` mundur) menjamin
+    // tidak akan pernah ada tarif yang menutup tanggal ini kemudian.
+    { ...dasarSesi, id: SESI.jauh, tanggal: geserHari(HARI_INI, -3650), status: "terjadwal", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.jauhSudah, status: "terjadwal", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.jauhBatal, status: "dibatalkan_padma", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.biasa, status: "terjadwal", jenjang: "0_5" },

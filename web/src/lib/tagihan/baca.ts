@@ -65,7 +65,14 @@ type BarisPengajuan = {
 export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPengajuan[]> {
   const supabase = await createServerSupabase();
 
-  const { data: pengajuan } = await supabase
+  // GALAT DIBACA, BUKAN DIBUANG (Ruling 26). `data ?? []` mengubah kegagalan
+  // PostgREST menjadi "klien ini tidak punya tagihan menunggu" — kalimat yang
+  // tidak bisa dibedakan dari keadaan sehat, dan yang justru paling meyakinkan
+  // saat ia salah: klien yang tenggatnya sedang berjalan membuka
+  // `/passport/bayar`, melihat halaman bersih, dan menyimpulkan tidak ada yang
+  // harus dibayar. Layar galat yang berisik lebih jujur daripada halaman
+  // kosong yang berbohong (pola commit 885b86e, `ambilDaftarPermintaan`).
+  const { data: pengajuan, error: galatPengajuan } = await supabase
     .from("booking_requests")
     .select(
       "id, tanggal, jam_mulai, variant_id, status_bayar, tenggat, bukti_objek, " +
@@ -76,13 +83,25 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
     .order("tenggat", { ascending: true })
     .returns<BarisPengajuan[]>();
 
+  if (galatPengajuan) throw galatPengajuan;
   if (!pengajuan || pengajuan.length === 0) return [];
 
   const admin = createAdminSupabase();
-  const [{ data: tarif }, { data: tarifTransport }] = await Promise.all([
-    admin.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
-    admin.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
-  ]);
+  const [{ data: tarif, error: galatTarif }, { data: tarifTransport, error: galatTransport }] =
+    await Promise.all([
+      admin.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
+      admin.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
+    ]);
+  // Sejajar persis dengan `daftarTagihanPengajuanAdmin()`
+  // (`lib/admin/tagihan-pengajuan.ts`): daftar tarif KOSONG bukan keadaan
+  // netral. `hitungTagihanPengajuan()` akan memulangkan `total: null` bersebab
+  // `tarif_varian_kosong`, dan di sisi klien kalimatnya berbunyi "Totalnya
+  // sedang dilengkapi tim PADMA" — kalimat yang menenangkan, salah, dan tidak
+  // meninggalkan satu pun jejak bahwa yang rusak sebenarnya adalah bacaan.
+  // Klien menunggu telepon yang tidak akan datang sementara tenggatnya
+  // berjalan.
+  if (galatTarif) throw galatTarif;
+  if (galatTransport) throw galatTransport;
 
   const barisTarif = (tarif ?? []).map((t) => ({
     variantId: t.variant_id as string,

@@ -19,7 +19,13 @@ keputusan itu — ia satu-satunya catatan bahwa mode itu dipilih **sadar**, dan 
 | `npm run lint` | **0 error, 11 warning** — sama persis dengan baseline. |
 | `npm test` | **2598 uji, 171 berkas.** Hijau kecuali dua kelas yang keduanya BUKAN kerusakan pekerjaan ini (lihat di bawah). |
 | E2E (`test:e2e:passport`, `test:e2e:funnel`, `test:e2e:bayar`, …) | **TIDAK dijalankan** — skrip E2E dan `npm run dev` diblokir di lingkungan pengerjaan. |
-| `npm run build` | **TIDAK berhasil dijalankan** di worktree ini: Turbopack menolak `node_modules` yang ter-symlink keluar akar filesystem (`Symlink [project]/node_modules is invalid`). Batasan lingkungan, bukan kode. **Wajib dijalankan sekali di checkout utama sebelum merge.** |
+| `npm run build` | **HIJAU.** (Baris ini dikoreksi pada gelombang perbaikan akhir; sebelumnya ia berbunyi "TIDAK berhasil dijalankan".) Kegagalan yang tercatat semula — `Symlink [project]/node_modules is invalid` — adalah Turbopack menolak `node_modules` yang ter-**symlink** ke checkout utama, bukan kode. Sesudah `node_modules` dipasang **sungguhan** di worktree ini, build berjalan sampai selesai. |
+
+Build yang hijau itu **bukan sekadar formalitas**: ia satu-satunya hal di suite ini yang membuktikan
+**batas server/klien** masih utuh. `lib/email/kirim.ts` mengimpor `server-only`, jadi begitu modul
+itu — atau apa pun yang menariknya — bocor ke bundel peramban, `next build` GAGAL. Tidak ada uji
+unit yang bisa melihat kebocoran itu: Vitest menjalankan semuanya di Node, tempat `server-only`
+tidak pernah keberatan.
 
 ### Dua kelas merah yang bukan kerusakan pekerjaan ini
 
@@ -73,6 +79,24 @@ Doktrin **baru**, yang sudah ditulis sebagai komentar tabel di migrasinya:
 
 Menyetel tarif dasar itu adalah **tugas owner, bukan migrasi** — lihat §C.
 
+**Yang tertinggal, dan dibereskan pada gelombang perbaikan akhir.** Pembalikan doktrin di atas
+mula-mula diterapkan pada lapisan **tagihan saja**, dan tiga konsumen lain jenjang `di_atas_20`
+tetap memakai doktrin lama — masing-masing dengan komentar yang membenarkannya, sehingga
+tidak satu pun terlihat sebagai cacat saat dibaca sendiri-sendiri:
+
+- **rekap owner** (`lib/owner/rekap.ts`) tidak pernah menengok tarif dasar, sehingga sesi jarak
+  jauh yang kliennya sudah **membayar penuh** jatuh sebagai tak-bertarif dan **bidannya tidak
+  dibayar**;
+- **view `sesi_menunggu_tarif_transport`** masih mendefinisikan "menunggu tarif" sebagai
+  "belum punya `transport_khusus`", yang sesudah tarif dasar ada berarti **setiap** sesi jarak
+  jauh yang sehat (lihat butir 6 §C);
+- **kartu tagihan klien** (`lib/passport/turunan.ts`) menyembunyikan sub-baris transport untuk
+  `di_atas_20`, di halaman yang blok atasnya sudah menampilkan nominalnya.
+
+Pelajarannya, dan inilah yang layak dibawa ke pekerjaan berikutnya: **doktrin yang dibalik harus
+dilacak ke seluruh konsumennya sekaligus.** Setiap konsumen yang tertinggal membawa komentar
+pembenar yang dulunya benar, dan komentar itulah yang membuat cacatnya lolos review per-tugas.
+
 ---
 
 ## C. Yang perlu disiapkan SEBELUM produksi
@@ -89,7 +113,42 @@ Menyetel tarif dasar itu adalah **tugas owner, bukan migrasi** — lihat §C.
 4. **Tarif `di_atas_20` ditetapkan owner lewat `/owner/transport`.** Migrasi hanya membuka
    kemungkinannya; angkanya keputusan bisnis. Selama barisnya belum ada, sesi >20 km kembali
    buntu persis seperti sebelum pekerjaan ini.
-5. **Setiap mitra produksi WAJIB punya pin di peta.** Ongkos transport dihitung dari domisili
+5. **URUTAN MIGRASI — `supabase db push` TANPA `--include-all` MELEWATI DUA MIGRASI CABANG INI,
+   DIAM-DIAM.** Ini butir yang paling mudah hilang dan paling mahal bila hilang.
+
+   Dua migrasi cabang ini bercap waktu **lebih awal** daripada
+   `20260914120000_harga_klien_untuk_staf.sql`, yang sudah ter-apply di sebagian basis data:
+
+   - `20260914100000_tarif_dasar_di_atas_20.sql`
+   - `20260914110000_jejak_email_tagihan.sql`
+
+   Pada basis data seperti itu, `supabase db push` hanya menjalankan migrasi yang cap waktunya
+   **lebih besar dari yang terakhir tercatat** — jadi keduanya **dilewati tanpa satu pun
+   peringatan**, dan `push`-nya melaporkan sukses. Dua kerusakan yang lahir dari situ:
+
+   1. CHECK `transport_rates_bukan_per_kasus` **masih hidup**, sehingga tarif dasar `di_atas_20`
+      tidak bisa disimpan dan **setiap klien >20 km buntu persis seperti sebelum cabang ini** —
+      kebuntuan yang seluruh cabang ini dibangun untuk membuka;
+   2. kolom `booking_requests.email_tagihan_pada` **tidak ada**, sehingga `ambilDaftarPermintaan`
+      menyebut kolom yang tidak ada (42703 menolak SELURUH query) dan **seluruh tab Permintaan
+      di panel admin mati**.
+
+   **Perintahnya:** `supabase db push --include-all` (lokal: `npx supabase migration up
+   --include-all`). Periksa sesudahnya bahwa ketiga migrasi berikut tercatat di
+   `supabase_migrations.schema_migrations`: `20260914100000`, `20260914110000`, dan
+   `20260914130000` (lihat butir 6).
+
+6. **Migrasi gelombang perbaikan akhir: `20260914130000_menunggu_tarif_hanya_tanpa_nominal.sql`.**
+   Ia mendefinisikan ulang view `sesi_menunggu_tarif_transport` agar hanya memuat sesi >20 km yang
+   **tidak punya nominal sama sekali** — tanpa `transport_khusus` DAN tanpa tarif dasar
+   `di_atas_20` yang berlaku pada tanggal sesi. Tanpa migrasi ini, badge dasbor admin dan daftar
+   `/owner/transport` menjadi **alarm permanen** yang menyala untuk setiap sesi jarak jauh yang
+   sehat, dan satu-satunya cara memadamkannya (mengisi `transport_khusus`) adalah pintu satu arah
+   yang membuat rekap melaporkan nominal penimpa untuk sesi yang kliennya membayar tarif dasar.
+   Cap waktunya lebih baru dari `20260914120000`, jadi ia ikut terbawa `db push` biasa — tetapi
+   hanya berguna bila butir 5 sudah dikerjakan.
+
+7. **Setiap mitra produksi WAJIB punya pin di peta.** Ongkos transport dihitung dari domisili
    mitra ke alamat klien; mitra tanpa `lat`/`lon` menghasilkan jenjang kosong, total kosong, dan
    tagihan yang tidak bisa terbit. Inilah penyebab asli laporan "totalnya tidak pernah ada".
 

@@ -115,8 +115,8 @@ export type ItemTagihan = {
   label: string;
   /**
    * Rincian transport (Task 9, Ruling 16 — fix round 1). `null` untuk SETIAP
-   * item paket, dan untuk item sesi yang tidak berjenjang atau berjenjang
-   * `di_atas_20` (lihat gerbang di `susunTagihan()`).
+   * item paket, dan untuk item sesi yang tidak berjenjang. `di_atas_20` TIDAK
+   * lagi dikecualikan sejak Ruling 26 — lihat gerbang di `susunTagihan()`.
    *
    * SENGAJA sebuah MEDAN pada item sesi yang sudah ada — BUKAN item kedua
    * ber-`id` yang sama. Draf pertama Task 9 menambahkan
@@ -177,18 +177,29 @@ export function susunTagihan(input: {
     // (`@/lib/transport/jarak`) — SATU-SATUNYA sumber, sama persis yang
     // dipakai `daftarTagihanAdmin()` (`@/lib/admin/tagihan`).
     //
-    // `di_atas_20` SENGAJA DIKECUALIKAN (Ruling 17): materi klien menulis
-    // ">20 km: konfirmasi admin" — KETIADAAN tarif otomatis, dirundingkan
-    // langsung per kasus, bukan lewat baris otomatis. Klien di sini juga
-    // TIDAK PUNYA cara memverifikasi apakah owner sudah menetapkan tarif
-    // khususnya (RLS yang sama menutup `transport_khusus` dari klien maupun
-    // admin) — menampilkan rincian transport untuk sesi yang nominalnya
-    // belum pernah ditetapkan siapa pun akan menagih sesuatu yang belum ada.
-    // Rate-card jenjang lain (`0_5`..`15_20`) tidak punya masalah ini: sekali
-    // owner menetapkan tarif SATU jenjang, tarif itu otomatis berlaku untuk
-    // SETIAP sesi jenjang itu — bukan keputusan per sesi seperti `di_atas_20`.
+    // `di_atas_20` DULU DIKECUALIKAN di sini (Ruling 17), dan pengecualian
+    // itu DICABUT pada gelombang perbaikan akhir (Ruling 26). Alasan aslinya
+    // — "materi klien menulis '>20 km: konfirmasi admin', jadi tidak ada
+    // tarif otomatis, dan klien tidak punya cara memverifikasi apakah owner
+    // sudah menetapkan tarif khususnya" — berdiri di atas doktrin yang sudah
+    // dicabut migrasi `tarif_dasar_di_atas_20`: `di_atas_20` KINI punya tarif
+    // DASAR di `transport_rates`, persis seperti `0_5`..`15_20`, dan sekali
+    // owner menetapkannya ia otomatis berlaku untuk SETIAP sesi jenjang itu.
+    //
+    // Yang membuat pengecualian itu bukan sekadar basi melainkan SALAH: klien
+    // yang sama, pada HALAMAN yang sama (`/passport/bayar`), sudah membaca
+    // "Transport · >20 km — Rp45.000" di kartu tagihan pengajuan di blok atas
+    // (`ambilTagihanPengajuan()`, `lib/tagihan/baca.ts`). Blok bawah — daftar
+    // tagihan sesi yang dirakit fungsi ini — lalu menyembunyikan sub-baris
+    // transport untuk sesi yang SAMA. Dua bagian satu halaman, dua doktrin,
+    // dan yang lebih tua yang menang secara diam-diam.
+    //
+    // Yang TIDAK berubah: baris ini tetap TANPA NOMINAL sama sekali (money
+    // firewall) — murni jenjang + tanggal dari `LABEL_JENJANG`
+    // (`@/lib/transport/jarak`), SATU-SATUNYA sumber, sama persis yang dipakai
+    // `daftarTagihanAdmin()` (`@/lib/admin/tagihan`) dan dikunci uji parity.
     const rincianTransport =
-      s.jenjang !== null && s.jenjang !== "di_atas_20"
+      s.jenjang !== null
         ? `Transport · ${LABEL_JENJANG[s.jenjang]} · ${formatTanggalID(s.tanggal)}`
         : null;
 

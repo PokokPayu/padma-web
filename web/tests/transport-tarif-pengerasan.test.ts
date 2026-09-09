@@ -149,15 +149,23 @@ describe("transport_rates — pagar uang", () => {
    * tabel ini TIDAK ikut longgar bersamanya — append-only tetap append-only.
    */
   it("menerima baris di_atas_20 sebagai tarif dasar", async () => {
-    await expect(
-      querySql(
-        `insert into transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
-           values ('di_atas_20', 99999, 88888, '2099-01-01')`,
-      ),
-    ).resolves.toBeDefined();
-
-    await querySql(
-      `delete from transport_rates where jenjang = 'di_atas_20' and berlaku_sejak = '2099-01-01'`,
-    );
+    // DIBUNGKUS `dalamTransaksiRollback` seperti seluruh uji lain di berkas
+    // ini (Ruling 26). Versi sebelumnya menyisipkan barisnya lewat `querySql`
+    // lalu menghapusnya dengan `querySql` kedua DI LUAR transaksi: bila
+    // asersinya gagal, `delete`-nya tidak pernah dijalankan dan baris
+    // `di_atas_20 @ 2099-01-01` MENETAP di basis data lokal yang DIPAKAI
+    // BERSAMA sesi lain. Ia tidak menetap dengan sopan, pula: `berlaku_sejak`
+    // 2099 lolos `guard_tarif_transport_maju` (ia hanya menolak tanggal yang
+    // MUNDUR), dan sejak view `sesi_menunggu_tarif_transport` menanyakan
+    // `berlaku_sejak <= s.tanggal` baris itu ikut mengubah jawaban uji lain.
+    // Rollback membuat kegagalan uji ini merugikan uji ini saja.
+    await dalamTransaksiRollback(async (jalankan) => {
+      await expect(
+        jalankan(
+          `insert into transport_rates (jenjang, tarif_klien, honor_mitra, berlaku_sejak)
+             values ('di_atas_20', 99999, 88888, '2099-01-01')`,
+        ),
+      ).resolves.toBeDefined();
+    });
   });
 });

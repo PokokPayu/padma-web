@@ -245,13 +245,25 @@ describe("susunTagihan", () => {
     expect(t[0].rincianTransport).toBeNull();
   });
 
-  it("sesi berjenjang di_atas_20: rincianTransport TETAP null — klien tidak pernah tahu apakah tarif khususnya sudah ditetapkan (Ruling 17)", () => {
+  it("sesi berjenjang di_atas_20: rincianTransport TERISI, sejajar jenjang lain (Ruling 26 mencabut Ruling 17)", () => {
+    // Uji ini DIBALIK, bukan dihapus. Yang dulu dijaga: klien tidak pernah
+    // melihat rincian transport >20 km, karena nominalnya hanya ada bila owner
+    // menetapkannya per kasus dan klien tidak punya cara memverifikasinya.
+    // Sejak migrasi `tarif_dasar_di_atas_20`, `di_atas_20` punya tarif DASAR
+    // seperti jenjang lain — dan klien yang sama SUDAH membaca "Transport ·
+    // >20 km — Rp45.000" di kartu tagihan pengajuan pada halaman yang SAMA
+    // (`/passport/bayar`). Menyembunyikannya di blok bawah membuat satu
+    // halaman berbicara dua doktrin.
+    //
+    // Yang tetap dijaga: baris ini TANPA NOMINAL — hanya label jenjang dan
+    // tanggal.
     const t = susunTagihan({
       paket: [],
       sesi: [s({ id: "x", clientPackageId: null, jenjang: "di_atas_20" })],
     });
     expect(t).toHaveLength(1);
-    expect(t[0].rincianTransport).toBeNull();
+    expect(t[0].rincianTransport).toContain(">20 km");
+    expect(t[0].rincianTransport).not.toContain("Rp");
   });
 
   it("item paket selalu rincianTransport null", () => {

@@ -119,8 +119,11 @@ insert into variant_rates (variant_id, harga_klien, harga_coret, honor_mitra)
       where vr.variant_id = v.id and vr.berlaku_sejak = current_date
    );
 
--- Tarif transport soft launch, dari materi klien. `di_atas_20` sengaja tidak
--- ada: tarifnya ditetapkan owner per kasus (lihat transport_khusus).
+-- Tarif transport soft launch, dari materi klien. `di_atas_20` IKUT di sini
+-- sejak migrasi `tarif_dasar_di_atas_20` — sebagai tarif DASAR, sementara
+-- `transport_khusus` tinggal sebagai penimpa per kasus milik owner. (Komentar
+-- lama di baris ini masih berbunyi "`di_atas_20` sengaja tidak ada", padahal
+-- barisnya sudah ditulis dua puluh baris di bawah; dikoreksi Ruling 26.)
 --
 -- Perhatikan 0–5 km: klien Rp0, mitra Rp10.000. Itu BUKAN salah ketik — ia
 -- subsidi PADMA, dan angka ketiganya (selisih) sengaja tidak disimpan.

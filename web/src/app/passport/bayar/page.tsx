@@ -14,9 +14,23 @@ import { LABEL_JENJANG } from "@/lib/transport/jarak";
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
 
-// Halaman ini menampilkan STATUS, bukan angka: nominal uang hidup di
-// `variant_rates`/`honor_marks` dan tidak pernah sampai ke layar klien —
-// besarannya disampaikan tim PADMA lewat WhatsApp (keputusan #10).
+// KOMENTAR INI DIKOREKSI (Ruling 26, gelombang perbaikan akhir). Sebelumnya ia
+// berbunyi "Halaman ini menampilkan STATUS, bukan angka: nominal uang tidak
+// pernah sampai ke layar klien (keputusan #10)" — dan halaman ini SUDAH lama
+// merender rincian layanan + transport + total lewat `KartuTagihan`. Komentar
+// yang menyangkal apa yang dirender di bawahnya bukan sekadar basi: ia
+// membuat pembaca berikutnya menyimpulkan bahwa nominal di layar ini adalah
+// KEBOCORAN yang harus ditutup, lalu menutup fitur yang memang diminta spec.
+//
+// Yang berlaku: keputusan #10 ("nominal tidak pernah sampai ke layar klien,
+// disampaikan lewat WhatsApp") DIGANTIKAN spec V4 — harga klien memang tampil
+// publik, karena QRIS PADMA statis dan klien mengetik sendiri jumlahnya.
+// Alasan lengkapnya sudah tertulis di dokblok `lib/tagihan/baca.ts`; jangan
+// menuliskannya kedua kali, cukup jangan bertentangan dengannya.
+//
+// Yang TIDAK berubah, dan itulah money firewall yang sesungguhnya: `honor_mitra`
+// tidak pernah keluar dari tabel tarif menuju permukaan mana pun — klien
+// maupun admin.
 const LABEL: Record<PayStatus, { teks: string; kelas: string }> = {
   lunas: { teks: "Lunas", kelas: "bg-leaf-soft text-leaf border-leaf/25" },
   menunggu_verifikasi: {

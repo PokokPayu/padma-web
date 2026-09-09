@@ -100,14 +100,46 @@ export async function daftarTagihanPengajuanAdmin(
     q = q.eq("status", PERMINTAAN_MENUNGGU_BAYAR).order("tenggat", { ascending: true });
   }
 
-  const { data } = await q.returns<BarisDb[]>();
+  // GALAT DIBACA, BUKAN DIBUANG — dan di sini akibatnya lebih berat daripada
+  // layar kosong. Draf sebelumnya menulis `const { data } = await q...`, jadi
+  // galat PostgREST (PGRST205 saat schema cache belum reload sesudah deploy,
+  // 42703 kolom embed salah, timeout) memulangkan `data: null` yang jatuh ke
+  // `[]`. Pemanggil terpentingnya bukan sebuah daftar, melainkan GERBANG
+  // penerbitan tagihan di `terbitkanTagihan()` (`app/admin/sesi/aksi.ts`):
+  // `[]` di sana terbaca sebagai `rincianAwal === null`, gerbangnya DILEWATI,
+  // status berpindah ke `menunggu_bayar`, tenggat 24 jam mulai berjalan, dan
+  // pesan WhatsApp-nya kembali berbunyi "Total: menyusul dari tim" — persis
+  // gejala yang seluruh cabang ini dibangun untuk membunuh. Gerbang yang
+  // gagal-TERBUKA bukan gerbang.
+  //
+  // Pola dan alasannya sama persis dengan `ambilDaftarPermintaan()`
+  // (`lib/admin/permintaan.ts`, commit 885b86e): lempar, jangan menyamar jadi
+  // hasil kosong. Pemanggil yang perlu bertahan hidup menangkapnya sendiri —
+  // `terbitkanTagihan()` menerjemahkannya jadi penolakan yang bisa ditindak,
+  // dan `kirimEmailTagihan()` sudah punya `try/catch` yang menjadikannya
+  // "email tidak terkirim", bukan "tagihan tidak terbit".
+  const { data, error } = await q.returns<BarisDb[]>();
+  if (error) throw error;
   if (!data || data.length === 0) return [];
 
   const admin = createAdminSupabase();
-  const [{ data: tarif }, { data: tarifTransport }] = await Promise.all([
-    admin.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
-    admin.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
-  ]);
+  const [{ data: tarif, error: galatTarif }, { data: tarifTransport, error: galatTransport }] =
+    await Promise.all([
+      admin.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
+      admin.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
+    ]);
+  // KEGAGALAN INFRASTRUKTUR TIDAK BOLEH MENYAMAR JADI DIAGNOSIS.
+  //
+  // `(tarif ?? [])` pada galat menghasilkan daftar tarif KOSONG, dan daftar
+  // kosong bukan keadaan netral di sini: `hitungTagihanPengajuan()` akan
+  // memulangkan `total: null` dengan sebab `tarif_varian_kosong`, yang
+  // `KALIMAT_SEBAB_ADMIN` terjemahkan menjadi "Belum ada tarif varian yang
+  // berlaku pada tanggal sesi ini. Owner menetapkannya di menu Tarif." Admin
+  // lalu membuka menu Tarif, melihat tarifnya SUDAH ADA di sana, dan tidak
+  // punya satu pun petunjuk bahwa yang rusak adalah bacaannya. Diagnosis yang
+  // salah dan meyakinkan lebih mahal daripada galat yang jujur.
+  if (galatTarif) throw galatTarif;
+  if (galatTransport) throw galatTransport;
 
   const barisTarif = (tarif ?? []).map((t) => ({
     variantId: t.variant_id as string,

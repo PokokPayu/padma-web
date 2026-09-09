@@ -459,11 +459,33 @@ describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
     expect(r[0].margin).toBe(500_000 - 200_000 - 10_000);
   });
 
-  it("sesi di_atas_20 tanpa tarif khusus TIDAK dihitung sebagai transport nol (Ruling 14)", () => {
-    // Nol yang salah lebih berbahaya daripada nol yang jujur: ia terlihat
-    // benar. Karena itu SELURUH honor sesi ini — termasuk honor varian yang
-    // sebenarnya valid — jatuh sebagai tak-bertarif, sejajar persis perlakuan
-    // tarif varian yang hilang.
+  it("sesi di_atas_20 tanpa penimpa memakai TARIF DASAR rate card; tak-bertarif HANYA bila keduanya tidak ada (Ruling 26)", () => {
+    // Uji ini DIBALIK SEBAGIAN, bukan dihapus. Ia dulu mengunci "di_atas_20
+    // tanpa `transport_khusus` = tak-bertarif", yang benar selama CHECK
+    // `transport_rates_bukan_per_kasus` hidup dan SALAH sejak migrasi
+    // `tarif_dasar_di_atas_20` mencabutnya. Yang dikunci perilaku lama itu
+    // adalah bidan TIDAK DIBAYAR untuk sesi yang kliennya sudah membayar
+    // penuh lewat tarif dasar — kegagalan seluruhnya di jalur bahagia baru.
+    //
+    // (a) ADA tarif dasar, TIDAK ada penimpa -> dipakai, seperti jenjang lain.
+    const dasar = tarifTransport({ id: "tt-jauh", jenjang: "di_atas_20", tarifKlien: 45_000, honorMitra: 30_000 });
+    const rDasar = hitungRekap({
+      sesi: [sesi({ jenjang: "di_atas_20" })],
+      tarif: [tarif({})],
+      tarifTransport: [dasar],
+      transportKhusus: [],
+      tanda: [],
+    });
+    expect(rDasar[0].sesiTakBertarif).toHaveLength(0);
+    // Honor mitra transport ikut dari baris tarif dasar — BUKAN nol.
+    expect(rDasar[0].perMitra[0].totalHonor).toBe(200_000 + 30_000);
+    expect(rDasar[0].totalHarga).toBe(500_000 + 45_000);
+
+    // (b) TIDAK ada penimpa DAN tidak ada tarif dasar -> barulah tak-bertarif.
+    //     Nol yang salah lebih berbahaya daripada nol yang jujur: ia terlihat
+    //     benar. Karena itu SELURUH honor sesi ini — termasuk honor varian
+    //     yang sebenarnya valid — jatuh sebagai tak-bertarif, sejajar persis
+    //     perlakuan tarif varian yang hilang.
     const r = hitungRekap({
       sesi: [sesi({ jenjang: "di_atas_20" })],
       tarif: [tarif({})],
@@ -475,19 +497,22 @@ describe("hitungRekap — honor memuat komponen transport (Task 9)", () => {
     expect(r[0].sesiTakBertarif[0].sebab).toBe("transport");
     expect(r[0].perMitra[0].jumlahTakBertarif).toBe(1);
     expect(r[0].perMitra[0].totalHonor).toBe(0);
-    // Sejajar PERSIS perlakuan tarif varian yang hilang: honor VARIAN yang
-    // sebenarnya valid pun ikut tidak disumkan — bukan hanya baris per mitra,
-    // total pekan juga tetap nol.
     expect(r[0].totalHonor).toBe(0);
     expect(r[0].totalHarga).toBe(0);
   });
 
-  it("sesi di_atas_20 DENGAN tarif khusus dihitung dari transport_khusus, bukan rate card", () => {
+  it("sesi di_atas_20 DENGAN tarif khusus dihitung dari transport_khusus — PENIMPA menang atas tarif dasar", () => {
     const khusus: TransportKhususRingkas = { sessionId: "s1", tarifKlien: 80_000, honorMitra: 120_000 };
     const r = hitungRekap({
       sesi: [sesi({ id: "s1", jenjang: "di_atas_20" })],
       tarif: [tarif({})],
-      tarifTransport: [],
+      // Tarif DASAR sengaja ADA di sini sejak Ruling 26: tanpanya uji ini
+      // hijau hanya karena tidak ada alternatif, dan tidak membuktikan
+      // URUTANNYA sama sekali. Urutan "penimpa dulu, baru tarif dasar" itulah
+      // satu-satunya yang menjaga 80 km tidak tertagih sama dengan 25 km.
+      tarifTransport: [
+        tarifTransport({ id: "tt-jauh", jenjang: "di_atas_20", tarifKlien: 45_000, honorMitra: 30_000 }),
+      ],
       transportKhusus: [khusus],
       tanda: [],
     });

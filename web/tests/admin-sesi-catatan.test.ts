@@ -1232,7 +1232,12 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // menyebut `email`, `nama`, atau medan klien lain sebagai argumen. Diuji
     // dengan KECOCOKAN PERSIS, bukan pola longgar, supaya `console.` baru di
     // luar tiga ini — apalagi yang menyisipkan data klien — memerahkan uji.
+    // (Ruling 26, gelombang perbaikan akhir) Baris KEEMPAT masuk daftar ini:
+    // gerbang penerbitan tagihan kini menangkap galat baca rincian dan
+    // menolak penerbitan alih-alih melewatinya. Argumennya `e` — objek galat
+    // generik, tanpa satu pun medan klien — sama seperti tiga baris lainnya.
     const KONSOL_SAH = [
+      'console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);',
       'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
       'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
       'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',

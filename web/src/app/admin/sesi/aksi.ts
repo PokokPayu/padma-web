@@ -175,8 +175,49 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
   // dikompensasi bila gerbangnya menutup. Dibaca lewat cabang `permintaanId`
   // (Step 4) karena baris ini BELUM `menunggu_bayar` — inilah fungsi yang
   // memindahkannya ke sana.
-  const rincianAwal = (await daftarTagihanPengajuanAdmin({ permintaanId }))[0] ?? null;
-  if (rincianAwal && rincianAwal.total === null) {
+  // GAGAL TERTUTUP, TERMASUK PADA GALAT BACA (Ruling 26, gelombang perbaikan
+  // akhir). Sebelumnya baris ini berbunyi `(await daftar...)[0] ?? null` dan
+  // gerbang di bawahnya hanya menutup bila `rincianAwal` ADA dan totalnya
+  // null. Dua keadaan lolos begitu saja:
+  //
+  //   1. `daftarTagihanPengajuanAdmin` membuang galat PostgREST-nya dan
+  //      memulangkan `[]` (sudah diperbaiki di modul itu — ia MELEMPAR
+  //      sekarang);
+  //   2. `rincianAwal === null` apa pun sebabnya.
+  //
+  // Keduanya berujung sama: gerbang dilewati, status pindah ke
+  // `menunggu_bayar`, tenggat 24 jam berjalan, dan klien menerima tagihan
+  // tanpa angka. Yang benar adalah kebalikannya — bila totalnya tidak bisa
+  // DIPASTIKAN, penerbitan ditolak. Menahan penerbitan bisa dicoba lagi satu
+  // menit kemudian; tenggat yang sudah berjalan atas tagihan tanpa angka
+  // tidak bisa ditarik kembali.
+  //
+  // Galatnya ditangkap di sini, bukan dibiarkan melempar ke Next.js: server
+  // action yang melempar sampai ke admin sebagai layar galat generik tanpa
+  // satu kalimat pun tentang apa yang harus ia lakukan, sementara yang
+  // dibutuhkan justru "coba lagi" yang eksplisit.
+  let rincianAwal: Awaited<ReturnType<typeof daftarTagihanPengajuanAdmin>>[number] | null = null;
+  try {
+    rincianAwal = (await daftarTagihanPengajuanAdmin({ permintaanId }))[0] ?? null;
+  } catch (e) {
+    console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);
+    return {
+      ok: false,
+      pesan:
+        "Tagihan belum bisa terbit: rincian totalnya gagal dibaca dari basis data. " +
+        "Ini kegagalan sistem, bukan data yang kurang — jangan mengubah tarif atau " +
+        "pin peta. Coba lagi beberapa saat lagi; bila tetap gagal, laporkan ke teknis.",
+    };
+  }
+  if (rincianAwal === null) {
+    return {
+      ok: false,
+      pesan:
+        "Tagihan belum bisa terbit: baris permintaannya tidak terbaca. " +
+        "Muat ulang halaman — kemungkinan besar permintaan ini sudah ditangani orang lain.",
+    };
+  }
+  if (rincianAwal.total === null) {
     return {
       ok: false,
       pesan: `Tagihan belum bisa terbit. ${
@@ -218,7 +259,25 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
 }
 
 /**
- * Mengirim email tagihan untuk satu permintaan. Memulangkan apakah berhasil.
+ * Sebab kegagalan kirim email tagihan, sebagai KALIMAT — bukan boolean.
+ *
+ * (Ruling 26, gelombang perbaikan akhir) `kirimEmailTagihan()` dulu memulangkan
+ * `boolean`, dan `kirimUlangEmailTagihan()` menerjemahkan SETIAP `false` jadi
+ * satu kalimat yang sama: "Periksa alamat email klien di menu Klien, dan
+ * pastikan RESEND_API_KEY & domain pengirim sudah terpasang." Kalimat itu benar
+ * untuk dua dari ENAM jalan keluar `false` di fungsi ini, dan menyesatkan untuk
+ * empat sisanya — termasuk gerbang `NEXT_PUBLIC_BASIS_URL` yang lahir belakangan
+ * dan tidak pernah disebut siapa pun, serta `total === null` yang sudah punya
+ * kalimatnya sendiri di `KALIMAT_SEBAB_ADMIN`. Admin yang menekan "kirim ulang"
+ * lalu memeriksa alamat email klien yang sebenarnya sudah benar, berulang kali,
+ * untuk kegagalan yang letaknya di environment server.
+ *
+ * Gerbang yang tak terlihat oleh orang yang memicunya bukan gerbang.
+ */
+type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
+
+/**
+ * Mengirim email tagihan untuk satu permintaan. Memulangkan hasil BERKALIMAT.
  *
  * TIDAK PERNAH MELEMPAR dan TIDAK PERNAH menggagalkan pemanggilnya. Berbeda
  * dari `kirimEmail()` (yang murni HTTP dan gagalnya memang selalu berbentuk
@@ -249,7 +308,7 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
  * dari input: pelajaran yang sama yang dibayar tautan WhatsApp yang dulu
  * menunjuk nomor klinik alih-alih nomor klien.
  */
-async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
+async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail> {
   try {
     // GAGAL TERTUTUP juga untuk basis URL: tautan bayar dibangun dari
     // `NEXT_PUBLIC_BASIS_URL`, dan URL kosong ATAU BERISI SPASI SAJA
@@ -269,13 +328,38 @@ async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
     const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
     if (!basisUrl) {
       console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");
-      return false;
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum " +
+          "terpasang di server, jadi tautan bayar di badan email akan patah. Ini " +
+          "setelan environment — bukan data klien. Laporkan ke teknis; sementara " +
+          "itu kirimkan tagihannya lewat WhatsApp.",
+      };
     }
 
     const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
     const t = daftar[0];
-    if (!t || t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
-      return false;
+    if (!t) {
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: baris permintaannya tidak terbaca. Muat ulang " +
+          "halaman — kemungkinan besar tagihan ini sudah tidak berstatus menunggu bayar.",
+      };
+    }
+    // `total === null` PUNYA kalimatnya sendiri, dan kalimat itu menyebut layar
+    // yang memperbaikinya (`KALIMAT_SEBAB_ADMIN`) — sama persis dengan yang
+    // dipakai gerbang `terbitkanTagihan()` di atas. Memakainya ulang di sini
+    // menjaga satu keadaan tidak dijelaskan dengan dua kalimat berbeda
+    // tergantung tombol mana yang ditekan admin.
+    if (t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
+      return {
+        ok: false,
+        pesan: `Email tidak dikirim: tagihannya belum bernominal. ${
+          t.sebab ? KALIMAT_SEBAB_ADMIN[t.sebab] : "Totalnya belum bisa dihitung."
+        }`,
+      };
     }
 
     const supabase = await createServerSupabase();
@@ -294,10 +378,22 @@ async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
         clients: { nama: string; email: string } | null;
       }>();
 
-    if (!baris) return false;
+    if (!baris) {
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: permintaan ini sudah tidak berstatus menunggu bayar. " +
+          "Muat ulang halaman — tenggatnya mungkin sudah lewat dan slotnya dilepas.",
+      };
+    }
 
     const email = baris.clients?.email ?? "";
-    if (email === "") return false;
+    if (email === "") {
+      return {
+        ok: false,
+        pesan: "Email tidak dikirim: klien ini belum punya alamat email. Lengkapi di menu Klien.",
+      };
+    }
 
     const { html, teks } = emailTagihan({
       namaKlien: baris.clients?.nama ?? t.namaKlien,
@@ -334,14 +430,28 @@ async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
         console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);
       }
     }
-    return hasil.ok;
+    if (!hasil.ok) {
+      return {
+        ok: false,
+        pesan:
+          "Email ditolak penyedia (Resend). Pastikan RESEND_API_KEY dan domain " +
+          "pengirim EMAIL_PENGIRIM sudah terverifikasi. Sebab teknisnya ada di log server.",
+      };
+    }
+    return { ok: true };
   } catch (e) {
     // Lihat dokblok: beberapa langkah di atas BISA melempar (service role
     // hilang, jam tak sah, tanggal tak sah). Menelan di sini membuat jaminan
     // "TIDAK PERNAH menggagalkan pemanggilnya" sungguhan, bukan sekadar
     // klaim di komentar.
     console.error("[email] kirimEmailTagihan gagal tak terduga:", e);
-    return false;
+    return {
+      ok: false,
+      pesan:
+        "Email gagal dikirim karena galat tak terduga di server (sebabnya tercatat " +
+        "di log). Tagihannya sendiri TIDAK terpengaruh — ia tetap terbit dan tenggatnya " +
+        "tetap berjalan. Kirimkan tagihan lewat WhatsApp lalu laporkan ke teknis.",
+    };
   }
 }
 
@@ -371,14 +481,12 @@ export async function kirimUlangEmailTagihan(
   permintaanId: string,
 ): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
-  const ok = await kirimEmailTagihan(permintaanId);
-  if (!ok) {
-    return {
-      ok: false,
-      pesan:
-        "Email tidak terkirim. Periksa alamat email klien di menu Klien, dan pastikan RESEND_API_KEY & domain pengirim sudah terpasang.",
-    };
-  }
+  // Kalimatnya datang dari tempat kegagalannya TERJADI, bukan dirangkai di
+  // sini: hanya `kirimEmailTagihan()` yang tahu gerbang mana yang menutup, dan
+  // menebaknya dari `false` adalah persis yang membuat versi sebelumnya selalu
+  // menyalahkan alamat email klien (lihat dokblok `HasilKirimEmail`).
+  const hasil = await kirimEmailTagihan(permintaanId);
+  if (!hasil.ok) return { ok: false, pesan: hasil.pesan };
   revalidatePath("/admin/sesi");
   return { ok: true };
 }

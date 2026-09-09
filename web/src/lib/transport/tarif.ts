@@ -1,4 +1,4 @@
-import type { JenjangTransport } from "./jarak";
+import { LABEL_JENJANG, type JenjangTransport } from "./jarak";
 
 // ============================================================================
 // TARIF TRANSPORT — "berlaku pada tanggal X", dihitung SEKALI untuk seluruh
@@ -43,14 +43,28 @@ export type TarifTransportRingkas = {
  * kartu per anggota), penjagaan `simpanTarifTransport()`, dan daftar
  * "tarif belum ditetapkan" di `lib/owner/data.ts`. Menambah `di_atas_20` di
  * sini karena itu sekaligus memberi owner layar untuk menetapkannya.
+ *
+ * ===== KENAPA DITURUNKAN, BUKAN DITULIS ULANG (Ruling 26) =====
+ * Sesudah `di_atas_20` bergabung, daftar ini beranggota IDENTIK dengan seluruh
+ * enum `jenjang_transport` — dan daftar yang ditulis manual di sini akan
+ * berpisah diam-diam dari enumnya pada anggota berikutnya yang lahir. Itu
+ * bukan risiko teoretis: gerbang KEDUA di `simpanTarifTransport()`
+ * (`app/owner/transport/aksi.ts`) yang dulu menolak `di_atas_20` sudah
+ * DICABUT ATAS DASAR kedua daftar itu identik. Bila keduanya berpisah lagi,
+ * yang hilang adalah satu-satunya penjaga yang tersisa.
+ *
+ * Diturunkan dari `LABEL_JENJANG` (`@/lib/transport/jarak`) — bukan dari
+ * enumnya langsung, karena TypeScript tidak bisa menghitung anggota union
+ * tipe pada waktu jalan. `LABEL_JENJANG` bertipe `Record<JenjangTransport,
+ * string>`, jadi anggota enum yang lahir tanpa label akan ditolak KOMPILATOR
+ * di berkas itu, dan daftar ini ikut lengkap tanpa disentuh. Urutan kunci
+ * objek literal string non-numerik di JS adalah urutan penulisan, dan itulah
+ * urutan terdekat-ke-terjauh yang dikunci
+ * `tests/transport-alamat-struktur.test.ts`.
  */
-export const JENJANG_TARIF_RATE_CARD: readonly JenjangTransport[] = [
-  "0_5",
-  "5_10",
-  "10_15",
-  "15_20",
-  "di_atas_20",
-];
+export const JENJANG_TARIF_RATE_CARD: readonly JenjangTransport[] = Object.keys(
+  LABEL_JENJANG,
+) as JenjangTransport[];
 
 /**
  * Tarif transport yang BERLAKU pada `tgl` untuk satu JENJANG: `berlaku_sejak`
