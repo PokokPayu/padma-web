@@ -24,7 +24,11 @@ function render(param: ParamDaftar, total = 40, jumlah = 25) {
       kelompok={KELOMPOK}
       jumlah={jumlah}
       total={total}
-      aksi={<a href="/admin/sesi?ubah=baru">+ Sesi baru</a>}
+      // `<button>`, bukan `<a href>`: sejak `/admin/sesi/[id]` ada, aturan
+      // `no-html-link-for-pages` memperlakukan `/admin/sesi?…` sebagai rute
+      // Next dan menolak jangkar mentah. Yang diuji di sini adalah bahwa slot
+      // `aksi` dirender apa adanya — elemennya sendiri tidak penting.
+      aksi={<button type="button">+ Sesi baru</button>}
     />,
   );
 }

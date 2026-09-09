@@ -1,4 +1,5 @@
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
+import type { StatusSesi } from "@/lib/jadwal/status";
 
 // Daftar putih & label modul Sesi.
 //
@@ -73,3 +74,32 @@ export function periksaAlasanPenimpaan(
   }
   return { ok: true, nilai: teks };
 }
+
+/**
+ * Warna pil status sesi, dipakai daftar /admin/sesi DAN halaman detailnya.
+ *
+ * Hidup di sini, bukan di salah satu halaman: dua layar yang menampilkan
+ * status yang sama dengan warna berbeda adalah cara paling halus membuat staf
+ * salah membaca, dan komentar di bawah menjelaskan justru pembedaan warna yang
+ * TIDAK boleh hilang.
+ */
+export const KELAS_PILL_SESI: Record<StatusSesi, string> = {
+  terjadwal: "bg-gold/15 text-[#8A6A16]",
+  // `berjalan` memakai hijau daun MUDA, bukan gold: ia keadaan yang sedang
+  // terjadi sekarang, dan admin perlu membedakannya sekilas dari yang baru
+  // dijadwalkan.
+  berjalan: "bg-leaf/15 text-leaf",
+  selesai: "bg-leaf-soft text-leaf",
+  // `tidak_hadir` DAN `dibatalkan_klien` memakai clay (warna yang menuntut
+  // perhatian) sementara `dibatalkan_padma` memakai abu netral: dua yang
+  // pertama meninggalkan pekerjaan bagi admin — `tidak_hadir` menghubungi
+  // klien dan memutuskan tagihannya, `dibatalkan_klien` memastikan akibat
+  // uangnya sudah benar (refund penuh, hak sesi, atau hangus, tergantung
+  // jenjang saat dibatalkan) — sedangkan `dibatalkan_padma` sudah tuntas:
+  // refund penuh, tanpa keputusan susulan. Warnanya SENGAJA beda dari
+  // `dibatalkan_padma` walau labelnya sama-sama "batal": admin yang menyamakan
+  // pilnya bisa salah menangani refund.
+  tidak_hadir: "bg-clay/10 text-clay",
+  dibatalkan_padma: "bg-black/5 text-ink-soft",
+  dibatalkan_klien: "bg-clay/10 text-clay",
+};
