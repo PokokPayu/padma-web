@@ -60,7 +60,7 @@ export default async function AdminPage() {
           + Klien baru
         </Link>
         <Link
-          href="/admin/sesi"
+          href="/admin/sesi?tab=sesi"
           className="rounded-xl bg-night px-4 py-2.5 text-[13px] font-bold text-gold-pale"
         >
           + Sesi baru
@@ -137,7 +137,7 @@ export default async function AdminPage() {
           // Urutannya `status` lalu `jenjang` — sama persis dengan yang
           // dihasilkan `bangunQuery`, supaya chip yang menyala di halaman
           // tujuan adalah keduanya, bukan salah satu.
-          href="/admin/sesi?status=selesai&jenjang=kosong"
+          href="/admin/sesi?tab=sesi&status=selesai&jenjang=kosong"
           menuntut={antrean.menungguJenjangTransport > 0}
         />
       </section>
@@ -147,7 +147,7 @@ export default async function AdminPage() {
           judul="Sesi selesai per pekan"
           className="xl:col-span-2"
           aksi={
-            <Link href="/admin/sesi" className={TAUTAN_KECIL}>
+            <Link href="/admin/sesi?tab=sesi" className={TAUTAN_KECIL}>
               Buka Sesi
             </Link>
           }
@@ -185,7 +185,7 @@ export default async function AdminPage() {
         <Kartu
           judul="Agenda hari ini"
           aksi={
-            <Link href="/admin/sesi" className={TAUTAN_KECIL}>
+            <Link href="/admin/sesi?tab=sesi" className={TAUTAN_KECIL}>
               Jadwalkan sesi
             </Link>
           }
