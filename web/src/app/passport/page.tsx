@@ -16,12 +16,12 @@ import {
 import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { GridStempel } from "./_komponen/grid-stempel";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { KartuInfo } from "./_komponen/kartu-info";
+import { BarisAgenda } from "./_komponen/baris-agenda";
+import { TajukBagian } from "./_komponen/tajuk-bagian";
 import { SampulPassport } from "./_komponen/sampul";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { LABEL_PERMINTAAN } from "@/lib/jadwal/status";
 import { TombolBatal } from "./_komponen/tombol-batal";
-import { KartuNilai } from "./_komponen/kartu-nilai";
 import { masihBisaDinilai } from "@/lib/passport/penilaian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout — jangan mengulang
@@ -140,13 +140,62 @@ export default async function BerandaPassport({
           </span>
         </div>
       )}
+      {/* NOMOR WHATSAPP KOSONG — permintaan, bukan gerbang.
+          Klien yang mendaftar sendiri lahir tanpa nomor, dan seluruh alur PADMA
+          berdiri di atas WhatsApp: konfirmasi jadwal, tagihan, kabar bidan yang
+          datang. Tanpa nomor, pengajuannya masuk antrean dan tim tidak punya
+          cara membalasnya.
+          Ia diletakkan PALING ATAS, di atas sampul, karena inilah satu-satunya
+          hal di halaman ini yang menghalangi hal lain bekerja — dan ia hilang
+          sendiri begitu nomornya terisi. Tetap sekadar permintaan: memblokir
+          beranda akan mengurung klien yang membuka aplikasi hanya untuk membaca
+          materi. */}
+      {klien.noHp.trim() === "" && (
+        <div
+          className="mb-3.5 flex flex-wrap items-center gap-3 rounded-2xl border-[1.6px] border-gold/60 bg-[#FDFAF1] p-4"
+          data-lengkapi-wa
+        >
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm text-night">Nomor WhatsApp Anda belum terisi</b>
+            <span className="text-[13px] text-ink-soft">
+              Tim PADMA mengonfirmasi jadwal, tagihan, dan bidan yang datang lewat WhatsApp.
+              Tanpa nomor, kami tidak punya cara membalas pengajuan Anda.
+            </span>
+          </span>
+          <Link
+            href="/passport/profil"
+            className="flex min-h-[44px] flex-none items-center rounded-xl bg-gold px-5 text-[13.5px] font-bold text-[#FFF8EA]"
+          >
+            Isi nomor sekarang
+          </Link>
+        </div>
+      )}
+      {/* KABAR, BUKAN FORMULIR. Dua baris bintang dan kotak teks dulu berdiri
+          di sini, menuntut perhatian setiap kali klien membuka aplikasi untuk
+          pekerjaan yang boleh dilewati. Formulirnya kini tinggal di halaman
+          detail sesi — bersama catatan bidan dan rincian kunjungannya, tempat
+          orang paling siap menilai. Yang tersisa di beranda hanyalah tautan
+          menuju ke sana. */}
       {belumDinilai && (
-        <KartuNilai
-          sesiId={belumDinilai.id}
-          namaLayanan={belumDinilai.namaLayanan}
-          namaMitra={belumDinilai.namaMitra}
-          tanggal={formatTanggalID(belumDinilai.tanggal)}
-        />
+        <Link
+          href={`/passport/sesi/${belumDinilai.id}`}
+          className="mb-3.5 flex items-center gap-3 rounded-2xl border-[1.6px] border-dotted border-gold bg-[#FDFAF1] p-4"
+          data-sesi-belum-dinilai={belumDinilai.id}
+        >
+          <span aria-hidden className="flex-none text-[17px] leading-none text-gold">★</span>
+          <span className="min-w-0 flex-1">
+            <b className="block text-sm text-night">
+              {belumDinilai.namaLayanan} menunggu penilaian Anda
+            </b>
+            <span className="text-[13px] text-ink-soft">
+              {formatTanggalID(belumDinilai.tanggal)} · bersama {belumDinilai.namaMitra} —
+              boleh dilewati
+            </span>
+          </span>
+          <span aria-hidden className="flex-none text-[13px] font-bold text-night">
+            Beri nilai
+          </span>
+        </Link>
       )}
       <SampulPassport
         nama={klien.nama}
@@ -179,66 +228,112 @@ export default async function BerandaPassport({
             <b className="font-serif text-[15px] text-night">{progres.persen}%</b>
           </div>
         </section>
-      ) : (
-        // Model hybrid: klien yang mengambil layanan per sesi tidak punya paket,
-        // dan itu bukan keadaan cacat — beranda tetap harus punya isi.
-        <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
-          <h2 className="font-serif text-xl text-night">Perjalanan Anda</h2>
-          <p className="mt-1.5 text-[13.5px] text-ink-soft">
-            Anda mengambil layanan per sesi. Riwayat lengkapnya ada di halaman Sesi.
-          </p>
-        </section>
-      )}
+      ) : null}
+      {/* Tidak ada kartu pengganti saat klien tak berpaket. Sebelumnya berdiri
+          kartu "Perjalanan Anda" yang isinya hanya mengabarkan ketiadaan paket
+          dan menunjuk ke halaman Sesi — sebuah kotak seukuran kartu terpenting
+          di layar ini, untuk kalimat yang tidak menuntut apa pun dari
+          pembacanya. Model per-sesi bukan keadaan cacat yang perlu dijelaskan;
+          agenda di bawah sudah menjadi isi beranda. */}
 
-      {berikut ? (
-        <KartuInfo
-          berlambang
-          judul={`Sesi berikutnya: ${berikut.namaLayanan}`}
-          detail={`${formatTanggalID(berikut.tanggal)} · ${formatJam(jamDariDb(berikut.jamMulai))} · ${berikut.namaMitra} · datang ke rumah Anda`}
+      {/* SATU BAGIAN untuk semua yang akan datang — sesi yang sudah pasti dan
+          permintaan yang masih menunggu. Sebelumnya keduanya berupa kartu lepas
+          yang saling berdempet tanpa tajuk, sehingga beranda terbaca sebagai
+          tumpukan pengumuman yang urutannya kebetulan. Di bawah satu tajuk,
+          urutannya menjadi pernyataan: yang pasti lebih dulu, yang menunggu
+          menyusul. */}
+      <section className="mb-5">
+        <TajukBagian
+          judul="Agenda"
+          keterangan={
+            permintaan.length > 0
+              ? `${permintaan.length} menunggu konfirmasi`
+              : undefined
+          }
         />
-      ) : (
-        <KartuInfo
-          judul="Belum ada jadwal berikutnya"
-          detail="Ajukan jadwal — tim PADMA mengonfirmasi via WhatsApp."
-        />
-      )}
 
-      {permintaan.map((p) => (
-        <KartuInfo
-          key={p.id}
-          garis="titik"
-          judul={`Permintaan jadwal: ${p.namaLayanan}`}
-          detail={`${formatTanggalID(p.tanggal)} · ${formatJam(jamDariDb(p.jamMulai))} · ${LABEL_PERMINTAAN[p.status]}`}
-          // Hanya pengajuan yang masih di antrean yang bisa dibatalkan sendiri.
-          // Yang sudah dikonfirmasi adalah SESI, dan pembatalan sesi menyangkut
-          // uang serta tenggat waktu — seluruhnya milik C3.
-          aksi={<TombolBatal permintaanId={p.id} />}
-        />
-      ))}
+        {berikut ? (
+          <BarisAgenda
+            nada="pasti"
+            tanggal={berikut.tanggal}
+            judul={`Sesi berikutnya: ${berikut.namaLayanan}`}
+            detail={`${formatJam(jamDariDb(berikut.jamMulai))} · ${berikut.namaMitra} · datang ke rumah Anda`}
+          />
+        ) : (
+          permintaan.length === 0 && (
+            <div className="mb-2.5 rounded-2xl border border-dashed border-gold/60 bg-[#FDFAF1] p-4">
+              <b className="block text-sm text-night">Belum ada jadwal berikutnya</b>
+              <span className="text-[13px] text-ink-soft">
+                Ajukan jadwal — tim PADMA mengonfirmasi via WhatsApp.
+              </span>
+            </div>
+          )
+        )}
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {permintaan.map((p) => (
+          <BarisAgenda
+            key={p.id}
+            nada="menunggu"
+            tanggal={p.tanggal}
+            judul={`Permintaan jadwal: ${p.namaLayanan}`}
+            detail={`${formatJam(jamDariDb(p.jamMulai))} · diajukan, belum terjadwal`}
+            pill={LABEL_PERMINTAAN[p.status]}
+            // Hanya pengajuan yang masih di antrean yang bisa dibatalkan
+            // sendiri. Yang sudah dikonfirmasi adalah SESI, dan pembatalan sesi
+            // menyangkut uang serta tenggat waktu — seluruhnya milik C3.
+            aksi={<TombolBatal permintaanId={p.id} />}
+          />
+        ))}
+      </section>
+
+      {/* Dua tombol, dua bobot. Sebelumnya keduanya sama besar dan sama tinggi
+          di grid dua kolom, sehingga "Ajukan Jadwal" — satu-satunya tindakan
+          yang memulai sesuatu — tampak setara dengan tautan ke halaman materi.
+          Yang emas kini memimpin barisnya, yang lain menjadi tautan bertepi. */}
+      <div className="mb-6 flex flex-col gap-2.5 sm:flex-row">
         <Link
           href="/passport/ajukan"
-          className="rounded-xl bg-gold py-3.5 text-center font-bold text-[#FFF8EA]"
+          className="flex min-h-[52px] flex-1 items-center justify-center rounded-2xl bg-gold text-[15px] font-bold text-[#FFF8EA] shadow-[0_10px_24px_-16px_rgba(181,138,60,0.9)]"
         >
           + Ajukan Jadwal
         </Link>
         <Link
           href="/passport/materi"
-          className="rounded-xl border-[1.5px] border-black/10 bg-white py-3.5 text-center font-bold text-night"
+          className="flex min-h-[52px] items-center justify-center rounded-2xl border border-black/10 bg-white px-6 text-[14px] font-bold text-night"
         >
           Materi Saya
         </Link>
       </div>
 
-      <section className="rounded-2xl border border-black/10 bg-white p-6">
-        <h2 className="mb-4 font-serif text-xl text-night">Pencapaian</h2>
+      <section>
+        <TajukBagian
+          judul="Pencapaian"
+          keterangan={badge.length > 0 ? `${badge.length} badge` : undefined}
+        />
         {badge.length === 0 ? (
-          <p className="text-[13px] italic text-ink-soft">
-            Badge pertama terbit saat sesi pertama Anda selesai.
-          </p>
+          // Keadaan kosong yang MEMPERLIHATKAN bentuk hadiahnya, bukan hanya
+          // menyebutnya. Tiga cincin putus-putus seukuran badge sungguhan
+          // memberi tahu apa yang akan muncul di sini dan berapa besar — satu
+          // kalimat miring di dalam kartu putih kosong tidak melakukan
+          // keduanya, dan itulah yang membuat bagian ini terbaca sebagai ruang
+          // yang terlupakan.
+          <div className="flex items-center gap-4 rounded-2xl border border-black/10 bg-white p-5">
+            <span aria-hidden className="flex flex-none gap-2">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-gold/45"
+                >
+                  <Lotus className="w-4 text-gold/25" />
+                </span>
+              ))}
+            </span>
+            <p className="text-[13px] leading-relaxed text-ink-soft">
+              Badge pertama terbit saat sesi pertama Anda selesai.
+            </p>
+          </div>
         ) : (
-          <div className="flex flex-wrap gap-3.5">
+          <div className="flex flex-wrap gap-3.5 rounded-2xl border border-black/10 bg-white p-5">
             {badge.map((b) => (
               <div
                 key={b.serviceId}

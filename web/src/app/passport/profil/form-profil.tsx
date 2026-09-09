@@ -18,10 +18,23 @@ const KELAS_MEDAN =
  */
 export function FormProfil({
   nama,
+  email,
   noHp,
   alamat,
 }: {
   nama: string;
+  /**
+   * DITAMPILKAN, TIDAK PERNAH DIKIRIM. Medannya sengaja tanpa atribut `name`
+   * dan ber-`disabled`, jadi ia tidak masuk FormData sama sekali — bukan
+   * sekadar diabaikan server.
+   *
+   * Alasannya sama dengan alasan ia tidak boleh disunting: email adalah dasar
+   * penautan akun (`linkClientByInvite` menuntutnya cocok persis), dan
+   * satu-satunya pintu tulis profil — RPC `perbarui_profil_klien` — memang
+   * hanya menerima nama, no_hp, dan alamat. Ketiadaan `name="email"` di sini
+   * dijaga tests/passport-profil.test.ts, dan penjaga itu tetap berlaku.
+   */
+  email: string;
   noHp: string;
   alamat: string;
 }) {
@@ -53,8 +66,31 @@ export function FormProfil({
       </label>
 
       <label className="mb-4 block text-sm">
+        <span className="font-semibold text-ink-soft">Email</span>
+        <input
+          value={email}
+          disabled
+          readOnly
+          aria-describedby="ket-email"
+          className={`${KELAS_MEDAN} cursor-not-allowed bg-paper-warm text-ink-soft`}
+        />
+        <span id="ket-email" className="mt-1 block text-xs text-ink-soft">
+          Dipakai untuk masuk ke akun Anda. Hubungi tim PADMA bila perlu diubah.
+        </span>
+      </label>
+
+      <label className="mb-4 block text-sm">
         <span className="font-semibold text-ink-soft">No. WhatsApp</span>
-        <input name="no_hp" defaultValue={noHp} inputMode="tel" className={KELAS_MEDAN} />
+        <input
+          name="no_hp"
+          defaultValue={noHp}
+          inputMode="tel"
+          placeholder="08xx-xxxx-xxxx"
+          className={KELAS_MEDAN}
+        />
+        <span className="mt-1 block text-xs text-ink-soft">
+          Nomor yang tim PADMA hubungi untuk mengonfirmasi setiap jadwal.
+        </span>
       </label>
 
       <label className="mb-2 block text-sm">

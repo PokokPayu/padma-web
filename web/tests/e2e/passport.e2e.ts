@@ -200,19 +200,20 @@ async function main() {
       // Saklar K11: `ambilPaket()` memulangkan [] selama PAKET_TAMPIL mati
       // (src/lib/passport/data.ts), jadi `paketAktif` di page.tsx selalu null
       // walau klien seed (Ananda) memang punya paket aktif di database.
-      // Beranda jatuh ke kartu fallback "Perjalanan Anda" — lihat
-      // tests/passport-beranda.test.ts, describe "paket & stempel", yang
-      // membuktikan bentuk statis lewat markup. Di sini, lewat browser
-      // sungguhan, dibuktikan yang sama: fallback benar-benar tampil DAN grid
-      // stempel benar-benar kosong — bukan diam-diam separuh jadi (mis. kartu
-      // fallback muncul BERSAMA sisa grid stempel lama).
+      // Beranda jatuh BERSIH: tanpa blok paket, tanpa kartu pengganti, dan
+      // agendanya tetap terbit — lihat tests/passport-beranda.test.ts, describe
+      // "paket & stempel", yang membuktikan bentuk statis lewat markup. Kartu
+      // fallback "Perjalanan Anda" dipensiunkan saat beranda ditata ulang;
+      // yang dibuktikan di sini lewat browser sungguhan tetap sama: halaman
+      // tidak separuh jadi (mis. sisa grid stempel lama ikut tertinggal).
       catat(
-        "1b. tanpa paket aktif, beranda jatuh ke kartu fallback 'Perjalanan Anda' (saklar K11)",
-        teksBeranda.includes("Perjalanan Anda") &&
-          teksBeranda.includes("Anda mengambil layanan per sesi"),
-        teksBeranda.includes("Perjalanan Anda")
-          ? "kartu fallback tampil"
-          : "kartu fallback TIDAK tampil",
+        "1b. tanpa paket aktif, beranda jatuh bersih tanpa sisa blok paket (saklar K11)",
+        !teksBeranda.includes("Perjalanan Anda") &&
+          !teksBeranda.includes("Paket Aktif") &&
+          teksBeranda.includes("Agenda"),
+        teksBeranda.includes("Agenda")
+          ? "agenda tampil, blok paket bersih"
+          : "agenda TIDAK tampil",
       );
       const totalStempel = await page.locator("[data-stempel]").count();
       catat(

@@ -25,6 +25,8 @@ export function Wizard({
   nomorWaLink,
   rute = "/api/skrining",
   dalamPassport = false,
+  namaAwal = "",
+  hpAwal = "",
 }: {
   nomorWaLink: string;
   /**
@@ -39,10 +41,22 @@ export function Wizard({
    * ini sudah punya akun dan sedang berdiri di dalamnya.
    */
   dalamPassport?: boolean;
+  /**
+   * Isian AWAL nama & WhatsApp, dari profil klien yang sudah masuk. Corong
+   * publik tidak mengopernya (pengisinya belum dikenal), jadi keduanya
+   * bernilai "" dan medannya lahir kosong seperti dulu.
+   *
+   * Medannya tetap BISA DIKETIK ULANG dan yang dikirim adalah isi medan saat
+   * itu — bukan nilai prop ini. Skrining boleh saja diisikan untuk orang lain
+   * di ruang tunggu, dan memaksa nama pemilik akun ke dalam jawaban akan
+   * membuat catatan keselamatan tertulis atas nama yang salah.
+   */
+  namaAwal?: string;
+  hpAwal?: string;
 }) {
   const [layar, setLayar] = useState<Layar>("intro");
-  const [nama, setNama] = useState("");
-  const [hp, setHp] = useState("");
+  const [nama, setNama] = useState(namaAwal);
+  const [hp, setHp] = useState(hpAwal);
   const [jujur, setJujur] = useState(false);
   const [fase, setFase] = useState<FaseSkrining | null>(null);
   const [indeks, setIndeks] = useState(0);

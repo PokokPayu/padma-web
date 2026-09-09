@@ -31,7 +31,11 @@ export function TombolBatal({ permintaanId }: { permintaanId: string }) {
       <button
         type="button"
         onClick={() => setKonfirmasi(true)}
-        className="mt-1 text-[12px] font-semibold text-ink-soft underline underline-offset-2"
+        // `block`, bukan inline: sebagai elemen inline ia menempel langsung di
+        // ujung kalimat status ("Menunggu pembayaranBatalkan pengajuan ini"),
+        // dan `mt-1` tidak berlaku bagi kotak inline sehingga tidak ada yang
+        // memisahkannya.
+        className="mt-2 block text-left text-[12px] font-semibold text-ink-soft underline underline-offset-2"
       >
         Batalkan pengajuan ini
       </button>

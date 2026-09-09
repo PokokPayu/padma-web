@@ -34,7 +34,17 @@ export default async function HalamanSkriningPassport() {
         Diisi setiap kali akan memesan — kondisi bisa berubah di antara dua kunjungan, dan
         jawaban terakhir Anda yang dipakai tim.
       </p>
-      <Wizard nomorWaLink={nomorWaLink} rute="/api/skrining/akun" dalamPassport />
+      {/* Nama & WhatsApp diisikan dari profil: orang ini sudah dikenal, dan
+          mengetik ulang datanya sendiri di setiap pemesanan adalah pekerjaan
+          yang kita bebankan tanpa alasan. Keduanya tetap bisa diketik ulang —
+          lihat komentar prop di wizard. */}
+      <Wizard
+        nomorWaLink={nomorWaLink}
+        rute="/api/skrining/akun"
+        dalamPassport
+        namaAwal={klien.nama}
+        hpAwal={klien.noHp}
+      />
     </section>
   );
 }

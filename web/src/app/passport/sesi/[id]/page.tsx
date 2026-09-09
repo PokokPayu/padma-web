@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ambilKlien, ambilSesiSatu } from "@/lib/passport/data";
-import { formatTanggalID } from "@/lib/passport/waktu";
+import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { labelVarian } from "@/lib/varian";
+import { createServerSupabase } from "@/lib/supabase/server";
+import { masihBisaDinilai } from "@/lib/passport/penilaian";
+import { KartuNilai } from "../../_komponen/kartu-nilai";
 import { LABEL_SESI_KLIEN, PIL_SESI_KLIEN } from "../../_komponen/status-sesi";
 
 export const metadata = { title: "Detail Sesi" };
@@ -36,6 +39,32 @@ export default async function DetailSesiPassport({
   // Tidak ada ATAU bukan miliknya — dua-duanya berakhir sama. Membedakannya di
   // layar akan membocorkan keberadaan sesi yang bukan haknya.
   if (!sesi) notFound();
+
+  // PENILAIAN TINGGAL DI SINI, BUKAN DI BERANDA.
+  //
+  // Formulirnya dulu berdiri di puncak beranda: dua baris bintang dan sebuah
+  // kotak teks, menuntut perhatian setiap kali klien membuka aplikasi — untuk
+  // pekerjaan yang tidak mendesak dan boleh dilewati. Beranda kini cukup
+  // MENGABARKAN bahwa ada sesi yang menunggu dinilai; yang menilai adalah
+  // halaman ini, tempat catatan bidan dan rincian kunjungannya sudah terbuka.
+  // Orang yang baru saja membaca ulang kunjungannya adalah orang yang paling
+  // siap menilainya.
+  //
+  // Dibaca dengan SESI PENGGUNA: policy "session_ratings: klien baca miliknya"
+  // yang memutuskan, jadi id sesi milik orang lain memulangkan nol baris dan
+  // formulirnya terbit — lalu ditolak server saat dikirim. Itu tidak masalah;
+  // sesi milik orang lain sudah berhenti di `ambilSesiSatu` jauh di atas.
+  const supabase = await createServerSupabase();
+  const { data: nilaiAda } = await supabase
+    .from("session_ratings")
+    .select("session_id")
+    .eq("session_id", sesi.id)
+    .maybeSingle<{ session_id: string }>();
+
+  const bolehDinilai =
+    sesi.status === "selesai" &&
+    !nilaiAda &&
+    masihBisaDinilai(sesi.tanggal, hariIniJakarta());
 
   const varian = labelVarian(sesi.varian);
   const adaCatatan = sesi.catatan.trim() !== "";
@@ -71,6 +100,15 @@ export default async function DetailSesiPassport({
           <Medan judul="Tempat">{sesi.alamat || "—"}</Medan>
         </dl>
       </section>
+
+      {bolehDinilai && (
+        <KartuNilai
+          sesiId={sesi.id}
+          namaLayanan={sesi.namaLayanan}
+          namaMitra={sesi.namaMitra}
+          tanggal={formatTanggalID(sesi.tanggal)}
+        />
+      )}
 
       <section className="rounded-2xl border border-black/10 bg-white p-6">
         <h2 className="mb-3 font-serif text-xl text-night">Catatan bidan</h2>

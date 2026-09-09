@@ -114,15 +114,22 @@ describe("beranda passport — sampul", () => {
 });
 
 describe("beranda passport — paket & stempel", () => {
-  it("tanpa paket aktif, seluruh grid stempel hilang dan digantikan kartu 'Perjalanan Anda'", async () => {
+  it("tanpa paket aktif, seluruh blok paket hilang tanpa menyisakan kartu pengganti", async () => {
     // Klien seed (Ananda) MEMANG punya paket aktif — kalau grid stempel masih
     // muncul di sini, saklar K11 bocor di jalur tampilan beranda walau
     // `ambilPaket()` sendiri sudah terpagar.
+    //
+    // Kartu fallback "Perjalanan Anda" DIPENSIUNKAN saat beranda ditata ulang:
+    // isinya hanya mengabarkan ketiadaan paket, dengan ukuran sebesar kartu
+    // terpenting di halaman. Yang diuji tetap sama seperti dulu — beranda
+    // jatuh BERSIH, bukan setengah jadi — hanya buktinya yang berpindah dari
+    // "ada kartu penggantinya" menjadi "tidak ada sisa blok paket sama
+    // sekali", dan agenda di bawahnya tetap terbit.
     const m = await markupBeranda();
     expect(hitung(m, /data-stempel="[a-z]+"/g)).toBe(0);
-    expect(m).toContain("Perjalanan Anda");
-    expect(m).toContain("Anda mengambil layanan per sesi. Riwayat lengkapnya ada di halaman Sesi.");
     expect(m).not.toContain("Paket Aktif");
+    expect(m).not.toContain("Perjalanan Anda");
+    expect(m).toContain("Agenda");
   });
 
   it("tanggal stempel paket (8 JUL, 19 AGU) tidak lagi muncul di beranda", async () => {

@@ -264,7 +264,7 @@ export function Katalog({
           daftarnya panjang cuma berguna sebelum ia dibutuhkan. Margin negatif
           menyamakan lebarnya dengan tepi kartu induk, supaya kartu layanan
           tidak terlihat menyembul dari balik latarnya saat lewat. */}
-      <div className="sticky top-0 z-30 -mx-4 -mt-1 bg-paper px-4 pb-3 pt-1 sm:-mx-6 sm:px-6">
+      <div className="sticky top-0 z-30 -mx-4 -mt-1 bg-paper px-4 pb-3 pt-1">
       <label className="relative block">
         <svg
           aria-hidden

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ajukanJadwal } from "@/lib/passport/aksi";
@@ -75,10 +74,6 @@ export function FormAjukan({
   // melepasnya saat klien mundur ke langkah 1 akan menghapus apa yang sudah
   // diketiknya.
   const [langkah, setLangkah] = useState<1 | 2>(1);
-  const [selesai, setSelesai] = useState(false);
-  // Terisi HANYA bila peramban memblokir jendela WhatsApp. Lihat komentar
-  // panjang di sekitar `window.open` di bawah.
-  const [tautanWa, setTautanWa] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
 
   /**
@@ -107,51 +102,20 @@ export function FormAjukan({
         ? `${layananTerpilih.nama} · ${varianTerpilih.label}`
         : layananTerpilih.nama;
 
-  if (selesai) {
-    return (
-      <section className="rounded-2xl border border-black/10 bg-white p-8 text-center">
-        <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-leaf/25 bg-leaf-soft text-2xl text-leaf">
-          ✓
-        </span>
-        <h1 className="font-serif text-xl text-night">Permintaan terkirim</h1>
-        <p className="mx-auto mt-2 max-w-sm text-[13.5px] text-[#415247]">
-          {tautanWa
-            ? "Jadwal Anda sudah masuk antrean. Tinggal satu ketukan lagi untuk mengabari tim PADMA lewat WhatsApp — pesannya sudah kami siapkan."
-            : "Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan bidan yang datang."}
-        </p>
-        {/* Muncul hanya saat pemblokir pop-up menolak jendela WhatsApp. Ini
-            TAUTAN, bukan tombol yang memanggil `window.open`: ketukan pada
-            tautan adalah gerakan pemakai, dan gerakan pemakai tidak pernah
-            diblokir. */}
-        {tautanWa && (
-          <a
-            href={tautanWa}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-block min-h-[44px] rounded-xl bg-[#1FAF57] px-5 py-3 text-sm font-bold text-white"
-          >
-            Kabari PADMA via WhatsApp
-          </a>
-        )}
-        <Link
-          href="/passport"
-          className={`inline-block rounded-xl border border-black/10 px-5 py-2.5 text-sm font-bold ${
-            tautanWa ? "mt-3 block" : "mt-5"
-          }`}
-        >
-          {tautanWa ? "Lewati, kembali ke Beranda" : "Kembali ke Beranda"}
-        </Link>
-      </section>
-    );
-  }
+  // Panel sukses yang dulu berdiri di sini SUDAH PINDAH ke rute sendiri,
+  // `/passport/ajukan/terkirim` — alasannya tertulis panjang di berkas itu.
 
-  // Alas KERTAS, bukan putih. Katalog di dalamnya bekerja dengan kartu putih
-  // yang saling terpisah, dan kartu putih di atas alas putih tidak punya tepi —
-  // seluruh susunan fase, layanan, dan varian rata jadi satu bidang. Padding
-  // mengecil di layar sempit karena lebar itu dipakai nama layanan: dengan p-6
-  // nama seperti "Garbha Couple Yoga" pecah jadi dua baris.
+  // Kartu halaman tetap PUTIH seperti seluruh halaman passport lain. Yang
+  // beralas kertas hanyalah katalog di langkah 1 — panelnya sendiri di bawah —
+  // karena di sanalah kartu putih per layanan butuh sesuatu untuk berdiri di
+  // atasnya. Sempat seluruh kartu ini dijadikan kertas demi katalog itu, dan
+  // akibatnya halaman ini menjadi satu-satunya layar passport yang berbeda
+  // warna dari saudara-saudaranya.
+  //
+  // Padding mengecil di layar sempit karena lebar itu dipakai nama layanan:
+  // dengan p-6 nama seperti "Garbha Couple Yoga" pecah jadi dua baris.
   return (
-    <section className="rounded-2xl border border-black/10 bg-paper p-4 sm:p-6">
+    <section className="rounded-2xl border border-black/10 bg-white p-4 sm:p-6">
       <h1 className="mb-5 font-serif text-xl leading-tight text-night">
         Ajukan Jadwal
         {/* Keterangan turun ke barisnya sendiri. Sebagai ekor di baris yang
@@ -207,24 +171,28 @@ export function FormAjukan({
               // Kalau itu terjadi, halaman TIDAK berpindah: klien ditahan di
               // panel sukses yang memuat tautannya sebagai tombol, dan ketukan
               // pada tombol itu adalah gerakan pemakai yang tak bisa diblokir.
-              const jendela = window.open(tautan, "_blank", "noopener");
-              if (jendela === null) {
-                setTautanWa(tautan);
-                setSelesai(true);
-                return;
-              }
-              // BERPINDAH KE BERANDA, bukan menampilkan panel sukses di sini.
+              // Nilai baliknya sengaja diabaikan. Pemblokir pop-up menolak
+              // jendela yang lahir sesudah `await` dan memulangkan null —
+              // dan itu tidak apa-apa: halaman tujuan di bawah memuat tombol
+              // WhatsApp-nya sendiri, yang tak bisa diblokir karena lahir dari
+              // ketukan.
+              window.open(tautan, "_blank", "noopener");
+              // BERPINDAH KE HALAMAN TERKIRIM, bukan menampilkan panel sukses
+              // di sini.
               //
               // Sebabnya bukan selera: begitu pengajuan berhasil, skrining yang
               // menopangnya HANGUS (spec J3) — dan halaman ini, yang dirender
               // ulang sesudah `revalidatePath`, sah berubah menjadi "Isi
               // skrining keselamatan dulu". Panel sukses lalu tertimpa oleh
               // kalimat yang berbohong: klien baru saja memesan dan disuruh
-              // mengulang skrining.
+              // mengulang skrining. Ditemukan lewat E2E yang gagal
+              // berselang-seling.
               //
-              // Ditemukan lewat E2E yang gagal berselang-seling. Beranda juga
-              // tujuan yang lebih benar: di sanalah pengajuannya muncul.
-              router.replace("/passport?pengajuan=terkirim");
+              // Tujuannya `/passport/ajukan/terkirim` dan bukan lagi beranda:
+              // rute itu tidak berdiri di atas skrining, jadi tidak ada yang
+              // bisa menggantikannya, DAN ia menyebutkan apa yang barusan
+              // dipesan — yang hilang ketika klien dilempar ke beranda.
+              router.replace("/passport/ajukan/terkirim");
             } else {
               // Galat server selalu tentang isian langkah 2 (tanggal lampau,
               // jam di luar jam layanan, alamat terlalu pendek) atau tentang
@@ -271,7 +239,11 @@ export function FormAjukan({
           ))}
         </div>
 
-        <div hidden={langkah !== 1}>
+        {/* Panel kertas — alas bagi kartu putih tiap layanan. Padding-nya 4 di
+            semua ukuran karena bilah cari yang menempel di dalam katalog
+            memakai margin negatif sebesar itu untuk menyamakan lebarnya dengan
+            tepi panel. */}
+        <div hidden={langkah !== 1} className="rounded-2xl bg-paper p-4">
           <Katalog
             layanan={katalog}
             varianId={varianId}

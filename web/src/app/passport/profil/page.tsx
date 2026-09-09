@@ -42,7 +42,12 @@ export default async function HalamanProfil() {
     <section className="rounded-2xl border border-black/10 bg-white p-6">
       <h1 className="mb-4 font-serif text-xl text-night">Profil</h1>
 
-      <FormProfil nama={klien.nama} noHp={klien.noHp} alamat={klien.alamat} />
+      <FormProfil
+        nama={klien.nama}
+        email={klien.email}
+        noHp={klien.noHp}
+        alamat={klien.alamat}
+      />
 
       <div className="mt-6 border-t border-dashed border-black/10 pt-4">
         {bacaan.map(([k, v]) => (
