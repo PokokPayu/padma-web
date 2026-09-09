@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import { namaObjekSertifikat, periksaBerkasSertifikat } from "@/lib/sertifikat/berkas";
+import { MIME_SERTIFIKAT, namaObjekSertifikat, periksaBerkasSertifikat } from "@/lib/sertifikat/berkas";
 
 const BUCKET = "sertifikat";
 
@@ -61,6 +61,13 @@ export async function terbitkanUrlUnggahSertifikat(
 /**
  * Mencatat barisnya SESUDAH byte-nya mendarat.
  *
+ * `objek` TIDAK diterima dari pemanggil — dihitung ulang di sini lewat
+ * `namaObjekSertifikat()`, persis seperti di `terbitkanUrlUnggahSertifikat`.
+ * Path penyimpanan adalah keputusan SERVER, bukan peramban: menerima `objek`
+ * apa adanya dari klien berarti peramban bisa menunjuk (dan menimpa) sertifikat
+ * milik sesi lain. Trigger `guard_sertifikat` menjaga `client_id`/`service_id`,
+ * tapi tidak menjaga `objek` — penjagaan itu harus terjadi di sini.
+ *
  * `upsert` pada `session_id`: satu sesi satu sertifikat (UNIQUE di basis data),
  * dan unggahan kedua mengganti yang lama. Objek lamanya tidak perlu dihapus
  * terpisah — `namaObjekSertifikat()` menghasilkan path yang sama untuk MIME
@@ -69,13 +76,25 @@ export async function terbitkanUrlUnggahSertifikat(
  */
 export async function catatSertifikat(
   sessionId: string,
-  objek: string,
   mime: string,
 ): Promise<{ ok: true } | Gagal> {
   await requireRole(["admin", "owner"]);
 
+  if (!(MIME_SERTIFIKAT as readonly string[]).includes(mime)) {
+    return { ok: false, pesan: "Sertifikat harus PDF, JPEG, atau WEBP." };
+  }
+
   const supabase = await createServerSupabase();
   const { data: pengguna } = await supabase.auth.getUser();
+
+  const { data: sesi } = await supabase
+    .from("sessions")
+    .select("id, client_id")
+    .eq("id", sessionId)
+    .maybeSingle<{ id: string; client_id: string }>();
+  if (!sesi) return { ok: false, pesan: "Sesi tidak ditemukan." };
+
+  const objek = namaObjekSertifikat(sesi.client_id, sesi.id, mime);
 
   const { data: lama } = await supabase
     .from("certificates")

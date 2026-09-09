@@ -48,7 +48,7 @@ export function PengunggahSertifikat({
       return;
     }
 
-    const catat = await catatSertifikat(sessionId, url.objek, berkas.type);
+    const catat = await catatSertifikat(sessionId, berkas.type);
     if (!catat.ok) {
       setFase("galat");
       setPesan(catat.pesan);
