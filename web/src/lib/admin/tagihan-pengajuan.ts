@@ -1,10 +1,12 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { hitungTagihanPengajuan } from "@/lib/tagihan/pengajuan";
+import type { SebabTagihanTakLengkap } from "@/lib/tagihan/pengajuan";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
 import { formatRupiah } from "@/lib/rupiah-publik";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
+import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 
 /**
@@ -23,6 +25,20 @@ export type BarisTagihanPengajuanAdmin = {
   /** Sudah diformat untuk dibaca manusia. */
   tanggal: string;
   total: string | null;
+  /**
+   * Rincian, sudah diformat rupiah di server. Nominal memang lewat berkas ini
+   * dan itu sudah begitu sejak C2 (pesan WhatsApp tagihan dirakit dari sini).
+   * Yang TIDAK pernah lewat, dan tidak boleh mulai lewat: `honor_mitra`.
+   */
+  hargaLayanan: string | null;
+  hargaTransport: string | null;
+  /** Mis. ">10–15 km". Dari `LABEL_JENJANG`, satu-satunya sumber labelnya. */
+  labelJenjang: string | null;
+  /**
+   * Terisi PERSIS ketika `total === null`. Inilah yang mengubah kegagalan
+   * senyap menjadi kalimat yang bisa ditindak admin.
+   */
+  sebab: SebabTagihanTakLengkap | null;
   labelBayar: string;
   adaBukti: boolean;
   bisaDiverifikasi: boolean;
@@ -116,10 +132,13 @@ export async function daftarTagihanPengajuanAdmin(
       jenjang = (j as JenjangTransport | null) ?? null;
     }
 
+    const mitraBertitik = p.partners?.lat != null && p.partners?.lon != null;
+
     const rincian = hitungTagihanPengajuan({
       variantId: p.variant_id,
       tanggal: p.tanggal,
       jenjang,
+      sebabJenjangNull: mitraBertitik ? "alamat_tanpa_pin" : "mitra_tanpa_titik",
       tarif: barisTarif,
       tarifTransport: barisTransport,
     });
@@ -130,6 +149,10 @@ export async function daftarTagihanPengajuanAdmin(
       namaLayanan: p.services?.nama ?? "Layanan",
       tanggal: formatTanggalID(p.tanggal),
       total: rincian.total === null ? null : formatRupiah(rincian.total),
+      hargaLayanan: rincian.layanan === null ? null : formatRupiah(rincian.layanan),
+      hargaTransport: rincian.transport === null ? null : formatRupiah(rincian.transport),
+      labelJenjang: rincian.jenjang === null ? null : LABEL_JENJANG[rincian.jenjang],
+      sebab: rincian.sebab,
       labelBayar:
         p.status_bayar === "lunas"
           ? "lunas"

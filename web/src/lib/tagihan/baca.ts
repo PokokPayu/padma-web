@@ -132,11 +132,15 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
       jenjang = (data as JenjangTransport | null) ?? null;
     }
 
-    const { data: khusus } = await admin
-      .from("transport_khusus")
-      .select("tarif_klien")
-      .eq("session_id", p.id)
-      .maybeSingle<{ tarif_klien: number }>();
+    // TIDAK ADA bacaan `transport_khusus` di sini, dan itu perbaikan cacat —
+    // bukan kelalaian. Tabel itu ber-primary-key `session_id references
+    // sessions(id)`, sementara `p.id` adalah id BOOKING REQUEST. Id itu tidak
+    // akan pernah ada di `sessions`, jadi bacaan lamanya selalu memulangkan nol
+    // baris — sebagai `null` yang terbaca wajar, bukan sebagai galat.
+    //
+    // Penimpa per kasus tetap berlaku untuk SESI (rekap owner membacanya).
+    // Untuk PENGAJUAN, yang berlaku adalah tarif dasar `di_atas_20` dari
+    // `transport_rates` yang sudah ikut terbaca di atas.
 
     hasil.push({
       permintaanId: p.id,
@@ -150,7 +154,8 @@ export async function ambilTagihanPengajuan(clientId: string): Promise<TagihanPe
         variantId: p.variant_id,
         tanggal: p.tanggal,
         jenjang,
-        transportKhusus: khusus?.tarif_klien ?? null,
+        sebabJenjangNull:
+          titik?.lat == null || titik?.lon == null ? "mitra_tanpa_titik" : "alamat_tanpa_pin",
         tarif: barisTarif,
         tarifTransport: barisTransport,
       }),
