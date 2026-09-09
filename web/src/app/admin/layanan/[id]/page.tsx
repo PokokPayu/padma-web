@@ -12,6 +12,7 @@ import { PanelGeser } from "@/app/_shell/panel/panel-geser";
 import { AksiLayanan, AksiPaket } from "../form-layanan";
 import { FormVarian } from "../form-varian";
 import { labelVarian } from "@/lib/varian";
+import { formatRupiah } from "@/lib/rupiah-publik";
 
 export const metadata = { title: "Detail layanan" };
 
@@ -119,7 +120,7 @@ export default async function DetailLayananPage({
           ) : (
             <Tabel label={`Varian layanan ${layanan.nama}`}>
               <thead>
-                <tr><Th>Varian</Th><Th>Sesi tercatat</Th><Th>Status</Th><Th>Aksi</Th></tr>
+                <tr><Th>Varian</Th><Th>Harga</Th><Th>Sesi tercatat</Th><Th>Status</Th><Th>Aksi</Th></tr>
               </thead>
               <tbody>
                 {layanan.varian.map((v) => (
@@ -129,6 +130,12 @@ export default async function DetailLayananPage({
                           ini WAJIB selalu punya teks tampilan. */}
                       {labelVarian({ label: v.label, durasiMenit: v.durasiMenit, format: v.format }) ||
                         "Standar"}
+                    </Td>
+                    {/* Em dash untuk varian tanpa tarif — angka nol akan terbaca
+                        sebagai gratis, padahal artinya belum ada baris tarif untuk
+                        varian ini. */}
+                    <Td className="font-mono text-[12.5px]">
+                      {v.hargaKlien === null ? "—" : formatRupiah(v.hargaKlien)}
                     </Td>
                     <Td className="font-mono text-[12.5px]">{v.sesiTercatat}</Td>
                     <Td><PillAktif aktif={v.aktif} /></Td>

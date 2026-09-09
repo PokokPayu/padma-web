@@ -78,8 +78,7 @@ export default async function LayananPage({
           {PAKET_TAMPIL ? <>Layanan &amp; Paket</> : "Layanan"}
         </h1>
         <Bantuan judul="Tentang halaman ini">
-          Katalog yang dibaca beranda dan wizard pengajuan jadwal klien. Tidak ada satu pun angka
-          harga di sini — tarif adalah wilayah Owner.{" "}
+          Katalog yang dibaca beranda dan wizard pengajuan jadwal klien.{" "}
           {PAKET_TAMPIL ? "Layanan, paket, dan varian" : "Layanan dan varian"} tidak pernah
           dihapus, hanya <b>dinonaktifkan</b>: yang nonaktif berhenti muncul di beranda dan berhenti
           ditawarkan untuk sesi baru, tetapi namanya <b>tetap</b> menempel pada riwayat sesi klien

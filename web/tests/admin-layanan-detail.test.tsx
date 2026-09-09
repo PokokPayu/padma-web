@@ -151,8 +151,21 @@ describe("halaman detail layanan", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("nol rupiah — tarif adalah wilayah Owner", async () => {
-    expect(nominalDalam(await markup(LAYANAN.id))).toEqual([]);
+  it("harga klien tampil, honor mitra tidak — money firewall diperketat, bukan dilonggarkan", async () => {
+    // Tugas 2 (harga-di-master-layanan): pagar ini DULU "toEqual([])" karena
+    // halaman ini tidak pernah menampilkan uang sama sekali. Sekarang kolom
+    // Harga SENGAJA menampilkan harga klien, jadi "nol nominal" bukan lagi
+    // jaminan yang benar — pagar diganti bentuknya, bukan dilemahkan:
+    //   1. honor mitra (variant_rates.honor_mitra = 125000 untuk varian
+    //      "Baby Massage Class" di seed.sql) TIDAK PERNAH muncul; dan
+    //   2. harga klien (variant_rates.harga_klien = 300000, varian yang sama)
+    //      MUNCUL. Butir 2 bukan hiasan: tanpanya, view `varian_harga_staf`
+    //      yang salah tulis dan memulangkan NOL BARIS akan lolos sebagai
+    //      "tidak ada nominal bocor" — kegagalan senyap berbentuk kolom harga
+    //      yang kosong, bukan error.
+    const nominal = nominalDalam(await markup(LAYANAN.id));
+    expect(nominal).not.toContain("Rp 125.000");
+    expect(nominal).toContain("Rp 300.000");
   });
 
   it("RULING B (Tugas 11): judul materi kini menaut ke /admin/materi/[id]", async () => {
@@ -313,9 +326,26 @@ describe("detail layanan — guarantee yang pindah dari Tugas 7", () => {
       nama: "PAD-UJI Paket Detail",
       jumlah_sesi: 6,
     });
+    // Satu baris tarif untuk varian baku SVC_DETAIL — dibutuhkan supaya pagar
+    // "harga klien muncul, honor mitra tidak" di bawah punya nominal
+    // sungguhan untuk dibuktikan, bukan hanya "—" (varian tanpa tarif).
+    // `berlaku_sejak` di masa lampau, bukan mengandalkan default
+    // `current_date`: view `varian_harga_staf` menyaring `berlaku_sejak <=
+    // hari ini` menurut kalender Asia/Jakarta, dan baris ini tidak boleh
+    // jatuh ke sisi "belum berlaku" akibat selisih zona waktu.
+    await admin.from("variant_rates").insert({
+      variant_id: varianBakuDetail,
+      harga_klien: 555000,
+      honor_mitra: 222000,
+      berlaku_sejak: "2020-01-01",
+    });
   });
 
   afterAll(async () => {
+    // Tarif dulu, baru varian & paket — FK `variant_rates.variant_id` menahan
+    // penghapusan `service_variants` sampai baris tarifnya bersih, pola yang
+    // sama dengan alasan FK `services` di bawahnya.
+    await admin.from("variant_rates").delete().eq("variant_id", varianBakuDetail);
     // Varian & paket disapu lebih dulu — FK menahan penghapusan `services`
     // sampai anaknya bersih, pola yang sama dengan `bersihkan()` di
     // tests/admin-layanan.test.ts.
@@ -339,12 +369,21 @@ describe("detail layanan — guarantee yang pindah dari Tugas 7", () => {
     expect(mati).not.toContain("PAD-UJI Paket Detail");
     expect(mati).not.toMatch(/paket/i);
 
-    // Sisi MENYALA: jaminan Tugas 8 yang asli, utuh — nama paket, jumlah
-    // sesinya, dan pagar uang (tidak satu nominal pun ikut ke layar staf).
+    // Sisi MENYALA: jaminan Tugas 8 yang asli tetap utuh untuk paket — nama
+    // paket, jumlah sesinya. Pagar uangnya sendiri BERUBAH BENTUK (Tugas 2):
+    // dulu "tidak satu nominal pun ikut ke layar staf" karena halaman ini
+    // memang tidak pernah menampilkan uang; sekarang kolom Harga varian
+    // SENGAJA menampilkan harga klien. Jaminan yang berarti bukan lagi "nol
+    // nominal", melainkan honor mitra (222000) tidak pernah muncul DAN harga
+    // klien (555000, fixture di atas) muncul — syarat kedua menangkap view
+    // `varian_harga_staf` yang salah tulis dan memulangkan nol baris, yang
+    // akan lolos "tidak ada nominal bocor" tanpa syarat itu.
     const hidup = await markupSaklarHidup(SVC_DETAIL);
     expect(hidup).toContain("PAD-UJI Paket Detail");
     expect(hidup).toMatch(/6 sesi/);
-    expect(nominalDalam(hidup)).toEqual([]);
+    const nominal = nominalDalam(hidup);
+    expect(nominal).not.toContain("Rp 222.000");
+    expect(nominal).toContain("Rp 555.000");
   });
 
   it("menampilkan varian nonaktif apa adanya, varian baku tampil sebagai \"Standar\"", async () => {
