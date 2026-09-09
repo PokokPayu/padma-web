@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ambilDaftarMateri, ambilKlien } from "@/lib/passport/data";
+import {
+  ambilDaftarMateri,
+  ambilKlien,
+  ambilSertifikatLayanan,
+  ambilSesi,
+} from "@/lib/passport/data";
+import { badgeDari } from "@/lib/passport/turunan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Materi Panduan" };
@@ -21,82 +27,135 @@ export default async function HalamanMateri() {
 
   const materi = await ambilDaftarMateri();
 
+  // Sertifikat datang dari KUNJUNGAN klien sendiri, bukan dari katalog seperti
+  // e-book dan video. Karena itu ia berdiri di bagiannya sendiri, bukan
+  // dicampur ke dalam grid materi: dua sumber yang berbeda tidak boleh terbaca
+  // seolah satu daftar yang sama.
+  const sesi = await ambilSesi(klien.id);
+  const dariBadge = badgeDari(sesi);
+  const sertifikat = (
+    await Promise.all(
+      dariBadge.map(async (b) => ({
+        ...b,
+        punya: (await ambilSertifikatLayanan(klien.id, b.serviceId)) !== null,
+      })),
+    )
+  ).filter((b) => b.punya);
+
   return (
-    <section className="rounded-2xl border border-black/10 bg-white p-6">
-      <h1 className="mb-4 font-serif text-xl text-night">
-        Materi Panduan Anda{" "}
-        <span className="font-sans text-xs font-semibold text-ink-soft">
-          terbuka sesuai layanan yang Anda jalani
-        </span>
-      </h1>
+    <>
+      <section className="rounded-2xl border border-black/10 bg-white p-6">
+        <h1 className="mb-4 font-serif text-xl text-night">
+          Materi Panduan Anda{" "}
+          <span className="font-sans text-xs font-semibold text-ink-soft">
+            terbuka sesuai layanan yang Anda jalani
+          </span>
+        </h1>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {materi.map((m) => {
-          // `data-materi-*` bukan hiasan: "terbuka atau tidak" adalah kontrak
-          // yang diuji, sementara kelas Tailwind berubah tiap desain disetel.
-          const penanda = {
-            "data-materi-id": m.id,
-            "data-materi-terbuka": m.terbuka ? "ya" : "tidak",
-          };
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {materi.map((m) => {
+            // `data-materi-*` bukan hiasan: "terbuka atau tidak" adalah kontrak
+            // yang diuji, sementara kelas Tailwind berubah tiap desain disetel.
+            const penanda = {
+              "data-materi-id": m.id,
+              "data-materi-terbuka": m.terbuka ? "ya" : "tidak",
+            };
 
-          const isi = (
-            <>
-              <span
-                className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl text-[17px] ${
-                  m.terbuka ? "bg-leaf-soft text-leaf" : "bg-[#EFEDE4] text-[#9A957F]"
-                }`}
-              >
-                {m.terbuka ? (m.tipe === "ebook" ? "📖" : "▶") : "🔒"}
-              </span>
-              <span className="min-w-0">
-                <b className="block text-[13.5px] leading-tight">{m.judul}</b>
-                <span className="text-[11.5px] text-ink-soft">
-                  {m.terbuka
-                    ? `${
-                        m.tipe === "ebook"
-                          ? "E-Book · baca di aplikasi"
-                          : "Video · tonton di aplikasi"
-                      } · ${m.namaLayanan}`
-                    : "Terbuka setelah layanan terkait selesai"}
+            const isi = (
+              <>
+                <span
+                  className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl text-[17px] ${
+                    m.terbuka
+                      ? "bg-leaf-soft text-leaf"
+                      : "bg-[#EFEDE4] text-[#9A957F]"
+                  }`}
+                >
+                  {m.terbuka ? (m.tipe === "ebook" ? "📖" : "▶") : "🔒"}
                 </span>
-              </span>
-            </>
-          );
+                <span className="min-w-0">
+                  <b className="block text-[13.5px] leading-tight">{m.judul}</b>
+                  <span className="text-[11.5px] text-ink-soft">
+                    {m.terbuka
+                      ? `${
+                          m.tipe === "ebook"
+                            ? "E-Book · baca di aplikasi"
+                            : "Video · tonton di aplikasi"
+                        } · ${m.namaLayanan}`
+                      : "Terbuka setelah layanan terkait selesai"}
+                  </span>
+                </span>
+              </>
+            );
 
-          // Kartu terkunci bukan tautan yang dinonaktifkan lewat kelas — ia
-          // memang bukan tautan, supaya tidak ada yang bisa diikuti.
-          return m.terbuka ? (
-            // prefetch dibiarkan pada nilai bawaannya untuk rute dinamis:
-            // memaksanya `true` akan menarik pengambil detail — dan lewat itu
-            // URL video sungguhan bila materinya video (lihat komentar
-            // dokblok di atas) — ke Client Cache sebelum kartu ini benar-benar
-            // diklik.
-            <Link
-              key={m.id}
-              {...penanda}
-              href={`/passport/materi/${m.id}`}
-              className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-[#FFFEFA] p-4 transition hover:-translate-y-0.5 hover:border-gold"
-            >
-              {isi}
-            </Link>
-          ) : (
-            <div
-              key={m.id}
-              {...penanda}
-              className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-paper p-4 opacity-60"
-            >
-              {isi}
-            </div>
-          );
-        })}
-      </div>
+            // Kartu terkunci bukan tautan yang dinonaktifkan lewat kelas — ia
+            // memang bukan tautan, supaya tidak ada yang bisa diikuti.
+            return m.terbuka ? (
+              // prefetch dibiarkan pada nilai bawaannya untuk rute dinamis:
+              // memaksanya `true` akan menarik pengambil detail — dan lewat itu
+              // URL video sungguhan bila materinya video (lihat komentar
+              // dokblok di atas) — ke Client Cache sebelum kartu ini benar-benar
+              // diklik.
+              <Link
+                key={m.id}
+                {...penanda}
+                href={`/passport/materi/${m.id}`}
+                className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-[#FFFEFA] p-4 transition hover:-translate-y-0.5 hover:border-gold"
+              >
+                {isi}
+              </Link>
+            ) : (
+              <div
+                key={m.id}
+                {...penanda}
+                className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-paper p-4 opacity-60"
+              >
+                {isi}
+              </div>
+            );
+          })}
+        </div>
 
-      <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
-        <span className="text-gold">🔒</span>
-        Semua materi eksklusif untuk klien PADMA — hanya bisa dibaca &amp; ditonton
-        di dalam aplikasi, tanpa unduhan. Setiap halaman ditandai identitas akun
-        Anda.
-      </p>
-    </section>
+        <p className="mt-4 flex gap-2.5 rounded-xl border border-dashed border-black/10 bg-paper p-3 text-xs text-ink-soft">
+          <span className="text-gold">🔒</span>
+          Semua materi eksklusif untuk klien PADMA — hanya bisa dibaca &amp;
+          ditonton di dalam aplikasi, tanpa unduhan. Setiap halaman ditandai
+          identitas akun Anda.
+        </p>
+      </section>
+
+      {sertifikat.length > 0 && (
+        <section className="mt-4 rounded-2xl border border-black/10 bg-white p-6">
+          <h2 className="mb-4 font-serif text-xl text-night">
+            Sertifikat{" "}
+            <span className="font-sans text-xs font-semibold text-ink-soft">
+              terbit dari kunjungan yang sudah Anda jalani
+            </span>
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {sertifikat.map((s) => (
+              <Link
+                key={s.serviceId}
+                href={`/passport/sertifikat/${s.serviceId}`}
+                data-sertifikat={s.serviceId}
+                className="flex items-center gap-3 rounded-xl border border-black/10 bg-paper p-3"
+              >
+                <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-gold-pale text-[17px] text-gold">
+                  🏅
+                </span>
+                <span className="min-w-0">
+                  <b className="block text-[13.5px] leading-tight text-night">
+                    {s.nama}
+                  </b>
+                  <span className="text-[11.5px] text-ink-soft">
+                    Sertifikat ·{" "}
+                    {s.jumlah > 1 ? `${s.jumlah} kunjungan` : "1 kunjungan"}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
   );
 }
