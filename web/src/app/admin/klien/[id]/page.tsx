@@ -3,9 +3,13 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { nomorWaKlinik } from "@/lib/admin/pengaturan";
-import { formatTanggalID } from "@/lib/passport/waktu";
+import { formatTanggalID, hariIniJakarta } from "@/lib/passport/waktu";
+import { hakBerlakuKlien } from "@/lib/admin/hak";
+import { pilihanMitra } from "@/lib/admin/mitra";
+import { bacaPengaturan } from "@/lib/settings";
 import { FormEditKlien } from "../form-klien";
 import { KartuAktivasi } from "./kartu-aktivasi";
+import { KartuHak } from "./kartu-hak";
 
 export const metadata = { title: "Detail Klien" };
 
@@ -56,7 +60,12 @@ export default async function DetailKlienPage({
   // sejak /admin/pengaturan lahir, nomornya bisa berubah kapan saja dan pesan
   // sambutan yang menyebut nomor mati adalah kesalahan yang tidak terlihat
   // siapa pun sampai ada klien yang tidak bisa menghubungi klinik.
-  const [{ data: fase }, { data: sesi }, wa] = await Promise.all([
+  // "Hari ini" menurut Jakarta, bukan menurut jam server (Vercel berjalan UTC):
+  // hak yang kedaluwarsanya dinilai dengan kalender mesin akan hilang dari
+  // layar tujuh jam lebih awal setiap hari.
+  const hariIni = hariIniJakarta();
+
+  const [{ data: fase }, { data: sesi }, wa, hak, mitra, { jamLayanan }] = await Promise.all([
     supabase
       .from("phases")
       .select("id, nama, urutan")
@@ -70,9 +79,21 @@ export default async function DetailKlienPage({
       .limit(8)
       .returns<Sesi[]>(),
     nomorWaKlinik(),
+    hakBerlakuKlien(id, hariIni),
+    pilihanMitra(),
+    bacaPengaturan(),
   ]);
 
   const aktif = klien.user_id !== null;
+
+  // Tanggal diformat DI SERVER: `KartuHak` adalah komponen klien, dan fungsi
+  // pemformat tidak boleh menyeberangi batas Server → Client
+  // (`tests/pagar-batas-server-klien.test.ts`). Yang menyeberang hasilnya.
+  const tanggalHak: Record<string, string> = {};
+  for (const h of hak) {
+    tanggalHak[h.kedaluwarsa] = formatTanggalID(h.kedaluwarsa);
+    if (h.tanggalAsal) tanggalHak[h.tanggalAsal] = formatTanggalID(h.tanggalAsal);
+  }
   // "—" untuk fase kosong, SAMA PERSIS dengan daftar klien
   // (`src/lib/admin/klien.ts`). Sebelumnya cabang ini jatuh ke `klien.phase_id`
   // yang bernilai null, sehingga <dd> Fase dirender BENAR-BENAR KOSONG — dua
@@ -153,6 +174,14 @@ export default async function DetailKlienPage({
             lon: klien.alamat_lon,
           }}
           fase={fase ?? []}
+        />
+
+        <KartuHak
+          hak={hak}
+          mitra={mitra.map((m) => ({ id: m.id, nama: m.nama }))}
+          jamPilihan={jamLayanan}
+          tanggalAwal={hariIni}
+          formatTanggal={tanggalHak}
         />
 
         <section className="rounded-lg border border-panel-border bg-panel-surface p-5">

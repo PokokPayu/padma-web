@@ -59,12 +59,18 @@ const KELAS_PILL: Record<StatusSesi, string> = {
   // dijadwalkan.
   berjalan: "bg-leaf/15 text-leaf",
   selesai: "bg-leaf-soft text-leaf",
-  // `tidak_hadir` memakai clay (warna yang menuntut perhatian) sementara
-  // `dibatalkan_padma` memakai abu netral: yang pertama meninggalkan pekerjaan
-  // (menghubungi klien, memutuskan tagihannya), yang kedua sudah selesai
-  // diurus saat dibatalkan.
+  // `tidak_hadir` DAN `dibatalkan_klien` memakai clay (warna yang menuntut
+  // perhatian) sementara `dibatalkan_padma` memakai abu netral: dua yang
+  // pertama meninggalkan pekerjaan bagi admin — `tidak_hadir` menghubungi
+  // klien dan memutuskan tagihannya, `dibatalkan_klien` memastikan akibat
+  // uangnya sudah benar (refund penuh, hak sesi, atau hangus, tergantung
+  // jenjang saat dibatalkan) — sedangkan `dibatalkan_padma` sudah tuntas:
+  // refund penuh, tanpa keputusan susulan. Warnanya SENGAJA beda dari
+  // `dibatalkan_padma` walau labelnya sama-sama "batal": admin yang menyamakan
+  // pilnya bisa salah menangani refund.
   tidak_hadir: "bg-clay/10 text-clay",
   dibatalkan_padma: "bg-black/5 text-ink-soft",
+  dibatalkan_klien: "bg-clay/10 text-clay",
 };
 
 export default async function SesiPage({
@@ -360,7 +366,7 @@ export default async function SesiPage({
           hrefTutup={hrefTutup}
         >
           {barisUbah ? (
-            <PanelSesi sesi={barisUbah} hrefTutup={hrefTutup} />
+            <PanelSesi sesi={barisUbah} hrefTutup={hrefTutup} jamPilihan={jamLayanan} />
           ) : (
             <FormJadwalSesi
               klien={pilihanKlien}

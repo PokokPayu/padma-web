@@ -142,6 +142,19 @@ describe("susunTagihan", () => {
     expect(t).toHaveLength(0);
   });
 
+  it("sesi yang dibatalkan KLIEN juga tidak ditagih", () => {
+    // "Batal" punya DUA nilai sejak C3-a, dan pemeriksaan yang hanya menyebut
+    // satu di antaranya membiarkan separuh pembatalan tetap tampil sebagai
+    // tagihan. Bentuk kegagalannya bukan galat: klien yang baru saja
+    // dijanjikan refund tetap melihat tagihannya beserta tombol "Saya sudah
+    // bayar" di Passport-nya.
+    const t = susunTagihan({
+      paket: [],
+      sesi: [s({ id: "x", clientPackageId: null, status: "dibatalkan_klien", statusBayar: "belum" })],
+    });
+    expect(t).toHaveLength(0);
+  });
+
   // Ruling 13: label sesi yang dibaca KLIEN sempat tidak menyebut varian sama
   // sekali, padahal label admin sudah menyebutnya sejak Task 7 — dua sesi
   // layanan sama, tanggal sama, tapi varian (dan harga) beda, tidak bisa

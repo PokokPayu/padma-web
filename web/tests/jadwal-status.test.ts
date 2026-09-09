@@ -141,9 +141,19 @@ describe("perpindahan status permintaan", () => {
 });
 
 describe("status sesi", () => {
-  it("lima keadaan, memakai ejaan Indonesia", () => {
+  it("enam keadaan, memakai ejaan Indonesia", () => {
+    // `dibatalkan_klien` (C3) berdampingan dengan `dibatalkan_padma` sejak
+    // enam keadaan ini bertambah dari lima: status adalah catatan tentang
+    // SIAPA yang membatalkan, dan keduanya sengaja tidak disatukan.
     expect([...STATUS_SESI].sort()).toEqual(
-      ["berjalan", "dibatalkan_padma", "selesai", "terjadwal", "tidak_hadir"].sort(),
+      [
+        "berjalan",
+        "dibatalkan_klien",
+        "dibatalkan_padma",
+        "selesai",
+        "terjadwal",
+        "tidak_hadir",
+      ].sort(),
     );
   });
 
@@ -156,6 +166,12 @@ describe("status sesi", () => {
     expect(bolehPindahSesi("berjalan", "selesai")).toBe(true);
     expect(bolehPindahSesi("terjadwal", "tidak_hadir")).toBe(true);
     expect(bolehPindahSesi("terjadwal", "dibatalkan_padma")).toBe(true);
+    expect(bolehPindahSesi("terjadwal", "dibatalkan_klien")).toBe(true);
+  });
+
+  it("dibatalkan_klien tidak bisa diputar balik", () => {
+    expect(bolehPindahSesi("dibatalkan_klien", "terjadwal")).toBe(false);
+    expect(PERPINDAHAN_SESI.dibatalkan_klien).toEqual([]);
   });
 
   it("sesi selesai tidak bisa diputar balik", () => {

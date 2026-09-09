@@ -1,7 +1,7 @@
 import { formatTanggalID, sudahLewat } from "./waktu";
 import { labelVarian, type FormatVarian } from "@/lib/varian";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
-import { SESI_DIBATALKAN, type StatusSesi } from "@/lib/jadwal/status";
+import { sesiBatal, type StatusSesi } from "@/lib/jadwal/status";
 
 // Tipe ini kini hidup di `lib/jadwal/status.ts` — SATU-SATUNYA sumbernya.
 // Diekspor ulang di sini untuk pemanggil lama.
@@ -167,7 +167,7 @@ export function susunTagihan(input: {
   // — lihat komentar di `SesiRingkas.varian` di atas.
   for (const s of input.sesi) {
     if (s.clientPackageId !== null) continue;
-    if (s.status === SESI_DIBATALKAN) continue;
+    if (sesiBatal(s.status)) continue;
     const varLabel = labelVarian(s.varian);
 
     // Rincian TRANSPORT (Task 9) — TANPA NOMINAL sama sekali (money

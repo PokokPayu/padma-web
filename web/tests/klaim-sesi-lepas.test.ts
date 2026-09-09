@@ -160,15 +160,53 @@ describe("klaim pembayaran hanya untuk sesi lepas", () => {
     expect(await statusBayarSesi(SESI_LEPAS)).toBe("menunggu_verifikasi");
   });
 
-  it("sesi lepas yang sudah BATAL tidak bisa diklaim", async () => {
-    await admin.from("sessions").update({ status: "dibatalkan_padma" }).eq("id", SESI_LEPAS);
+  // ===== DUA STATUS "BATAL", DAN KEDUANYA HARUS DITOLAK =====
+  // Sejak C3-a ada DUA nilai yang berarti sesi ini tidak jadi terjadi, dan
+  // `klaim_sudah_bayar` sempat hanya menyebut satu (`<> 'dibatalkan_padma'`).
+  // Diuji sebagai PASANGAN, bukan satu-satu, supaya nilai berikutnya yang
+  // ditambahkan ke daftar itu punya tempat yang jelas untuk menyusul.
+  //
+  // Kenapa keduanya harus ditolak, dan bukan hanya yang dibatalkan PADMA:
+  // fungsi ini di-`grant` ke `authenticated`, jadi ia permukaan TULIS milik
+  // klien. Sesi yang dibatalkan klien pun tidak menagih apa pun — akibat
+  // uangnya sudah ditentukan jenjang saat pembatalan (refund penuh, hak sesi,
+  // atau hangus), dan tidak satu pun di antaranya berbentuk klien menekan
+  // "saya sudah bayar" setelahnya. Bila lolos, barisnya berpindah ke
+  // `menunggu_verifikasi` dan MACET PERMANEN: `lib/admin/tagihan.ts`,
+  // `app/admin/bayar/aksi.ts`, dan Passport sama-sama menyaring sesi batal
+  // keluar, jadi tidak ada seorang pun yang bisa memverifikasi ATAU menolaknya
+  // lagi.
+  for (const status of ["dibatalkan_padma", "dibatalkan_klien"] as const) {
+    it(`sesi lepas berstatus ${status} tidak bisa diklaim`, async () => {
+      await admin.from("sessions").update({ status }).eq("id", SESI_LEPAS);
+      const k = await signInAs("ananda@padma.test");
+      const { data, error } = await k.rpc("klaim_sudah_bayar", {
+        jenis: "sesi",
+        sasaran_id: SESI_LEPAS,
+      });
+      // Ditahan filter di dalam fungsi, bukan lemparan: "tidak ada yang cocok"
+      // adalah jawaban yang benar, bukan kegagalan sistem.
+      expect(error).toBeNull();
+      expect(data ?? []).toHaveLength(0);
+      expect(await statusBayarSesi(SESI_LEPAS)).toBe("belum");
+    });
+  }
+
+  it("sesi TIDAK HADIR masih bisa diklaim — keputusan C3 belum diambil", async () => {
+    // Ini uji yang menjaga sebuah KETIADAAN, dan itu disengaja. `tidak_hadir`
+    // sengaja TIDAK ikut dikecualikan: apakah sesi yang kliennya tidak hadir
+    // tetap ditagih adalah keputusan C3 yang belum diambil, dan menambahkannya
+    // ke daftar "batal" akan menyelundupkan keputusan produk ke dalam
+    // perbaikan bug. Bila keputusan itu kelak diambil, uji INI yang harus
+    // diubah lebih dulu — bukan diam-diam berubah artinya.
+    await admin.from("sessions").update({ status: "tidak_hadir" }).eq("id", SESI_LEPAS);
     const k = await signInAs("ananda@padma.test");
     const { data } = await k.rpc("klaim_sudah_bayar", {
       jenis: "sesi",
       sasaran_id: SESI_LEPAS,
     });
-    expect(data ?? []).toHaveLength(0);
-    expect(await statusBayarSesi(SESI_LEPAS)).toBe("belum");
+    expect(data ?? []).toHaveLength(1);
+    expect(await statusBayarSesi(SESI_LEPAS)).toBe("menunggu_verifikasi");
   });
 
   it("klien BISA mengklaim paket aktif", async () => {

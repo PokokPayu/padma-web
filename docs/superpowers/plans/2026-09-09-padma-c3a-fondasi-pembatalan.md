@@ -278,7 +278,7 @@ export const KALIMAT_AKIBAT: Record<Akibat, string> = {
 - [ ] **Step 4: Jalankan uji, pastikan LULUS**
 
 Run: `npx vitest run tests/pembatalan-jenjang.test.ts`
-Expected: PASS (16 uji)
+Expected: PASS (14 uji)
 
 - [ ] **Step 5: Commit**
 
@@ -1028,7 +1028,13 @@ Buat `web/supabase/migrations/20260913102000_rpc_pembatalan.sql`:
 create or replace function public.jenjang_pembatalan(tanggal date, jam time)
 returns smallint
 language sql
-immutable
+-- `stable`, BUKAN `immutable`. Badannya membaca `now()`, dan Postgres
+-- mempercayai label ini tanpa memeriksa isinya: fungsi `immutable` boleh
+-- dilipat menjadi konstanta oleh perencana, dipakai di indeks fungsional, atau
+-- dibekukan dalam rencana yang di-cache. Jenjang yang membeku adalah jenjang
+-- yang berhenti mengikuti waktu — dan yang berhenti bersamanya adalah uang
+-- klien.
+stable
 set search_path = public, pg_temp
 as $$
   select case
@@ -1096,7 +1102,17 @@ begin
   end if;
 
   -- Kepemilikan diperiksa DI SINI, bukan dipercayakan kepada pemanggil.
-  if not staf and s.client_id <> auth.uid() then
+  --
+  -- Menjodohkannya lewat `clients.user_id`, BUKAN `s.client_id = auth.uid()`:
+  -- `clients.id` adalah id baris klien dan TIDAK PERNAH sama dengan id
+  -- pengguna auth. Perbandingan langsung tidak menolak orang lain — ia menolak
+  -- SEMUA ORANG, termasuk pemiliknya sendiri, dan bentuk kegagalannya adalah
+  -- klien yang tidak bisa menyentuh sesinya sendiri. Pola ini disalin dari
+  -- policy "sessions: milik sendiri" (migrasi 20260828095030).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = s.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
   end if;
 
@@ -1398,7 +1414,12 @@ begin
     return null;
   end if;
 
-  if not staf and s.client_id <> auth.uid() then
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = s.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'sesi ini bukan milik Anda' using errcode = '42501';
   end if;
 
@@ -1593,10 +1614,14 @@ describe("tukar_hak_sesi — hak menjadi sesi baru", () => {
     if (eh) throw eh;
     const hak = h.id;
 
+    // 16:00 dan BUKAN 17:00: jam layanan seed hanya
+    // 08,09,10,11,13,14,15,16. Memakai jam di luar daftar membuat uji ini
+    // hijau karena jamnya tak sah, bukan karena kepemilikannya ditolak — uji
+    // yang lolos karena sebab lain tidak menjaga apa pun.
     const { data, error } = await sesiKlien.rpc("tukar_hak_sesi", {
       hak_id: hak,
       tanggal_baru: "2027-09-25",
-      jam_baru: "17:00",
+      jam_baru: "16:00",
       mitra: MITRA,
     });
     expect(data === null || error !== null).toBe(true);
@@ -1649,7 +1674,12 @@ begin
     return null;
   end if;
 
-  if not staf and h.client_id <> auth.uid() then
+  -- Dijodohkan lewat `clients.user_id`: `clients.id` bukan id auth (lihat
+  -- komentar panjang di `batalkan_sesi`).
+  if not staf and not exists (
+    select 1 from public.clients c
+     where c.id = h.client_id and c.user_id = auth.uid()
+  ) then
     raise exception 'hak ini bukan milik Anda' using errcode = '42501';
   end if;
 
@@ -1760,6 +1790,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ringkasanPembatalan } from "@/lib/admin/pembatalan";
+import { jamDariDb } from "@/lib/jadwal/jam";
 
 const akar = path.resolve(__dirname, "..");
 
@@ -1788,6 +1819,14 @@ describe("panel tidak pernah meminta admin mengetik jenjang", () => {
 
   it("tidak ada medan masukan jenjang", () => {
     expect(sumber).not.toMatch(/name="jenjang"/);
+  });
+
+  it("jam dari basis data dilewatkan `jamDariDb`, bukan dioper apa adanya", () => {
+    // `jamMulai` bernilai 'HH:MM:SS'; `instanSesi` hanya menerima 'HH:MM' dan
+    // MELEMPAR untuk selainnya. Mengopernya apa adanya mematikan panel untuk
+    // setiap sesi terjadwal — dan itu tidak akan terlihat di uji mana pun yang
+    // hanya memanggil `ringkasanPembatalan` dengan literal 'HH:MM'.
+    expect(sumber).toContain("jamDariDb(jamMulai)");
   });
 
   it("alasan darurat WAJIB terisi di markup, bukan hanya di basis data", () => {
@@ -1945,7 +1984,13 @@ export function PanelPembatalan({
   const [pesan, setPesan] = useState<string | null>(null);
   const [darurat, setDarurat] = useState(false);
 
-  const r = ringkasanPembatalan(tanggal, jamMulai);
+  // `jamDariDb` WAJIB di sini. `BarisSesiDaftar.jamMulai` bernilai 'HH:MM:SS'
+  // apa adanya dari Postgres, sedangkan `instanSesi` di balik
+  // `ringkasanPembatalan` hanya menerima 'HH:MM' dan MELEMPAR untuk selainnya —
+  // sengaja, supaya tanggal yang diam-diam menjadi NaN tidak merambat menjadi
+  // pagar waktu yang terbuka tanpa galat. Mengopernya apa adanya membuat panel
+  // ini mati saat dirender untuk SETIAP sesi terjadwal.
+  const r = ringkasanPembatalan(tanggal, jamDariDb(jamMulai));
 
   return (
     <section className="grid gap-3 rounded-lg border border-panel-border p-3.5">

@@ -1,5 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import { SESI_DIBATALKAN } from "@/lib/jadwal/status";
+import { FILTER_SESI_BATAL } from "@/lib/jadwal/status";
 
 export type SesiAgenda = {
   id: string;
@@ -37,7 +37,7 @@ export async function agendaHariIni(hariIni: string): Promise<SesiAgenda[]> {
     .from("sessions")
     .select("id, status, clients(nama, padma_id), services(nama), partners(nama)")
     .eq("tanggal", hariIni)
-    .neq("status", SESI_DIBATALKAN)
+    .not("status", "in", FILTER_SESI_BATAL)
     .returns<BarisAgenda[]>();
 
   return (data ?? []).map((r) => ({

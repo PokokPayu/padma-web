@@ -132,6 +132,7 @@ describe("SARING_SESI", () => {
       "selesai",
       "tidak_hadir",
       "dibatalkan_padma",
+      "dibatalkan_klien",
     ]);
   });
 });

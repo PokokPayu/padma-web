@@ -117,3 +117,23 @@ describe("higiene jejak audit pembayaran", () => {
     expect(hak).toEqual([]);
   });
 });
+
+describe("higiene jejak_jadwal (C3-a)", () => {
+  it("tidak ada baris jejak jadwal YATIM", async () => {
+    // Alasan yang sama dengan jejak pembayaran: tabelnya sengaja tanpa foreign
+    // key, jadi menghapus sesi tidak menyapu jejaknya. Setiap berkas uji yang
+    // membuat lalu menghapus sesi WAJIB menyapu `jejak_jadwal` miliknya sendiri
+    // lewat service role — `authenticated` memang tidak boleh punya DELETE.
+    const yatim = await querySql<{ id: string; sesi_id: string; tindakan: string }>(
+      `select j.id, j.sesi_id, j.tindakan
+         from public.jejak_jadwal j
+         left join public.sessions s on s.id = j.sesi_id
+        where s.id is null`,
+    );
+    expect(
+      yatim.length,
+      `${yatim.length} baris jejak_jadwal menunjuk sesi yang sudah tidak ada.\n` +
+        yatim.map((y) => `  - ${y.tindakan} pada sesi ${y.sesi_id}`).join("\n"),
+    ).toBe(0);
+  });
+});
