@@ -548,6 +548,7 @@ export default async function SesiPage({
             tautanWaKosong={tautanWaKosongUntukLihat}
             jamPilihan={jamLayanan}
             tanggalIso={barisLihat.tanggal}
+            tagihan={tagihanLihat}
           />
         </PanelGeser>
       )}

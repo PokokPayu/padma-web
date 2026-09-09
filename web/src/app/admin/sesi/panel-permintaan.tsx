@@ -3,6 +3,8 @@ import { TombolPermintaan, FormUbahPermintaan, type MitraPilihan } from "./aksi-
 import type { BarisPermintaanDaftar } from "@/lib/admin/permintaan";
 import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
+import type { BarisTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 
 /**
  * Isi panel geser untuk SATU permintaan.
@@ -28,6 +30,7 @@ export function PanelPermintaan({
   tautanWaKosong,
   jamPilihan,
   tanggalIso,
+  tagihan,
 }: {
   permintaan: BarisPermintaanDaftar;
   mitra: MitraPilihan[];
@@ -42,6 +45,14 @@ export function PanelPermintaan({
   jamPilihan: string[];
   /** Nilai `YYYY-MM-DD` mentah, untuk `<input type="date">`. */
   tanggalIso: string;
+  /**
+   * Rincian tagihan permintaan ini, `null` bila belum ada (mis. tab Sesi, atau
+   * status yang belum menuntutnya). Nominal memang tampil di berkas ini: ia
+   * sudah lewat halaman induknya sejak C2 untuk merakit pesan WhatsApp, dan
+   * larangan `formatRupiah` yang dijaga uji menyasar `src/app/_shell/panel/**`
+   * serta dasbor/agenda/tren — bukan berkas ini.
+   */
+  tagihan: BarisTagihanPengajuanAdmin | null;
 }) {
   const berkoordinat = permintaan.alamatLat !== null && permintaan.alamatLon !== null;
   const bisaDiubah = STATUS_UBAH_PERMINTAAN.includes(permintaan.status);
@@ -209,6 +220,40 @@ export function PanelPermintaan({
       <section>
         <p className="text-[12.5px] font-bold text-panel-muted">Pembayaran</p>
         <p className="mt-1 text-[12.5px] text-panel-ink">{labelBayar}</p>
+
+        {tagihan && (
+          <div className="mt-2 rounded-lg border border-panel-border px-3 py-2">
+            {tagihan.total === null ? (
+              /* SEBABNYA, bukan sekadar ketiadaannya. Tanpa kalimat ini admin
+                 menerbitkan tagihan, menyalin pesan WhatsApp, mengirimnya, lalu
+                 baru sadar nominalnya hilang — sesudah pesannya sampai. Itulah
+                 bentuk kegagalan yang membuat fitur ini terlihat "selalu rusak"
+                 padahal yang kurang hanya satu pin di peta. */
+              <p className="text-[12px] font-semibold text-clay">
+                {tagihan.sebab
+                  ? KALIMAT_SEBAB_ADMIN[tagihan.sebab]
+                  : "Totalnya belum bisa dihitung."}
+              </p>
+            ) : (
+              <dl className="text-[12.5px]">
+                <div className="flex justify-between">
+                  <dt className="text-panel-muted">Layanan</dt>
+                  <dd className="text-panel-ink">{tagihan.hargaLayanan}</dd>
+                </div>
+                <div className="mt-0.5 flex justify-between">
+                  <dt className="text-panel-muted">
+                    Transport{tagihan.labelJenjang ? ` · ${tagihan.labelJenjang}` : ""}
+                  </dt>
+                  <dd className="text-panel-ink">{tagihan.hargaTransport}</dd>
+                </div>
+                <div className="mt-1.5 flex justify-between border-t border-panel-border pt-1.5">
+                  <dt className="font-bold text-panel-ink">Total</dt>
+                  <dd className="font-bold text-panel-ink">{tagihan.total}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
+        )}
       </section>
 
       <TombolPermintaan

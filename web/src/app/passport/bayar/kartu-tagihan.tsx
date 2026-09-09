@@ -24,8 +24,11 @@ export function KartuTagihan({
   namaLayanan,
   tanggal,
   jam,
+  hargaLayanan,
+  hargaTransport,
+  labelJenjang,
   total,
-  menungguTarifKhusus,
+  kalimatBelumLengkap,
   statusBayar,
   tenggat,
   adaBukti,
@@ -35,9 +38,14 @@ export function KartuTagihan({
   /** Sudah diformat di server. */
   tanggal: string;
   jam: string;
-  /** Rupiah, sudah diformat. `null` bila tagihannya belum lengkap. */
+  /** Rupiah, sudah diformat di server. `null` bila bagian itu belum diketahui. */
+  hargaLayanan: string | null;
+  hargaTransport: string | null;
+  /** Mis. ">10–15 km". */
+  labelJenjang: string | null;
   total: string | null;
-  menungguTarifKhusus: boolean;
+  /** Kalimat siap tampil bila `total === null`. Dirangkai di server. */
+  kalimatBelumLengkap: string | null;
   statusBayar: "belum" | "menunggu_verifikasi" | "lunas";
   tenggat: string | null;
   adaBukti: boolean;
@@ -76,19 +84,33 @@ export function KartuTagihan({
         {tanggal} · {jam}
       </span>
 
-      {menungguTarifKhusus ? (
+      {total === null ? (
         <p className="mt-2 text-[13px] text-[#77321F]">
-          Jarak ke alamat Anda di atas 20 km, jadi ongkos transportnya ditetapkan tim lebih dulu.
-          Kami menghubungi Anda dengan totalnya.
-        </p>
-      ) : total === null ? (
-        <p className="mt-2 text-[13px] text-[#77321F]">
-          Totalnya sedang dilengkapi tim PADMA. Kami menghubungi Anda sebentar lagi.
+          {kalimatBelumLengkap ?? "Totalnya sedang dilengkapi tim PADMA."}
         </p>
       ) : (
-        <p className="mt-2 text-[15px] font-bold text-night" data-total>
-          {total}
-        </p>
+        <dl className="mt-2 text-[13px]">
+          <div className="flex justify-between">
+            <dt className="text-ink-soft">Layanan</dt>
+            <dd className="text-night">{hargaLayanan}</dd>
+          </div>
+          <div className="mt-0.5 flex justify-between">
+            <dt className="text-ink-soft">
+              Transport{labelJenjang ? ` · ${labelJenjang}` : ""}
+            </dt>
+            <dd className="text-night">{hargaTransport}</dd>
+          </div>
+          {/* `data-total` DIPERTAHANKAN di elemen totalnya. E2E
+              tests/e2e/bayar-pengajuan.e2e.ts mencarinya, dan penanda itu
+              justru yang dulu menangkap cacat embed RLS yang membuat setiap
+              klien melihat "Totalnya sedang dilengkapi tim". */}
+          <div className="mt-1.5 flex justify-between border-t border-black/10 pt-1.5">
+            <dt className="font-bold text-night">Total</dt>
+            <dd className="text-[15px] font-bold text-night" data-total>
+              {total}
+            </dd>
+          </div>
+        </dl>
       )}
 
       {statusBayar === "lunas" ? (

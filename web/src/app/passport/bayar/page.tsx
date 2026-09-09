@@ -8,6 +8,8 @@ import { KartuTagihan } from "./kartu-tagihan";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { formatRupiah } from "@/lib/rupiah-publik";
+import { KALIMAT_SEBAB_KLIEN } from "@/lib/tagihan/pengajuan";
+import { LABEL_JENJANG } from "@/lib/transport/jarak";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
@@ -56,8 +58,13 @@ export default async function HalamanBayar() {
               namaLayanan={t.namaLayanan}
               tanggal={formatTanggalID(t.tanggal)}
               jam={formatJam(jamDariDb(t.jamMulai))}
+              hargaLayanan={t.rincian.layanan === null ? null : formatRupiah(t.rincian.layanan)}
+              hargaTransport={
+                t.rincian.transport === null ? null : formatRupiah(t.rincian.transport)
+              }
+              labelJenjang={t.rincian.jenjang === null ? null : LABEL_JENJANG[t.rincian.jenjang]}
               total={t.rincian.total === null ? null : formatRupiah(t.rincian.total)}
-              menungguTarifKhusus={t.rincian.menungguTarifKhusus}
+              kalimatBelumLengkap={t.rincian.sebab ? KALIMAT_SEBAB_KLIEN[t.rincian.sebab] : null}
               statusBayar={t.statusBayar}
               tenggat={t.tenggat}
               adaBukti={t.adaBukti}
