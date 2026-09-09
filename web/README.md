@@ -88,7 +88,7 @@ baris klien mana pun berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **38 rute** (30 halaman + 8 route handler), tanpa satu pun
+PADMA v1 lengkap: **41 rute** (32 halaman + 9 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.
@@ -109,6 +109,8 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/bayar/[id]` | Klien | Satu tagihan pengajuan: nominal, tenggat, QRIS, dan unggah bukti dalam satu layar |
 | `/passport/bayar` | Klien | Daftar tagihan: pengajuan bertenggat menaut ke halamannya sendiri, tagihan sesi + klaim "saya sudah bayar", QRIS terlipat |
 | `/passport/ajukan` | Klien | Ajukan jadwal: varian, tanggal, JAM, alamat — selalu berstatus `diminta`. Tanpa skrining hijau yang belum terpakai: ajakan skrining, bukan formulir |
+| `/passport/ajukan/terkirim` | Klien | Konfirmasi sesudah pengajuan jadwal terkirim |
+| `/passport/sertifikat/[serviceId]` | Klien | Sertifikat klien untuk satu layanan, dipilih menurut sesi `selesai` terbaru |
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
@@ -151,6 +153,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/geocode` | Admin/Owner | POST alamat → koordinat untuk pemilih lokasi di peta panel staf. Ada supaya geocoding tetap di SERVER: `lib/transport/geocode.ts` memasang `server-only`, browser tidak bisa menyetel `User-Agent` yang dituntut Nominatim, dan cache serta jeda 1 permintaan/detik hidup di sisi server. Hasilnya hanya menggeser peta — tidak ada apa pun yang tersimpan dari rute ini |
 | `/api/materi/[id]/halaman/[n]` | Klien | GET satu halaman e-book sebagai `image/webp` berwatermark identitas pembaca; hak diputuskan RLS lewat sesi klien SEBELUM service role menyentuh bucket privat `materi-halaman`; tidak berhak → 404 (bukan 401/403) |
 | `/api/materi/[id]/video` | Klien | GET presigned URL berumur pendek untuk satu video di bucket privat R2; hak diputuskan query ber-RLS memakai sesi klien SEBELUM presigned URL diterbitkan, urutan yang mengikat karena membaliknya berarti menerbitkan tautan unduhan sebelum tahu siapa yang meminta; tidak berhak → 403. URL-nya tidak pernah dirender ke HTML — komponen `<video>` di halaman lahir tanpa `src`, lalu klien mengambilnya sesudah hidup |
+| `/api/sertifikat/[sesi]` | Klien | GET berkas sertifikat; kepemilikan sesi diputuskan RLS lewat sesi klien SEBELUM bucket privat `sertifikat` (tanpa policy storage.objects) disentuh service role |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan

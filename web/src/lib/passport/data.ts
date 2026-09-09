@@ -497,25 +497,48 @@ export async function ambilSertifikatLayanan(
   serviceId: string,
 ): Promise<{ sessionId: string; tanggal: string; mime: string } | null> {
   const supabase = await createServerSupabase();
+
+  // "Terbaru" di sini WAJIB berarti tanggal SESI (kapan kunjungannya), bukan
+  // `certificates.created_at` (kapan admin mengunggahnya). Klien bisa punya
+  // sesi 1 Mei dan 1 Agustus; admin menerbitkan sertifikat sesi Agustus lebih
+  // dulu, lalu menyusulkan sertifikat sesi Mei — mengurutkan pada
+  // `created_at` akan menunjuk sertifikat Mei (unggahan terakhir) padahal
+  // badge mestinya tetap ke Agustus (kunjungan terakhir), dan itu terjadi
+  // TANPA satu galat pun. Karena itu sumbunya `sessions.tanggal`, bukan
+  // `created_at`.
+  //
+  // `.order()` PostgREST pada kolom tabel yang di-embed tidak selalu bisa
+  // diandalkan untuk memutuskan baris MANA yang diambil `.limit(1)` di sisi
+  // induk — jadi seluruh baris (biasanya sedikit: satu sertifikat per sesi)
+  // ditarik sekaligus, dan tanggal terbesarnya dipilih di TypeScript.
+  // `tanggal` adalah kolom `date` Postgres yang sudah berupa string
+  // 'YYYY-MM-DD' — perbandingan STRING itu sendiri sudah urut secara
+  // leksikografis sama seperti urut tanggalnya; jangan diganti `new Date()`.
   const { data } = await supabase
     .from("certificates")
     .select("session_id, mime, sessions(tanggal)")
     .eq("client_id", clientId)
     .eq("service_id", serviceId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{
-      session_id: string;
-      mime: string;
-      sessions: { tanggal: string } | null;
-    }>();
+    .returns<
+      Array<{
+        session_id: string;
+        mime: string;
+        // Embed yang tertolak RLS memulangkan NULL, bukan galat.
+        sessions: { tanggal: string } | null;
+      }>
+    >();
 
-  if (!data) return null;
+  if (!data || data.length === 0) return null;
+
+  const terbaru = data.reduce((a, b) => {
+    const tglA = a.sessions?.tanggal ?? "";
+    const tglB = b.sessions?.tanggal ?? "";
+    return tglB > tglA ? b : a;
+  });
+
   return {
-    sessionId: data.session_id,
-    // Embed yang tertolak RLS memulangkan NULL, bukan galat — halaman tetap
-    // terbit dengan tanggal kosong alih-alih meledak.
-    tanggal: data.sessions?.tanggal ?? "",
-    mime: data.mime,
+    sessionId: terbaru.session_id,
+    tanggal: terbaru.sessions?.tanggal ?? "",
+    mime: terbaru.mime,
   };
 }

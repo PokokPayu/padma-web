@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { periksaBerkasSertifikat } from "@/lib/sertifikat/berkas";
 import { terbitkanUrlUnggahSertifikat, catatSertifikat } from "./unggah-sertifikat";
@@ -16,6 +17,7 @@ export function PengunggahSertifikat({
   sessionId: string;
   sudahAda: boolean;
 }) {
+  const router = useRouter();
   const [fase, setFase] = useState<Fase>("diam");
   const [pesan, setPesan] = useState("");
 
@@ -57,6 +59,10 @@ export function PengunggahSertifikat({
 
     setFase("selesai");
     setPesan("Sertifikat tersimpan dan sudah bisa dibuka klien.");
+    // Layar server ("Belum ada." dan label tombol "Unggah"/"Ganti") ikut
+    // membaca `sudahAda` dari props server — pola yang sama dipakai
+    // `IsiEbook`/`IsiVideo` di admin/materi/form-materi.tsx.
+    router.refresh();
   }
 
   return (

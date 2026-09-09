@@ -612,7 +612,20 @@ describe("layout admin", () => {
     // Hak yang MEMANG diputuskan RLS (materi ini ada & terlihat peran staf)
     // tetap dicek lewat createServerSupabase() lebih dulu; admin.storage baru
     // lahir sesudahnya. Lihat komentar di dalam unggah.ts sendiri.
-    const DIKECUALIKAN = new Set(["src/app/admin/materi/unggah.ts"]);
+    //
+    // `admin/sesi/[id]/unggah-sertifikat.ts` adalah titik kedua, dengan alasan
+    // yang sama persis: bucket `sertifikat` (migration terkait) SENGAJA lahir
+    // tanpa satu pun policy storage.objects — authenticated dan anon tidak
+    // punya hak apa pun di sana, jadi tidak ada RLS untuk "dilewati"; service
+    // role satu-satunya cara menyentuh objeknya, titik. Hak yang MEMANG
+    // diputuskan RLS (peran staf lewat `requireRole`, lalu baris sesinya
+    // dibaca lewat `createServerSupabase()` ber-RLS staf) tetap diperiksa
+    // LEBIH DULU — `createAdminSupabase()` baru dipanggil SESUDAHNYA. Lihat
+    // komentar di dalam unggah-sertifikat.ts sendiri.
+    const DIKECUALIKAN = new Set([
+      "src/app/admin/materi/unggah.ts",
+      "src/app/admin/sesi/[id]/unggah-sertifikat.ts",
+    ]);
     for (const berkas of berkasAdmin()) {
       if (DIKECUALIKAN.has(berkas)) continue;
       expect(baca(berkas), `${berkas} memakai service role`).not.toContain(
