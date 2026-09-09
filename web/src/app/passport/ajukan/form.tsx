@@ -5,7 +5,8 @@ import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ajukanJadwal } from "@/lib/passport/aksi";
 import { formatJam } from "@/lib/jadwal/jam";
-import { Katalog, type LayananKatalogAjukan } from "./katalog";
+import { formatTanggalID } from "@/lib/passport/waktu";
+import { IkonFase, Katalog, type LayananKatalogAjukan } from "./katalog";
 import { Ringkasan } from "./ringkasan";
 
 // Formulir hanya mengirim keinginan klien (layanan, tanggal, preferensi waktu,
@@ -19,6 +20,8 @@ export function FormAjukan({
   jamPilihan,
   tanggalPalingAwal,
   alamatDefault,
+  waLink,
+  namaKlien,
 }: {
   // Katalog LENGKAP (layanan aktif, varian aktif, harga yang berlaku hari ini)
   // sudah dirakit di server. Dioper utuh, bukan dipecah jadi dua prop
@@ -42,6 +45,11 @@ export function FormAjukan({
   // apa pun yang terkirim di FormData saat submit itulah yang tersimpan,
   // bukan nilai prop ini.
   alamatDefault: string;
+  // Nomor WhatsApp PADMA dari `app_settings`, sudah lewat `nomorWaTerpakai()`.
+  waLink: string;
+  // Nama klien ikut ke dalam pesan: yang menerima adalah admin yang membaca
+  // puluhan chat, dan pesan tanpa nama memaksanya menebak dari nomor.
+  namaKlien: string;
 }) {
   const router = useRouter();
   const [pending, mulai] = useTransition();
@@ -68,6 +76,9 @@ export function FormAjukan({
   // diketiknya.
   const [langkah, setLangkah] = useState<1 | 2>(1);
   const [selesai, setSelesai] = useState(false);
+  // Terisi HANYA bila peramban memblokir jendela WhatsApp. Lihat komentar
+  // panjang di sekitar `window.open` di bawah.
+  const [tautanWa, setTautanWa] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
 
   /**
@@ -104,24 +115,49 @@ export function FormAjukan({
         </span>
         <h1 className="font-serif text-xl text-night">Permintaan terkirim</h1>
         <p className="mx-auto mt-2 max-w-sm text-[13.5px] text-[#415247]">
-          Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan
-          bidan yang datang.
+          {tautanWa
+            ? "Jadwal Anda sudah masuk antrean. Tinggal satu ketukan lagi untuk mengabari tim PADMA lewat WhatsApp — pesannya sudah kami siapkan."
+            : "Tim PADMA akan menghubungi Anda via WhatsApp untuk mengonfirmasi jadwal dan bidan yang datang."}
         </p>
+        {/* Muncul hanya saat pemblokir pop-up menolak jendela WhatsApp. Ini
+            TAUTAN, bukan tombol yang memanggil `window.open`: ketukan pada
+            tautan adalah gerakan pemakai, dan gerakan pemakai tidak pernah
+            diblokir. */}
+        {tautanWa && (
+          <a
+            href={tautanWa}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-5 inline-block min-h-[44px] rounded-xl bg-[#1FAF57] px-5 py-3 text-sm font-bold text-white"
+          >
+            Kabari PADMA via WhatsApp
+          </a>
+        )}
         <Link
           href="/passport"
-          className="mt-5 inline-block rounded-xl border border-black/10 px-5 py-2.5 text-sm font-bold"
+          className={`inline-block rounded-xl border border-black/10 px-5 py-2.5 text-sm font-bold ${
+            tautanWa ? "mt-3 block" : "mt-5"
+          }`}
         >
-          Kembali ke Beranda
+          {tautanWa ? "Lewati, kembali ke Beranda" : "Kembali ke Beranda"}
         </Link>
       </section>
     );
   }
 
+  // Alas KERTAS, bukan putih. Katalog di dalamnya bekerja dengan kartu putih
+  // yang saling terpisah, dan kartu putih di atas alas putih tidak punya tepi —
+  // seluruh susunan fase, layanan, dan varian rata jadi satu bidang. Padding
+  // mengecil di layar sempit karena lebar itu dipakai nama layanan: dengan p-6
+  // nama seperti "Garbha Couple Yoga" pecah jadi dua baris.
   return (
-    <section className="rounded-2xl border border-black/10 bg-white p-6">
-      <h1 className="mb-4 font-serif text-xl text-night">
-        Ajukan Jadwal{" "}
-        <span className="font-sans text-xs font-semibold text-ink-soft">
+    <section className="rounded-2xl border border-black/10 bg-paper p-4 sm:p-6">
+      <h1 className="mb-5 font-serif text-xl leading-tight text-night">
+        Ajukan Jadwal
+        {/* Keterangan turun ke barisnya sendiri. Sebagai ekor di baris yang
+            sama ia membungkus di tengah frasa dan tajuknya jadi dua baris
+            berantakan di ponsel. */}
+        <span className="mt-1 block font-sans text-xs font-semibold text-ink-soft">
           tim PADMA mengonfirmasi via WhatsApp
         </span>
       </h1>
@@ -146,6 +182,37 @@ export function FormAjukan({
           mulai(async () => {
             const r = await ajukanJadwal(fd);
             if (r.ok) {
+              // NOTIFIKASI KE WHATSAPP PADMA.
+              //
+              // Pengajuan sudah TERSIMPAN sebelum baris ini — WhatsApp adalah
+              // kabar, bukan pengirimannya. Kalau langkah di bawah gagal atau
+              // dibatalkan klien, jadwalnya tetap ada di antrean admin; yang
+              // hilang hanya kecepatan kabarnya.
+              const teks = [
+                `Halo PADMA, saya ${namaKlien} baru mengajukan jadwal:`,
+                ``,
+                `Layanan: ${namaTerpilih}`,
+                `Tanggal: ${formatTanggalID(String(fd.get("tanggal") ?? ""))}`,
+                `Jam: ${formatJam(jam)}`,
+                `Kalau penuh, saya lebih suka: ${waktu}`,
+                `Alamat: ${String(fd.get("alamat") ?? "")}`,
+                ``,
+                `Mohon dikonfirmasi ya, terima kasih.`,
+              ].join("\n");
+              const tautan = `https://wa.me/${waLink}?text=${encodeURIComponent(teks)}`;
+
+              // `window.open` di sini berjalan SESUDAH `await`, jadi peramban
+              // tidak lagi menganggapnya buah ketukan klien dan sebagian
+              // pemblokir pop-up menolaknya — diam-diam, memulangkan null.
+              // Kalau itu terjadi, halaman TIDAK berpindah: klien ditahan di
+              // panel sukses yang memuat tautannya sebagai tombol, dan ketukan
+              // pada tombol itu adalah gerakan pemakai yang tak bisa diblokir.
+              const jendela = window.open(tautan, "_blank", "noopener");
+              if (jendela === null) {
+                setTautanWa(tautan);
+                setSelesai(true);
+                return;
+              }
               // BERPINDAH KE BERANDA, bukan menampilkan panel sukses di sini.
               //
               // Sebabnya bukan selera: begitu pengajuan berhasil, skrining yang
@@ -216,7 +283,7 @@ export function FormAjukan({
               di daftar sepanjang ini, jawaban atas "saya sudah pilih apa, dan
               berapa" tidak boleh ikut tergulir naik. `bottom` di mobile
               menghindari nav bawah yang `fixed` di layout passport. */}
-          <div className="sticky bottom-[76px] z-40 mt-5 flex items-center gap-3 rounded-2xl border border-black/10 bg-paper/95 px-4 py-3 backdrop-blur sm:bottom-3">
+          <div className="sticky bottom-[76px] z-40 mt-5 flex items-center gap-3 rounded-2xl border border-black/10 bg-white/95 px-4 py-3 shadow-[0_8px_24px_-16px_rgba(10,43,31,0.6)] backdrop-blur sm:bottom-3">
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] text-ink-soft">Pilihan Anda</span>
               <span className="block truncate text-[13px] text-night">
@@ -244,6 +311,12 @@ export function FormAjukan({
             mana" adalah mundur — dan yang mundur kehilangan tempatnya di
             daftar. */}
         <div className="mb-6 flex items-center gap-3 rounded-2xl border border-leaf/25 bg-leaf-soft px-4 py-3">
+          {/* Ikon fase yang sama dengan tajuk fase di langkah 1: penanda yang
+              sama untuk layanan yang sama. */}
+          <IkonFase
+            faseId={layananTerpilih?.faseId ?? ""}
+            className="h-5 w-5 shrink-0 text-gold"
+          />
           <span className="min-w-0 flex-1">
             <span className="block font-serif text-[15.5px] leading-snug text-night">
               {namaTerpilih === "" ? "Belum ada pilihan" : namaTerpilih}

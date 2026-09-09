@@ -77,7 +77,7 @@ export default async function HalamanAjukan() {
   // sehingga apa yang ditawarkan layar dan apa yang diterima server tidak
   // pernah bisa berselisih.
   const [
-    { jamLayanan },
+    { jamLayanan, nomorWaLink },
     { data: layanan },
     { data: varian },
     { data: profil },
@@ -251,6 +251,11 @@ export default async function HalamanAjukan() {
     <FormAjukan
       katalog={katalog}
       faseKlien={klien.faseId}
+      // Nomor PADMA sendiri, jadi `nomorWaTerpakai()` (yang punya nomor
+      // cadangan) memang yang benar di sini — bukan `nomorWaKlien()` yang
+      // sengaja tanpa cadangan karena tujuannya orang lain.
+      waLink={nomorWaLink}
+      namaKlien={klien.nama}
       jamPilihan={jamLayanan}
       tanggalPalingAwal={hariIniJakarta()}
       alamatDefault={profil?.alamat ?? ""}

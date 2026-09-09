@@ -113,7 +113,12 @@ const IKON_FASE: Record<string, React.ReactNode> = {
   ),
 };
 
-function IkonFase({ faseId, className }: { faseId: string; className: string }) {
+/**
+ * Dipakai juga oleh `form.tsx` untuk kartu pilihan yang terbawa ke langkah 2:
+ * ikon yang sama menandai layanan yang sama, jadi klien mengenali kembali baris
+ * yang tadi ia ketuk tanpa membaca ulang namanya.
+ */
+export function IkonFase({ faseId, className }: { faseId: string; className: string }) {
   const isi = IKON_FASE[faseId];
   if (!isi) return null;
   return (
@@ -254,6 +259,12 @@ export function Katalog({
 
   return (
     <div>
+      {/* Cari dan chip MENEMPEL di puncak layar selama daftar digulir. Keduanya
+          alat untuk memendekkan daftar; alat yang ikut hanyut ke atas begitu
+          daftarnya panjang cuma berguna sebelum ia dibutuhkan. Margin negatif
+          menyamakan lebarnya dengan tepi kartu induk, supaya kartu layanan
+          tidak terlihat menyembul dari balik latarnya saat lewat. */}
+      <div className="sticky top-0 z-30 -mx-4 -mt-1 bg-paper px-4 pb-3 pt-1 sm:-mx-6 sm:px-6">
       <label className="relative block">
         <svg
           aria-hidden
@@ -310,6 +321,7 @@ export function Katalog({
           );
         })}
       </div>
+      </div>
 
       {daftar.length === 0 ? (
         <div className="mt-4 rounded-xl border border-black/10 bg-white px-4 py-4 text-[13px] text-ink-soft">
@@ -317,7 +329,7 @@ export function Katalog({
           Coba kata yang lebih pendek, atau ketuk “Semua” untuk melihat seluruh katalog.
         </div>
       ) : (
-        <div className="mt-5 space-y-7">
+        <div className="mt-2 space-y-7">
           {kelompokkanPerFase(daftar).map((kel) => {
             // "Garbha · Masa Kehamilan" dipecah kembali menjadi dua peran
             // tipografi — nama Sanskerta sebagai tajuk serif, nama Indonesia
