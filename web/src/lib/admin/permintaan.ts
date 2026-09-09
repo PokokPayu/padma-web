@@ -140,7 +140,15 @@ export async function ambilDaftarPermintaan(
     q = q.ilike("clients.nama", `%${aman}%`);
   }
 
-  const { data, count } = await q.range(dari, sampai).returns<BarisMentah[]>();
+  // GALAT DIBACA, BUKAN DIBUANG. Query yang ditolak PostgREST memulangkan
+  // `data: null`, dan `data ?? []` mengubahnya menjadi layar kosong yang
+  // tidak bisa dibedakan dari "memang belum ada permintaan hari ini". Persis
+  // itu yang terjadi saat embed `service_variants` menyebutkan kolom yang salah:
+  // 42703 menolak SELURUH query, dan tab bawaan panel ini akan kosong bagi
+  // setiap admin tanpa satu pun tanda. Layar 500 yang berisik lebih jujur
+  // daripada daftar kosong yang berbohong.
+  const { data, count, error } = await q.range(dari, sampai).returns<BarisMentah[]>();
+  if (error) throw error;
 
   return {
     baris: (data ?? []).map((p) => ({
