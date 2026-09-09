@@ -157,3 +157,43 @@ Ditutup dengan bendera `pin_disentuh` (`a028d13`).
 - **L3** — nol uji baru. Yang tanpa penjaga: ketiga cabang PIN MENANG (termasuk bendera
   `pin_disentuh` yang baru), penolakan tanggal lampau & jam di luar jam layanan, penerjemahan 23505,
   penolakan `menunggu_bayar`, dan RLS di sesi klien.
+
+---
+
+# Tambahan — Harga Klien di Master Layanan (commit `005325c`…`7d4491e`)
+
+**Spec:** `docs/superpowers/specs/2026-09-09-padma-harga-di-master-layanan-design.md`
+
+## Keadaan basis data lokal
+
+Migrasi `20260914120000_harga_klien_untuk_staf.sql` **diterapkan tangan lewat psql**, bukan lewat
+`supabase migration up`: DB lokal dipakai bersama sesi lain yang sudah menerapkan migrasi dari
+branch-nya sendiri (`tagihan-email-katalog`), sehingga riwayat berkas tidak cocok. Versinya sudah
+dicatat di `supabase_migrations.schema_migrations`, dan `revoke`/`grant`-nya diterapkan dalam
+urutan yang sama dengan isi berkas. **Pada basis data bersih, berkas migrasinya berlaku apa adanya.**
+
+## Dua pagar struktural yang nyaris terlewat
+
+Ditemukan hanya oleh review menyeluruh, yang **memprobe skema hidup** alih-alih membaca diff:
+
+1. `tests/money-firewall-struktural.test.ts` memindai `information_schema` seluruh BASE TABLE **dan
+   VIEW** untuk kolom bernuansa uang, dengan pengecualian yang dulu terpaku ke satu nama view.
+   View baru memerahkannya — itu memang tugasnya. Diperbaiki dengan pengecualian **kedua yang
+   dipersempit ke pasangan (view, kolom)**, sehingga `honor_mitra` yang kelak masuk view itu tetap
+   memerahkan pagar.
+2. `tests/admin-pengerasan.test.ts` menuntut `anon`/`authenticated` tidak memegang verba tulis pada
+   VIEW mana pun. Supabase memberi hak **penuh** atas setiap objek baru di `public`, jadi `grant`
+   tanpa `revoke` di depannya diam-diam memberi INSERT/UPDATE/TRIGGER. Pola yang sama sudah pernah
+   memerahkan pagar itu sekali sebelumnya.
+
+**Pelajaran proses:** reviewer per-tugas hanya diminta menjalankan berkas uji modulnya sendiri.
+Perubahan yang menyentuh **skema atau hak akses** wajib menjalankan pagar struktural repo —
+`money-firewall-struktural`, `admin-pengerasan`, `grant-anon` — bukan hanya uji modulnya.
+
+## Utang baru
+
+- `hargaCoret` ditarik dan dibawa sampai ke prop halaman, tetapi tidak dirender.
+- Query `varian_harga_staf` tidak dipaginasi; di atas `max_rows = 1000` harga diam-diam jadi "—".
+  Sudah diberi komentar, belum diperbaiki.
+- `formatRupiah` kini masuk ke `src/app/admin/layanan/[id]/page.tsx` — pengecualian pertama yang
+  disengaja terhadap catatan di `src/lib/rupiah-publik.ts`, dan itu belum tercatat di sana.
