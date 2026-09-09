@@ -81,6 +81,25 @@ export const STATUS_ANTRE: readonly StatusPermintaan[] = [
 ];
 
 /**
+ * Keadaan yang masih boleh DIUBAH admin (tanggal, jam, alamat).
+ *
+ * SENGAJA BUKAN `STATUS_ANTRE`, walau ketiganya adalah anggotanya. `STATUS_ANTRE`
+ * memuat `menunggu_bayar` juga, dan di keadaan itu tagihan SUDAH terbit: nominal
+ * transportnya sudah dihitung, pesannya sudah ada di tangan klien, dan tenggat 24
+ * jamnya sudah berjalan. Mengubah tanggal atau alamat sesudah itu membuat tagihan
+ * yang sudah dikirim tidak lagi benar — tanpa satu pun galat.
+ *
+ * Di ketiga keadaan di bawah tidak ada nominal basi yang tertinggal: jenjang
+ * transport baru dihitung `konfirmasi_permintaan` pada saat konfirmasi, dari
+ * koordinat yang berlaku saat itu.
+ */
+export const STATUS_UBAH_PERMINTAAN: readonly StatusPermintaan[] = [
+  "diminta",
+  "mencari_mitra",
+  "mitra_siap",
+];
+
+/**
  * Keadaan asal yang sah untuk konfirmasi. Dipakai server action & uji supaya
  * nilainya tidak perlu ditulis literal di luar berkas ini (pagar
  * `tests/status-satu-sumber.test.ts` memang melarangnya).
