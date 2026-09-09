@@ -112,3 +112,48 @@ pagar yang relevan — bukan hanya membaca diff.
 
 **Bug produksi tunggal di pekerjaan ini ditemukan oleh implementer yang memprobe query, bukan oleh
 satu pun dari sembilan review kode.** Membaca kode tidak bisa membuktikan nama kolom.
+
+---
+
+# Tambahan — Hubungi Klien & Ubah Permintaan (commit `bc65298`…`a028d13`)
+
+**Spec:** `docs/superpowers/specs/2026-09-09-padma-ubah-permintaan-design.md`
+**Rencana & daftar periksa manual lengkap (10 butir):** `docs/superpowers/plans/2026-09-09-padma-ubah-permintaan.md`
+
+## Bug yang nyaris lolos, dan kenapa ia nyaris lolos
+
+`PemilihLokasi` menyemai state-nya dari prop `awal` dan merender state itu **langsung ke input
+tersembunyi `lat`/`lon`**. Selama peta hanya muncul ketika koordinat kosong, `awal` selalu `null`
+dan itu tidak berbahaya. Begitu peta dibuat **selalu tersedia**, medan tersembunyi jadi terisi sejak
+cat pertama tanpa admin menyentuh apa pun — sehingga setiap penyimpanan terlihat seperti membawa
+pin, dan cabang "alamat berubah → geocode ulang" **tidak pernah tercapai**.
+
+Bentuk kegagalannya: admin menulis ulang alamat ke jalan yang berbeda, menekan Simpan, layar berkata
+"Perubahan tersimpan." Yang tersimpan adalah **alamat baru dengan koordinat lama** — dan itu menjadi
+jenjang transport yang salah dengan percaya diri saat konfirmasi.
+
+Ditemukan hanya oleh review menyeluruh, sesudah tiga review per-tugas melewatkannya. Sebabnya: ia
+lahir dari **interaksi** antara dua tugas yang masing-masing benar — Tugas 2 membuat peta selalu ada,
+Tugas 1 mengandalkan "ada pin berarti manusia memilihnya". Tidak ada diff tunggal yang salah.
+
+Ditutup dengan bendera `pin_disentuh` (`a028d13`).
+
+## Utang baru
+
+- **`pin_disentuh` adalah kontrak privat** antara `PemilihLokasi` dan `perbaruiPermintaan`, nilainya
+  `"1"` vs `""`, tanpa konstanta bersama. Form mitra & klien sengaja mengabaikannya. Siapa pun yang
+  menyentuh salah satu sisi sendirian perlu tahu ini.
+- **Tanggal lampau boleh disimpan bila tidak berubah** (agar permintaan basi masih bisa dikoreksi
+  alamatnya). Aturannya: ditolak hanya bila berbeda dari tanggal tersimpan.
+- **`<input type="date">` tanpa atribut `min`** — peramban tidak mencegah memilih tanggal lampau;
+  server yang menolaknya.
+- **`PanelPermintaan` tumbuh besar** — blok ubah-alamat kandidat komponen tersendiri.
+
+## Lubang yang sengaja dibiarkan (dari spec)
+
+- **L1** — tidak ada jejak siapa mengubah apa. Penutupnya tabel `jejak_permintaan` tersendiri.
+- **L2** — validasi tanggal & jam untuk admin **hanya** hidup di TypeScript; `guard_booking_pembatas`
+  berbunyi `if user_role() = 'klien'`. Penutupnya memperluas guard itu ke peran staf — sebuah migrasi.
+- **L3** — nol uji baru. Yang tanpa penjaga: ketiga cabang PIN MENANG (termasuk bendera
+  `pin_disentuh` yang baru), penolakan tanggal lampau & jam di luar jam layanan, penerjemahan 23505,
+  penolakan `menunggu_bayar`, dan RLS di sesi klien.
