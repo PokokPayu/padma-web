@@ -20,6 +20,23 @@
  * `variant_rates` selain `harga_klien`.
  */
 
+/**
+ * Escape HTML LOKAL — bukan pertahanan XSS (email dikirim ke klien itu
+ * sendiri, dan klien email tidak menjalankan skrip), melainkan pertahanan
+ * TATA LETAK: nama klien atau nama layanan yang kebetulan mengandung `<` atau
+ * `&` akan merusak markup di sekelilingnya kalau diinterpolasi mentah. Ditulis
+ * di sini, bukan diimpor, supaya berkas ini tetap NOL IMPOR (lihat dokblok
+ * atas berkas).
+ */
+function escapeHtml(nilai: string): string {
+  return nilai
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function subjekTagihan(input: { namaLayanan: string; tanggal: string }): string {
   return `Tagihan sesi ${input.namaLayanan} — ${input.tanggal}`;
 }
@@ -81,16 +98,16 @@ export function emailTagihan(input: {
   // sebagian besar aturan tata letak modern. Ini bukan HTML yang layak ditiru
   // di halaman web, dan memang tidak dipakai di sana.
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#22302A;line-height:1.6;max-width:520px">
-  <p>Halo <b>${namaKlien}</b>,</p>
+  <p>Halo <b>${escapeHtml(namaKlien)}</b>,</p>
   <p>Bidan untuk sesi Anda sudah siap. Berikut rincian tagihannya.</p>
-  <p style="margin:0 0 4px"><b>${namaLayanan}</b><br><span style="color:#5A6B62">${tanggal}, ${jam}</span></p>
+  <p style="margin:0 0 4px"><b>${escapeHtml(namaLayanan)}</b><br><span style="color:#5A6B62">${escapeHtml(tanggal)}, ${escapeHtml(jam)}</span></p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:6px 0;color:#5A6B62">Layanan</td><td style="padding:6px 0;text-align:right">${hargaLayanan}</td></tr>
-    <tr><td style="padding:6px 0;color:#5A6B62">Transport · ${labelJenjang}</td><td style="padding:6px 0;text-align:right">${hargaTransport}</td></tr>
-    <tr><td style="padding:10px 0;border-top:1px solid #E4E0D6"><b>Total</b></td><td style="padding:10px 0;border-top:1px solid #E4E0D6;text-align:right"><b>${total}</b></td></tr>
+    <tr><td style="padding:6px 0;color:#5A6B62">Layanan</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaLayanan)}</td></tr>
+    <tr><td style="padding:6px 0;color:#5A6B62">Transport · ${escapeHtml(labelJenjang)}</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaTransport)}</td></tr>
+    <tr><td style="padding:10px 0;border-top:1px solid #E4E0D6"><b>Total</b></td><td style="padding:10px 0;border-top:1px solid #E4E0D6;text-align:right"><b>${escapeHtml(total)}</b></td></tr>
   </table>
-  <p>Mohon selesaikan pembayaran paling lambat <b>${tenggatAbsolut}</b>.</p>
-  <p><a href="${tautanBayar}" style="display:inline-block;background:#C9A227;color:#2A2013;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Bayar &amp; unggah bukti</a></p>
+  <p>Mohon selesaikan pembayaran paling lambat <b>${escapeHtml(tenggatAbsolut)}</b>.</p>
+  <p><a href="${escapeHtml(tautanBayar)}" style="display:inline-block;background:#C9A227;color:#2A2013;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Bayar &amp; unggah bukti</a></p>
   <p style="color:#5A6B62;font-size:13px">QRIS-nya ada di halaman yang sama — nominalnya diketik sendiri sesuai total di atas. Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain, tapi Anda tetap bisa mengajukan ulang kapan saja.</p>
   <p style="color:#5A6B62;font-size:13px">Terima kasih,<br>Tim PADMA Wellness</p>
 </div>`;

@@ -819,7 +819,27 @@ describe("berkas server action sesi", () => {
   });
 
   it("tidak menuliskan data klien ke log", () => {
-    for (const sumber of [sumberAksi, sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
+    // Larangan aslinya menyapu TOTAL keberadaan `console.` di `sumberAksi`
+    // karena sebelum Task 6 tidak ada satu pun pemakaian yang legit. Task 6
+    // (ronde perbaikan 1, temuan 3 & 5) menambah TIGA pemakaian yang legit:
+    // mencatat kegagalan kirim email tagihan (env basis URL kosong, galat
+    // menulis `email_tagihan_pada` sesudah email SUDAH sampai, dan exception
+    // tak terduga dari langkah yang bisa melempar). Ketiganya adalah
+    // PESAN TETAP diikuti objek galat generik (`error`/`e`) — tidak satu pun
+    // menyebut `email`, `nama`, atau medan klien lain sebagai argumen. Diuji
+    // dengan KECOCOKAN PERSIS, bukan pola longgar, supaya `console.` baru di
+    // luar tiga ini — apalagi yang menyisipkan data klien — memerahkan uji.
+    const KONSOL_SAH = [
+      'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
+      'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
+      'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',
+    ];
+    for (const baris of KONSOL_SAH) {
+      expect(sumberAksi).toContain(baris);
+    }
+    expect([...sumberAksi.matchAll(/console\./g)]).toHaveLength(KONSOL_SAH.length);
+
+    for (const sumber of [sumberHalaman, sumberPanelPermintaan, sumberAksiPermintaan, sumberStatus, sumberAksiUbahPermintaan]) {
       expect(sumber).not.toContain("console.");
     }
   });

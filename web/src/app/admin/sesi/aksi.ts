@@ -220,59 +220,124 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
 /**
  * Mengirim email tagihan untuk satu permintaan. Memulangkan apakah berhasil.
  *
- * TIDAK PERNAH melempar dan TIDAK PERNAH menggagalkan pemanggilnya — lihat
- * dokblok `kirimEmail`. Tujuannya diambil dari `clients.email` baris pengajuan
- * itu, TIDAK PERNAH dari input: pelajaran yang sama yang dibayar tautan
- * WhatsApp yang dulu menunjuk nomor klinik alih-alih nomor klien.
+ * TIDAK PERNAH MELEMPAR dan TIDAK PERNAH menggagalkan pemanggilnya. Berbeda
+ * dari `kirimEmail()` (yang murni HTTP dan gagalnya memang selalu berbentuk
+ * nilai balik), badan fungsi INI memanggil beberapa hal yang BISA melempar:
+ * `daftarTagihanPengajuanAdmin` menyentuh klien service role di modulnya
+ * sendiri (melempar bila kunci layanannya hilang dari environment) dan dua
+ * pemanggilan RPC tarif, `formatJam` melempar untuk jam tak sah, dan
+ * `Intl.DateTimeFormat().format` melempar `RangeError` untuk tanggal tak sah.
+ * Tanpa `try/catch` di sini, lemparan itu terjadi SESUDAH `terbitkanTagihan()`
+ * sudah memindahkan status
+ * dan menulis tenggat — admin melihat action gagal, menekan ulang, dan
+ * mendapat "Permintaan sudah ditangani atau tidak ditemukan" untuk tagihan
+ * yang sebetulnya sudah terbit dengan baik. Galatnya dicatat, bukan ditelan
+ * senyap.
+ *
+ * PAGAR STATUS: bacaan `booking_requests` DIKUNCI ke `menunggu_bayar`.
+ * `daftarTagihanPengajuanAdmin({ permintaanId })` sengaja mengabaikan status
+ * (dipakai gerbang `terbitkanTagihan()` yang membaca SEBELUM transisi), tetapi
+ * fungsi ini punya DUA pemanggil: `terbitkanTagihan()` sendiri (baris sudah
+ * `menunggu_bayar` pada titik ini) dan server action `kirimUlangEmailTagihan`
+ * — endpoint POST tersendiri (aturan #1 dokblok atas berkas ini) yang bisa
+ * dipanggil langsung atau diklik ganda pada panel yang kadung basi sesudah
+ * `batalkan_lewat_tenggat()` melepas slotnya. Tanpa pagar ini, POST semacam
+ * itu mengirim "Mohon selesaikan pembayaran paling lambat <tenggat lama>"
+ * untuk jadwal yang sudah tidak dipegang siapa pun.
+ *
+ * Tujuannya diambil dari `clients.email` baris pengajuan itu, TIDAK PERNAH
+ * dari input: pelajaran yang sama yang dibayar tautan WhatsApp yang dulu
+ * menunjuk nomor klinik alih-alih nomor klien.
  */
 async function kirimEmailTagihan(permintaanId: string): Promise<boolean> {
-  const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
-  const t = daftar[0];
-  if (!t || t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
+  try {
+    // GAGAL TERTUTUP juga untuk basis URL: tautan bayar dibangun dari
+    // `NEXT_PUBLIC_BASIS_URL`, dan URL kosong menghasilkan href RELATIF yang
+    // mati di kotak masuk klien ("Bayar & unggah bukti transfer di:
+    // /passport/bayar") — sementara `kirimEmail()` tetap memulangkan
+    // `ok: true`, `email_tagihan_pada` tetap tertulis, dan panel tetap
+    // berbunyi "sudah terkirim ke klien". Klien kehilangan satu-satunya jalan
+    // membayar sementara tenggat 24 jam berjalan, tanpa satu baris pun di
+    // log. Diperiksa di sini, SEBELUM email dirakit, supaya env yang lupa
+    // diisi gagal sejelas `RESEND_API_KEY`/`EMAIL_PENGIRIM` kosong — bukan
+    // gagal senyap sebagai "berhasil".
+    const basisUrl = process.env.NEXT_PUBLIC_BASIS_URL;
+    if (!basisUrl) {
+      console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");
+      return false;
+    }
+
+    const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
+    const t = daftar[0];
+    if (!t || t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
+      return false;
+    }
+
+    const supabase = await createServerSupabase();
+    const { data: baris } = await supabase
+      .from("booking_requests")
+      .select("tenggat, jam_mulai, clients ( nama, email )")
+      .eq("id", permintaanId)
+      // Lihat dokblok: mengunci bacaan ini ke `menunggu_bayar` melindungi
+      // KEDUA jalur pemanggil (`terbitkanTagihan` dan `kirimUlangEmailTagihan`)
+      // sekaligus, sejajar dengan `.eq("status", PERMINTAAN_SIAP_KONFIRMASI)`
+      // pada `terbitkanTagihan` di atas.
+      .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
+      .maybeSingle<{
+        tenggat: string | null;
+        jam_mulai: string;
+        clients: { nama: string; email: string } | null;
+      }>();
+
+    if (!baris) return false;
+
+    const email = baris.clients?.email ?? "";
+    if (email === "") return false;
+
+    const { html, teks } = emailTagihan({
+      namaKlien: baris.clients?.nama ?? t.namaKlien,
+      namaLayanan: t.namaLayanan,
+      tanggal: t.tanggal,
+      jam: formatJam(jamDariDb(baris.jam_mulai)),
+      hargaLayanan: t.hargaLayanan,
+      hargaTransport: t.hargaTransport,
+      labelJenjang: t.labelJenjang ?? "",
+      total: t.total,
+      tenggatAbsolut: formatTenggatAbsolut(baris.tenggat),
+      tautanBayar: `${basisUrl}/passport/bayar`,
+    });
+
+    const hasil = await kirimEmail({
+      ke: email,
+      subjek: subjekTagihan({ namaLayanan: t.namaLayanan, tanggal: t.tanggal }),
+      html,
+      teks,
+    });
+
+    if (hasil.ok) {
+      // Galat di sini DIBUANG dengan sengaja, bukan menggagalkan pemanggil:
+      // emailnya sudah SAMPAI. Tetap dicatat ke log — bukan ditelan senyap —
+      // supaya operator tahu kolom jejaknya bisa berselisih dengan kenyataan,
+      // tanpa membuat kegagalan tulis satu kolom terlihat seperti kegagalan
+      // kirim (yang akan mendorong admin mengirim ulang dan menagih klien
+      // dua kali untuk satu email yang sama).
+      const { error } = await supabase
+        .from("booking_requests")
+        .update({ email_tagihan_pada: new Date().toISOString() })
+        .eq("id", permintaanId);
+      if (error) {
+        console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);
+      }
+    }
+    return hasil.ok;
+  } catch (e) {
+    // Lihat dokblok: beberapa langkah di atas BISA melempar (service role
+    // hilang, jam tak sah, tanggal tak sah). Menelan di sini membuat jaminan
+    // "TIDAK PERNAH menggagalkan pemanggilnya" sungguhan, bukan sekadar
+    // klaim di komentar.
+    console.error("[email] kirimEmailTagihan gagal tak terduga:", e);
     return false;
   }
-
-  const supabase = await createServerSupabase();
-  const { data: baris } = await supabase
-    .from("booking_requests")
-    .select("tenggat, jam_mulai, clients ( nama, email )")
-    .eq("id", permintaanId)
-    .maybeSingle<{
-      tenggat: string | null;
-      jam_mulai: string;
-      clients: { nama: string; email: string } | null;
-    }>();
-
-  const email = baris?.clients?.email ?? "";
-  if (email === "") return false;
-
-  const { html, teks } = emailTagihan({
-    namaKlien: baris?.clients?.nama ?? t.namaKlien,
-    namaLayanan: t.namaLayanan,
-    tanggal: t.tanggal,
-    jam: formatJam(jamDariDb(baris!.jam_mulai)),
-    hargaLayanan: t.hargaLayanan,
-    hargaTransport: t.hargaTransport,
-    labelJenjang: t.labelJenjang ?? "",
-    total: t.total,
-    tenggatAbsolut: formatTenggatAbsolut(baris?.tenggat ?? null),
-    tautanBayar: `${process.env.NEXT_PUBLIC_BASIS_URL ?? ""}/passport/bayar`,
-  });
-
-  const hasil = await kirimEmail({
-    ke: email,
-    subjek: subjekTagihan({ namaLayanan: t.namaLayanan, tanggal: t.tanggal }),
-    html,
-    teks,
-  });
-
-  if (hasil.ok) {
-    await supabase
-      .from("booking_requests")
-      .update({ email_tagihan_pada: new Date().toISOString() })
-      .eq("id", permintaanId);
-  }
-  return hasil.ok;
 }
 
 /**
