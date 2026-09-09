@@ -31,19 +31,24 @@ import { querySql } from "./helpers/db";
  * DIIKAT KE TIPE: `status_bayar int` tetap akan merah, karena itu nominal yang
  * menyamar sebagai status.
  *
- * Yang sengaja TIDAK dituduh (kedua): VIEW `harga_publik`. Ini bukan celah
- * yang sama dengan yang ditolak `lib/owner/rekap.ts` — penolakan di sana
- * menyasar view AGREGAT yang diam-diam melewati RLS dan pernah membocorkan
- * rate card LENGKAP (termasuk honor) ke admin lewat SELECT biasa. View ini
- * sebaliknya: sempit, disengaja, dan pagarnya justru ADA di kolomnya —
- * `honor_mitra` tidak pernah ikut diproyeksikan, dan daftar empat kolom yang
- * boleh tampil dikunci sebagai assertion terpisah di
- * tests/harga-publik.test.ts. Harga klien memang DIPUTUSKAN tampil publik
- * (spec V4, §4.4); yang tidak berubah adalah honor mitra tidak pernah keluar
- * dari `variant_rates`. Pengecualian di bawah karena itu HANYA membebaskan
- * `harga_klien` & `harga_coret` pada view ini — bukan seluruh view, bukan
- * melebarkan `TABEL_UANG`, dan bukan melonggarkan `POLA_NOMINAL` — sehingga
- * `honor_mitra` yang seandainya muncul di view ini tetap memerahkan uji ini.
+ * Yang sengaja TIDAK dituduh (kedua): DUA VIEW, `harga_publik` &
+ * `varian_harga_staf`. Ini bukan celah yang sama dengan yang ditolak
+ * `lib/owner/rekap.ts` — penolakan di sana menyasar view AGREGAT yang
+ * diam-diam melewati RLS dan pernah membocorkan rate card LENGKAP (termasuk
+ * honor) ke admin lewat SELECT biasa. Kedua view ini sebaliknya: sempit,
+ * disengaja, dan pagarnya justru ADA di kolomnya — `honor_mitra` tidak
+ * pernah ikut diproyeksikan di salah satu pun. `harga_publik` menyasar
+ * pengunjung anon (empat kolomnya dikunci terpisah di
+ * tests/harga-publik.test.ts); `varian_harga_staf` (migration
+ * `harga_klien_untuk_staf`) menyasar staf admin lewat `authenticated`, dengan
+ * predikat `user_role()` di dalamnya sebagai pagar peran tambahan. Harga
+ * klien memang DIPUTUSKAN tampil ke keduanya (spec V4 §4.4, dan spec
+ * "harga-di-master-layanan" K1/K2); yang tidak berubah adalah honor mitra
+ * tidak pernah keluar dari `variant_rates` lewat jalur mana pun. Pengecualian
+ * di bawah karena itu HANYA membebaskan `harga_klien` & `harga_coret` PER
+ * VIEW yang didaftarkan — bukan seluruh view, bukan melebarkan `TABEL_UANG`,
+ * dan bukan melonggarkan `POLA_NOMINAL` — sehingga `honor_mitra` yang
+ * seandainya muncul di salah satu view ini tetap memerahkan uji ini.
  */
 
 /**
@@ -63,21 +68,31 @@ import { querySql } from "./helpers/db";
 const TABEL_UANG = new Set(["variant_rates", "honor_marks", "transport_rates", "transport_khusus"]);
 
 /**
- * Satu-satunya view yang boleh memuat kolom nominal — dan hanya DUA kolomnya.
+ * View yang boleh memuat kolom nominal — dan untuk masing-masing, hanya DUA
+ * kolomnya. Dulu hanya `harga_publik`; migration `harga_klien_untuk_staf`
+ * menambah `varian_harga_staf` untuk sisi admin, jadi daftarnya kini DUA
+ * entri, bukan satu.
  *
- * Harga klien memang DIPUTUSKAN tampil publik (spec V4): pengunjung harus bisa
- * melihat pricelist sebelum mendaftar. Yang tidak berubah: honor mitra tidak
- * pernah keluar dari variant_rates, dan daftar kolom view ini dikunci terpisah
- * di tests/harga-publik.test.ts.
+ * Harga klien memang DIPUTUSKAN tampil publik (spec V4) MAUPUN ke staf admin
+ * (spec "harga-di-master-layanan" K1/K2): pengunjung harus bisa melihat
+ * pricelist sebelum mendaftar, dan admin harus bisa menjawab pertanyaan harga
+ * dari layar yang sedang ia buka. Yang tidak berubah di KEDUA view: honor
+ * mitra tidak pernah keluar dari `variant_rates`, dan daftar kolom
+ * `harga_publik` dikunci terpisah di tests/harga-publik.test.ts.
  *
- * Pengecualian di bawah dipersempit ke KOLOM, bukan ke seluruh view: bila
- * `honor_mitra` kelak muncul di proyeksi `harga_publik`, nama kolomnya sendiri
- * tidak ada dalam daftar ini, sehingga uji ini TETAP merah — dua uji menjaga
- * satu batas, bukan satu uji yang bisa dilewati begitu view-nya dikecualikan
- * secara keseluruhan.
+ * Pengecualian di bawah dipersempit ke KOLOM per-view, bukan ke seluruh view:
+ * bila `honor_mitra` kelak muncul di proyeksi salah satu view ini, nama
+ * kolomnya sendiri tidak ada dalam set yang dipetakan ke view itu, sehingga
+ * uji ini TETAP merah — dua uji menjaga satu batas (untuk `harga_publik`),
+ * bukan satu uji yang bisa dilewati begitu view-nya dikecualikan secara
+ * keseluruhan. Menambah entri baru di sini TIDAK melebarkan `TABEL_UANG` —
+ * itu forbidden fix yang berbeda: view baru masih harus didaftarkan SADAR,
+ * per-kolom, di sini.
  */
-const VIEW_HARGA_PUBLIK = "harga_publik";
-const KOLOM_HARGA_PUBLIK_DIIZINKAN = new Set(["harga_klien", "harga_coret"]);
+const KOLOM_UANG_VIEW_DIIZINKAN = new Map<string, Set<string>>([
+  ["harga_publik", new Set(["harga_klien", "harga_coret"])],
+  ["varian_harga_staf", new Set(["harga_klien", "harga_coret"])],
+]);
 
 /**
  * Pola nama kolom bernuansa uang. Sengaja dicocokkan per-KATA (dibatasi `_`
@@ -161,10 +176,7 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
   it("tidak ada kolom bernuansa nominal uang di luar variant_rates & honor_marks", () => {
     const pelanggaran = semuaKolom
       .filter((k) => !TABEL_UANG.has(k.table_name))
-      .filter(
-        (k) =>
-          !(k.table_name === VIEW_HARGA_PUBLIK && KOLOM_HARGA_PUBLIK_DIIZINKAN.has(k.column_name)),
-      )
+      .filter((k) => !(KOLOM_UANG_VIEW_DIIZINKAN.get(k.table_name)?.has(k.column_name) ?? false))
       .filter((k) => bernuansaUang(k.column_name))
       .filter((k) => !statusSah(k))
       .map((k) => `${k.table_name}.${k.column_name} (${k.data_type})`);

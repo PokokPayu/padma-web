@@ -47,9 +47,18 @@ Pola ini sudah dipakai repo ini untuk `partner_publik`, yang migrasinya menulisk
 disembunyikan di UI — ia **tidak pernah meninggalkan basis data**, lewat jalur mana pun yang
 dilalui sisi admin.
 
-`where public.user_role() in ('admin','owner')` membuat view kosong bagi klien, sehingga
-`grant … to authenticated` tidak diam-diam membuka harga ke Passport. Gagalnya menutup, bukan
-membuka.
+`where public.user_role() in ('admin','owner')` membuat view kosong bagi klien — tapi ini
+pertahanan LAPIS KEDUA, bukan batasnya. **Koreksi (review akhir):** klaim awal di sini — bahwa
+predikat inilah yang mencegah `grant … to authenticated` "diam-diam membuka harga ke Passport" —
+salah arah. Harga klien SUDAH publik sebelum pekerjaan ini: view `harga_publik`
+(migration `20260906150000`) sudah men-grant `harga_klien`/`harga_coret` ke peran **anon**, dan
+beranda merendernya. Batas yang sesungguhnya — dan satu-satunya — tetap seperti judul bagian ini:
+DAFTAR KOLOM view (K1's judul), yang membuat `honor_mitra` tidak pernah ikut diproyeksikan.
+Predikat `user_role()` di atas tidak menutup kebocoran harga (harga sudah bocor secara sengaja ke
+publik); ia menutup jalur klien membaca `variant_rates` lewat view ini SAMA SEKALI — pertahanan
+berlapis yang berharga (klien login sebagai `authenticated`, peran SQL yang sama dengan admin), tapi
+bukan yang menjaga honor mitra. Yang menjaga honor mitra, sendirian, adalah `honor_mitra` tidak
+pernah disebut di `select`-nya.
 
 ### K2 — Setiap staf admin boleh melihat SELURUH harga klien
 
@@ -87,9 +96,12 @@ keputusan yang dibuat sadar berhak punya jejak; bukan untuk diperdebatkan ulang.
 
 ### K5 — Pagar money firewall DIPERKETAT, bukan dilemahkan
 
-Tiga assertion sekarang berbunyi "nol nominal di halaman ini"
-(`tests/admin-layanan.test.ts`, `tests/admin-layanan-detail.test.tsx` dua tempat). Halaman ini
-sekarang memang menampilkan nominal, jadi ketiganya pasti merah.
+**Koreksi (review akhir):** bukan tiga assertion di dua berkas — hanya **DUA** assertion, dan
+KEDUANYA di `tests/admin-layanan-detail.test.tsx` (bukan di `tests/admin-layanan.test.ts`: halaman
+daftar datar itu tidak pernah menampilkan nominal apa pun, sebelum maupun sesudah pekerjaan ini,
+jadi pagar "nol nominal"-nya di sana tetap benar dan tetap hijau tanpa diubah). Yang berbunyi "nol
+nominal di halaman ini" dan pasti merah sesudah pekerjaan ini hanya dua tempat di berkas detail
+layanan itu — satu di describe utama, satu di describe "guarantee yang pindah dari Tugas 7".
 
 Yang **dilarang**: menggantinya dengan assertion yang mengizinkan nominal apa pun. Itu menukar pagar
 dengan ketiadaan pagar.
@@ -101,6 +113,24 @@ Yang **dikerjakan**: assertion diubah untuk menjaga hal yang sebenarnya penting 
 
 Butir 2 penting: tanpanya, view yang salah tulis dan memulangkan nol baris akan lolos sebagai
 "tidak ada nominal bocor" — kegagalan senyap yang berbentuk kolom harga kosong.
+
+**Tambahan (review akhir) — dua pagar STRUKTURAL yang juga tersentuh, tidak disebut di draf awal
+bagian ini:**
+
+3. `tests/money-firewall-struktural.test.ts` memindai `information_schema.columns` seluruh
+   `BASE TABLE` **dan `VIEW`** untuk kolom bernuansa uang, dengan pengecualian yang dulu terpaku ke
+   SATU nama view (`harga_publik`). View baru `varian_harga_staf` memerahkannya — diperbaiki dengan
+   menambah pengecualian KEDUA yang dipersempit sama seperti yang pertama: nama view PLUS set kolom
+   `{harga_klien, harga_coret}` yang persis, bukan melebarkan `TABEL_UANG` atau mengecualikan
+   seluruh view.
+4. `tests/admin-pengerasan.test.ts` menuntut `anon` & `authenticated` tidak memegang verba tulis
+   pada VIEW mana pun di schema `public`. Migration `harga_klien_untuk_staf` awalnya men-`grant
+   select ... to authenticated` TANPA `revoke all` di depannya — dan Supabase memberi hak PENUH
+   (termasuk INSERT/UPDATE/DELETE/TRIGGER) atas setiap objek baru secara default, jadi tanpa revoke
+   itu `authenticated` diam-diam memegang verba tulis atas view ini. Pola yang sama sudah pernah
+   memerahkan pagar ini sekali sebelumnya (migration `sesi_menunggu_jenjang`); perbaikannya
+   menambahkan `revoke all on public.varian_harga_staf from public, anon, authenticated;` tepat
+   sebelum `grant`-nya.
 
 ### K6 — Cakupan
 

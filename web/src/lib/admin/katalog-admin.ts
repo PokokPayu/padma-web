@@ -166,6 +166,12 @@ export async function daftarKatalogAdmin(): Promise<FaseKelola[]> {
     // sengaja tidak pernah disebut modul admin — pagar di
     // tests/admin-layanan.test.ts memang memeriksa itu, dan pagar itu tetap
     // benar sesudah pekerjaan ini.
+    //
+    // Query ini TIDAK dipaginasi dan tetap tunduk pada `max_rows = 1000`
+    // PostgREST — kelas utang yang sama dengan komentar di
+    // `@/lib/admin/layanan` (`ambilDaftarLayanan`): lewat 1000 varian
+    // bertarif, sisanya diam-diam hilang dari peta harga di bawah dan
+    // tampil "—" di layar, bukan error.
     supabase
       .from("varian_harga_staf")
       .select("variant_id, harga_klien, harga_coret")

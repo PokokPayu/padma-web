@@ -163,6 +163,20 @@ describe("halaman detail layanan", () => {
     //      yang salah tulis dan memulangkan NOL BARIS akan lolos sebagai
     //      "tidak ada nominal bocor" — kegagalan senyap berbentuk kolom harga
     //      yang kosong, bukan error.
+    //
+    // PENJAGA FIXTURE (review akhir): angka 125.000/300.000 di atas hanya
+    // benar untuk "Baby Massage Class" — bukan untuk `LAYANAN` (baris[0])
+    // apa pun. `LAYANAN` kebetulan JATUH pada layanan itu karena ia layanan
+    // AKTIF pertama secara alfabet hari ini; layanan lain yang lahir lebih
+    // awal secara alfabet (mis. fixture test lain yang tidak dibersihkan)
+    // akan menggantinya diam-diam, dan pagar di bawah akan membandingkan
+    // "Rp 300.000" terhadap markup layanan yang TIDAK PERNAH punya nominal
+    // itu — pagar yang tidak bisa gagal. Baris berikut membuktikan asumsi
+    // itu sebelum angkanya dipakai, sehingga pagar ini benar-benar
+    // falsifiable, bukan kebetulan yang lolos.
+    expect(LAYANAN.id, "LAYANAN bukan lagi 'Baby Massage Class' — fixture asumsi ini basi").toBe(
+      "11111111-1111-1111-1111-111111111110",
+    );
     const nominal = nominalDalam(await markup(LAYANAN.id));
     expect(nominal).not.toContain("Rp 125.000");
     expect(nominal).toContain("Rp 300.000");
@@ -331,8 +345,10 @@ describe("detail layanan — guarantee yang pindah dari Tugas 7", () => {
     // sungguhan untuk dibuktikan, bukan hanya "—" (varian tanpa tarif).
     // `berlaku_sejak` di masa lampau, bukan mengandalkan default
     // `current_date`: view `varian_harga_staf` menyaring `berlaku_sejak <=
-    // hari ini` menurut kalender Asia/Jakarta, dan baris ini tidak boleh
-    // jatuh ke sisi "belum berlaku" akibat selisih zona waktu.
+    // hari ini` menurut kalender Asia/Jakarta — bukan `current_date` yang
+    // UTC, yang setiap dini hari WIB masih membaca kemarin dan bisa membuat
+    // baris yang seharusnya SUDAH berlaku tertunda tujuh jam, bukan tampil
+    // lebih awal.
     await admin.from("variant_rates").insert({
       variant_id: varianBakuDetail,
       harga_klien: 555000,

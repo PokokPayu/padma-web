@@ -70,6 +70,15 @@ const TABEL_TERTUTUP_ANON = [
   // jenjangnya belum ditetapkan. Pola hak persis sama dengan view di atas —
   // nol nominal, batas peran ada DI DALAM view lewat `user_role()`.
   "sesi_menunggu_jenjang_transport",
+  // View harga klien untuk staf (migration `harga_klien_untuk_staf`,
+  // Tugas 2 harga-di-master-layanan): pola hak sama dengan dua view di
+  // atas — batas peran ada DI DALAM view lewat `user_role() in
+  // ('admin','owner')`, bukan di GRANT-nya. Di sini nominalnya BUKAN nol
+  // (harga_klien/harga_coret memang keluar), tetapi anon tidak pernah masuk
+  // ke daftar peran itu, jadi ia tetap tidak punya urusan sama sekali
+  // dengan view ini — beda dari `harga_publik` yang justru SENGAJA
+  // digrant ke anon.
+  "varian_harga_staf",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */

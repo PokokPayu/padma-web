@@ -17,8 +17,9 @@
 -- dijaga — atau menulis pemilih kedua yang bisa berselisih dengan yang pertama.
 --
 -- Batas harinya kalender ASIA/JAKARTA, bukan `current_date`: server berjalan
--- UTC, dan antara 17:00-24:00 UTC tanggalnya sudah besok. Tarif yang berlaku
--- "mulai besok" tidak boleh muncul tujuh jam lebih awal.
+-- UTC, dan setiap dini hari WIB `current_date` masih kemarin. Tarif yang
+-- sudah berlaku "mulai hari ini" menurut kalender Jakarta tidak boleh
+-- tertunda tujuh jam gara-gara dicek dengan tanggal UTC.
 create view public.varian_harga_staf with (security_invoker = off) as
   select distinct on (vr.variant_id)
          vr.variant_id,
@@ -30,6 +31,13 @@ create view public.varian_harga_staf with (security_invoker = off) as
      and public.user_role() in ('admin', 'owner')
    order by vr.variant_id, vr.berlaku_sejak desc;
 
+-- WAJIB revoke SEBELUM grant: Supabase memberi hak bawaan PENUH atas SETIAP
+-- objek baru di skema `public` — termasuk VIEW — kepada `anon` MAUPUN
+-- `authenticated`, dan `grant select ... to authenticated` MENAMBAH, bukan
+-- MENGGANTIKAN. Melewatkan urutan ini sudah sekali memerahkan
+-- tests/admin-pengerasan.test.ts pada migrasi sebelumnya di branch ini
+-- (lihat migration `sesi_menunggu_jenjang`).
+revoke all on public.varian_harga_staf from public, anon, authenticated;
 grant select on public.varian_harga_staf to authenticated;
 
 comment on view public.varian_harga_staf is
