@@ -93,6 +93,7 @@ type BarisSesi = {
   variant_id: string;
   partner_id: string;
   jenjang: JenjangTransport | null;
+  alamat: string | null;
   services: { nama: string } | null;
 };
 
@@ -111,6 +112,40 @@ type BarisVarianSesi = {
 // DELETE, tetapi `labelVarian()` tetap butuh sesuatu untuk dipanggil).
 const VARIAN_BAKU = { label: "", durasiMenit: null, format: null } as const;
 
+/**
+ * Kolom sesi yang dibaca Passport — SATU daftar untuk riwayat dan untuk detail
+ * satu sesi. Dua daftar yang harus identik selamanya adalah persis jenis
+ * kembaran yang akhirnya menyimpang, dan bentuk kegagalannya senyap: kolom
+ * yang lupa ditambahkan di salah satunya memulangkan `undefined`, bukan galat.
+ */
+const KOLOM_SESI =
+  "id, tanggal, jam_mulai, status, catatan, rekomendasi, status_bayar, " +
+  "client_package_id, service_id, variant_id, partner_id, jenjang, alamat, services(nama)";
+
+/** Baris mentah → bentuk yang dibaca layar. Dipakai kedua pembaca di bawah. */
+function petakanSesi(
+  r: BarisSesi,
+  namaMitraPer: Map<string, string>,
+  varianPerId: Map<string, BarisVarianSesi>,
+): SesiRingkas {
+  const v = varianPerId.get(r.variant_id);
+  return {
+    id: r.id,
+    serviceId: r.service_id,
+    namaLayanan: r.services?.nama ?? "Layanan",
+    namaMitra: namaMitraPer.get(r.partner_id) ?? "Tim PADMA",
+    tanggal: r.tanggal,
+    jamMulai: r.jam_mulai,
+    status: r.status,
+    clientPackageId: r.client_package_id,
+    catatan: r.catatan ?? "",
+    rekomendasi: r.rekomendasi ?? "",
+    statusBayar: r.status_bayar,
+    jenjang: r.jenjang,
+    varian: v ? { label: v.label, durasiMenit: v.durasi_menit, format: v.format } : VARIAN_BAKU,
+  };
+}
+
 export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
   const supabase = await createServerSupabase();
 
@@ -126,9 +161,7 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
   const [{ data: sesi }, { data: mitra }, { data: varian }] = await Promise.all([
     supabase
       .from("sessions")
-      .select(
-        "id, tanggal, jam_mulai, status, catatan, rekomendasi, status_bayar, client_package_id, service_id, variant_id, partner_id, jenjang, services(nama)",
-      )
+      .select(KOLOM_SESI)
       .eq("client_id", clientId) // eksplisit, walau RLS sudah menyaring
       // `tanggal` bertipe date dan sudah berupa string YYYY-MM-DD: urutannya
       // diserahkan ke Postgres, tidak pernah ke aritmatika Date di JS.
@@ -147,26 +180,55 @@ export async function ambilSesi(clientId: string): Promise<SesiRingkas[]> {
   const namaMitraPer = new Map((mitra ?? []).map((m) => [m.id, m.nama]));
   const varianPerId = new Map((varian ?? []).map((v) => [v.id, v] as const));
 
-  return (sesi ?? []).map((r) => {
-    const v = varianPerId.get(r.variant_id);
-    return {
-      id: r.id,
-      serviceId: r.service_id,
-      namaLayanan: r.services?.nama ?? "Layanan",
-      namaMitra: namaMitraPer.get(r.partner_id) ?? "Tim PADMA",
-      tanggal: r.tanggal,
-      jamMulai: r.jam_mulai,
-      status: r.status,
-      clientPackageId: r.client_package_id,
-      catatan: r.catatan ?? "",
-      rekomendasi: r.rekomendasi ?? "",
-      statusBayar: r.status_bayar,
-      jenjang: r.jenjang,
-      varian: v
-        ? { label: v.label, durasiMenit: v.durasi_menit, format: v.format }
-        : VARIAN_BAKU,
-    };
-  });
+  return (sesi ?? []).map((r) => petakanSesi(r, namaMitraPer, varianPerId));
+}
+
+/**
+ * SATU sesi milik klien ini — untuk `/passport/sesi/[id]`.
+ *
+ * `clientId` DAN `sesiId` dua-duanya menyaring, walau RLS "sessions: milik
+ * sendiri" sudah melakukannya: id di sini datang dari URL, dan halaman yang
+ * mengandalkan satu lapis saja adalah halaman yang bocor begitu satu policy
+ * disunting keliru. Pola yang sama dipegang `ambilSesi` (lihat `.eq` di atas).
+ *
+ * `null` berarti tidak ada ATAU bukan miliknya — dua-duanya berakhir
+ * `notFound()` di halaman, dan membedakannya di layar akan membocorkan
+ * keberadaan sesi yang tidak boleh dilihat pemanggilnya.
+ */
+export async function ambilSesiSatu(
+  clientId: string,
+  sesiId: string,
+): Promise<(SesiRingkas & { alamat: string }) | null> {
+  const supabase = await createServerSupabase();
+
+  const { data: sesi } = await supabase
+    .from("sessions")
+    .select(KOLOM_SESI)
+    .eq("client_id", clientId)
+    .eq("id", sesiId) // operator setara, tidak pernah pola
+    .maybeSingle<BarisSesi>();
+
+  if (!sesi) return null;
+
+  // Dua tabel kecil, ditarik SESUDAH baris sesinya ada — bukan bersamaan.
+  // Halaman yang dibuka dengan id asing tidak perlu membayar dua query untuk
+  // hasil yang toh dibuang.
+  const [{ data: mitra }, { data: varian }] = await Promise.all([
+    supabase.from("partner_publik").select("id, nama").returns<BarisMitra[]>(),
+    supabase
+      .from("service_variants")
+      .select("id, label, durasi_menit, format")
+      .returns<BarisVarianSesi[]>(),
+  ]);
+
+  return {
+    ...petakanSesi(
+      sesi,
+      new Map((mitra ?? []).map((m) => [m.id, m.nama])),
+      new Map((varian ?? []).map((v) => [v.id, v] as const)),
+    ),
+    alamat: sesi.alamat ?? "",
+  };
 }
 
 type BarisPaket = {

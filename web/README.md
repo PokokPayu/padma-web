@@ -102,7 +102,8 @@ sama-sama membuat `npm test` MERAH.
 | `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
 | `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
 | `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
-| `/passport/sesi` | Klien | Riwayat sesi + catatan & rekomendasi bidan (tertutup sampai diketuk) |
+| `/passport/sesi/[id]` | Klien | Detail satu kunjungan: jadwal, bidan, tempat, catatan & rekomendasi bidan dengan ruang penuh |
+| `/passport/sesi` | Klien | Riwayat sesi; tiap kartu menaut ke detail kunjungannya |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
 | `/passport/materi/[id]` | Klien | Reader e-book/video berwatermark identitas, tanpa unduhan |
 | `/passport/bayar` | Klien | STATUS tagihan (tanpa nominal) + klaim "saya sudah bayar" |
