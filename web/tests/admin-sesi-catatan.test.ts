@@ -867,7 +867,12 @@ describe("tetapkanJenjang — penimpaan admin", () => {
 describe("daftar sesi di halaman /admin/sesi", () => {
   it("menampilkan sesi dengan nama klien, layanan, mitra, dan status", async () => {
     await buatSesi("terjadwal", { denganPaket: true });
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    // `tab: "sesi"` sejak halaman ini bertab dua: bawaannya kini Permintaan,
+    // dan tabel sesi hidup di tab sebelah. Tanpa parameter ini seluruh
+    // assertion di bawah memeriksa daftar yang salah.
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ tab: "sesi" }) }),
+    );
 
     expect(markup).toContain("Ananda");
     expect(markup).toContain("Prenatal Gentle Yoga");
@@ -907,7 +912,10 @@ describe("daftar sesi di halaman /admin/sesi", () => {
     // daftar pilihan klien/layanan/varian baru ditarik saat `?ubah=baru`
     // (lihat Ruling di brief Task 3). UUID klien karena itu tidak boleh
     // pernah ikut ke markup pada keadaan tertutup.
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    // "+ Sesi baru" adalah aksi bilah daftar SESI, jadi tab-nya disebut.
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ tab: "sesi" }) }),
+    );
     expect(markup).toContain("+ Sesi baru");
     expect(markup).not.toContain(KLIEN);
   });
@@ -989,19 +997,22 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
   });
 
   it("chip saringan menaut, bukan menekan tombol", async () => {
-    const m = await markupSesi();
+    const m = await markupSesi({ tab: "sesi" });
+    // `tab` ditulis PALING AWAL pada setiap href (parameter lengket, lihat
+    // `bangunQuery`), dan itu yang menjaga chip saringan tetap di tabnya
+    // sendiri alih-alih melempar admin kembali ke Permintaan.
     for (const href of [
-      "/admin/sesi?status=terjadwal",
-      "/admin/sesi?status=selesai",
-      "/admin/sesi?jenjang=kosong",
-      "/admin/sesi?waktu=pekan_ini",
+      "/admin/sesi?tab=sesi&amp;status=terjadwal",
+      "/admin/sesi?tab=sesi&amp;status=selesai",
+      "/admin/sesi?tab=sesi&amp;jenjang=kosong",
+      "/admin/sesi?tab=sesi&amp;waktu=pekan_ini",
     ]) {
       expect(m, `chip ${href} hilang`).toContain(`href="${href}"`);
     }
   });
 
   it("tombol baru membuka panel, BUKAN kartu yang mendorong isi halaman", async () => {
-    const m = await markupSesi();
+    const m = await markupSesi({ tab: "sesi" });
     expect(m).toContain('href="/admin/sesi?ubah=baru"');
     // Kartu putus-putus lama tidak boleh tersisa di keadaan tertutup.
     expect(m).not.toContain("border-dashed");
@@ -1022,7 +1033,11 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
 
   it("menutup panel mempertahankan cari, saringan, dan halaman", async () => {
     const m = await markupSesi({ cari: "ananda", status: "selesai", hal: "2", ubah: "baru" });
-    expect(m).toContain('href="/admin/sesi?cari=ananda&amp;status=selesai&amp;hal=2"');
+    // `ubah` MEMAKSA tab sesi, jadi `tab=sesi` ikut tertulis — dan ia berdiri
+    // paling depan karena parameter lengket ditulis lebih dulu dari `cari`.
+    // Tanpa `tab`, menutup panel akan memulangkan admin ke tab Permintaan
+    // dengan saringan sesi yang tidak berlaku di sana.
+    expect(m).toContain('href="/admin/sesi?tab=sesi&amp;cari=ananda&amp;status=selesai&amp;hal=2"');
   });
 
   it("penjelasan halaman pindah ke tombol bantuan yang terlipat", async () => {
@@ -1033,9 +1048,21 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
 
   it("atribusi OpenStreetMap tetap tampak tanpa membuka apa pun", async () => {
     // Kewajiban lisensi ODbL: atribusi harus tampak di LAYAR yang menampilkan
-    // hasil geocoding. Kolom "Jenjang" tampil begitu halaman dimuat, jadi
+    // hasil geocoding. Kolom "Jenjang" tampil begitu tab Sesi dimuat, jadi
     // atribusinya tidak boleh ikut pindah ke dalam panel yang mulai tertutup.
-    const m = await markupSesi();
+    //
+    // KENAPA `tab: "sesi"`, DAN KENAPA ITU BUKAN PELONGGARAN. Sejak halaman
+    // bertab dua, satu-satunya keluaran geocoding yang tergambar TANPA klik
+    // adalah kolom "Jenjang" milik tabel sesi — dan atribusinya berdiri tepat
+    // di atas tabel itu. Tab Permintaan tidak menggambar jarak sama sekali:
+    // tabelnya berisi klien/layanan/tanggal/status/bayar, dan jarak bidan baru
+    // muncul di dalam panel geser, yang membawa atribusinya SENDIRI
+    // (`panel-permintaan.tsx`, "Peta & lokasi dari data © OpenStreetMap
+    // contributors"). Jadi kewajibannya tetap terpenuhi di kedua layar; yang
+    // berubah hanya di mana masing-masing tinggal. Yang TIDAK boleh terjadi —
+    // dan inilah yang masih dijaga baris di bawah — adalah atribusi tab Sesi
+    // ikut terseret ke dalam panel yang mulai tertutup.
+    const m = await markupSesi({ tab: "sesi" });
     expect(m).toContain("OpenStreetMap");
   });
 
@@ -1045,7 +1072,7 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
   });
 
   it("pencarian yang tidak cocok menampilkan pesan pencarian, bukan tabel kosong", async () => {
-    const m = await markupSesi({ cari: "zzz-tidak-ada-sesi-bernama-ini" });
+    const m = await markupSesi({ tab: "sesi", cari: "zzz-tidak-ada-sesi-bernama-ini" });
     expect(m).toContain("Tidak ada sesi yang cocok dengan pencarian ini.");
   });
 
@@ -1059,7 +1086,7 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
       .spyOn(sesiMod, "ambilDaftarSesi")
       .mockResolvedValue({ baris: [], total: 0 });
     try {
-      const m = await markupSesi();
+      const m = await markupSesi({ tab: "sesi" });
       expect(m).toContain("Belum ada sesi.");
       expect(m).not.toContain("cocok dengan pencarian ini");
     } finally {
@@ -1067,17 +1094,25 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
     }
   });
 
-  // RULING (menggantikan draf Langkah 5 di brief Task 3): panel permintaan
-  // (sejak dua tab: `panel-permintaan.tsx`, dibuka lewat `?lihat=`) menerima
-  // prop `mitra` yang sama dengan panel "Sesi baru", dan punya cabang sendiri
-  // yang menampilkan "Belum ada mitra aktif —
-  // daftarkan mitra dulu di menu Mitra" bila `mitra.length === 0`. Draf awal
-  // brief menarik `pilihanMitra()` HANYA saat `ubah === "baru"`, yang berarti
-  // kalimat itu muncul setiap kali panel sesi tertutup — walau mitra aktif
-  // sungguhan ada — karena `page.tsx` mengirim array kosong ke tab
-  // Permintaan. Tanpa pagar ini, koreksi tersebut bisa lenyap lagi di edit
-  // berikutnya tanpa satu test pun menjadi merah.
-  describe("mitra tetap tersedia untuk antrean permintaan walau panel tertutup", () => {
+  // RULING (menggantikan draf Langkah 5 di brief Task 3): layar permintaan
+  // menerima prop `mitra` yang sama dengan panel "Sesi baru", dan punya cabang
+  // sendiri yang menampilkan "Belum ada mitra aktif. Tambahkan di menu Mitra
+  // lebih dulu." bila `mitra.length === 0`. Draf awal brief menarik
+  // `pilihanMitra()` HANYA saat `ubah === "baru"` — yaitu hanya ketika panel
+  // SESI terbuka — sehingga kalimat itu muncul di layar permintaan walau mitra
+  // aktif sungguhan ada, karena `page.tsx` mengirim array kosong ke sana.
+  // Pagarnya sekarang berbunyi `butuhMitra = ubah === "baru" || tab ===
+  // "permintaan"`.
+  //
+  // BENTUK UJINYA IKUT BERUBAH BERSAMA LAYARNYA. Sejak dua tab, kalimat itu
+  // hidup di `aksi-permintaan.tsx`, di dalam panel geser `?lihat=` — dan hanya
+  // pada status 'mencari_mitra', satu-satunya keadaan yang menggambar daftar
+  // bidan. Merendernya dengan panel TERTUTUP (yang dilakukan versi sebelumnya)
+  // membuat `not.toContain(...)` tidak pernah bisa gagal apa pun isi
+  // `butuhMitra`: kalimatnya memang tidak pernah dirender. Karena itu fixture
+  // dinaikkan ke 'mencari_mitra' dan panelnya dibuka — barulah assertion-nya
+  // hidup kembali.
+  describe("mitra ditarik untuk seluruh tab Permintaan, bukan hanya saat panel sesi terbuka", () => {
     const TGL_ANTREAN = "2026-12-29";
     let idPermintaanAntre = "";
 
@@ -1109,11 +1144,22 @@ describe("halaman sesi — bilah daftar & panel geser", () => {
       await admin.from("screenings").delete().like("kode", "UJI-%");
     });
 
-    it("TIDAK menampilkan 'Belum ada mitra aktif' walau panel tertutup", async () => {
-      const m = await markupSesi();
-      // Bukti bahwa antreannya sungguh dirender pada test ini — tanpa baris
-      // ini, test bisa hijau palsu karena blok antreannya sendiri gagal tampil.
-      expect(m).toContain("Permintaan jadwal");
+    it("TIDAK menampilkan 'Belum ada mitra aktif' di panel permintaan", async () => {
+      // 'diminta -> mencari_mitra' adalah perpindahan yang SAH, dan hanya pada
+      // keadaan itu panel menggambar daftar bidan.
+      const { error } = await admin
+        .from("booking_requests")
+        .update({ status: "mencari_mitra" })
+        .eq("id", idPermintaanAntre);
+      if (error) throw error;
+
+      const m = await markupSesi({ lihat: idPermintaanAntre });
+      // KANARI. Membuktikan panel permintaan ini sungguh tergambar, dan
+      // tergambar pada keadaan yang MEMANG memuat cabang "Belum ada mitra
+      // aktif". Tanpa dua baris ini assertion terakhir hijau palsu: kalimat
+      // yang tidak pernah dirender juga tidak pernah bisa ditemukan.
+      expect(m).toContain('role="dialog"');
+      expect(m).toContain("Tetapkan bidan");
       expect(m).not.toContain("Belum ada mitra aktif");
     });
   });

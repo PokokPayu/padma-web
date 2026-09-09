@@ -77,6 +77,12 @@ vi.mock("next/navigation", () => ({
     throw new Error("NOTFOUND");
   },
   usePathname: () => "/admin/sesi",
+  // `PanelGeser` memakai `useRouter` untuk tombol Escape/overlay. Sejak detail
+  // permintaan pindah ke panel geser, berkas ini ikut merendernya lewat
+  // `?lihat=` — dan pemanggilan `useRouter()` di badan komponen tetap butuh
+  // mock ini walau `renderToStaticMarkup` tidak menjalankan efeknya (pola sama
+  // persis dengan tests/admin-sesi-catatan.test.ts).
+  useRouter: () => ({ push: () => {} }),
 }));
 
 const { konfirmasiPermintaan, tolakPermintaan } = await import("@/app/admin/sesi/aksi");
@@ -602,32 +608,77 @@ describe("pagar basis data yang menopang modul ini", () => {
 // Halaman /admin/sesi
 // ---------------------------------------------------------------------------
 
-describe("halaman antrean permintaan (/admin/sesi)", () => {
-  it("menampilkan permintaan yang menunggu beserta konteksnya", async () => {
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+/**
+ * Sejak /admin/sesi menjadi dua tab, layar ini terbelah DUA dan uji di bawah
+ * ikut terbelah bersamanya:
+ *
+ *   `searchParams: {}`            → tab Permintaan, DAFTAR-nya (baris tabel)
+ *   `searchParams: { lihat: id }` → daftar yang sama + PANEL GESER baris itu
+ *
+ * Isi yang dulu tergambar sekaligus di blok emas kini terbagi: tabel memuat
+ * klien/layanan/tanggal/status/bayar, sedangkan catatan klien, alamat, daftar
+ * bidan, dan seluruh tombol pindah ke panel. Setiap `it` di bawah karena itu
+ * merender BENTUK yang memuat subjeknya — bukan `{}` untuk semuanya, yang akan
+ * membuat separuh assertion di sini tidak pernah bisa gagal.
+ */
+describe("halaman permintaan jadwal (/admin/sesi)", () => {
+  const render = async (sp: Record<string, string> = {}) =>
+    renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve(sp) }));
 
-    expect(markup).toContain("Ananda"); // nama klien, bukan sekadar UUID
-    expect(markup).not.toContain(KLIEN);
-    expect(markup).toContain("Fertility Massage"); // nama layanan
-    expect(markup).toContain("26 Desember 2026"); // tanggal terbaca manusia
-    expect(markup).toContain(LABEL_WAKTU.pagi);
-    expect(markup).toContain("Kalau bisa sebelum pukul 9."); // catatan klien
+  it("menampilkan permintaan yang menunggu beserta konteksnya", async () => {
+    const daftar = await render();
+
+    expect(daftar).toContain("Ananda"); // nama klien, bukan sekadar UUID
+    expect(daftar).not.toContain(KLIEN);
+    expect(daftar).toContain("Fertility Massage"); // nama layanan
+    expect(daftar).toContain("26 Desember 2026"); // tanggal terbaca manusia
+
+    // Preferensi waktu & catatan klien kini milik PANEL, bukan baris tabel:
+    // keduanya kalimat panjang yang tidak muat di kolom. Assertion-nya ikut
+    // pindah ke sana alih-alih dihapus — subjeknya tidak hilang, hanya
+    // berpindah tempat.
+    const panel = await render({ lihat: permintaanId });
+    expect(panel).toContain(LABEL_WAKTU.pagi);
+    expect(panel).toContain("Kalau bisa sebelum pukul 9."); // catatan klien
   });
 
   it("menawarkan mitra AKTIF untuk ditugaskan, bukan yang sudah pensiun", async () => {
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
-    expect(markup).toContain("Bidan Sri Wahyuni");
-    expect(markup).not.toContain("PAD-UJI Bidan Pensiun");
+    // Daftar bidan hanya tergambar pada 'mencari_mitra' — pada 'mitra_siap'
+    // (status fixture) panel sudah menyebut satu nama yang terpilih, sehingga
+    // "yang pensiun tidak ditawarkan" tidak punya daftar untuk dibuktikan.
+    // Fixture karena itu dimundurkan satu langkah; 'mitra_siap -> mencari_mitra'
+    // adalah perpindahan yang SAH (jalan "Ganti bidan").
+    const { error } = await admin
+      .from("booking_requests")
+      .update({ status: "mencari_mitra", partner_id: null })
+      .eq("id", permintaanId);
+    if (error) throw error;
+
+    const panel = await render({ lihat: permintaanId });
+    expect(panel).toContain("Bidan Sri Wahyuni");
+    expect(panel).not.toContain("PAD-UJI Bidan Pensiun");
   });
 
   it("menyediakan tombol Konfirmasi — Tolak sudah dilepas dari layar (spec C1 J8)", async () => {
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
-    expect(markup).toContain("Konfirmasi");
-    expect(markup).not.toContain("Tolak");
+    // "Konfirmasi jadwal" hanya muncul pada 'menunggu_bayar' + lunas (rantai
+    // C2): menampilkannya lebih awal berarti menawarkan tombol yang akan
+    // ditolak basis data. Fixture dinaikkan supaya yang diperiksa adalah
+    // keadaan tempat tombol itu memang seharusnya ada.
+    await naikkanKeMenungguBayarLunas();
+
+    const panel = await render({ lihat: permintaanId });
+    expect(panel).toContain("Konfirmasi jadwal");
+    // Berlaku untuk SELURUH layar, bukan hanya panelnya — termasuk chip
+    // saringan "Ditolak", yang huruf T-nya kecil dan karena itu lolos.
+    expect(panel).not.toContain("Tolak");
   });
 
   it("menjelaskan akibat konfirmasi kepada admin", async () => {
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
+    // Panduan ini dulu menempel di bawah antrean blok emas dan ikut terhapus
+    // bersamanya; ia dikembalikan ke blok "Tentang halaman ini", yang tergambar
+    // pada kedua tab. Akibat konfirmasi dan kewajiban mengabari klien tidak
+    // berubah oleh perubahan tata letak, jadi assertion-nya tidak diturunkan.
+    const markup = await render();
     expect(markup).toMatch(/sesi\s+Terjadwal/i);
     expect(markup).toMatch(/whatsapp/i);
   });
@@ -636,9 +687,18 @@ describe("halaman antrean permintaan (/admin/sesi)", () => {
     // Idem: dinaikkan ke 'menunggu_bayar' + lunas supaya konfirmasi ini
     // sungguh berhasil (lihat komentar beforeEach global soal fixture dasar).
     await naikkanKeMenungguBayarLunas();
+
+    // Dibuktikan lebih dulu bahwa barisnya MEMANG tergambar sebelum
+    // dikonfirmasi. Tanpa langkah ini assertion di bawah lulus bahkan bila
+    // daftarnya tidak pernah menggambar permintaan apa pun — persis bentuk
+    // kegagalan yang membuat uji ini berhenti menjaga apa-apa.
+    expect(await render()).toContain(permintaanId);
+
     await konfirmasiPermintaan(permintaanId);
-    const markup = renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve({}) }));
-    expect(markup).not.toContain("Kalau bisa sebelum pukul 9.");
+    const markup = await render();
+    // `data-permintaan={p.id}` pada tiap baris: id-nya tergambar di daftar,
+    // jadi ketiadaannya adalah bukti barisnya benar-benar keluar dari antrean.
+    expect(markup).not.toContain(permintaanId);
     expect(markup).toMatch(/tidak ada permintaan/i);
   });
 

@@ -68,7 +68,13 @@ export type BarisPermintaanDaftar = {
   padmaId: string;
   noHpKlien: string;
   namaLayanan: string;
-  /** Nama varian; null bila embed-nya dipulangkan kosong. */
+  /**
+   * Label varian — kolomnya bernama `label`, BUKAN `nama` (lihat
+   * migration 20260906100000_varian_layanan.sql). Salah menyebutnya membuat
+   * PostgREST memulangkan galat 42703 untuk SELURUH query, bukan hanya untuk
+   * kolom itu, sehingga daftarnya kosong tanpa satu pun pesan di layar.
+   * Varian baku ber-label string kosong, dan itu SAH.
+   */
   namaVarian: string | null;
   namaMitra: string | null;
   /** ISO `YYYY-MM-DD` mentah — pemformatannya milik halaman. */
@@ -100,7 +106,7 @@ type BarisMentah = {
   tenggat: string | null;
   clients: { nama: string; padma_id: string; no_hp: string } | null;
   services: { nama: string } | null;
-  service_variants: { nama: string } | null;
+  service_variants: { label: string } | null;
   partners: { nama: string } | null;
 };
 
@@ -119,7 +125,7 @@ export async function ambilDaftarPermintaan(
       "id, tanggal, jam_mulai, preferensi_waktu, catatan, alamat, alamat_lat, alamat_lon, " +
         "status, status_bayar, tenggat, " +
         "clients!inner ( nama, padma_id, no_hp ), services ( nama ), " +
-        "service_variants ( nama ), partners ( nama )",
+        "service_variants ( label ), partners ( nama )",
       { count: "exact" },
     )
     // Disalin ke array biasa: `.in()` menolak `readonly string[]`.
@@ -146,7 +152,7 @@ export async function ambilDaftarPermintaan(
       padmaId: p.clients?.padma_id ?? "",
       noHpKlien: p.clients?.no_hp ?? "",
       namaLayanan: p.services?.nama ?? "Layanan",
-      namaVarian: p.service_variants?.nama ?? null,
+      namaVarian: p.service_variants?.label ?? null,
       namaMitra: p.partners?.nama ?? null,
       tanggal: p.tanggal,
       jamMulai: p.jam_mulai,

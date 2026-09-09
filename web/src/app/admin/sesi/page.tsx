@@ -217,12 +217,18 @@ export default async function SesiPage({
     <main>
       <header className="mb-4">
         <h1 className="text-[18px] font-bold text-panel-ink">Sesi</h1>
+        {/* Kalimat kedua ("Konfirmasi mengubah…") adalah panduan yang dulu menempel
+            di bawah antrean blok emas. Ia nyaris ikut terhapus bersama antreannya,
+            padahal akibat konfirmasi dan kewajiban mengabari klien tidak berubah sedikit
+            pun — dan keduanya tidak terbaca dari tombolnya sendiri. Tempatnya sekarang di
+            sini karena blok ini tergambar pada KEDUA tab. */}
         <Bantuan judul="Tentang halaman ini">
           Tab <b>Permintaan</b> memuat pengajuan jadwal dari klien yang menunggu keputusan; klik
-          satu baris untuk membukanya, dan yang dikonfirmasi langsung menjadi sesi pada Passport
-          kliennya — yang tampil di tab <b>Sesi</b>. Catatan &amp; rekomendasi yang ditulis saat
-          menandai sesi selesai <b>terbaca klien</b> di Passport-nya — tulislah untuk dibaca klien,
-          bukan sebagai catatan internal.
+          satu baris untuk membukanya. Konfirmasi mengubah permintaan menjadi sesi Terjadwal
+          pada Passport kliennya — yang tampil di tab <b>Sesi</b> — jadi kabari juga klien via
+          WhatsApp. Catatan &amp; rekomendasi yang ditulis saat menandai sesi selesai{" "}
+          <b>terbaca klien</b> di Passport-nya — tulislah untuk dibaca klien, bukan sebagai
+          catatan internal.
         </Bantuan>
       </header>
 
