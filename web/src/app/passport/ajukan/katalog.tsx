@@ -52,6 +52,8 @@ export type LayananKatalogAjukan = {
   namaFase: string;
   /** `phases.id` — penentu ikon dan chip penyaring. "" bila tak terbaca. */
   faseId: string;
+  /** `services.deskripsi`. String kosong = belum ditulis admin; itu SAH. */
+  deskripsi: string;
   varian: VarianKatalogAjukan[];
 };
 
@@ -170,8 +172,12 @@ function rentangHarga(l: LayananKatalogAjukan) {
 function cocokDenganCarian(l: LayananKatalogAjukan, q: string) {
   const k = q.trim().toLowerCase();
   if (k === "") return true;
+  // Deskripsi ikut dicari. Klien lebih sering ingat apa yang layanan itu
+  // LAKUKAN ("pijat punggung") daripada nama Sanskertanya, dan nama itulah
+  // satu-satunya yang tercari sebelum ini.
   return (
     l.nama.toLowerCase().includes(k) ||
+    l.deskripsi.toLowerCase().includes(k) ||
     l.varian.some((v) => v.label.toLowerCase().includes(k))
   );
 }
@@ -409,6 +415,19 @@ export function Katalog({
                             daftar yang membuat kolom harga sejajar, dan hanya
                             kolom yang sejajar yang bisa dibandingkan tanpa
                             membaca ulang. */}
+                        {/* Deskripsi hanya muncul saat kartu TERBUKA, dan
+                            berdiri di antara nama layanan dan daftar varian —
+                            tepat di detik klien sedang memutuskan. Di baris
+                            tertutup ia sengaja absen: yang harus bisa disapu
+                            mata di sana adalah nama dan angka, dan paragraf
+                            akan mengubur keduanya. Layanan tanpa deskripsi
+                            tidak menyisakan apa pun, bukan ruang kosong. */}
+                        {dibuka && l.deskripsi !== "" && (
+                          <p className="border-t border-black/[0.07] bg-paper/60 px-4 py-3 text-[12.5px] leading-relaxed text-ink-soft">
+                            {l.deskripsi}
+                          </p>
+                        )}
+
                         {dibuka && (
                           <ul className="divide-y divide-black/[0.07] border-t border-black/[0.07]">
                             {l.varian.map((v) => {

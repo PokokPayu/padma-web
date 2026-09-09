@@ -41,7 +41,7 @@ type BarisVarian = {
   format: FormatVarian | null;
 };
 
-type BarisLayanan = { id: string; nama: string; phase_id: string };
+type BarisLayanan = { id: string; nama: string; phase_id: string; deskripsi: string };
 
 type BarisFase = { id: string; nama_sanskrit: string; nama: string; urutan: number };
 
@@ -87,7 +87,11 @@ export default async function HalamanAjukan() {
     bacaPengaturan(),
     supabase
       .from("services")
-      .select("id, nama, phase_id")
+      // `deskripsi` ikut dibaca sejak katalog klien menampilkannya. Kolomnya
+      // `not null default ''`, jadi layanan yang belum dideskripsikan
+      // memulangkan string kosong — bukan null — dan katalog tinggal
+      // melewatinya.
+      .select("id, nama, phase_id, deskripsi")
       .eq("aktif", true)
       .order("nama")
       .returns<BarisLayanan[]>(),
@@ -203,6 +207,7 @@ export default async function HalamanAjukan() {
       // dengan `clients.phase_id` saat menentukan chip mana yang terbuka
       // lebih dulu. Nama fase bisa diganti klien lewat panel; idnya tidak.
       faseId: l.phase_id,
+      deskripsi: l.deskripsi,
       varian: (varian ?? [])
         .filter((v) => v.service_id === l.id)
         .map((v) => {
