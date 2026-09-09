@@ -1,20 +1,21 @@
 /**
  * Riwayat sesi (`src/app/passport/sesi/page.tsx` + `_komponen/kartu-sesi.tsx`).
  *
- * Halaman ini satu-satunya tempat catatan bidan dibaca klien, dan itulah yang
- * membuat kegagalannya mahal sekaligus senyap — halaman tetap 200 dalam ketiga
- * kasus berikut:
+ * SEJAK `/passport/sesi/[id]` LAHIR, halaman ini adalah DAFTAR, bukan lagi
+ * tempat catatan bidan dibaca. Laci yang dulu mengembang di dalam kartu sudah
+ * dipensiunkan, dan itu bukan pemindahan kosmetik: selama laci itu ada,
+ * SELURUH catatan perawatan ikut terkirim ke perangkat bersama halaman daftar
+ * — tertutup atau tidak — dan Passport sering dibuka di ruang bersama. Test
+ * "catatan tidak ikut daftar" di bawah adalah yang menjaga kemenangan itu
+ * tidak diam-diam dibatalkan; penyajian catatannya sendiri kini dijaga
+ * `tests/passport-sesi-detail.test.ts`.
  *
- *  1. Catatan tidak pernah sampai ke layar. `sessions.catatan` NOT NULL DEFAULT
- *     '' , jadi pemeriksaan `!= null` selalu benar dan kartu tampak "punya
- *     catatan" padahal kosong — atau sebaliknya, blok catatan tidak pernah
- *     dirender sama sekali dan klien kehilangan satu-satunya rekam perawatannya.
- *     Karena itu isi catatan seed dibaca dari RENDER NYATA halaman, bukan dari
- *     pembacaan sumber.
- *  2. Urutan terbalik. `ambilSesi` mengurutkan menurun di Postgres; halaman yang
+ * Dua bentuk kegagalan lain tetap senyap — halaman tetap 200:
+ *
+ *  1. Urutan terbalik. `ambilSesi` mengurutkan menurun di Postgres; halaman yang
  *     diam-diam mengurut ulang membuat sesi terlama muncul di puncak dan riwayat
  *     terbaca seperti mundur.
- *  3. Nama bidan jatuh ke fallback "Tim PADMA" — tanda `partner_publik` gagal
+ *  2. Nama bidan jatuh ke fallback "Tim PADMA" — tanda `partner_publik` gagal
  *     terbaca (view hilang, grant hilang, policy berubah), tanpa error apa pun.
  *
  * Bentuk kartu diuji lewat atribut `data-*`, bukan kelas Tailwind: kelas berubah
@@ -84,9 +85,12 @@ function esc(teks: string): string {
     .replace(/'/g, "&#x27;");
 }
 
-/** Tag pembuka setiap kartu sesi, apa adanya. */
+/**
+ * Tag pembuka setiap kartu sesi, apa adanya. `<a>`, bukan `<div>`: kartu ini
+ * kini SEBUAH TAUTAN ke detail kunjungannya.
+ */
 function kartu(markup: string): string[] {
-  return markup.match(/<div data-sesi-tanggal[^>]*>/g) ?? [];
+  return markup.match(/<a data-sesi-tanggal[^>]*>/g) ?? [];
 }
 
 async function sesiSeed() {
@@ -159,39 +163,43 @@ describe("riwayat sesi — daftar", () => {
   it("judul halaman menjelaskan cara membaca catatan", async () => {
     const m = await markupSesi();
     expect(m).toContain("Riwayat Sesi");
-    expect(m).toContain("ketuk untuk membaca catatan bidan");
+    expect(m).toContain("ketuk satu kunjungan untuk membaca catatan bidan");
+  });
+
+  it("setiap kartu menaut ke halaman detail kunjungannya", async () => {
+    const m = await markupSesi();
+    for (const s of await sesiSeed()) {
+      expect(m, `sesi ${s.tanggal} tidak bisa dibuka`).toContain(
+        `href="/passport/sesi/${s.id}"`,
+      );
+    }
   });
 });
 
-describe("riwayat sesi — catatan bidan", () => {
-  it("catatan & rekomendasi setiap sesi selesai benar-benar ter-render", async () => {
+describe("riwayat sesi — catatan bidan TIDAK ikut daftar", () => {
+  it("tidak satu pun catatan atau rekomendasi seed ikut terkirim bersama daftar", async () => {
     const m = await markupSesi();
     const berisi = (await sesiSeed()).filter((s) => s.catatan.trim() !== "");
     expect(berisi).toHaveLength(6); // seed memang punya enam sesi bercatatan
+
+    // Inilah alasan laci dipensiunkan. Selama ia ada, keenam catatan di bawah
+    // ada di dalam HTML halaman ini — `hidden` hanya menyembunyikannya dari
+    // mata, bukan dari perangkat, dan Passport sering dibuka di ruang bersama.
     for (const s of berisi) {
-      expect(m, `catatan sesi ${s.tanggal} tidak sampai ke layar`).toContain(
-        esc(s.catatan),
-      );
-      expect(m, `rekomendasi sesi ${s.tanggal} tidak sampai ke layar`).toContain(
+      expect(m, `catatan sesi ${s.tanggal} masih ikut daftar`).not.toContain(esc(s.catatan));
+      expect(m, `rekomendasi sesi ${s.tanggal} masih ikut daftar`).not.toContain(
         esc(s.rekomendasi),
       );
-      expect(m).toContain(esc(`Catatan ${s.namaMitra}`));
     }
-    expect(hitung(m, /Rekomendasi untuk Anda/g)).toBe(6);
+    expect(m).not.toContain("Rekomendasi untuk Anda");
   });
 
-  it("blok catatan tertutup saat halaman dibuka (delapan sesi tidak terpampang sekaligus)", async () => {
+  it("tidak ada lagi laci yang bisa dibuka-tutup di daftar", async () => {
     const m = await markupSesi();
-    // `hidden` hanya muncul pada blok catatan yang ada isinya.
-    expect(hitung(m, /<div hidden=""/g)).toBe(6);
-    expect(hitung(m, /aria-expanded="false"/g)).toBe(6);
-  });
-
-  it("sesi tanpa catatan tidak bisa diketuk (tombolnya mati, tanpa aria-expanded)", async () => {
-    const m = await markupSesi();
-    // Dua sesi terjadwal seed belum punya catatan.
-    expect(hitung(m, /disabled=""/g)).toBe(2);
-    expect(hitung(m, /aria-expanded=/g)).toBe(6);
+    // Jejak laci lama: blok `hidden` dan tombol ber-`aria-expanded`. Nol
+    // dua-duanya, kalau tidak isinya sudah kembali ke halaman daftar.
+    expect(hitung(m, /<div hidden=""/g)).toBe(0);
+    expect(hitung(m, /aria-expanded=/g)).toBe(0);
   });
 
   it("data kesehatan tidak pernah menjadi bagian URL", async () => {
@@ -237,31 +245,19 @@ describe("kartu sesi — perilaku per status", () => {
     expect(m).toContain('data-sesi-status="dibatalkan_padma"');
   });
 
-  it("catatan berisi spasi saja dihitung kosong (kolom NOT NULL DEFAULT '')", async () => {
-    const m = await markupKartu(contoh({ catatan: "   ", rekomendasi: "\n" }));
-    expect(m).toContain("disabled=");
-    expect(m).not.toContain("aria-expanded");
-    expect(m).not.toContain("Rekomendasi untuk Anda");
-  });
-
-  it("rekomendasi kosong tidak melahirkan blok kosong", async () => {
-    const m = await markupKartu(contoh({ rekomendasi: "" }));
-    expect(m).toContain("Catatan Bidan Sri Wahyuni");
-    expect(m).not.toContain("Rekomendasi untuk Anda");
-  });
-
-  it("catatan kosong dengan rekomendasi terisi tetap bisa dibuka", async () => {
-    const m = await markupKartu(contoh({ catatan: "" }));
-    expect(m).toContain("Rekomendasi untuk Anda");
-    expect(m).not.toContain("Catatan Bidan Sri Wahyuni");
-    expect(m).toContain('aria-expanded="false"');
-  });
-
-  it("tombol pembuka menunjuk blok catatannya sendiri (aria-controls)", async () => {
+  it("kartu TIDAK membawa satu pun kalimat perawatan, seberapa pun terisi sesinya", async () => {
+    // Kartu diberi catatan DAN rekomendasi yang terisi penuh: kalau salah satu
+    // masih menyeberang ke markup, laci lama sudah kembali dalam bentuk lain.
     const m = await markupKartu(contoh());
-    const id = m.match(/aria-controls="([^"]+)"/)?.[1];
-    expect(id).toBeTruthy();
-    expect(m).toContain(`id="${id}"`);
+    expect(m).not.toContain("Ketegangan punggung bawah");
+    expect(m).not.toContain("Lanjutkan jalan pagi");
+    expect(m).not.toContain("Catatan Bidan Sri Wahyuni");
+    expect(m).not.toContain("Rekomendasi untuk Anda");
+  });
+
+  it("kartu adalah tautan ke detail sesinya, dengan id sesi apa adanya", async () => {
+    const m = await markupKartu(contoh({ id: "abc-123" }));
+    expect(m).toContain('href="/passport/sesi/abc-123"');
   });
 });
 
@@ -269,8 +265,12 @@ describe("riwayat sesi — pagar", () => {
   const sumberHalaman = baca("src/app/passport/sesi/page.tsx");
   const sumberKartu = baca("src/app/passport/_komponen/kartu-sesi.tsx");
 
-  it("kartu sesi adalah client component (buka-tutup butuh state)", () => {
-    expect(sumberKartu.trimStart().startsWith('"use client"')).toBe(true);
+  it("kartu sesi adalah SERVER component — tidak ada lagi state buka-tutup", () => {
+    // Pembalikan yang disengaja. Selama kartu ini komponen klien dengan laci,
+    // isinya wajib ikut dikirim ke peramban supaya bisa dibuka tanpa
+    // permintaan baru. Sebagai komponen server yang cuma menaut, catatan
+    // perawatan tidak punya alasan menyeberang sama sekali.
+    expect(sumberKartu).not.toContain('"use client"');
   });
 
   it("halaman tetap Server Component yang membaca lewat lapisan data passport", () => {

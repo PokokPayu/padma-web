@@ -36,7 +36,13 @@ export function PanelSesi({
   jamPilihan,
 }: {
   sesi: BarisSesiDaftar;
-  hrefTutup: string;
+  /**
+   * Dihilangkan bila komponen ini bukan isi panel geser melainkan badan
+   * halaman `/admin/sesi/[id]`: di sana tidak ada yang bisa "ditutup", dan
+   * tautan "Tutup tanpa menyimpan" yang mengembalikan ke daftar justru
+   * berbohong tentang apa yang barusan terjadi.
+   */
+  hrefTutup?: string;
   /**
    * Daftar `app_settings.jam_layanan`, dibaca di SERVER oleh halaman dan
    * dioper ke bawah. Panel ini komponen klien dan tidak boleh mengambil data
@@ -157,9 +163,11 @@ export function PanelSesi({
         </section>
       )}
 
-      <a href={hrefTutup} className="text-[12px] font-bold text-panel-muted">
-        Tutup tanpa menyimpan
-      </a>
+      {hrefTutup && (
+        <a href={hrefTutup} className="text-[12px] font-bold text-panel-muted">
+          Tutup tanpa menyimpan
+        </a>
+      )}
 
       {sesi.status === "terjadwal" && (
         <PanelPembatalan

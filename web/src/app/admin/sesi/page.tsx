@@ -22,7 +22,7 @@ import {
 } from "@/lib/admin/permintaan";
 import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
 import { PanelSesi } from "./panel-sesi";
-import { LABEL_WAKTU, LABEL_STATUS_SESI, type StatusSesi } from "./status";
+import { LABEL_WAKTU, LABEL_STATUS_SESI, KELAS_PILL_SESI } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import {
@@ -62,26 +62,6 @@ function labelBayarPermintaan(p: {
   return `belum dibayar · ${labelSisaWaktu(p.tenggat)}`;
 }
 
-const KELAS_PILL: Record<StatusSesi, string> = {
-  terjadwal: "bg-gold/15 text-[#8A6A16]",
-  // `berjalan` memakai hijau daun MUDA, bukan gold: ia keadaan yang sedang
-  // terjadi sekarang, dan admin perlu membedakannya sekilas dari yang baru
-  // dijadwalkan.
-  berjalan: "bg-leaf/15 text-leaf",
-  selesai: "bg-leaf-soft text-leaf",
-  // `tidak_hadir` DAN `dibatalkan_klien` memakai clay (warna yang menuntut
-  // perhatian) sementara `dibatalkan_padma` memakai abu netral: dua yang
-  // pertama meninggalkan pekerjaan bagi admin — `tidak_hadir` menghubungi
-  // klien dan memutuskan tagihannya, `dibatalkan_klien` memastikan akibat
-  // uangnya sudah benar (refund penuh, hak sesi, atau hangus, tergantung
-  // jenjang saat dibatalkan) — sedangkan `dibatalkan_padma` sudah tuntas:
-  // refund penuh, tanpa keputusan susulan. Warnanya SENGAJA beda dari
-  // `dibatalkan_padma` walau labelnya sama-sama "batal": admin yang menyamakan
-  // pilnya bisa salah menangani refund.
-  tidak_hadir: "bg-clay/10 text-clay",
-  dibatalkan_padma: "bg-black/5 text-ink-soft",
-  dibatalkan_klien: "bg-clay/10 text-clay",
-};
 
 export default async function SesiPage({
   searchParams,
@@ -484,7 +464,7 @@ export default async function SesiPage({
                       <Td>{s.jenjang ? LABEL_JENJANG[s.jenjang] : "—"}</Td>
                       <Td>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${KELAS_PILL[s.status]}`}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${KELAS_PILL_SESI[s.status]}`}
                         >
                           {LABEL_STATUS_SESI[s.status]}
                         </span>

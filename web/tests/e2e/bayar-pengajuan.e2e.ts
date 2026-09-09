@@ -338,9 +338,22 @@ async function main() {
     );
 
     // ---- 4. Klien melihat nominal & tenggat ----
+    //
+    // DUA layar sejak halaman bayar dipecah: `/passport/bayar` adalah DAFTAR
+    // yang menaut, dan nominal + tenggat + unggahan hidup di halaman satu
+    // tagihan. Ketukan di bawah karena itu bagian dari yang diuji — bukan
+    // sekadar navigasi: kartu yang tidak menaut membuat tagihannya tidak bisa
+    // dibayar sama sekali.
     await klien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
+    const kartuDaftar = klien.locator(`[data-tagihan="${idPermintaan}"]`);
+    await kartuDaftar.waitFor({ state: "visible", timeout: 20_000 });
+    await kartuDaftar.click();
+    await klien.waitForURL(`**/passport/bayar/${idPermintaan}`, { timeout: 20_000 });
+
+    // Sesudah berpindah, kartu ringkas di halaman tagihan membawa penanda yang
+    // sama — nominal dan tenggatnya ada di dalamnya.
     const kartuTagihan = klien.locator(`[data-tagihan="${idPermintaan}"]`);
-    await kartuTagihan.waitFor({ state: "visible", timeout: 20_000 });
+    await kartuTagihan.locator("[data-total]").waitFor({ state: "visible", timeout: 20_000 });
 
     // Total yang benar dihitung dari tarif di basis data, bukan diketik di sini:
     // angka yang di-hardcode akan merah setiap kali seed-nya disetel, dan yang
@@ -382,15 +395,20 @@ async function main() {
     );
 
     // ---- 5. Klien mengunggah bukti ----
-    await kartuTagihan.locator('input[type="file"]').setInputFiles({
+    // Medan berkas hidup di seksi "Kirim bukti", di luar kartu ringkas — jadi
+    // dicari pada halaman, bukan di dalam kartu. Ia `sr-only` (tetap fokusabel,
+    // hanya tidak terlihat), dan `setInputFiles` memang tidak menuntut
+    // visibilitas.
+    await klien.locator('input[type="file"]').setInputFiles({
       name: "bukti.png",
       mimeType: "image/png",
       buffer: PNG_1X1,
     });
     // Kartu berganti kalimat begitu `router.refresh()` selesai — itu penanda
     // unggahannya benar-benar diterima server, bukan sekadar berkasnya dipilih.
-    await kartuTagihan
+    await klien
       .getByText("Bukti diterima")
+      .first()
       .waitFor({ state: "visible", timeout: 20_000 });
 
     const p3 = await bacaPengajuan();

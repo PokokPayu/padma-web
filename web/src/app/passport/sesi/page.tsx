@@ -31,7 +31,7 @@ export default async function HalamanSesi() {
         <h1 className="mb-4 font-serif text-xl text-night">
           Riwayat Sesi{" "}
           <span className="font-sans text-xs font-semibold text-ink-soft">
-            ketuk untuk membaca catatan bidan
+            ketuk satu kunjungan untuk membaca catatan bidan
           </span>
         </h1>
         {sesi.length === 0 ? (

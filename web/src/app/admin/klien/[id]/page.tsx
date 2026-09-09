@@ -65,15 +65,18 @@ export default async function DetailKlienPage({
   // layar tujuh jam lebih awal setiap hari.
   const hariIni = hariIniJakarta();
 
-  const [{ data: fase }, { data: sesi }, wa, hak, mitra, { jamLayanan }] = await Promise.all([
+  const [{ data: fase }, { data: sesi, count: totalSesi }, wa, hak, mitra, { jamLayanan }] = await Promise.all([
     supabase
       .from("phases")
       .select("id, nama, urutan")
       .order("urutan")
       .returns<{ id: string; nama: string; urutan: number }[]>(),
     supabase
+      // `count: "exact"` bukan hiasan: daftar di bawah dipotong 8 baris, dan
+      // hanya jumlah SELURUHNYA yang bisa memberi tahu apakah ada sesi ke-9
+      // yang tidak terlihat dari layar ini.
       .from("sessions")
-      .select("id, tanggal, status, services ( nama )")
+      .select("id, tanggal, status, services ( nama )", { count: "exact" })
       .eq("client_id", id)
       .order("tanggal", { ascending: false })
       .limit(8)
@@ -185,30 +188,55 @@ export default async function DetailKlienPage({
         />
 
         <section className="rounded-lg border border-panel-border bg-panel-surface p-5">
-          <h2 className="mb-3 font-serif text-lg text-panel-ink">Sesi terakhir</h2>
+          <h2 className="mb-3 font-serif text-lg text-panel-ink">Riwayat sesi</h2>
           {(sesi ?? []).length === 0 ? (
             <p className="text-[13px] italic text-panel-muted">
               Belum ada sesi tercatat untuk klien ini.
             </p>
           ) : (
-            <ul className="grid gap-2.5">
-              {(sesi ?? []).map((s) => (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-panel-border/70 pb-2 text-[13px] last:border-b-0"
+            <>
+              <ul className="grid gap-2.5">
+                {(sesi ?? []).map((s) => (
+                  <li
+                    key={s.id}
+                    className="border-b border-panel-border/70 text-[13px] last:border-b-0"
+                  >
+                    {/* Barisnya TAUTAN, bukan teks: catatan bidan, jenjang, dan
+                        skrining penopang sesi ini semuanya hidup di halaman
+                        detailnya, dan sampai baris ini bisa diklik tidak ada
+                        satu pun jalan ke sana dari layar klien. */}
+                    <Link
+                      href={`/admin/sesi/${s.id}`}
+                      className="flex flex-wrap items-center justify-between gap-2 pb-2"
+                    >
+                      <span>
+                        <b className="text-leaf underline underline-offset-4">
+                          {s.services?.nama ?? "Layanan"}
+                        </b>
+                        <span className="mt-0.5 block text-[11.5px] text-panel-muted">
+                          {formatTanggalID(s.tanggal)}
+                        </span>
+                      </span>
+                      <span className="text-[11.5px] font-extrabold uppercase tracking-wider text-panel-muted">
+                        {s.status}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Hanya ketika ada yang benar-benar tidak terlihat. Tautan
+                  "lihat semua" pada daftar yang SUDAH lengkap mengajak admin
+                  berpindah layar untuk tidak menemukan apa pun yang baru. */}
+              {(totalSesi ?? 0) > (sesi ?? []).length && (
+                <Link
+                  href={`/admin/sesi?tab=sesi&cari=${klien.padma_id}`}
+                  className="mt-3 inline-block text-[13px] font-bold text-leaf underline underline-offset-4"
                 >
-                  <span>
-                    <b>{s.services?.nama ?? "Layanan"}</b>
-                    <span className="mt-0.5 block text-[11.5px] text-panel-muted">
-                      {formatTanggalID(s.tanggal)}
-                    </span>
-                  </span>
-                  <span className="text-[11.5px] font-extrabold uppercase tracking-wider text-panel-muted">
-                    {s.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                  Lihat semua {totalSesi} sesi klien ini
+                </Link>
+              )}
+            </>
           )}
         </section>
       </div>

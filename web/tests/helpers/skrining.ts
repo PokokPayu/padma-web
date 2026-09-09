@@ -20,9 +20,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export async function skriningHijau(
   admin: SupabaseClient,
   clientId: string,
-  opsi: { fase?: string; hasil?: "hijau" | "merah" } = {},
+  opsi: {
+    fase?: string;
+    hasil?: "hijau" | "merah";
+    /**
+     * Bendera yang ikut disimpan. Bawaannya kosong karena hampir setiap
+     * fixture hanya butuh skrining yang SAH, bukan isinya; yang menguji
+     * penyajian jawaban mengisinya sendiri.
+     */
+    flags?: { id: string; level: string; teks: string }[];
+  } = {},
 ): Promise<string> {
-  const { fase = "prekonsepsi", hasil = "hijau" } = opsi;
+  const { fase = "prekonsepsi", hasil = "hijau", flags = [] } = opsi;
 
   const { data, error } = await admin
     .from("screenings")
@@ -33,7 +42,7 @@ export async function skriningHijau(
       fase,
       jawaban: {},
       hasil,
-      flags: [],
+      flags,
       client_id: clientId,
     })
     .select("id")

@@ -102,10 +102,12 @@ sama-sama membuat `npm test` MERAH.
 | `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
 | `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
 | `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
-| `/passport/sesi` | Klien | Riwayat sesi + catatan & rekomendasi bidan (tertutup sampai diketuk) |
+| `/passport/sesi/[id]` | Klien | Detail satu kunjungan: jadwal, bidan, tempat, catatan & rekomendasi bidan dengan ruang penuh |
+| `/passport/sesi` | Klien | Riwayat sesi; tiap kartu menaut ke detail kunjungannya |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
 | `/passport/materi/[id]` | Klien | Reader e-book/video berwatermark identitas, tanpa unduhan |
-| `/passport/bayar` | Klien | STATUS tagihan (tanpa nominal) + klaim "saya sudah bayar" |
+| `/passport/bayar/[id]` | Klien | Satu tagihan pengajuan: nominal, tenggat, QRIS, dan unggah bukti dalam satu layar |
+| `/passport/bayar` | Klien | Daftar tagihan: pengajuan bertenggat menaut ke halamannya sendiri, tagihan sesi + klaim "saya sudah bayar", QRIS terlipat |
 | `/passport/ajukan` | Klien | Ajukan jadwal: varian, tanggal, JAM, alamat — selalu berstatus `diminta`. Tanpa skrining hijau yang belum terpakai: ajakan skrining, bukan formulir |
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
@@ -113,8 +115,9 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
 | `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |
 | `/admin/klien/baru` | Admin, Owner | Formulir klien baru (PADMA ID otomatis) — halaman tersendiri, bukan formulir di header daftar |
-| `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp |
+| `/admin/klien/[id]` | Admin, Owner | Detail klien, ubah data operasional, terbitkan tautan aktivasi + pesan WhatsApp, riwayat sesi bertaut ke detail sesi |
 | `/admin/sesi` | Admin, Owner | Antrean permintaan (cari bidan → tetapkan bidan → konfirmasi), jadwalkan sesi, tandai selesai + catatan bidan |
+| `/admin/sesi/[id]` | Admin, Owner | Detail satu sesi: skrining penopang (kode, hasil, jawaban berbendera), jadwal, bidan, jenjang, tindakan |
 | `/admin/penilaian` | Admin, Owner | Penilaian sesi: dua angka TERPISAH (sesi & bidan), saringan bintang ≤ 3, komentar klien sebagai teks biasa |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
