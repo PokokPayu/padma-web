@@ -64,8 +64,21 @@ import { querySql } from "./helpers/db";
  * transport tidak pernah boleh hidup di `sessions` atau tabel operasional
  * lain — itulah yang uji ini jaga secara terus-menerus untuk kolom yang
  * belum lahir sekalipun.
+ *
+ * `digital_product_prices` (migration `produk_harga`, Task 2 "produk-digital")
+ * ditambahkan SADAR, dengan pagar yang sama persis dengan `variant_rates`:
+ * append-only, UPDATE ditolak seluruhnya, DELETE dicabut, dan harga keluar
+ * hanya lewat dua view berkolom sempit (`harga_produk_publik` &
+ * `produk_harga_staf`). Tidak ada honor mitra pada produk digital, jadi yang
+ * bisa keluar dari sini hanyalah harga yang memang diputuskan publik.
  */
-const TABEL_UANG = new Set(["variant_rates", "honor_marks", "transport_rates", "transport_khusus"]);
+const TABEL_UANG = new Set([
+  "variant_rates",
+  "honor_marks",
+  "transport_rates",
+  "transport_khusus",
+  "digital_product_prices",
+]);
 
 /**
  * View yang boleh memuat kolom nominal — dan untuk masing-masing, hanya DUA
@@ -88,10 +101,18 @@ const TABEL_UANG = new Set(["variant_rates", "honor_marks", "transport_rates", "
  * keseluruhan. Menambah entri baru di sini TIDAK melebarkan `TABEL_UANG` —
  * itu forbidden fix yang berbeda: view baru masih harus didaftarkan SADAR,
  * per-kolom, di sini.
+ *
+ * `harga_produk_publik` & `produk_harga_staf` (migration `produk_harga`,
+ * Task 2 "produk-digital") bergabung dengan pola yang sama: dua kolom saja
+ * (`harga`, `harga_coret`), tidak ada honor mitra untuk dibocorkan karena
+ * produk digital memang tidak punya mitra. `harga_produk_publik` dikunci
+ * terpisah, berkolom PERSIS empat, di tests/produk-harga-publik.test.ts.
  */
 const KOLOM_UANG_VIEW_DIIZINKAN = new Map<string, Set<string>>([
   ["harga_publik", new Set(["harga_klien", "harga_coret"])],
   ["varian_harga_staf", new Set(["harga_klien", "harga_coret"])],
+  ["harga_produk_publik", new Set(["harga", "harga_coret"])],
+  ["produk_harga_staf", new Set(["harga", "harga_coret"])],
 ]);
 
 /**
