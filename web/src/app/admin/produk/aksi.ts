@@ -8,7 +8,9 @@ import {
   periksaSlug,
   periksaJenis,
   slugDariJudul,
+  punyaIsi,
   PANJANG_DESKRIPSI_MAKS,
+  type JenisProduk,
 } from "@/lib/produk/status";
 
 /**
@@ -165,17 +167,45 @@ export async function perbaruiProduk(id: string, formData: FormData): Promise<Be
  *
  * Produk tanpa isi yang terpajang di etalase adalah janji yang tidak bisa
  * ditepati: pengunjung membuka halamannya dan tidak menemukan apa pun.
+ *
+ * "Punya isi" adalah predikat JENIS-SADAR (`punyaIsi`, `@/lib/produk/status`),
+ * BUKAN sekadar "ada baris `digital_product_files`". Video menyimpan isinya
+ * SELALU di situ, tapi PDF menyimpan isinya di `digital_product_pages` —
+ * `digital_product_files` untuk PDF hanya terisi bila `boleh_unduh` menyala
+ * (Task 6, `admin/produk/[id]/unggah.ts`). Memeriksa `digital_product_files`
+ * saja di sini dulu berarti produk PDF yang tidak mengizinkan unduhan TIDAK
+ * PERNAH bisa ditayangkan walau halamannya sudah lengkap — jalan buntu, bukan
+ * sekadar ketidaknyamanan, dan justru lewat jalur unggahan yang jadi tugas
+ * modul ini sendiri untuk mengisi.
  */
 export async function aktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
-  const { data: berkas, error: berkasError } = await supabase
-    .from("digital_product_files")
-    .select("id")
-    .eq("product_id", id);
-  if (berkasError) return { ok: false, pesan: `Gagal memeriksa isi (${berkasError.code}).` };
-  if ((berkas ?? []).length === 0) {
+  const { data: produk, error: produkError } = await supabase
+    .from("digital_products").select("jenis").eq("id", id).maybeSingle();
+  if (produkError) return { ok: false, pesan: `Gagal membaca produk (${produkError.code}).` };
+  if (!produk) return { ok: false, pesan: "Produk tidak ditemukan." };
+
+  let jumlahBerkas = 0;
+  let jumlahHalaman = 0;
+  if (produk.jenis === "video") {
+    const { data: berkas, error: berkasError } = await supabase
+      .from("digital_product_files")
+      .select("id")
+      .eq("product_id", id);
+    if (berkasError) return { ok: false, pesan: `Gagal memeriksa isi (${berkasError.code}).` };
+    jumlahBerkas = (berkas ?? []).length;
+  } else {
+    const { count, error: halamanError } = await supabase
+      .from("digital_product_pages")
+      .select("halaman", { count: "exact", head: true })
+      .eq("product_id", id);
+    if (halamanError) return { ok: false, pesan: `Gagal memeriksa isi (${halamanError.code}).` };
+    jumlahHalaman = count ?? 0;
+  }
+
+  if (!punyaIsi(produk.jenis as JenisProduk, jumlahBerkas, jumlahHalaman)) {
     return {
       ok: false,
       pesan: "Produk belum punya berkas — unggah isinya dulu sebelum ditayangkan.",

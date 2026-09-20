@@ -625,9 +625,20 @@ describe("layout admin", () => {
     // dibaca lewat `createServerSupabase()` ber-RLS staf) tetap diperiksa
     // LEBIH DULU — `createAdminSupabase()` baru dipanggil SESUDAHNYA. Lihat
     // komentar di dalam unggah-sertifikat.ts sendiri.
+    //
+    // `admin/produk/[id]/unggah.ts` (Task 6) adalah titik ketiga, dengan
+    // alasan yang sama persis: bucket `produk-halaman` dan `produk-berkas`
+    // (migration produk_digital, Task 1) SENGAJA lahir tanpa satu pun policy
+    // storage.objects — authenticated dan anon tidak punya hak apa pun di
+    // sana, jadi tidak ada RLS untuk "dilewati"; service role satu-satunya
+    // cara menyentuh objeknya, titik. Hak yang MEMANG diputuskan RLS (produk
+    // ini ada, dan peran staf lewat `requireRole`) tetap diperiksa lewat
+    // `createServerSupabase()` LEBIH DULU — `createAdminSupabase()` baru
+    // dipanggil SESUDAHNYA. Lihat komentar di dalam unggah.ts sendiri.
     const DIKECUALIKAN = new Set([
       "src/app/admin/materi/unggah.ts",
       "src/app/admin/sesi/[id]/unggah-sertifikat.ts",
+      "src/app/admin/produk/[id]/unggah.ts",
     ]);
     for (const berkas of berkasAdmin()) {
       if (DIKECUALIKAN.has(berkas)) continue;

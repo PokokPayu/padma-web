@@ -77,6 +77,34 @@ export function periksaSlug(teks: string): Periksa<string> {
   return { ok: true, nilai: rapi };
 }
 
+/**
+ * "Punya isi" adalah predikat JENIS-SADAR, bukan sekadar "ada baris
+ * `digital_product_files`".
+ *
+ * Video menyimpan isinya SELALU lewat baris itu (`catatVideoProduk`,
+ * `admin/produk/[id]/unggah.ts`). PDF TIDAK: isi produk PDF adalah halaman
+ * terasterisasi di `digital_product_pages`, dan `digital_product_files`
+ * untuk jenis ini hanya terisi bila `boleh_unduh` menyala (lihat
+ * `catatPdfProduk` di berkas yang sama) — unduhan berkas mentah adalah
+ * pertanyaan TERPISAH dari "produk ini berisi sesuatu". Produk PDF yang
+ * tidak mengizinkan unduhan tapi halamannya sudah lengkap tetap "punya isi".
+ *
+ * SATU predikat dipakai `aktifkanProduk` (`admin/produk/aksi.ts`) DAN
+ * `ambilDaftarProduk`/`ambilProduk` (`lib/admin/produk-admin.ts`): dua
+ * salinan "punya isi" adalah dua tempat yang bisa berbeda begitu salah
+ * satunya disunting — persis yang dulu membuat produk PDF tanpa unduhan
+ * terkunci permanen (tidak pernah bisa ditayangkan) di panel admin, karena
+ * gerbangnya hanya melihat `digital_product_files` yang memang selalu
+ * kosong untuk produk semacam itu.
+ */
+export function punyaIsi(
+  jenis: JenisProduk,
+  jumlahBerkas: number,
+  jumlahHalaman: number,
+): boolean {
+  return jenis === "video" ? jumlahBerkas > 0 : jumlahHalaman > 0;
+}
+
 export function periksaJenis(teks: string): Periksa<JenisProduk> {
   if (!(JENIS_SAH as string[]).includes(teks)) {
     return { ok: false, pesan: PESAN_PRODUK.jenisTidakSah };

@@ -1,8 +1,33 @@
 import { describe, it, expect } from "vitest";
 import {
   periksaJudul, slugDariJudul, periksaSlug, periksaJenis,
-  periksaHarga, periksaHargaCoretProduk, PESAN_PRODUK,
+  periksaHarga, periksaHargaCoretProduk, punyaIsi, PESAN_PRODUK,
 } from "@/lib/produk/status";
+
+describe("punyaIsi", () => {
+  it("video: punya isi hanya lewat digital_product_files", () => {
+    expect(punyaIsi("video", 1, 0)).toBe(true);
+    expect(punyaIsi("video", 0, 0)).toBe(false);
+    // Jumlah halaman TIDAK relevan untuk video — video tidak pernah punya
+    // baris `digital_product_pages` sama sekali.
+    expect(punyaIsi("video", 0, 5)).toBe(false);
+  });
+
+  it("pdf: punya isi lewat digital_product_pages, TIDAK BUTUH digital_product_files", () => {
+    // Ini persis kasus yang dulu jadi jalan buntu: PDF dengan halaman
+    // lengkap tapi `boleh_unduh` mati (jadi tidak pernah punya baris
+    // `digital_product_files`) tetap harus bisa ditayangkan.
+    expect(punyaIsi("pdf", 0, 12)).toBe(true);
+  });
+
+  it("pdf: tanpa halaman DAN tanpa berkas tetap ditolak", () => {
+    expect(punyaIsi("pdf", 0, 0)).toBe(false);
+    // Baris `digital_product_files` (mis. produk lama, migrasi data) tidak
+    // menyelamatkan PDF yang halamannya kosong — halaman adalah isi yang
+    // sungguh terbaca pembeli.
+    expect(punyaIsi("pdf", 1, 0)).toBe(false);
+  });
+});
 
 describe("periksaJudul", () => {
   it("menolak judul terlalu pendek", () => {

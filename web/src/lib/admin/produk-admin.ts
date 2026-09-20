@@ -1,6 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
-import type { JenisProduk } from "@/lib/produk/status";
+import { punyaIsi, type JenisProduk } from "@/lib/produk/status";
 
 /**
  * Lapisan data modul Produk Digital — sisi admin.
@@ -21,7 +21,11 @@ export type ProdukKelola = {
   bolehUnduh: boolean;
   aktif: boolean;
   urutan: number;
-  /** Ada berkas terunggah. Produk tanpa isi tidak boleh diaktifkan. */
+  /**
+   * Punya isi — JENIS-SADAR lewat `punyaIsi` (`@/lib/produk/status`): video
+   * lewat `digital_product_files`, PDF lewat `digital_product_pages`. Produk
+   * tanpa isi tidak boleh diaktifkan.
+   */
   adaIsi: boolean;
   /** Dari view `produk_harga_staf`. null = owner belum menetapkan harga. */
   harga: number | null;
@@ -48,6 +52,11 @@ type BarisProduk = {
   // materi-admin.ts: PostgREST memotong BARIS pada `max_rows`, tidak pernah
   // nilai agregat.
   digital_product_files: Array<{ count: number }>;
+  // Sama bentuknya, untuk halaman PDF terasterisasi — dibutuhkan `punyaIsi`
+  // (`@/lib/produk/status`) supaya "isi" produk PDF tidak salah dibaca dari
+  // `digital_product_files`, yang untuk jenis ini kosong kecuali `boleh_unduh`
+  // menyala.
+  digital_product_pages: Array<{ count: number }>;
 };
 type BarisHarga = { product_id: string; harga: number; harga_coret: number | null };
 
@@ -69,7 +78,7 @@ export async function ambilDaftarProduk(
   let q = supabase
     .from("digital_products")
     .select(
-      "id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(count)",
+      "id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(count), digital_product_pages(count)",
       { count: "exact" },
     )
     .order("urutan")
@@ -97,7 +106,11 @@ export async function ambilDaftarProduk(
   const hargaPer = new Map((harga ?? []).map((h) => [h.product_id, h] as const));
 
   let baris: ProdukKelola[] = (produk ?? []).map((p) => {
-    const adaIsi = (p.digital_product_files[0]?.count ?? 0) > 0;
+    const adaIsi = punyaIsi(
+      p.jenis,
+      p.digital_product_files[0]?.count ?? 0,
+      p.digital_product_pages[0]?.count ?? 0,
+    );
     const h = hargaPer.get(p.id);
     return {
       id: p.id,
@@ -135,7 +148,14 @@ export async function ambilProduk(id: string): Promise<ProdukKelola | null> {
   // layar admin.
   const { data, error } = await supabase
     .from("digital_products")
-    .select("id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(id)")
+    // SATU string literal, TIDAK dikonkatenasi: supabase-js menyimpulkan
+    // tipe baris hasil dari literal `select` ini lewat template literal type
+    // di level TypeScript. Merakitnya lewat `+` menghilangkan literal itu dan
+    // menjatuhkan hasilnya ke `GenericStringError` (dibuktikan empiris —
+    // `tsc` menolak setiap akses medan di bawah begitu string ini dipecah).
+    .select(
+      "id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(id), digital_product_pages(halaman)",
+    )
     .eq("id", id)
     .maybeSingle();
   if (error) throw new Error(`Gagal membaca produk: ${error.message}`);
@@ -157,7 +177,11 @@ export async function ambilProduk(id: string): Promise<ProdukKelola | null> {
     bolehUnduh: data.boleh_unduh,
     aktif: data.aktif,
     urutan: data.urutan,
-    adaIsi: (data.digital_product_files ?? []).length > 0,
+    adaIsi: punyaIsi(
+      data.jenis as JenisProduk,
+      (data.digital_product_files ?? []).length,
+      (data.digital_product_pages ?? []).length,
+    ),
     harga: harga?.harga ?? null,
     hargaCoret: harga?.harga_coret ?? null,
   };

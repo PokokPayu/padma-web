@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { slugDariJudul } from "@/lib/produk/status";
@@ -12,6 +13,18 @@ afterEach(async () => {
   const svc = createAdminSupabase();
   while (bersihkan.length) await svc.from("digital_products").delete().eq("id", bersihkan.pop()!);
 });
+
+// `aktifkanProduk` memakai sesi pengguna (`createServerSupabase`). Di vitest
+// tidak ada cookie, jadi klien ber-SESI SUNGGUHAN disuntikkan — RLS dan
+// `requireRole` di dalamnya tetap berjalan apa adanya, persis pola
+// `tests/admin-materi.test.ts`.
+const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => ref.sesi!,
+}));
+vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+
+const { aktifkanProduk } = await import("@/app/admin/produk/aksi");
 
 describe("master produk admin", () => {
   it("rute baru terdaftar di tabel rute README", () => {
@@ -80,5 +93,62 @@ describe("master produk admin", () => {
     const klien = await signInAs("ananda@padma.test");
     const { data } = await klien.from("produk_harga_staf").select("harga").limit(1);
     expect(data ?? []).toEqual([]);
+  });
+});
+
+/**
+ * `aktifkanProduk` — "punya isi" harus JENIS-SADAR (`punyaIsi`,
+ * `@/lib/produk/status`), bukan sekadar "ada baris `digital_product_files`".
+ *
+ * Sebelum perbaikan ini, produk PDF dengan `boleh_unduh = false` yang
+ * halamannya sudah lengkap TIDAK PERNAH bisa ditayangkan: gerbangnya hanya
+ * memeriksa `digital_product_files`, dan produk semacam itu tidak pernah
+ * punya baris di situ (Task 6, `catatPdfProduk` di
+ * `admin/produk/[id]/unggah.ts` hanya menulis baris itu bila `boleh_unduh`
+ * menyala) — jalan buntu permanen lewat panel admin, dari jalur unggahan
+ * yang justru jadi tugas modul yang sama.
+ */
+describe("aktifkanProduk — punya isi jenis-sadar", () => {
+  it("PDF berhalaman lengkap TANPA berkas unduhan tetap bisa ditayangkan", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({
+        judul: "Uji Aktifkan PDF Tanpa Unduhan",
+        slug: "uji-aktifkan-pdf-tanpa-unduhan",
+        jenis: "pdf",
+        boleh_unduh: false,
+      })
+      .select("id").single();
+    bersihkan.push(produk!.id);
+    await svc.from("digital_product_pages").insert(
+      Array.from({ length: 3 }, (_, i) => ({
+        product_id: produk!.id, halaman: i + 1, objek: `${produk!.id}/${i + 1}.webp`,
+      })),
+    );
+    // Kontrol: benar-benar TIDAK ada baris `digital_product_files` — pagar
+    // lama akan menolak persis di sini.
+    const { data: berkas } = await svc.from("digital_product_files")
+      .select("id").eq("product_id", produk!.id);
+    expect(berkas ?? []).toEqual([]);
+
+    ref.sesi = await signInAs("admin@padma.test");
+    const hasil = await aktifkanProduk(produk!.id);
+    expect(hasil.ok).toBe(true);
+
+    const { data: baris } = await svc.from("digital_products")
+      .select("aktif").eq("id", produk!.id).single();
+    expect(baris!.aktif).toBe(true);
+  });
+
+  it("PDF tanpa halaman DAN tanpa berkas tetap ditolak", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji Aktifkan PDF Kosong", slug: "uji-aktifkan-pdf-kosong", jenis: "pdf" })
+      .select("id").single();
+    bersihkan.push(produk!.id);
+
+    ref.sesi = await signInAs("admin@padma.test");
+    const hasil = await aktifkanProduk(produk!.id);
+    expect(hasil.ok).toBe(false);
   });
 });
