@@ -73,6 +73,32 @@ export async function urlTontonVideo(objek: string): Promise<string> {
   );
 }
 
+/**
+ * Umur presigned URL UNDUH: 15 menit — sengaja jauh lebih pendek dari
+ * `UMUR_TONTON_DETIK`.
+ *
+ * Kompromi keduanya berjalan ke arah yang berbeda. URL tonton harus bertahan
+ * selama orang mem-pause, jadi ia panjang. URL unduh cukup bertahan selama
+ * unduhannya, dan setiap menit tambahan adalah menit di mana tautan yang
+ * tersalin ke grup percakapan masih bisa dipakai siapa pun yang membukanya.
+ */
+export const UMUR_UNDUH_DETIK = 15 * 60;
+
+export async function urlUnduhBerkas(objek: string, namaBerkas: string): Promise<string> {
+  return getSignedUrl(
+    klien(),
+    new GetObjectCommand({
+      Bucket: bucketVideo(),
+      Key: objek,
+      // Memaksa peramban MENGUNDUH alih-alih memutar di tab, dan menamai
+      // berkasnya dengan judul produk — bukan dengan UUID yang tak berarti
+      // apa pun di folder Unduhan pembeli.
+      ResponseContentDisposition: `attachment; filename="${namaBerkas}"`,
+    }),
+    { expiresIn: UMUR_UNDUH_DETIK },
+  );
+}
+
 export async function hapusObjekVideo(objek: string): Promise<void> {
   await klien().send(
     new DeleteObjectCommand({ Bucket: bucketVideo(), Key: objek }),

@@ -116,6 +116,7 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
 | `/passport/produk` | Klien | Pembelian saya: produk digital yang dimiliki, pintu ke pemutar/pembaca/unduhan |
+| `/passport/produk/[slug]` | Klien | Pembaca/pemutar produk digital yang dimiliki, plus tombol unduh bila diizinkan |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
 | `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |
@@ -161,6 +162,9 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/materi/[id]/halaman/[n]` | Klien | GET satu halaman e-book sebagai `image/webp` berwatermark identitas pembaca; hak diputuskan RLS lewat sesi klien SEBELUM service role menyentuh bucket privat `materi-halaman`; tidak berhak → 404 (bukan 401/403) |
 | `/api/materi/[id]/video` | Klien | GET presigned URL berumur pendek untuk satu video di bucket privat R2; hak diputuskan query ber-RLS memakai sesi klien SEBELUM presigned URL diterbitkan, urutan yang mengikat karena membaliknya berarti menerbitkan tautan unduhan sebelum tahu siapa yang meminta; tidak berhak → 403. URL-nya tidak pernah dirender ke HTML — komponen `<video>` di halaman lahir tanpa `src`, lalu klien mengambilnya sesudah hidup |
 | `/api/sertifikat/[sesi]` | Klien | GET berkas sertifikat; kepemilikan sesi diputuskan RLS lewat sesi klien SEBELUM bucket privat `sertifikat` (tanpa policy storage.objects) disentuh service role |
+| `/api/produk/[id]/video` | Klien pemilik | Alih ke presigned R2 untuk video produk; bukan-pemilik menerima 404 |
+| `/api/produk/[id]/halaman/[n]` | Klien pemilik | Satu halaman PDF produk, ber-watermark identitas pembaca |
+| `/api/produk/[id]/unduh` | Klien pemilik | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
