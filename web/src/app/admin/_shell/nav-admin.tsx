@@ -28,6 +28,10 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   { href: "/admin/layanan", label: "Layanan", ikon: "katalog" },
   // Judul halamannya "Materi Panduan".
   { href: "/admin/materi", label: "Materi", ikon: "materi" },
+  // Judul halamannya "Produk Digital". Ikon dipakai ulang dari "katalog"
+  // (layanan) — tidak ada ikon "produk" tersendiri, dan menambah satu SVG
+  // baru hanya untuk satu butir menu bukan bagian dari task ini.
+  { href: "/admin/produk", label: "Produk", ikon: "katalog" },
   // Judul halamannya "Pengaturan".
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
 ];

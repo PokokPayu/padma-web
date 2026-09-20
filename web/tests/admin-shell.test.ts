@@ -405,7 +405,7 @@ describe("navigasi admin", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat sepuluh tujuan berbahasa Indonesia di sidebar", () => {
+  it("memuat sebelas tujuan berbahasa Indonesia di sidebar", () => {
     const m = markupNav("/admin");
     const tujuan = [
       ["/admin", "Beranda"],
@@ -417,16 +417,19 @@ describe("navigasi admin", () => {
       ["/admin/penilaian", "Nilai"],
       ["/admin/layanan", "Layanan"],
       ["/admin/materi", "Materi"],
+      // Produk Digital (rencana produk-digital-tahap1, Task 5): master
+      // produk digital di panel admin.
+      ["/admin/produk", "Produk"],
       ["/admin/pengaturan", "Setelan"],
     ];
     for (const [href, label] of tujuan) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
     }
-    // Sepuluh tautan sidebar + empat tautan bar bawah. Dikunci PERSIS:
+    // Sebelas tautan sidebar + empat tautan bar bawah. Dikunci PERSIS:
     // tujuan yang lahir tanpa memperbarui daftar di atas akan lolos dari
     // seluruh assertion `toContain` tanpa satu pun test merah.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(10 + 4);
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(11 + 4);
   });
 
   it("bar bawah memuat empat tujuan tersibuk, bukan salinan seluruh menu", () => {

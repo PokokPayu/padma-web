@@ -127,6 +127,8 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
 | `/admin/materi` | Admin, Owner | Daftar materi datar: cari, saring aktif/tipe/kelengkapan isi, paginasi; baris menaut ke detail |
 | `/admin/materi/[id]` | Admin, Owner | Detail materi: metadata, isi (e-book/video), layanan tertaut, penugasan per klien |
+| `/admin/produk` | Admin, Owner | Master produk digital: daftar, cari, saring jenis/tayang/kelengkapan isi; harga TAMPIL tapi tidak bisa disunting admin |
+| `/admin/produk/baru` | Admin, Owner | Formulir produk digital baru; lahir nonaktif sampai berkasnya terunggah |
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
