@@ -98,7 +98,7 @@ export async function GET(
   const asli = new Uint8Array(await sumber.arrayBuffer());
   let tercap: Uint8Array;
   try {
-    tercap = await capPdfPembeli(asli, klien.nama, klien.email);
+    tercap = await capPdfPembeli(asli, klien.nama, klien.email, klien.padmaId);
   } catch (e) {
     const nama = e instanceof Error ? e.name : "GalatTidakDikenal";
     const pesan = e instanceof Error ? e.message : String(e);
