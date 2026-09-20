@@ -115,6 +115,7 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/sertifikat/[serviceId]` | Klien | Sertifikat klien untuk satu layanan, dipilih menurut sesi `selesai` terbaru |
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
+| `/passport/produk` | Klien | Pembelian saya: produk digital yang dimiliki, pintu ke pemutar/pembaca/unduhan |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
 | `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |

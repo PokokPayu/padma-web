@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { LABEL_JENIS } from "@/lib/produk/status";
 import { formatRupiah } from "@/lib/rupiah-publik";
+import { TombolAmbil } from "./tombol-ambil";
 
 // Sama seperti etalase: katalog berubah lewat panel staf, jadi halaman satu
 // produk tidak boleh dibekukan selamanya di waktu build.
@@ -13,7 +14,15 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: produk ? produk.judul : "Produk tidak ditemukan" };
 }
 
-function HargaProduk({ harga, hargaCoret }: { harga: number | null; hargaCoret: number | null }) {
+function HargaProduk({
+  slug,
+  harga,
+  hargaCoret,
+}: {
+  slug: string;
+  harga: number | null;
+  hargaCoret: number | null;
+}) {
   if (harga === null) {
     return <p className="mt-4 text-[15px] text-ink-soft">Harga segera diumumkan</p>;
   }
@@ -23,8 +32,10 @@ function HargaProduk({ harga, hargaCoret }: { harga: number | null; hargaCoret: 
         <span className="rounded-full bg-leaf-soft px-3 py-1 text-[12px] font-bold uppercase tracking-wide text-leaf">
           Gratis
         </span>
-        {/* Klaim gratis sungguhan menjadi Task 9 (`/passport/produk`) — di
-            sini pengunjung publik hanya melihat status harganya. */}
+        {/* Pengunjung anon diarahkan ke /masuk oleh server action itu sendiri
+            — lihat komentar `ambil.ts`. Klien yang sudah masuk lihat isi
+            produknya di /passport/produk sesudah mengambil. */}
+        <TombolAmbil slug={slug} />
       </div>
     );
   }
@@ -60,7 +71,7 @@ export default async function ProdukDetailPage({
           </p>
         )}
 
-        <HargaProduk harga={produk.harga} hargaCoret={produk.hargaCoret} />
+        <HargaProduk slug={produk.slug} harga={produk.harga} hargaCoret={produk.hargaCoret} />
 
         <p className="mt-6 rounded-xl border border-black/10 bg-white p-4 text-[13px] text-ink-soft">
           Produk digital dikirim seketika sesudah pembayaran dan <b>tidak dapat
