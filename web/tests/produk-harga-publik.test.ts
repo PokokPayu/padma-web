@@ -59,6 +59,57 @@ describe("harga produk digital", () => {
     await svc.from("digital_products").delete().eq("id", produk!.id);
   });
 
+  /**
+   * `produk_harga_staf` tidak punya pagar GRANT yang membedakan klien dari
+   * admin/owner — ketiganya sama-sama peran SQL `authenticated`. Satu-satunya
+   * pagar adalah predikat `user_role() in ('admin','owner')` DI DALAM view
+   * itu sendiri. Dua uji di bawah memeriksa predikat itu langsung, bukan
+   * cuma hak tabel — pasangan dari uji "tidak bocor ke pengunjung" di atas:
+   * staf HARUS melihat harga yang sudah dijadwalkan owner, publik TIDAK.
+   */
+  it("admin melihat harga terjadwal lewat produk_harga_staf", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji staf", slug: "uji-staf-harga-terjadwal", jenis: "pdf", aktif: true })
+      .select("id").single();
+
+    // Kalender JAKARTA, bukan UTC — sama seperti uji "tidak bocor" di atas.
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" });
+    const besok = fmt.format(new Date(Date.now() + 86_400_000));
+
+    await svc.from("digital_product_prices")
+      .insert({ product_id: produk!.id, harga: 77_000, berlaku_sejak: besok });
+
+    const admin = await signInAs("admin@padma.test");
+    const { data, error } = await admin.from("produk_harga_staf")
+      .select("harga").eq("product_id", produk!.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([{ harga: 77_000 }]);
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
+  });
+
+  it("klien mendapat array kosong (bukan galat) dari produk_harga_staf", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji staf klien", slug: "uji-staf-harga-klien", jenis: "pdf", aktif: true })
+      .select("id").single();
+
+    await svc.from("digital_product_prices")
+      .insert({ product_id: produk!.id, harga: 88_000 });
+
+    const klien = await signInAs("ananda@padma.test");
+    const { data, error } = await klien.from("produk_harga_staf")
+      .select("harga").eq("product_id", produk!.id);
+    // Array kosong berarti predikat `user_role()` di dalam view yang
+    // menyaring — beda kegagalan dari error grant (yang berarti hak tabel
+    // yang salah). Keduanya harus dibedakan, bukan cuma "tidak error".
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
+  });
+
   it("harga coret yang lebih murah dari harga jual DITOLAK basis data", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
