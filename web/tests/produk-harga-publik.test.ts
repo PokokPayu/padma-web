@@ -49,10 +49,24 @@ describe("harga produk digital", () => {
    * secara eksplisit alih-alih menganggap "tidak error" sudah cukup.
    */
   it("klien TETAP dijawab 0 baris oleh RLS bahkan lewat REST langsung", async () => {
+    // Fix round 1, Temuan 2: tanpa baris di tabel, `toHaveLength(0)` benar
+    // entah RLS menyaring apa pun atau tabelnya memang kosong — dua keadaan
+    // yang TIDAK bisa dibedakan assertion ini sendirian. Satu baris disisipkan
+    // lewat SERVICE ROLE tepat sebelum diperiksa, supaya "0 baris" membuktikan
+    // PENYARINGAN, bukan ketiadaan data.
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji klien select", slug: "uji-klien-select-harga", jenis: "pdf" })
+      .select("id").single();
+    await svc.from("digital_product_prices").insert({ product_id: produk!.id, harga: 12_345 });
+
     const klien = await signInAs("ananda@padma.test");
-    const { error, data } = await klien.from("digital_product_prices").select("harga").limit(1);
+    const { error, data } = await klien.from("digital_product_prices")
+      .select("harga").eq("product_id", produk!.id);
     expect(error).toBeNull();
     expect(data ?? []).toHaveLength(0);
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
   });
 
   it("klien yang menyisipkan harga langsung lewat REST ditolak RLS", async () => {
@@ -64,7 +78,16 @@ describe("harga produk digital", () => {
     const klien = await signInAs("ananda@padma.test");
     const { error } = await klien.from("digital_product_prices")
       .insert({ product_id: produk!.id, harga: 1 });
+    // Fix round 1, Temuan 1: Postgres menjawab 42501 untuk DUA mekanisme
+    // berbeda — GRANT tabel yang hilang ("permission denied for table") dan
+    // pelanggaran policy RLS ("new row violates row-level security policy").
+    // Kode saja tidak membedakan keduanya; assertion ini lolos identik entah
+    // migration grant Task 7 ada atau di-revert, padahal nama & docstring uji
+    // ini menjanjikan pembedaan itu. Pesannya ikut diperiksa supaya assertion
+    // ini sungguh menagih RLS, bukan GRANT yang hilang.
     expect(error?.code).toBe("42501");
+    expect(error?.message).toMatch(/row-level security policy/i);
+    expect(error?.message).not.toMatch(/permission denied for table/i);
 
     await svc.from("digital_products").delete().eq("id", produk!.id);
   });
