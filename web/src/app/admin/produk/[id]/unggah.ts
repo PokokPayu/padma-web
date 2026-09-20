@@ -324,6 +324,14 @@ export async function catatPdfProduk(
  * (`admin/materi/aksi.ts`): kunci objek dibaca sebelum barisnya lenyap,
  * kegagalan menghapus objek sesudah itu adalah mode gagal LUNAK (objek
  * yatim), dilaporkan lewat `objekTersisa`, bukan ditelan diam.
+ *
+ * Untuk PDF, cabang ini menyentuh DUA baris (`digital_product_pages` DAN
+ * `digital_product_files`) dan DUA bucket storage. Pembersihan objek
+ * halaman dijalankan SEGERA sesudah `digital_product_pages` kosong, TIDAK
+ * ditunda sampai `digital_product_files` juga selesai dihapus — lihat
+ * komentar di titik itu untuk alasan lengkap: dua penghapusan itu independen,
+ * dan menyandera satu pada suksesnya yang lain membuka kembali persis
+ * kegagalan yang urutan "baris dulu, objek belakangan" ada untuk mencegah.
  */
 export async function lepasIsiProduk(
   productId: string,
@@ -373,23 +381,39 @@ export async function lepasIsiProduk(
     .from("digital_product_pages").delete().eq("product_id", productId);
   if (delHalaman) return { ok: false, pesan: `Gagal mengosongkan halaman (${delHalaman.code}).` };
 
-  const { error: delBerkas } = await supabase
-    .from("digital_product_files").delete().eq("product_id", productId);
-  if (delBerkas) {
-    return {
-      ok: false,
-      pesan: `Halaman sudah kosong, tetapi berkas PDF gagal dilepas (${delBerkas.code}).`,
-    };
-  }
-
   const admin = createAdminSupabase();
   let objekTersisa = false;
+
+  // Objek halaman dibersihkan DI SINI — SEGERA sesudah barisnya kosong, TIDAK
+  // digantungkan pada sukses-tidaknya penghapusan `digital_product_files` di
+  // bawah. Nama objeknya sudah di tangan (`halaman`, dibaca sebelum baris
+  // dihapus); begitu barisnya lenyap, itu satu-satunya kesempatan untuk
+  // membersihkannya — percobaan berikutnya membaca `digital_product_pages`
+  // dan menemukan NOL baris, sehingga blok pembersihan storage tidak pernah
+  // jalan lagi. Dua penghapusan (baris `digital_product_files` dan objek
+  // halaman) adalah dua hal yang TIDAK SALING BERGANTUNG — JANGAN
+  // menyandera satu pada suksesnya yang lain. Inilah persis mode gagal yang
+  // urutan "baris dulu, objek belakangan" di seluruh berkas ini ada untuk
+  // mencegah, dan menggabungkan dua tabel dalam satu urutan gagal-berhenti
+  // diam-diam membukanya kembali.
   if ((halaman ?? []).length > 0) {
     const { error: hapusHalaman } = await admin.storage
       .from(BUCKET_HALAMAN)
       .remove((halaman ?? []).map((h) => h.objek));
     if (hapusHalaman) objekTersisa = true;
   }
+
+  const { error: delBerkas } = await supabase
+    .from("digital_product_files").delete().eq("product_id", productId);
+  if (delBerkas) {
+    return {
+      ok: false,
+      pesan: objekTersisa
+        ? `Halaman dilepas, tetapi sebagian objek halaman DAN baris berkas PDF gagal dihapus (${delBerkas.code}). Beri tahu tim teknis agar tidak menumpuk.`
+        : `Halaman sudah kosong, tetapi berkas PDF gagal dilepas (${delBerkas.code}).`,
+    };
+  }
+
   if (berkasPdf?.objek) {
     const { error: hapusBerkas } = await admin.storage
       .from(BUCKET_BERKAS)

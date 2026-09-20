@@ -1,0 +1,42 @@
+-- ============================================================================
+-- GRANT DELETE — isi produk digital (halaman & berkas)
+-- ============================================================================
+-- `alter default privileges in schema public revoke delete on tables from
+-- authenticated` (migration `cabut_hak_hapus_berlebih`, 20260829190000)
+-- berlaku untuk SETIAP tabel baru, termasuk dua yang dibuat migration
+-- `produk_digital` (20260921100000) di atas. Itu memang niatnya, tertulis
+-- tegas di migration itu sendiri: tabel baru yang BUTUH DELETE staf harus
+-- menyatakan diri lewat satu baris `grant delete ... to authenticated`, dan
+-- lupa melakukannya gagal BERISIK (42501) alih-alih diam.
+--
+-- Task 6 (`src/app/admin/produk/[id]/unggah.ts`) menulis TIGA titik DELETE
+-- langsung atas dua tabel ini, lewat sesi staf (`createServerSupabase()`,
+-- RLS "halaman produk: staf" / "berkas produk: staf" — keduanya `for all`):
+--
+--   1. `terbitkanUrlUnggahHalamanProduk` mengosongkan `digital_product_pages`
+--      SEBELUM menerbitkan URL unggah halaman baru — langkah PERTAMA saat
+--      mengunggah/mengganti PDF produk apa pun.
+--   2. `lepasIsiProduk` mengosongkan `digital_product_pages` saat melepas isi
+--      produk PDF.
+--   3. `lepasIsiProduk` mengosongkan `digital_product_files` saat melepas
+--      video ATAU berkas PDF utuh.
+--
+-- Tanpa GRANT di bawah, KETIGANYA gagal 42501 "permission denied for table"
+-- — dibuktikan EMPIRIS lewat probe langsung terhadap sesi admin sungguhan
+-- (anon key + JWT admin, bukan service role), bukan diasumsikan dari RLS
+-- semata: RLS-nya sudah benar (policy "for all" menyempit ke admin/owner),
+-- tapi hak TABEL-nya belum pernah dinyatakan sama sekali — dan RLS tidak
+-- pernah dievaluasi bila haknya sendiri sudah ditolak di lapisan grant.
+-- Konsekuensinya sebelum migration ini: PDF produk bahkan TIDAK BISA
+-- diunggah ulang sama sekali — langkah pertamanya sendiri (mengosongkan
+-- baris halaman lama) sudah gagal, dan "Lepas isi" gagal untuk KEDUA jenis
+-- produk.
+--
+-- RLS tetap satu-satunya yang MEMUTUSKAN siapa boleh: klien (`user_role() =
+-- 'klien'`) yang mencoba DELETE tetap ditolak oleh policy "for all" di atas
+-- meski GRANT tabelnya sekarang ada — persis pola yang sudah dipakai
+-- INSERT/UPDATE kedua tabel ini (migration `produk_digital`, sudah ter-grant
+-- lewat privilese default sebelum revoke DELETE berlaku, tidak pernah butuh
+-- baris eksplisit terpisah).
+grant delete on public.digital_product_pages to authenticated;
+grant delete on public.digital_product_files to authenticated;
