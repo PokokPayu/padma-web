@@ -36,7 +36,7 @@ export async function ambilDaftarSkrining(
     // sudah didaftarkan dari yang belum — tanpa kolom itu, satu-satunya kabar
     // bahwa seseorang sudah punya PADMA ID adalah ingatan admin.
     .select(
-      "id, kode, nama, no_hp, fase, hasil, status_tindak_lanjut, created_at, flags, client_id",
+      "id, kode, nama, no_hp, fase, hasil, status_tindak_lanjut, created_at, flags, client_id, usia_kehamilan_minggu, trimester",
       { count: "exact" },
     )
     .order("created_at", { ascending: false })

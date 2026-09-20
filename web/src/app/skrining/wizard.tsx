@@ -9,6 +9,8 @@ import {
 // Dipakai HANYA untuk menampilkan hasil bila server gagal dihubungi;
 // nilai yang tersimpan di DB tetap yang dihitung server (keputusan A).
 import { nilaiSkrining } from "@/lib/skrining/evaluasi";
+import { MedanUsiaKehamilan } from "./medan-usia-kehamilan";
+import { USIA_KOSONG, type IsianUsiaKehamilan } from "@/lib/skrining/usia-kehamilan";
 
 type Layar = "intro" | "soal" | "hasil";
 
@@ -59,12 +61,26 @@ export function Wizard({
   const [hp, setHp] = useState(hpAwal);
   const [jujur, setJujur] = useState(false);
   const [fase, setFase] = useState<FaseSkrining | null>(null);
+  const [usia, setUsia] = useState<IsianUsiaKehamilan>(USIA_KOSONG);
   const [indeks, setIndeks] = useState(0);
   const [jawaban, setJawaban] = useState<Record<string, boolean>>({});
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const [sibuk, setSibuk] = useState(false);
 
   const soal = useMemo(() => (fase ? daftarSoal(fase) : []), [fase]);
+
+  /**
+   * Mengganti fase SELALU mengosongkan usia kehamilan.
+   *
+   * Tanpa ini, seseorang yang salah menekan "Kehamilan", mengetik 30 minggu,
+   * lalu membetulkan pilihannya ke "Menopause" akan mengirim payload yang
+   * ditolak skema — dan yang ia lihat hanyalah skrining yang gagal tersimpan
+   * tanpa sebab yang tampak di layar.
+   */
+  function pilihFase(f: FaseSkrining) {
+    setFase(f);
+    setUsia(USIA_KOSONG);
+  }
   const bolehMulai = Boolean(fase && nama.trim() && hp.trim() && jujur);
 
   async function selesai(jawabanFinal: Record<string, boolean>) {
@@ -77,7 +93,10 @@ export function Wizard({
       const res = await fetch(rute, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ nama, no_hp: hp, fase, jawaban: jawabanFinal }),
+        body: JSON.stringify({
+          nama, no_hp: hp, fase, jawaban: jawabanFinal,
+          usia_kehamilan_minggu: usia.minggu, trimester: usia.trimester,
+        }),
       });
       if (res.ok) kode = (await res.json()).kode;
     } catch {
@@ -149,7 +168,7 @@ export function Wizard({
           <legend className="text-sm font-semibold text-ink-soft">Tahap kehidupan Anda</legend>
           <div className="mt-2 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {FASE_PILIHAN.map((f) => (
-              <button key={f} type="button" onClick={() => setFase(f)}
+              <button key={f} type="button" onClick={() => pilihFase(f)}
                 aria-pressed={fase === f}
                 className={`min-h-[52px] rounded-xl border px-3 py-3 text-sm font-semibold ${
                   fase === f ? "border-night bg-leaf-soft text-night" : "border-black/15 bg-white"
@@ -159,6 +178,11 @@ export function Wizard({
             ))}
           </div>
         </fieldset>
+
+        {/* Hanya untuk fase kehamilan — lihat dokblok medan-usia-kehamilan.tsx. */}
+        {fase === "kehamilan" && (
+          <MedanUsiaKehamilan minggu={usia.minggu} trimester={usia.trimester} onUbah={setUsia} />
+        )}
 
         <label className="mt-4 flex gap-3 rounded-xl border border-black/10 bg-paper-warm p-3.5 text-[13px]">
           <input type="checkbox" checked={jujur} onChange={(e) => setJujur(e.target.checked)}
@@ -223,6 +247,9 @@ export function Wizard({
       hasil.kode ? `Kode: ${hasil.kode}` : "(kode tidak tersimpan)",
       `Nama: ${nama}`,
       `Tahap: ${LABEL_FASE[fase]}`,
+      ...(usia.minggu !== null || usia.trimester !== null
+        ? [`Usia kehamilan: ${usia.minggu !== null ? `${usia.minggu} minggu` : `Trimester ${usia.trimester}`}`]
+        : []),
       `Hasil: ${hijau ? "HIJAU — dapat dijadwalkan" : "MERAH — belum dapat dijadwalkan"}`,
       "",
       hijau

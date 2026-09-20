@@ -19,6 +19,10 @@ export type BarisSkrining = {
   // Terisi hanya untuk skrining yang sudah dikonversi. Opsional karena kolomnya
   // baru mulai dipakai di Plan 3A — baris lama membawanya sebagai null.
   client_id?: string | null;
+  // Usia kehamilan — hanya pada fase kehamilan, dan hanya bila klien
+  // menyebutkannya. Keduanya boleh kosong: mengisinya opsional bagi klien.
+  usia_kehamilan_minggu?: number | null;
+  trimester?: number | null;
 };
 
 export type PilihanFase = { id: string; nama: string };
@@ -73,6 +77,12 @@ export function TabelInbox({
                       <b>{r.nama}</b>
                       <span className="mt-0.5 block text-[11.5px] text-panel-muted">
                         {r.no_hp} · {labelFase.get(r.fase) ?? r.fase}
+                        {/* Usia kehamilan ikut di baris fase, bukan kolom
+                            sendiri: ia hanya pernah terisi untuk sebagian
+                            kecil baris, dan kolom yang mayoritasnya kosong
+                            memakan lebar yang dibutuhkan nama & nomor. */}
+                        {r.usia_kehamilan_minggu != null && ` · ${r.usia_kehamilan_minggu} mg`}
+                        {r.trimester != null && ` · T${r.trimester}`}
                       </span>
                     </td>
                     <td className="p-4">

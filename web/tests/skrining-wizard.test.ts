@@ -221,3 +221,39 @@ describe("layar intro tidak bisa dimulai sebelum lengkap", () => {
     }
   });
 });
+
+describe("wizard — usia kehamilan", () => {
+  it("medan belum ada sebelum ada fase yang dipilih", () => {
+    expect(markupIntro).not.toContain("Usia kehamilan");
+  });
+
+  it("medan dipasang HANYA untuk fase kehamilan", () => {
+    // Bukan sekadar kerapian: 'nifas dengan trimester 2' adalah catatan
+    // keselamatan yang membingungkan terapis, dan skema menolaknya — layar
+    // yang bisa menghasilkannya akan menggagalkan kiriman klien tanpa sebab
+    // yang bisa ia lihat.
+    expect(sumberWizard).toMatch(/fase === "kehamilan"[\s\S]{0,200}MedanUsiaKehamilan/);
+  });
+
+  it("batas trimester tidak disalin ulang ke wizard", () => {
+    expect(sumberWizard).toContain("medan-usia-kehamilan");
+    expect(sumberWizard).not.toMatch(/\b(13|27|28|42)\b/);
+  });
+
+  it("berganti fase mengosongkan isian usia kehamilan", () => {
+    // Tanpa ini, seseorang yang salah menekan "Kehamilan", mengetik 30 minggu,
+    // lalu membetulkan ke "Menopause" akan mengirim payload yang ditolak skema.
+    expect(sumberWizard).toMatch(/setFase\([\s\S]{0,400}USIA_KOSONG/);
+  });
+
+  it("usia kehamilan ikut terkirim ke rute penyimpan", () => {
+    const badan = sumberWizard.match(/JSON\.stringify\(\{[^}]*\}\)/);
+    expect(badan).not.toBeNull();
+    expect(badan![0]).toContain("usia_kehamilan_minggu");
+    expect(badan![0]).toContain("trimester");
+  });
+
+  it("pesan WhatsApp menyebut usia kehamilan bila terisi", () => {
+    expect(sumberWizard).toMatch(/Usia kehamilan/);
+  });
+});

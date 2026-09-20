@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ pesan: "Data skrining tidak valid." }, { status: 400 });
   }
 
-  const { nama, no_hp, fase, jawaban } = parsed.data;
+  const { nama, no_hp, fase, jawaban, usia_kehamilan_minggu, trimester } = parsed.data;
   const penilaian = nilaiSkrining(fase, jawaban);
   const jawabanBersih = saringJawaban(fase, jawaban);
   const admin = createAdminSupabase();
@@ -86,6 +86,11 @@ export async function POST(request: Request) {
       nama,
       no_hp,
       fase,
+      // Opsional, dan hanya terisi pada fase kehamilan. Skema sudah menurunkan
+      // ulang `trimester` dari minggunya — yang sampai ke sini tidak mungkin
+      // "30 minggu, trimester 1". Lihat lib/skrining/skema.ts.
+      usia_kehamilan_minggu,
+      trimester,
       jawaban: { ...jawabanBersih, dihentikan_pada: penilaian.dihentikanPada },
       hasil: penilaian.hasil,
       flags: penilaian.flags,
