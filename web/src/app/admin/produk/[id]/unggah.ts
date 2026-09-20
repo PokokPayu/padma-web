@@ -96,14 +96,14 @@ export async function catatVideoProduk(
 /**
  * Menerbitkan signed upload URL untuk seluruh halaman sekaligus.
  *
- * Berbeda dari `admin/materi/unggah.ts`, pembersihan baris lama di sini
- * memakai DELETE LANGSUNG lewat sesi staf, bukan RPC: `digital_product_pages`
- * (migration produk_digital, Task 1) tidak pernah mencabut hak tabel dari
- * `authenticated` seperti `material_pages` (migration materi_halaman_pdf)
- * pernah dipaksa lakukan sesudah insiden `?urutan=gte.0`) — policy "halaman
- * produk: staf" sudah `for all` dan menyempit ke baris milik staf lewat
- * `user_role()`, jadi RPC security-definer tidak dibutuhkan di sini untuk
- * mengembalikan hak tulis yang memang belum pernah dicabut.
+ * Pembersihan baris lama memakai RPC `ganti_halaman_produk`
+ * (`security definer`, radius terkunci `p_product_id`), BUKAN DELETE
+ * langsung lewat sesi staf: `digital_product_pages` mencabut SELURUH hak
+ * tabelnya dari `authenticated` (migration `produk_hapus_isi`) — persis
+ * `material_pages` (migration `materi_halaman_pdf`) — karena policy
+ * "halaman produk: staf" yang `for all` tidak pernah menyempit ke SATU
+ * produk, dan filter PostgREST adalah pilihan pemanggil, bukan pembatas
+ * baris. Lihat komentar panjang di migration itu untuk kejadian nyatanya.
  */
 export async function terbitkanUrlUnggahHalamanProduk(
   productId: string,
@@ -135,8 +135,15 @@ export async function terbitkanUrlUnggahHalamanProduk(
   // (objek dihapus dulu) membuat kegagalan berarti objek sudah lenyap
   // sementara baris lama masih menunjuknya, dan pembeli melihat halaman
   // rusak sementara panel admin menyatakan produk ini berisi.
-  const { error: bersih } = await supabase
-    .from("digital_product_pages").delete().eq("product_id", productId);
+  //
+  // `p_halaman: []` berarti "kosongkan, jangan isi apa pun" — RPC yang sama
+  // dipakai `catatHalamanProduk` di bawah untuk MENGISI, persis pola
+  // `ganti_halaman_materi` dipakai dua kali (kosongkan, lalu isi) oleh
+  // `admin/materi/unggah.ts`.
+  const { data: lama, error: bersih } = await supabase.rpc("ganti_halaman_produk", {
+    p_product_id: productId,
+    p_halaman: [],
+  });
   if (bersih) {
     return {
       ok: false,
@@ -146,24 +153,15 @@ export async function terbitkanUrlUnggahHalamanProduk(
 
   const admin = createAdminSupabase();
 
-  // Objek lama dibersihkan SESUDAH barisnya kosong (lihat urutan di atas).
-  // `.list()` TANPA opsi hanya menjawab 100 objek pertama (default
-  // storage-js) — di-loop pakai `offset` supaya SELURUH objek ditemukan
-  // berapa pun jumlah halamannya, persis pola `admin/materi/unggah.ts`.
-  const LIMIT_LIST = 1000;
-  const lama: Array<{ name: string }> = [];
-  for (let offset = 0; ; offset += LIMIT_LIST) {
-    const { data: potongan } = await admin.storage
-      .from(BUCKET_HALAMAN)
-      .list(productId, { limit: LIMIT_LIST, offset });
-    if (!potongan || potongan.length === 0) break;
-    lama.push(...potongan);
-    if (potongan.length < LIMIT_LIST) break;
-  }
-  if (lama.length > 0) {
-    const { error: hapus } = await admin.storage
-      .from(BUCKET_HALAMAN)
-      .remove(lama.map((o) => `${productId}/${o.name}`));
+  // Objek lama dibersihkan SESUDAH barisnya kosong (lihat urutan di atas),
+  // dari nama yang dikembalikan RPC langsung — TIDAK dibaca lewat
+  // `.list()` bucket: RPC sudah memulangkan tepat objek yang barisnya
+  // barusan dihapus lewat `returning`, jadi tidak ada lagi potensi
+  // pemotongan 100-objek-pertama (`.list()` tanpa opsi) yang pernah
+  // membuat unggah ulang e-book >100 halaman gagal permanen di materi.
+  const objekLama = (lama ?? []).map((r: { objek: string }) => r.objek);
+  if (objekLama.length > 0) {
+    const { error: hapus } = await admin.storage.from(BUCKET_HALAMAN).remove(objekLama);
     if (hapus) {
       return {
         ok: false,
@@ -216,16 +214,25 @@ export async function catatHalamanProduk(
     }
   }
 
+  // Lewat RPC `ganti_halaman_produk` yang sama dengan
+  // `terbitkanUrlUnggahHalamanProduk` — kali ini dengan `p_halaman` TERISI,
+  // jadi mengosongkan (yang seharusnya sudah kosong dari langkah
+  // sebelumnya) lalu mengisi set yang baru. `digital_product_pages` tidak
+  // punya hak INSERT langsung lagi (migration `produk_hapus_isi`), jadi ini
+  // satu-satunya jalur tulis yang tersisa.
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("digital_product_pages")
-    .insert(halaman.map((h) => ({ product_id: productId, halaman: h.halaman, objek: h.objek })))
-    .select("halaman");
+  const { error } = await supabase.rpc("ganti_halaman_produk", {
+    p_product_id: productId,
+    p_halaman: halaman.map((h) => ({ halaman: h.halaman, objek: h.objek })),
+  });
+  // Otorisasi RPC gagal lewat EXCEPTION (`raise exception`), bukan lewat
+  // baris kosong — beda dari tulisan langsung ke tabel (PostgREST 200 + []
+  // untuk RLS yang menolak), jadi tidak ada lagi "panjang data === 0" yang
+  // perlu diperiksa terpisah di sini.
   if (error) return { ok: false, pesan: `Gagal menyimpan halaman (${error.code}).` };
-  if ((data ?? []).length === 0) return { ok: false, pesan: "Halaman tidak tersimpan." };
 
   revalidatePath(`/admin/produk/${productId}`);
-  return { ok: true, jumlah: data.length };
+  return { ok: true, jumlah: halaman.length };
 }
 
 // ===========================================================================
@@ -321,9 +328,14 @@ export async function catatPdfProduk(
  *
  * Baris dihapus LEBIH DULU, objek storage BELAKANGAN — simetris dengan
  * urutan di `terbitkanUrlUnggahHalamanProduk` dan dengan `lepasVideo`
- * (`admin/materi/aksi.ts`): kunci objek dibaca sebelum barisnya lenyap,
- * kegagalan menghapus objek sesudah itu adalah mode gagal LUNAK (objek
- * yatim), dilaporkan lewat `objekTersisa`, bukan ditelan diam.
+ * (`admin/materi/aksi.ts`). Kedua tabel di sini tidak lagi terhapus lewat
+ * DELETE langsung (lihat migration `produk_hapus_isi`): baris dihapus lewat
+ * RPC (`lepas_berkas_produk` / `ganti_halaman_produk`), yang MEMULANGKAN
+ * kunci objeknya lewat `returning` — bukan dibaca via SELECT terpisah
+ * sebelum RPC dipanggil, yang adalah balapan dengan dirinya sendiri (baris
+ * bisa berubah di antara SELECT dan DELETE). Kegagalan menghapus objek
+ * SESUDAH baris lenyap adalah mode gagal LUNAK (objek yatim), dilaporkan
+ * lewat `objekTersisa`, bukan ditelan diam.
  *
  * Untuk PDF, cabang ini menyentuh DUA baris (`digital_product_pages` DAN
  * `digital_product_files`) dan DUA bucket storage. Pembersihan objek
@@ -352,17 +364,19 @@ export async function lepasIsiProduk(
   }
 
   if (produk.jenis === "video") {
-    const { data: berkas } = await supabase
-      .from("digital_product_files").select("objek").eq("product_id", productId).maybeSingle();
-
-    const { error: delError } = await supabase
-      .from("digital_product_files").delete().eq("product_id", productId);
+    // `returning objek` di dalam RPC memulangkan kunci objek lama LANGSUNG
+    // dari pernyataan DELETE-nya sendiri — tidak ada SELECT terpisah di sini
+    // yang bisa balapan dengan DELETE-nya.
+    const { data: lama, error: delError } = await supabase.rpc("lepas_berkas_produk", {
+      p_product_id: productId,
+    });
     if (delError) return { ok: false, pesan: `Gagal melepas video (${delError.code}).` };
 
     let objekTersisa = false;
-    if (berkas?.objek) {
+    const objek = lama?.[0]?.objek;
+    if (objek) {
       try {
-        await hapusObjekVideo(berkas.objek);
+        await hapusObjekVideo(objek);
       } catch {
         objekTersisa = true;
       }
@@ -372,13 +386,13 @@ export async function lepasIsiProduk(
   }
 
   // jenis === "pdf": halaman terasterisasi DAN berkas PDF utuh (bila ada).
-  const { data: halaman } = await supabase
-    .from("digital_product_pages").select("objek").eq("product_id", productId);
-  const { data: berkasPdf } = await supabase
-    .from("digital_product_files").select("objek").eq("product_id", productId).maybeSingle();
-
-  const { error: delHalaman } = await supabase
-    .from("digital_product_pages").delete().eq("product_id", productId);
+  // `p_halaman: []` mengosongkan tanpa mengisi ulang — sama pemakaian
+  // dengan `terbitkanUrlUnggahHalamanProduk` — dan memulangkan objek baris
+  // yang barusan lenyap lewat `returning`.
+  const { data: halamanLama, error: delHalaman } = await supabase.rpc("ganti_halaman_produk", {
+    p_product_id: productId,
+    p_halaman: [],
+  });
   if (delHalaman) return { ok: false, pesan: `Gagal mengosongkan halaman (${delHalaman.code}).` };
 
   const admin = createAdminSupabase();
@@ -386,25 +400,27 @@ export async function lepasIsiProduk(
 
   // Objek halaman dibersihkan DI SINI — SEGERA sesudah barisnya kosong, TIDAK
   // digantungkan pada sukses-tidaknya penghapusan `digital_product_files` di
-  // bawah. Nama objeknya sudah di tangan (`halaman`, dibaca sebelum baris
-  // dihapus); begitu barisnya lenyap, itu satu-satunya kesempatan untuk
-  // membersihkannya — percobaan berikutnya membaca `digital_product_pages`
-  // dan menemukan NOL baris, sehingga blok pembersihan storage tidak pernah
-  // jalan lagi. Dua penghapusan (baris `digital_product_files` dan objek
-  // halaman) adalah dua hal yang TIDAK SALING BERGANTUNG — JANGAN
-  // menyandera satu pada suksesnya yang lain. Inilah persis mode gagal yang
-  // urutan "baris dulu, objek belakangan" di seluruh berkas ini ada untuk
-  // mencegah, dan menggabungkan dua tabel dalam satu urutan gagal-berhenti
-  // diam-diam membukanya kembali.
-  if ((halaman ?? []).length > 0) {
+  // bawah. Nama objeknya sudah di tangan (dipulangkan RPC lewat `returning`,
+  // BUKAN dibaca via SELECT terpisah); begitu barisnya lenyap, itu
+  // satu-satunya kesempatan untuk membersihkannya — percobaan berikutnya
+  // memanggil RPC yang sama dan menemukan NOL baris untuk dihapus, sehingga
+  // blok pembersihan storage tidak pernah jalan lagi. Dua penghapusan
+  // (baris `digital_product_files` dan objek halaman) adalah dua hal yang
+  // TIDAK SALING BERGANTUNG — JANGAN menyandera satu pada suksesnya yang
+  // lain. Inilah persis mode gagal yang urutan "baris dulu, objek
+  // belakangan" di seluruh berkas ini ada untuk mencegah, dan menggabungkan
+  // dua tabel dalam satu urutan gagal-berhenti diam-diam membukanya kembali.
+  const objekHalamanLama = (halamanLama ?? []).map((r: { objek: string }) => r.objek);
+  if (objekHalamanLama.length > 0) {
     const { error: hapusHalaman } = await admin.storage
       .from(BUCKET_HALAMAN)
-      .remove((halaman ?? []).map((h) => h.objek));
+      .remove(objekHalamanLama);
     if (hapusHalaman) objekTersisa = true;
   }
 
-  const { error: delBerkas } = await supabase
-    .from("digital_product_files").delete().eq("product_id", productId);
+  const { data: berkasLama, error: delBerkas } = await supabase.rpc("lepas_berkas_produk", {
+    p_product_id: productId,
+  });
   if (delBerkas) {
     return {
       ok: false,
@@ -414,10 +430,11 @@ export async function lepasIsiProduk(
     };
   }
 
-  if (berkasPdf?.objek) {
+  const objekPdf = berkasLama?.[0]?.objek;
+  if (objekPdf) {
     const { error: hapusBerkas } = await admin.storage
       .from(BUCKET_BERKAS)
-      .remove([berkasPdf.objek]);
+      .remove([objekPdf]);
     if (hapusBerkas) objekTersisa = true;
   }
 

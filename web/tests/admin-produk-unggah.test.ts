@@ -102,31 +102,31 @@ afterEach(async () => {
 });
 
 /**
- * Sesi admin sungguhan, tetapi penghapusan `digital_product_files` dipaksa
- * gagal SECARA SINTETIS — mensimulasikan blip PostgREST pada delete KEDUA
- * milik `lepasIsiProduk`, tanpa mengubah satu baris pun di tabel lain.
+ * Sesi admin sungguhan, tetapi RPC `lepas_berkas_produk` dipaksa gagal
+ * SECARA SINTETIS — mensimulasikan blip PostgREST pada delete KEDUA milik
+ * `lepasIsiProduk`, tanpa mengubah satu baris pun di tabel lain. `unggah.ts`
+ * tidak lagi memanggil `.from("digital_product_files").delete()` langsung
+ * (migration `produk_hapus_isi`, review round 2) — jalur tulisnya sekarang
+ * RPC, jadi yang perlu dipalsukan adalah `.rpc()`, bukan `.from()`.
  *
- * `Object.create(asli)` + shadow `.from` SENGAJA dipilih ketimbang Proxy:
- * `sesiPalsu` mewarisi SELURUH state `asli` (auth, storage, rpc, `.from`
- * untuk tabel lain) apa adanya lewat rantai prototype, dan hanya `.from`
- * yang di-shadow — jadi tidak ada `this`-binding builder PostgREST yang
- * perlu dipalsukan ulang lewat trap Proxy yang rawan pecah diam-diam.
+ * `Object.create(asli)` + shadow `.rpc` SENGAJA dipilih ketimbang Proxy:
+ * `sesiPalsu` mewarisi SELURUH state `asli` (auth, storage, `.from`, RPC
+ * lain) apa adanya lewat rantai prototype, dan hanya `.rpc` yang di-shadow —
+ * jadi tidak ada `this`-binding builder PostgREST yang perlu dipalsukan
+ * ulang lewat trap Proxy yang rawan pecah diam-diam.
  */
-function sesiDenganHapusBerkasGagal(asli: SupabaseClient): SupabaseClient {
-  const fromAsli = asli.from.bind(asli);
+function sesiDenganLepasBerkasGagal(asli: SupabaseClient): SupabaseClient {
+  const rpcAsli = asli.rpc.bind(asli);
   const sesiPalsu = Object.create(asli) as SupabaseClient;
-  (sesiPalsu as unknown as { from: typeof asli.from }).from = ((nama: string) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const builder: any = fromAsli(nama as never);
-    if (nama === "digital_product_files") {
-      builder.delete = () => ({
-        eq: async () => ({
-          data: null,
-          error: { code: "FAKE", message: "dipaksa gagal untuk uji" },
-        }),
+  (sesiPalsu as unknown as { rpc: typeof asli.rpc }).rpc = ((nama: string, params?: unknown) => {
+    if (nama === "lepas_berkas_produk") {
+      return Promise.resolve({
+        data: null,
+        error: { code: "FAKE", message: "dipaksa gagal untuk uji" },
       });
     }
-    return builder;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (rpcAsli as any)(nama, params);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
   return sesiPalsu;
@@ -169,7 +169,7 @@ describe("lepasIsiProduk — pembersihan objek halaman TIDAK disandera baris dig
     });
 
     const sesiAsli = await signInAs("admin@padma.test");
-    ref.sesi = sesiDenganHapusBerkasGagal(sesiAsli);
+    ref.sesi = sesiDenganLepasBerkasGagal(sesiAsli);
 
     const hasil = await lepasIsiProduk(id);
     // Delete KEDUA (`digital_product_files`) dipaksa gagal, jadi fungsi ini
