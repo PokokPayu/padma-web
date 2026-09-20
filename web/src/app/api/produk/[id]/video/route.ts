@@ -23,6 +23,26 @@ export async function GET(
   if (!klien) return new Response(null, { status: 404 });
 
   const supabase = await createServerSupabase();
+
+  // Jenis produk DIPERIKSA, tidak diasumsikan. `digital_product_files` memuat
+  // isi untuk KEDUA jenis (video di R2, PDF utuh di bucket `produk-berkas`),
+  // jadi tanpa pagar ini rute ini menandatangani kunci objek PDF terhadap
+  // bucket VIDEO — hari ini hasilnya tautan mati, tapi yang salah bukan
+  // akibatnya melainkan sebabnya: rute ini memercayai invarian milik modul
+  // lain tanpa pernah menagihnya sendiri. Rute penyaji adalah endpoint
+  // MANDIRI; itu berlaku untuk jenis produk sama seperti untuk identitas.
+  //
+  // Dibaca lewat sesi pengguna: policy "produk: baca publik yang aktif" ATAU
+  // "produk: pemilik entitlement baca" yang menjawab — pemegang entitlement
+  // karena itu tetap lolos untuk produk yang sudah ditarik dari etalase.
+  const { data: produk } = await supabase
+    .from("digital_products")
+    .select("jenis")
+    .eq("id", id)
+    .maybeSingle();
+  if (!produk) return new Response(null, { status: 404 });
+  if (produk.jenis !== "video") return new Response(null, { status: 404 });
+
   const { data: baris } = await supabase
     .from("digital_product_files")
     .select("objek")

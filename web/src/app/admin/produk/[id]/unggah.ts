@@ -10,6 +10,7 @@ import { MAKS_HALAMAN, MAKS_BYTE_PDF } from "@/lib/materi/rasterisasi";
 import {
   namaObjekVideoProduk, namaObjekHalamanProduk, namaObjekPdfProduk,
 } from "@/lib/produk/objek";
+import { prefiksPdfPembeli } from "@/lib/produk/cap-pdf";
 
 const BUCKET_HALAMAN = "produk-halaman";
 const BUCKET_BERKAS = "produk-berkas";
@@ -17,6 +18,52 @@ const MIME_PDF = "application/pdf";
 
 type Gagal = { ok: false; pesan: string };
 export type UnggahanHalaman = { halaman: number; objek: string; token: string };
+
+/** Sebanyak yang dipulangkan satu halaman `.list()` — lihat komentar di bawah. */
+const BATAS_LIST = 1000;
+
+/**
+ * Mengosongkan SELURUH salinan PDF tercap milik para pembeli satu produk.
+ *
+ * Salinan tercap (`<produk>/pembeli/<klien>.pdf`) adalah TURUNAN dari PDF
+ * sumber, dan rute unduh memakainya ulang begitu ia ada — tanpa pernah
+ * membandingkannya dengan sumbernya. Karena itu siapa pun yang MENGGANTI atau
+ * MELEPAS sumbernya wajib menghapus folder ini; kalau tidak, admin yang
+ * mengunggah PDF perbaikan tidak akan PERNAH bisa mengirimkannya kepada orang
+ * yang sudah pernah mengunduh — permanen, tanpa satu pun galat di layar — dan
+ * "Lepas isi" meninggalkan objek yatim, kelas kebocoran yang sama yang sudah
+ * ditutup untuk objek halaman.
+ *
+ * `.list()` DIPAGINASI, tidak dipanggil sekali: tanpa opsi, Supabase memulangkan
+ * 100 objek pertama saja — pemotongan diam yang dulu membuat unggah ulang
+ * e-book >100 halaman gagal permanen di modul materi. Produk laris punya lebih
+ * dari 100 pembeli, dan sisa yang tidak terhapus adalah sisa yang tetap
+ * disajikan rute unduh.
+ *
+ * Memulangkan `true` bila ADA yang tidak terhapus — mode gagal LUNAK yang
+ * dilaporkan ke pemanggil, bukan ditelan diam.
+ */
+async function hapusSalinanPembeli(
+  admin: ReturnType<typeof createAdminSupabase>,
+  productId: string,
+): Promise<boolean> {
+  const prefiks = prefiksPdfPembeli(productId);
+  for (;;) {
+    const { data, error } = await admin.storage
+      .from(BUCKET_BERKAS)
+      .list(prefiks, { limit: BATAS_LIST });
+    if (error) return true;
+    if (!data || data.length === 0) return false;
+
+    const { error: hapus } = await admin.storage
+      .from(BUCKET_BERKAS)
+      .remove(data.map((o) => `${prefiks}/${o.name}`));
+    if (hapus) return true;
+    // Halaman terakhir: berhenti di sini, bukan memanggil `.list()` sekali lagi
+    // hanya untuk mendapat jawaban kosong.
+    if (data.length < BATAS_LIST) return false;
+  }
+}
 
 // ===========================================================================
 // VIDEO
@@ -269,6 +316,26 @@ export async function terbitkanUrlUnggahPdfProduk(
   }
 
   const admin = createAdminSupabase();
+
+  // Salinan tercap para pembeli dikosongkan DI SINI — SEBELUM sumbernya
+  // tertimpa, bukan sesudah. Dua alasan, dan keduanya soal kegagalan:
+  //
+  //   1. Kegagalannya INERT. Kalau unggahan yang diizinkan URL ini tidak pernah
+  //      terjadi (admin membatalkan, koneksi putus), yang hilang cuma salinan
+  //      yang bisa dicap ulang dari sumber lama — tidak ada yang rusak.
+  //   2. Menempatkannya di `catatPdfProduk` justru MELUBANGI pagarnya:
+  //      unggahan ke storage sudah selesai saat action itu dipanggil, dan
+  //      peramban yang tidak pernah memanggilnya (tab ditutup di detik yang
+  //      salah) meninggalkan sumber BARU berdampingan dengan salinan tercap
+  //      LAMA — persis keadaan yang perbaikan ini ada untuk mencegah.
+  if (await hapusSalinanPembeli(admin, productId)) {
+    return {
+      ok: false,
+      pesan:
+        "Gagal membersihkan salinan unduhan pembeli yang lama. Unggahan dibatalkan supaya pembeli tidak menerima berkas versi lama — coba lagi.",
+    };
+  }
+
   const objek = namaObjekPdfProduk(productId);
   const { data, error: e } = await admin.storage
     .from(BUCKET_BERKAS)
@@ -344,6 +411,10 @@ export async function catatPdfProduk(
  * komentar di titik itu untuk alasan lengkap: dua penghapusan itu independen,
  * dan menyandera satu pada suksesnya yang lain membuka kembali persis
  * kegagalan yang urutan "baris dulu, objek belakangan" ada untuk mencegah.
+ *
+ * Untuk PDF, dibersihkan juga SELURUH salinan tercap pembeli
+ * (`<produk>/pembeli/**`) — objek yang tidak punya baris sama sekali, jadi
+ * tidak ada yang akan mengingatnya bila dilewatkan di sini.
  */
 export async function lepasIsiProduk(
   productId: string,
@@ -437,6 +508,14 @@ export async function lepasIsiProduk(
       .remove([objekPdf]);
     if (hapusBerkas) objekTersisa = true;
   }
+
+  // Salinan tercap pembeli dibersihkan TANPA SYARAT, tidak digantungkan pada
+  // `objekPdf` di atas: barisnya sudah lenyap sejak `lepas_berkas_produk`, jadi
+  // nama-nama itu tidak akan pernah tercatat lagi di mana pun. Kalau ia hanya
+  // dijalankan saat berkas sumbernya masih ada, produk yang barisnya sudah
+  // terlanjur hilang (mis. percobaan lepas sebelumnya yang gagal separuh)
+  // menyimpan salinan tercapnya selamanya, tak terjangkau siapa pun.
+  if (await hapusSalinanPembeli(admin, productId)) objekTersisa = true;
 
   revalidatePath(`/admin/produk/${productId}`);
   return { ok: true, objekTersisa };

@@ -40,10 +40,17 @@ type BarisEntitlement = {
  * yang sudah dicabut admin tidak lagi muncul di "Pembelian saya" — halaman
  * ini adalah daftar akses AKTIF, bukan riwayat lengkap.
  *
- * Baris yang produknya tidak lagi terbaca (mis. admin menonaktifkan
- * produknya sesudah entitlement diterbitkan) dibuang, bukan ditampilkan
- * dengan judul kosong: embed yang ditolak RLS memulangkan `null`, bukan
- * galat, dan "Pembelian saya" tidak boleh menampilkan kartu tanpa nama.
+ * Baris yang produknya tidak lagi terbaca dibuang, bukan ditampilkan dengan
+ * judul kosong: embed yang ditolak RLS memulangkan `null`, bukan galat, dan
+ * "Pembelian saya" tidak boleh menampilkan kartu tanpa nama.
+ *
+ * Yang TIDAK lagi termasuk di dalamnya: produk yang dinonaktifkan admin.
+ * Policy "produk: pemilik entitlement baca" (migration `produk_akses_pemilik`)
+ * membuat embed ini tetap terisi untuk pemegang entitlement yang hidup, tayang
+ * atau tidak — `aktif = false` berarti berhenti dijual, bukan mencabut akses.
+ * Penyaring di bawah karena itu kini hanya menjaga kasus sisa (mis. produknya
+ * benar-benar dihapus di tengah pembacaan), bukan lagi diam-diam menjadi
+ * pencabutan akses.
  */
 export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
   // `clientId` diterima demi kesamaan bentuk dengan pembaca passport lain

@@ -115,6 +115,60 @@ describe("harga produk digital", () => {
   });
 
   /**
+   * Produk yang BELUM ditayangkan bocor lewat view ini sebelum migration
+   * `harga_produk_publik_hanya_tayang`: `digital_products` menyembunyikannya
+   * rapat dari anon, tetapi `GET /rest/v1/harga_produk_publik` memulangkan
+   * id, harga, dan tanggal berlakunya — termasuk berapa banyak produk yang
+   * sedang disiapkan dan kapan diluncurkan.
+   */
+  it("harga produk yang BELUM tayang tidak bocor ke anon", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji belum tayang", slug: "uji-harga-belum-tayang", jenis: "pdf", aktif: false })
+      .select("id").single();
+    // Harga yang SUDAH berlaku hari ini — jadi 0 baris di bawah hanya bisa
+    // berarti saringan `aktif`, bukan saringan tanggal yang sudah diuji di
+    // atas.
+    await svc.from("digital_product_prices")
+      .insert({ product_id: produk!.id, harga: 149_000 });
+
+    const { data, error } = await anonClient()
+      .from("harga_produk_publik").select("harga").eq("product_id", produk!.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+
+    // Kontrol positif: begitu produknya ditayangkan, harga yang SAMA muncul —
+    // bukti bahwa 0 baris di atas datang dari saringan, bukan dari data yang
+    // memang tidak ada.
+    await svc.from("digital_products").update({ aktif: true }).eq("id", produk!.id);
+    const { data: sesudah } = await anonClient()
+      .from("harga_produk_publik").select("harga").eq("product_id", produk!.id);
+    expect(sesudah).toEqual([{ harga: 149_000 }]);
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
+  });
+
+  it("staf TETAP melihat harga produk yang belum tayang", async () => {
+    // Pasangan wajib dari uji di atas: saringan `aktif` yang ikut terpasang di
+    // `produk_harga_staf` akan membutakan panel owner terhadap produk yang
+    // justru sedang ia siapkan harganya.
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji staf belum tayang", slug: "uji-staf-belum-tayang", jenis: "pdf", aktif: false })
+      .select("id").single();
+    await svc.from("digital_product_prices")
+      .insert({ product_id: produk!.id, harga: 55_000 });
+
+    const owner = await signInAs("owner@padma.test");
+    const { data, error } = await owner.from("produk_harga_staf")
+      .select("harga").eq("product_id", produk!.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([{ harga: 55_000 }]);
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
+  });
+
+  /**
    * `produk_harga_staf` tidak punya pagar GRANT yang membedakan klien dari
    * admin/owner — ketiganya sama-sama peran SQL `authenticated`. Satu-satunya
    * pagar adalah predikat `user_role() in ('admin','owner')` DI DALAM view

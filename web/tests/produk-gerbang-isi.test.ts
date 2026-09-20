@@ -63,8 +63,32 @@ describe("gerbang isi produk", () => {
     expect(sumber).not.toContain("UMUR_TONTON_DETIK");
   });
 
+  /**
+   * Asersi ini dulu berbunyi `expect(sumber).toContain("boleh_unduh")` — dan
+   * itu HAMPA: baris `.select("id, judul, jenis, boleh_unduh")` sendiri sudah
+   * memenuhinya, sehingga menghapus `if (!produk.boleh_unduh) return 404` tidak
+   * memerahkan apa pun sementara setiap produk yang sengaja tidak boleh diunduh
+   * menjadi bisa diunduh siapa pun yang memegang entitlement (temuan review
+   * menyeluruh, Finding 10).
+   *
+   * Yang menjaga pagar ini sekarang adalah uji PERILAKU di
+   * `tests/produk-rute-isi.test.ts` ("rute unduh MENOLAK produk yang
+   * boleh_unduh-nya mati, walau berkasnya ada"), yang memanggil rutenya
+   * sungguhan. Yang tersisa di sini hanyalah bentuk `if`-nya — diikat pada
+   * PENOLAKANNYA, bukan pada kemunculan nama kolomnya.
+   */
   it("rute unduh menolak produk yang boleh_unduh-nya mati", () => {
-    expect(baca("src/app/api/produk/[id]/unduh/route.ts")).toContain("boleh_unduh");
+    const sumber = baca("src/app/api/produk/[id]/unduh/route.ts");
+    expect(sumber).toMatch(/if\s*\(!\s*produk\.boleh_unduh\)[^\n]*404/);
+  });
+
+  it("rute video memeriksa jenis produknya sendiri, tidak memercayai modul lain", () => {
+    // `digital_product_files` memuat isi untuk KEDUA jenis; tanpa pagar ini
+    // rute video menandatangani kunci objek PDF terhadap bucket video.
+    // Perilakunya ditagih di tests/produk-rute-isi.test.ts ("rute video MENOLAK
+    // produk PDF").
+    const sumber = baca("src/app/api/produk/[id]/video/route.ts");
+    expect(sumber).toMatch(/produk\.jenis !== "video"/);
   });
 
   it("umur unduh benar-benar 15 menit", async () => {

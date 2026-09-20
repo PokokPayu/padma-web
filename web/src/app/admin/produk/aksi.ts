@@ -126,6 +126,9 @@ export async function simpanProduk(formData: FormData): Promise<Dibuat | Gagal> 
  * `aktif` dan harga sengaja tidak muncul di sini — keadaan tayang punya
  * action tersendiri (`aktifkanProduk`/`nonaktifkanProduk`), dan harga adalah
  * wilayah owner (Task 7).
+ *
+ * `jenis` boleh diubah hanya SELAMA produknya belum berisi — lihat pagar di
+ * dalam badan fungsi.
  */
 export async function perbaruiProduk(id: string, formData: FormData): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
@@ -137,6 +140,33 @@ export async function perbaruiProduk(id: string, formData: FormData): Promise<Be
   const urutan = /^-?\d+$/.test(urutanMentah) ? Number(urutanMentah) : 0;
 
   const supabase = await createServerSupabase();
+
+  // `jenis` TERKUNCI begitu isinya ada. Video dan PDF menyimpan isinya di
+  // tempat yang berbeda (`digital_product_files` vs `digital_product_pages`),
+  // dan setiap pembaca isi bercabang pada kolom ini: membalik jenis produk PDF
+  // yang sudah terisi membuat halamannya terlantar tanpa pembaca, `punyaIsi`
+  // memeriksa tabel yang salah, dan reader 404 untuk pemilik yang SUDAH
+  // membayar — sementara etalase tetap memajangnya seperti tidak terjadi apa
+  // pun. Salah ketik satu dropdown tidak boleh berakibat sebesar itu; yang
+  // benar-benar ingin mengubah jenis melepas isinya lebih dulu, dan itu
+  // tindakan yang sadar.
+  const { data: kini, error: kiniError } = await supabase
+    .from("digital_products").select("jenis").eq("id", id).maybeSingle();
+  if (kiniError) return { ok: false, pesan: `Gagal membaca produk (${kiniError.code}).` };
+  if (!kini) return { ok: false, pesan: "Produk tidak ditemukan atau hak akses ditolak." };
+
+  if (kini.jenis !== medan.jenis) {
+    const isi = await hitungIsi(supabase, id, kini.jenis as JenisProduk);
+    if (!isi.ok) return isi;
+    if (punyaIsi(kini.jenis as JenisProduk, isi.berkas, isi.halaman)) {
+      return {
+        ok: false,
+        pesan:
+          "Jenis produk tidak bisa diubah setelah isinya diunggah. Lepas isi produk lebih dulu.",
+      };
+    }
+  }
+
   const { data, error } = await supabase
     .from("digital_products")
     .update({
@@ -160,6 +190,38 @@ export async function perbaruiProduk(id: string, formData: FormData): Promise<Be
 
   segarkanProduk();
   return { ok: true };
+}
+
+/**
+ * Menghitung isi produk menurut JENISNYA — satu pembaca untuk dua pemakai
+ * (`aktifkanProduk` dan pagar `jenis` di `perbaruiProduk`), supaya "apa yang
+ * dianggap berisi" hidup di satu tempat saja.
+ *
+ * Galat query DIKEMBALIKAN, tidak ditelan: "0 karena tidak ada isi" dan "0
+ * karena kueri gagal" adalah dua keadaan berbeda, dan yang kedua tidak boleh
+ * menyamar sebagai yang pertama — di `perbaruiProduk` ia akan berarti pagar
+ * yang diam-diam terbuka.
+ */
+async function hitungIsi(
+  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
+  id: string,
+  jenis: JenisProduk,
+): Promise<{ ok: true; berkas: number; halaman: number } | Gagal> {
+  if (jenis === "video") {
+    const { data, error } = await supabase
+      .from("digital_product_files")
+      .select("id")
+      .eq("product_id", id);
+    if (error) return { ok: false, pesan: `Gagal memeriksa isi (${error.code}).` };
+    return { ok: true, berkas: (data ?? []).length, halaman: 0 };
+  }
+
+  const { count, error } = await supabase
+    .from("digital_product_pages")
+    .select("halaman", { count: "exact", head: true })
+    .eq("product_id", id);
+  if (error) return { ok: false, pesan: `Gagal memeriksa isi (${error.code}).` };
+  return { ok: true, berkas: 0, halaman: count ?? 0 };
 }
 
 /**
@@ -187,25 +249,10 @@ export async function aktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   if (produkError) return { ok: false, pesan: `Gagal membaca produk (${produkError.code}).` };
   if (!produk) return { ok: false, pesan: "Produk tidak ditemukan." };
 
-  let jumlahBerkas = 0;
-  let jumlahHalaman = 0;
-  if (produk.jenis === "video") {
-    const { data: berkas, error: berkasError } = await supabase
-      .from("digital_product_files")
-      .select("id")
-      .eq("product_id", id);
-    if (berkasError) return { ok: false, pesan: `Gagal memeriksa isi (${berkasError.code}).` };
-    jumlahBerkas = (berkas ?? []).length;
-  } else {
-    const { count, error: halamanError } = await supabase
-      .from("digital_product_pages")
-      .select("halaman", { count: "exact", head: true })
-      .eq("product_id", id);
-    if (halamanError) return { ok: false, pesan: `Gagal memeriksa isi (${halamanError.code}).` };
-    jumlahHalaman = count ?? 0;
-  }
+  const isi = await hitungIsi(supabase, id, produk.jenis as JenisProduk);
+  if (!isi.ok) return isi;
 
-  if (!punyaIsi(produk.jenis as JenisProduk, jumlahBerkas, jumlahHalaman)) {
+  if (!punyaIsi(produk.jenis as JenisProduk, isi.berkas, isi.halaman)) {
     return {
       ok: false,
       pesan: "Produk belum punya berkas — unggah isinya dulu sebelum ditayangkan.",
@@ -224,7 +271,21 @@ export async function aktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   return { ok: true };
 }
 
-/** Menarik produk dari etalase. Baris & isinya tetap ada, hanya tidak terpajang. */
+/**
+ * Menarik produk dari etalase — BERHENTI DIJUAL, bukan mencabut akses.
+ *
+ * Pemegang entitlement yang belum dicabut TETAP membuka produk ini: kartunya
+ * tetap ada di "Pembelian saya", readernya tetap terbuka, unduhannya tetap
+ * jalan. Itu bukan sekadar niat yang ditulis di komentar ini — yang
+ * menegakkannya adalah policy "produk: pemilik entitlement baca" (migration
+ * `20260921160000_produk_akses_pemilik.sql`), karena spec menjanjikan masa
+ * akses "Selamanya; admin tetap bisa mencabut" dan pencabutan punya tombolnya
+ * SENDIRI: `digital_entitlements.dicabut_pada`. Satu action yang dipakai admin
+ * untuk merapikan etalase tidak boleh diam-diam menjadi pencabutan massal.
+ *
+ * Yang berubah hanyalah etalase publik: `/produk`, `/produk/[slug]`, dan seksi
+ * landing berhenti memajangnya, dan produk gratisnya tidak bisa diambil lagi.
+ */
 export async function nonaktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();

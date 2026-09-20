@@ -6,7 +6,16 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 
-type Hasil = { ok: true } | { ok: false; pesan: string };
+/**
+ * `punya` BUKAN salinan dari `ok`. RPC `ambil_produk_gratis` memakai
+ * `on conflict do nothing` supaya pengambilan ulang tidak menghidupkan kembali
+ * entitlement yang sudah DICABUT admin — artinya ia menjawab "tidak ada galat"
+ * untuk klien yang justru sedang tidak berhak. Melaporkan "berhasil, produk
+ * sudah masuk" kepada orang itu adalah kebohongan yang baru ketahuan saat ia
+ * mengklik dan menemukan halaman kosong. Karena itu kepemilikannya DIBACA
+ * ULANG sesudah RPC, dari predikat yang sama yang menjaga isinya.
+ */
+type Hasil = { ok: true; punya: boolean } | { ok: false; pesan: string };
 
 /**
  * TIDAK memakai requireRole: produk gratis diambil oleh KLIEN, dan klien
@@ -35,7 +44,14 @@ export async function ambilProdukGratis(slug: string): Promise<Hasil> {
   const { error } = await supabase.rpc("ambil_produk_gratis", { p_product_id: produk.id });
   if (error) return { ok: false, pesan: "Produk ini tidak bisa diambil gratis." };
 
+  // Predikat yang SAMA dengan yang menjaga isi produk (`punya_produk`, dipakai
+  // policy berkas & halaman), bukan predikat kedua yang bisa berbeda. Galatnya
+  // dibaca, tidak dibuang: RPC yang gagal memulangkan `null`, dan menganggap
+  // null sebagai "tidak punya" tetap jujur — yang tidak boleh adalah
+  // menganggapnya "punya".
+  const { data: punya } = await supabase.rpc("punya_produk", { p_product_id: produk.id });
+
   revalidatePath("/passport/produk");
   revalidatePath(`/produk/${slug}`);
-  return { ok: true };
+  return { ok: true, punya: punya === true };
 }

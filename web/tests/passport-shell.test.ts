@@ -149,12 +149,17 @@ describe("navigasi passport", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat lima tujuan berbahasa Indonesia", () => {
+  it("memuat enam tujuan berbahasa Indonesia", () => {
     const m = markupNav("/passport");
     for (const [href, label] of [
       ["/passport", "Beranda"],
       ["/passport/sesi", "Sesi"],
       ["/passport/materi", "Materi"],
+      // "Produk" bukan tambahan kosmetik: tanpa tab ini, `/passport/produk`
+      // ("Pembelian saya") tidak punya SATU PUN tautan masuk di seluruh
+      // aplikasi, dan klien yang sudah mengambil produk gratis tidak bisa
+      // mencapai barangnya sendiri.
+      ["/passport/produk", "Produk"],
       ["/passport/bayar", "Bayar"],
       ["/passport/profil", "Profil"],
     ]) {

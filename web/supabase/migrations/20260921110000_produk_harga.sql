@@ -43,30 +43,41 @@ create policy "harga produk: owner baca" on public.digital_product_prices for se
 -- RLS menolak verba yang tidak punya policy, dan penolakannya senyap (0 baris),
 -- bukan galat — karena itu uji memeriksa JUMLAH BARIS terdampak, bukan error.
 
--- Berbeda dari `variant_rates`: di sana `select, insert` sengaja DIBERIKAN ke
--- `authenticated` karena admin & klien memang perlu lolos ke lapis RLS supaya
--- 0-baris-nya teramati (lihat tests/owner-pengerasan.test.ts). Di sini BELUM
--- ada alur produk yang membaca/menulis tabel ini lewat sesi `authenticated`
--- milik owner sendiri — service role yang menulis (lihat seluruh test), dan
--- staf membaca lewat `produk_harga_staf`. Maka SELURUH hak tabel dicabut dari
--- `authenticated`, bukan cuma update/delete.
+-- SELURUH hak tabel dicabut lebih dulu dari KEDUA peran API — titik nol yang
+-- disengaja. Supabase memberi hak PENUH bawaan atas setiap tabel baru di skema
+-- public kepada `anon` maupun `authenticated`; tanpa baris `revoke` ini, UPDATE
+-- dan DELETE menempel diam-diam dan seluruh janji append-only di atas hanya
+-- berlaku di atas kertas.
 --
--- "0 baris karena RLS menyaring" dan "ditolak karena tidak punya hak tabel"
--- adalah DUA KEGAGALAN YANG BERBEDA, dan uji
--- tests/produk-harga-publik.test.ts ("klien login juga tidak bisa menyentuh
--- tabel harga langsung") sengaja menagih yang KEDUA: klien mencoba SELECT
--- harus berhenti di 42501 tingkat GRANT, bukan lolos lewat grant lalu pulang
--- 0 baris dari RLS yang — dari sisi klien — terlihat sama persis dengan
--- "memang tidak ada data untuk produk ini". Kedua policy owner di atas
--- sengaja tetap ada sebagai pagar LAPIS KEDUA yang sudah siap kalau kelak ada
--- tugas yang memberi `authenticated` hak SELECT/INSERT langsung untuk UI
--- owner menetapkan harga — saat itu tiba, firewall RLS-nya sudah berdiri,
--- tinggal hak tabelnya yang dibuka.
+-- Yang dibuka kembali sesudahnya ditulis di migration lain, bukan di sini:
+-- `20260921140000_produk_harga_grant.sql` memberi `select, insert` kepada
+-- `authenticated` saat panel owner penetapan harga lahir — dengan alasan yang
+-- SAMA PERSIS dengan `variant_rates`: owner menulis lewat sesinya sendiri, dan
+-- RLS ("harga produk: owner sisip"/"owner baca") yang menjadi pagar perannya,
+-- bukan hak tabel. Kedua policy owner di atas karena itu bukan hiasan — sejak
+-- migration itu, merekalah satu-satunya yang membedakan owner dari admin dan
+-- klien, yang bertiga sama-sama peran SQL `authenticated`.
+--
+-- Sejak grant itu, klien yang menyentuh tabel ini berhenti di RLS (0 baris untuk
+-- SELECT, 42501 "row-level security policy" untuk INSERT), BUKAN lagi di 42501
+-- tingkat GRANT. Keduanya tetap dua kegagalan yang berbeda dan tetap ditagih
+-- terpisah — lihat "klien TETAP dijawab 0 baris oleh RLS bahkan lewat REST
+-- langsung" dan "klien yang menyisipkan harga langsung lewat REST ditolak RLS"
+-- di tests/produk-harga-publik.test.ts, yang memeriksa PESAN galatnya, bukan
+-- cuma kodenya.
+--
+-- UPDATE dan DELETE tidak pernah dibuka oleh migration mana pun: harga lama
+-- tidak berubah dan tidak hilang.
 revoke all on public.digital_product_prices from anon, authenticated;
 
 -- ===== VIEW PUBLIK =====
 -- `security_invoker = off` disengaja: view INILAH batas kolomnya, dan anon
 -- memang tidak punya hak baca atas tabel dasarnya.
+--
+-- Bentuk di bawah adalah bentuk AWALNYA. Saringan "hanya produk yang tayang"
+-- ditambahkan `20260921170000_harga_produk_publik_hanya_tayang.sql`: tanpa itu
+-- view ini membocorkan harga & tanggal peluncuran produk yang sengaja belum
+-- ditampilkan. Baca migration itu sebelum menyunting definisi di bawah.
 create view public.harga_produk_publik with (security_invoker = off) as
   select distinct on (product_id)
          product_id, harga, harga_coret, berlaku_sejak

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { LABEL_JENIS } from "@/lib/produk/status";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { TombolAmbil } from "./tombol-ambil";
+import { TombolAmbil, TautanBuka } from "./tombol-ambil";
 
 // Sama seperti etalase: katalog berubah lewat panel staf, jadi halaman satu
 // produk tidak boleh dibekukan selamanya di waktu build.
@@ -16,10 +16,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 function HargaProduk({
   slug,
+  productId,
   harga,
   hargaCoret,
 }: {
   slug: string;
+  productId: string;
   harga: number | null;
   hargaCoret: number | null;
 }) {
@@ -33,19 +35,27 @@ function HargaProduk({
           Gratis
         </span>
         {/* Pengunjung anon diarahkan ke /masuk oleh server action itu sendiri
-            — lihat komentar `ambil.ts`. Klien yang sudah masuk lihat isi
-            produknya di /passport/produk sesudah mengambil. */}
-        <TombolAmbil slug={slug} />
+            — lihat komentar `ambil.ts`. Klien yang SUDAH memiliki produknya
+            melihat tombol "Buka" alih-alih "Ambil gratis"; halaman ini tetap
+            dibaca anon dan di-cache, kepemilikannya ditanyakan dari peramban
+            (lihat `punyaProdukDiPeramban`). */}
+        <TombolAmbil slug={slug} productId={productId} />
       </div>
     );
   }
   return (
-    <div className="mt-4 flex flex-wrap items-baseline gap-x-2">
-      <span className="text-2xl font-bold text-night">{formatRupiah(harga)}</span>
-      {hargaCoret !== null && (
-        <s className="text-[15px] text-ink-soft/70">{formatRupiah(hargaCoret)}</s>
-      )}
-    </div>
+    <>
+      <div className="mt-4 flex flex-wrap items-baseline gap-x-2">
+        <span className="text-2xl font-bold text-night">{formatRupiah(harga)}</span>
+        {hargaCoret !== null && (
+          <s className="text-[15px] text-ink-soft/70">{formatRupiah(hargaCoret)}</s>
+        )}
+      </div>
+      {/* Tahap 1 belum punya checkout — tidak ada tombol beli di sini. Yang ada
+          hanyalah jalan masuk bagi yang SUDAH memiliki (mis. pemberian admin),
+          dan komponen itu tidak merender apa pun untuk yang belum. */}
+      <TautanBuka slug={slug} productId={productId} />
+    </>
   );
 }
 
@@ -71,7 +81,12 @@ export default async function ProdukDetailPage({
           </p>
         )}
 
-        <HargaProduk slug={produk.slug} harga={produk.harga} hargaCoret={produk.hargaCoret} />
+        <HargaProduk
+          slug={produk.slug}
+          productId={produk.id}
+          harga={produk.harga}
+          hargaCoret={produk.hargaCoret}
+        />
 
         <p className="mt-6 rounded-xl border border-black/10 bg-white p-4 text-[13px] text-ink-soft">
           Produk digital dikirim seketika sesudah pembayaran dan <b>tidak dapat

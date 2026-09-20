@@ -5,12 +5,19 @@ import { usePathname } from "next/navigation";
 import { MenuAkun } from "@/app/_shell/menu-akun";
 import { Lotus } from "@/app/_landing/lotus";
 
-type Ikon = "lotus" | "cal" | "book" | "qr" | "user";
+type Ikon = "lotus" | "cal" | "book" | "tas" | "qr" | "user";
 
+// "Produk" WAJIB ada di sini, bukan sekadar enak ada: `/passport/produk`
+// ("Pembelian saya") adalah tempat isi produk digital dibuka, dan tanpa tab
+// ini satu-satunya tautan menujunya di seluruh aplikasi adalah tautan
+// "kembali" dari halaman yang hanya bisa dicapai DARI sana. Klien yang sudah
+// mengambil produk gratis karena itu tidak punya satu pun jalan menuju
+// barangnya sendiri.
 const MENU: Array<{ href: string; label: string; ikon: Ikon }> = [
   { href: "/passport", label: "Beranda", ikon: "lotus" },
   { href: "/passport/sesi", label: "Sesi", ikon: "cal" },
   { href: "/passport/materi", label: "Materi", ikon: "book" },
+  { href: "/passport/produk", label: "Produk", ikon: "tas" },
   { href: "/passport/bayar", label: "Bayar", ikon: "qr" },
   { href: "/passport/profil", label: "Profil", ikon: "user" },
 ];
@@ -41,6 +48,13 @@ function Ikon({ jenis, className }: { jenis: Ikon; className?: string }) {
           strokeLinejoin="round"
         />
         <path d="M12 6.5v13.6" />
+      </svg>
+    );
+  if (jenis === "tas")
+    return (
+      <svg viewBox="0 0 24 24" {...p}>
+        <path d="M4.5 8h15l-1.2 11.5H5.7z" strokeLinejoin="round" />
+        <path d="M8.8 10.5V7.2a3.2 3.2 0 0 1 6.4 0v3.3" strokeLinecap="round" />
       </svg>
     );
   if (jenis === "qr")

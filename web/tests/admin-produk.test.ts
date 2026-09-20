@@ -24,7 +24,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const { aktifkanProduk } = await import("@/app/admin/produk/aksi");
+const { aktifkanProduk, perbaruiProduk } = await import("@/app/admin/produk/aksi");
 
 describe("master produk admin", () => {
   it("rute baru terdaftar di tabel rute README", () => {
@@ -150,5 +150,82 @@ describe("aktifkanProduk — punya isi jenis-sadar", () => {
     ref.sesi = await signInAs("admin@padma.test");
     const hasil = await aktifkanProduk(produk!.id);
     expect(hasil.ok).toBe(false);
+  });
+});
+
+
+/**
+ * `jenis` menentukan DI MANA isi produk hidup (`digital_product_files` untuk
+ * video, `digital_product_pages` untuk PDF) dan setiap pembaca isi bercabang
+ * padanya. Membaliknya sesudah isinya ada membuat halaman terlantar,
+ * `punyaIsi` memeriksa tabel yang salah, dan reader 404 untuk pemilik yang
+ * SUDAH membayar — sementara etalase tetap memajangnya. Satu dropdown tidak
+ * boleh seberbahaya itu.
+ */
+describe("perbaruiProduk — jenis terkunci sesudah isi ada", () => {
+  function medan(judul: string, slug: string, jenis: string): FormData {
+    const f = new FormData();
+    f.set("judul", judul);
+    f.set("slug", slug);
+    f.set("jenis", jenis);
+    f.set("deskripsi", "");
+    f.set("urutan", "0");
+    return f;
+  }
+
+  it("PDF yang sudah punya halaman TIDAK bisa dijadikan video", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji Kunci Jenis", slug: "uji-kunci-jenis", jenis: "pdf" })
+      .select("id").single();
+    bersihkan.push(produk!.id);
+    await svc.from("digital_product_pages")
+      .insert({ product_id: produk!.id, halaman: 1, objek: `${produk!.id}/1.webp` });
+
+    ref.sesi = await signInAs("admin@padma.test");
+    const hasil = await perbaruiProduk(produk!.id, medan("Uji Kunci Jenis", "uji-kunci-jenis", "video"));
+    expect(hasil.ok).toBe(false);
+
+    // Yang penting bukan pesannya, melainkan barisnya: jenisnya tidak berubah.
+    const { data: baris } = await svc.from("digital_products")
+      .select("jenis").eq("id", produk!.id).single();
+    expect(baris!.jenis).toBe("pdf");
+  });
+
+  it("produk yang BELUM berisi masih bebas ganti jenis", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji Jenis Bebas", slug: "uji-jenis-bebas", jenis: "pdf" })
+      .select("id").single();
+    bersihkan.push(produk!.id);
+
+    ref.sesi = await signInAs("admin@padma.test");
+    const hasil = await perbaruiProduk(produk!.id, medan("Uji Jenis Bebas", "uji-jenis-bebas", "video"));
+    expect(hasil.ok).toBe(true);
+
+    const { data: baris } = await svc.from("digital_products")
+      .select("jenis").eq("id", produk!.id).single();
+    expect(baris!.jenis).toBe("video");
+  });
+
+  it("menyunting judul produk berisi TIDAK ikut tertolak — pagarnya hanya soal jenis", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji Sunting Judul", slug: "uji-sunting-judul", jenis: "pdf" })
+      .select("id").single();
+    bersihkan.push(produk!.id);
+    await svc.from("digital_product_pages")
+      .insert({ product_id: produk!.id, halaman: 1, objek: `${produk!.id}/1.webp` });
+
+    ref.sesi = await signInAs("admin@padma.test");
+    const hasil = await perbaruiProduk(
+      produk!.id,
+      medan("Uji Sunting Judul Baru", "uji-sunting-judul", "pdf"),
+    );
+    expect(hasil.ok).toBe(true);
+
+    const { data: baris } = await svc.from("digital_products")
+      .select("judul").eq("id", produk!.id).single();
+    expect(baris!.judul).toBe("Uji Sunting Judul Baru");
   });
 });

@@ -73,7 +73,22 @@ function amanWinAnsi(font: PDFFont, teks: string): string {
  * berbiaya satu tanda tangan.
  */
 export function objekPdfPembeli(productId: string, clientId: string): string {
-  return `${productId}/pembeli/${clientId}.pdf`;
+  return `${prefiksPdfPembeli(productId)}/${clientId}.pdf`;
+}
+
+/**
+ * Folder tempat seluruh salinan tercap satu produk tinggal.
+ *
+ * Ada sebagai fungsi tersendiri karena salinan tercap punya SATU sifat yang
+ * mudah terlupa: ia adalah TURUNAN dari PDF sumber, bukan berkas mandiri.
+ * Begitu sumbernya diganti atau dilepas, seluruh isi folder ini menjadi
+ * jawaban lama atas pertanyaan yang sudah berubah — dan rute unduh
+ * (`/api/produk/[id]/unduh`) memakai ulang salinan yang ada tanpa pernah
+ * membandingkannya dengan sumber. Yang mengganti sumber karena itu WAJIB
+ * mengosongkan folder ini; lihat `admin/produk/[id]/unggah.ts`.
+ */
+export function prefiksPdfPembeli(productId: string): string {
+  return `${productId}/pembeli`;
 }
 
 /**

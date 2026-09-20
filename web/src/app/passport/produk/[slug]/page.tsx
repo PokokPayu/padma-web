@@ -83,7 +83,24 @@ export default async function ReaderProduk({
     </div>
   );
 
-  const tombolUnduh = produk.boleh_unduh && (
+  // Baris berkas utuh: isi video, DAN sumber satu-satunya unduhan untuk kedua
+  // jenis. Dibaca lewat sesi pengguna — policy "berkas produk: pemilik baca"
+  // yang menjawab, jadi nol baris berarti "tidak dimiliki ATAU belum ada".
+  const { data: berkas } = await supabase
+    .from("digital_product_files")
+    .select("product_id")
+    .eq("product_id", produk.id)
+    .maybeSingle();
+
+  // Tombol dirender atas KEBERADAAN BERKASNYA, bukan atas `boleh_unduh`
+  // sendirian. Untuk produk PDF, baris `digital_product_files` hanya lahir
+  // bila `boleh_unduh` sudah menyala SAAT PDF utuhnya diunggah (lihat
+  // `admin/produk/[id]/unggah.ts`) — sementara `perbaruiProduk` boleh
+  // menyalakan bendera itu kapan saja sesudahnya. Bendera yang menyala di atas
+  // produk tanpa berkas dulu melahirkan tombol yang selalu berakhir 404: janji
+  // yang tidak bisa ditepati, dan pembeli yang menyalahkan dirinya sendiri.
+  // Bendera TETAP diperiksa — ia pagar niat admin — hanya tidak sendirian.
+  const tombolUnduh = produk.boleh_unduh && berkas !== null && (
     <a
       href={`/api/produk/${produk.id}/unduh`}
       className="mt-4 inline-block rounded-lg bg-night px-5 py-3 text-[13.5px] font-bold text-gold-pale"
@@ -93,11 +110,6 @@ export default async function ReaderProduk({
   );
 
   if (produk.jenis === "video") {
-    const { data: berkas } = await supabase
-      .from("digital_product_files")
-      .select("product_id")
-      .eq("product_id", produk.id)
-      .maybeSingle();
     // Nol baris = tidak dimiliki (RLS) ATAU belum diunggah admin — bukan
     // dibedakan di sini, lihat komentar di atas fungsi.
     if (!berkas) notFound();

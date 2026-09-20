@@ -22,10 +22,13 @@ const BUCKET_BERKAS = "produk-berkas";
  *
  * Urutannya mengikat:
  *   1. Identitas pembaca.
- *   2. Sesi pengguna membaca `digital_products` — RLS "produk: baca publik
- *      yang aktif" yang menjawab. `boleh_unduh` mati adalah PAGAR TERPISAH
- *      dari entitlement: produk yang dimiliki tetap tidak boleh diunduh bila
- *      memang tidak diizinkan.
+ *   2. Sesi pengguna membaca `digital_products` — RLS yang menjawab, lewat
+ *      "produk: baca publik yang aktif" ATAU "produk: pemilik entitlement
+ *      baca". Yang kedua itulah yang membuat produk yang sudah DITARIK dari
+ *      etalase tetap bisa diunduh pemiliknya: `aktif = false` berarti berhenti
+ *      dijual, bukan mencabut akses (migration `produk_akses_pemilik`).
+ *      `boleh_unduh` mati adalah PAGAR TERPISAH dari entitlement: produk yang
+ *      dimiliki tetap tidak boleh diunduh bila memang tidak diizinkan.
  *   3. Sesi pengguna membaca `digital_product_files` — inilah yang menegakkan
  *      ENTITLEMENT lewat policy "berkas produk: pemilik baca".
  *   4/5. Baru sesudah kedua gerbang itu lolos, service role menyentuh
