@@ -100,6 +100,8 @@ sama-sama membuat `npm test` MERAH.
 | `/masuk` | Publik | Login email+password & Google |
 | `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |
 | `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
+| `/produk` | Publik | Etalase produk digital: kartu bersampul, badge jenis & unduhan, harga dengan coret |
+| `/produk/[slug]` | Publik | Halaman satu produk digital: deskripsi, pratinjau, harga, tombol ambil/beli, kebijakan tanpa pengembalian |
 | `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
 | `/passport` | Klien | Beranda passport: sampul, grid stempel paket, sesi berikutnya, pencapaian |
 | `/passport/sesi/[id]` | Klien | Detail satu kunjungan: jadwal, bidan, tempat, catatan & rekomendasi bidan dengan ruang penuh |
