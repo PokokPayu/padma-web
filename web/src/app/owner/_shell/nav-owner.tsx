@@ -12,6 +12,10 @@ const MENU: ItemMenu[] = [
   { href: "/owner/rekap", label: "Rekap", ikon: "rekap" },
   { href: "/owner/tarif", label: "Tarif", ikon: "tarif" },
   { href: "/owner/transport", label: "Transport", ikon: "transport" },
+  // Tidak ada ikon "produk" tersendiri (sama alasannya dengan
+  // `/admin/produk` di `nav-admin.tsx`): `katalog` dipakai ulang alih-alih
+  // menambah satu SVG untuk satu tujuan.
+  { href: "/owner/produk", label: "Produk", ikon: "katalog" },
 ];
 
 // JALAN PULANG. Owner adalah SUPERSET admin — ia berhak membuka seluruh panel
@@ -35,13 +39,13 @@ const PULANG: Tautan = {
 /**
  * Shell panel owner.
  *
- * Panel ini hanya punya empat tujuan, jadi bar bawah layar kecil memuat
+ * Panel ini hanya punya lima tujuan, jadi bar bawah layar kecil memuat
  * SEMUANYA — tidak ada yang perlu diringkas seperti di panel admin.
  *
- * Daftar menu SENGAJA tinggal di sini, terpisah dari daftar admin: ketiga
- * tujuan di bawah (Rekap, Tarif, Transport) berisi seluruh nominal PADMA, dan
- * satu daftar bersama akan mengubah pemisahan fisik money firewall menjadi
- * satu kondisional peran.
+ * Daftar menu SENGAJA tinggal di sini, terpisah dari daftar admin: keempat
+ * tujuan di bawah (Rekap, Tarif, Transport, Produk) berisi seluruh nominal
+ * PADMA, dan satu daftar bersama akan mengubah pemisahan fisik money
+ * firewall menjadi satu kondisional peran.
  */
 export function NavOwner({ nama, children }: { nama: string; children: ReactNode }) {
   return (

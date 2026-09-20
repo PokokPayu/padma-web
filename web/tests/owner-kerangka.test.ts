@@ -360,8 +360,8 @@ describe("navigasi owner", () => {
 
   it("jumlah tautan dikunci persis (tujuan baru tidak boleh lolos diam-diam)", () => {
     const m = markupNav("/owner");
-    // Empat tujuan × dua nav + dua tautan jalan pulang.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(4 * 2 + 2);
+    // Lima tujuan (Task 7 menambah "Produk") × dua nav + dua tautan jalan pulang.
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(5 * 2 + 2);
   });
 
   it("hanya SATU tujuan yang aktif per nav di beranda", () => {

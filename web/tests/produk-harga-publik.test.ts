@@ -31,10 +31,42 @@ describe("harga produk digital", () => {
     expect(tabelErr?.code).toBe("42501");
   });
 
-  it("klien login juga tidak bisa menyentuh tabel harga langsung", async () => {
+  /**
+   * Sampai Task 7, SELURUH hak tabel `digital_product_prices` tercabut dari
+   * `authenticated` — klien login pun berhenti di 42501 GRANT, sama seperti
+   * anon. Migration `20260921140000_produk_harga_grant.sql` membuka
+   * `select, insert` kepada `authenticated` supaya OWNER bisa menetapkan
+   * harga lewat sesinya sendiri (dibuktikan empiris: tanpa grant itu, INSERT
+   * owner sungguhan berhenti 42501 juga). RLS-nya sudah berdiri sejak Task 2
+   * ("harga produk: owner sisip"/"owner baca", keduanya `user_role() =
+   * 'owner'"), jadi klien sekarang LOLOS ke lapis RLS dan berhenti DI SANA —
+   * pola yang identik dengan `variant_rates` (lihat
+   * "admin TETAP dijawab 0 baris oleh RLS..." &
+   * "admin yang menyisipkan tarif langsung ... ditolak RLS" di
+   * `tests/owner-tarif.test.ts`). "0 baris karena RLS" dan "ditolak karena
+   * grant" tetap dua kegagalan berbeda — hanya saja sekarang klien mengalami
+   * yang PERTAMA, bukan yang kedua, dan dua uji di bawah memeriksa keduanya
+   * secara eksplisit alih-alih menganggap "tidak error" sudah cukup.
+   */
+  it("klien TETAP dijawab 0 baris oleh RLS bahkan lewat REST langsung", async () => {
     const klien = await signInAs("ananda@padma.test");
-    const { error } = await klien.from("digital_product_prices").select("harga").limit(1);
+    const { error, data } = await klien.from("digital_product_prices").select("harga").limit(1);
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it("klien yang menyisipkan harga langsung lewat REST ditolak RLS", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc.from("digital_products")
+      .insert({ judul: "Uji klien insert", slug: "uji-klien-insert-harga", jenis: "pdf" })
+      .select("id").single();
+
+    const klien = await signInAs("ananda@padma.test");
+    const { error } = await klien.from("digital_product_prices")
+      .insert({ product_id: produk!.id, harga: 1 });
     expect(error?.code).toBe("42501");
+
+    await svc.from("digital_products").delete().eq("id", produk!.id);
   });
 
   it("harga yang belum berlaku tidak bocor ke pengunjung", async () => {
