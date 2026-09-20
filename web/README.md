@@ -95,7 +95,7 @@ sama-sama membuat `npm test` MERAH.
 
 | Rute | Akses | Isi |
 |---|---|---|
-| `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
+| `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, seksi produk digital (maks. 4), teaser passport, pembanding |
 | `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
 | `/masuk` | Publik | Login email+password & Google |
 | `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |

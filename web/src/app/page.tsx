@@ -1,8 +1,10 @@
 import { bacaKatalog } from "@/lib/katalog";
 import { bacaPengaturan } from "@/lib/settings";
+import { bacaProdukPublik } from "@/lib/produk/katalog";
 import { Hero } from "./_landing/hero";
 import { LiniLayanan } from "./_landing/lini-layanan";
 import { CaraKerja } from "./_landing/cara-kerja";
+import { ProdukDigital } from "./_landing/produk-digital";
 import { PassportTeaser } from "./_landing/passport-teaser";
 import { Pembanding } from "./_landing/pembanding";
 import { Footer } from "./_landing/footer";
@@ -19,9 +21,10 @@ export const revalidate = 300;
 // anonim menerima 0 baris TANPA error dan landing tampil kosong. Penjagaannya
 // ada di `tests/landing.test.ts` + `tests/landing-katalog.test.ts`.
 export default async function Home() {
-  const [katalog, pengaturan] = await Promise.all([
+  const [katalog, pengaturan, produk] = await Promise.all([
     bacaKatalog(),
     bacaPengaturan(),
+    bacaProdukPublik(4),
   ]);
 
   return (
@@ -29,6 +32,7 @@ export default async function Home() {
       <Hero waLink={pengaturan.nomorWaLink} />
       <LiniLayanan katalog={katalog} />
       <CaraKerja />
+      <ProdukDigital produk={produk} />
       <PassportTeaser />
       <Pembanding />
       <Footer
