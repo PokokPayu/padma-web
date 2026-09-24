@@ -33,11 +33,11 @@ const KELAS_LUNAS =
  */
 export function BarisHonorMitra({
   baris,
-  senin,
+  awal,
 }: {
   baris: BarisMitra;
-  /** Senin pekan ini — kunci bucket rekap sekaligus `week_start` tandanya. */
-  senin: string;
+  /** Sabtu pekan ini — kunci bucket rekap sekaligus `week_start` tandanya. */
+  awal: string;
 }) {
   const [baruDitandai, setBaruDitandai] = useState(false);
   const [pending, mulai] = useTransition();
@@ -73,10 +73,10 @@ export function BarisHonorMitra({
               disabled={pending}
               onClick={() =>
                 mulai(async () => {
-                  // `partnerId` dan `senin` dikirim apa adanya; server memeriksa
+                  // `partnerId` dan `awal` dikirim apa adanya; server memeriksa
                   // keduanya ulang, karena argumen server action pun masukan
                   // jaringan yang bisa ditulis ulang di DevTools.
-                  const hasil = await tandaiHonorDibayar(baris.partnerId, senin);
+                  const hasil = await tandaiHonorDibayar(baris.partnerId, awal);
                   if (hasil.ok) {
                     setPesan(null);
                     setBaruDitandai(true);

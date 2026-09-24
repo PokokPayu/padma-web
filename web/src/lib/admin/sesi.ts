@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
 import { awalPekan, akhirPekan } from "@/lib/owner/pekan";
 import type { JenjangTransport } from "@/lib/transport/jarak";
+import { jarakUntukSesi, koordinat } from "@/lib/transport/saran";
 import type { StatusSesi } from "@/app/admin/sesi/status";
 import { STATUS_SESI } from "@/lib/jadwal/status";
 
@@ -42,6 +43,26 @@ export type BarisSesiDaftar = {
   jenjang: JenjangTransport | null;
   jenjangSumber: "otomatis" | "admin" | null;
   jadwalUlangTerpakai: boolean;
+  /**
+   * Jarak GARIS LURUS mitra ke alamat sesi (butir 2, umpan balik klien
+   * 21 Sep 2026) — `null`, TIDAK PERNAH nol, bila titiknya tidak ada.
+   *
+   * Daftar inilah layar yang melahirkan keluhan "jarak mitra - klien masih
+   * 1-5 km semua": satu kolom jenjang dengan nilai yang sama berulang ke
+   * bawah, tanpa satu angka pun yang membuktikan ada yang dihitung. Jaraknya
+   * BENAR — seluruh mitra terdaftar berada dalam radius 7 km satu sama lain
+   * di Malang kota — tetapi label yang selalu sama tidak bisa dibedakan dari
+   * nilai bawaan yang macet. Angkanya yang mengembalikan bedanya.
+   */
+  jarakKm: number | null;
+  /** Alamat mana yang dipakai `jarakKm` — sesi ini sendiri, atau default klien. */
+  jarakDari: "sesi" | "klien" | null;
+  /**
+   * Jenjang yang DISIRATKAN `jarakKm`, sengaja terpisah dari `jenjang` yang
+   * tersimpan dan sengaja tidak menimpanya. Selisih keduanya adalah selisih
+   * honor transport mitra.
+   */
+  jenjangHitung: JenjangTransport | null;
 };
 
 type BarisDb = {
@@ -55,9 +76,11 @@ type BarisDb = {
   jenjang: JenjangTransport | null;
   jenjang_sumber: "otomatis" | "admin" | null;
   jadwal_ulang_terpakai: boolean;
-  clients: { nama: string; padma_id: string } | null;
+  alamat_lat: number | null;
+  alamat_lon: number | null;
+  clients: { nama: string; padma_id: string; alamat_lat: number | null; alamat_lon: number | null } | null;
   services: { nama: string } | null;
-  partners: { nama: string } | null;
+  partners: { nama: string; lat: number | null; lon: number | null } | null;
 };
 
 /**
@@ -83,7 +106,8 @@ export async function ambilDaftarSesi(
     .from("sessions")
     .select(
       "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, jadwal_ulang_terpakai, " +
-        "clients!inner(nama, padma_id), services(nama), partners(nama)",
+        "alamat_lat, alamat_lon, " +
+        "clients!inner(nama, padma_id, alamat_lat, alamat_lon), services(nama), partners(nama, lat, lon)",
       { count: "exact" },
     )
     // Terbaru di atas: yang baru saja dijalani bidan paling mungkin perlu
@@ -137,6 +161,11 @@ export async function ambilDaftarSesi(
       jenjang: s.jenjang,
       jenjangSumber: s.jenjang_sumber,
       jadwalUlangTerpakai: s.jadwal_ulang_terpakai,
+      ...jarakUntukSesi({
+        mitra: koordinat(s.partners?.lat, s.partners?.lon),
+        alamatSesi: koordinat(s.alamat_lat, s.alamat_lon),
+        alamatKlien: koordinat(s.clients?.alamat_lat, s.clients?.alamat_lon),
+      }),
     })),
     total: count ?? 0,
   };

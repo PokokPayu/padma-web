@@ -4,6 +4,7 @@ import { ambilKlien, ambilMateriDetail } from "@/lib/passport/data";
 import { Watermark } from "../../_komponen/watermark";
 import { ReaderPdf } from "./reader-pdf";
 import { PemutarVideo } from "./pemutar-video";
+import { PencatatBuka } from "../pencatat-buka";
 
 export const metadata = { title: "Materi" };
 
@@ -105,6 +106,10 @@ export default async function ReaderMateri({
     }
     return (
       <>
+        {/* Dipasang SESUDAH gerbang `m.berhak` dan gerbang "isi belum
+            diunggah" di atas: yang dicatat adalah materi yang benar-benar
+            terbuka dan benar-benar berisi. */}
+        <PencatatBuka materiId={id} />
         <Link
           href="/passport/materi"
           className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"
@@ -180,6 +185,9 @@ export default async function ReaderMateri({
   //    bukan gaya baru.
   return (
     <>
+      {/* Dipasang SESUDAH kedua gerbang di atas — yang dicatat adalah materi
+          yang benar-benar terbuka dan benar-benar berisi halaman. */}
+      <PencatatBuka materiId={id} />
       <Link
         href="/passport/materi"
         className="mb-3.5 inline-block rounded-xl border border-black/10 bg-white px-4 py-2 text-[13px] font-bold"

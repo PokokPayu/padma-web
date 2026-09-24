@@ -34,7 +34,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { awalPekan, geserHari, rentangPekan } from "@/lib/owner/pekan";
-import { hariIniJakarta } from "@/lib/passport/waktu";
+import { hariIniJakarta, formatTanggalID } from "@/lib/passport/waktu";
 import { formatRupiah } from "@/lib/owner/rupiah";
 import { signInAs } from "./helpers/as-user";
 
@@ -84,6 +84,14 @@ const VARIAN_TANPA_TARIF = "11111111-1111-1111-1111-2111111112f3";
 const MITRA_A = "33333333-3333-3333-3333-3333333333f3";
 const MITRA_B = "33333333-3333-3333-3333-3333333334f3";
 const TARIF_UJI = "99999999-9999-9999-9999-9999999999f3";
+// Penilaian fixture untuk butir 5 (testimoni di board owner). Dua baris: satu
+// pujian yang lebih BARU, satu kritik yang lebih LAMA — susunan yang membuat
+// urutan kronologis dan urutan kritik-dulu memberi jawaban BERBEDA, sehingga
+// tesnya benar-benar menguji urutannya.
+const NILAI_PUJIAN = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa01f3";
+const NILAI_KRITIK = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa02f3";
+const KOMENTAR_KRITIK = "PAD-UJI bidannya datang terlambat empat puluh menit.";
+const KOMENTAR_PUJIAN = "PAD-UJI semuanya lancar dan menyenangkan.";
 const KLIEN_UJI = "44444444-4444-4444-4444-4444444444f3";
 const PADMA_ID_UJI = "PAD-UJI-0003";
 const SESI = {
@@ -100,12 +108,13 @@ const SESI = {
 const HARGA = 400_000;
 const HONOR = 150_000;
 
-// Pekan berjalan menurut kalender Jakarta. SENIN dipakai sebagai tanggal sesi
-// (bukan hari acak dalam pekan) supaya tanggalnya tidak pernah jatuh di masa
-// depan — sesi "selesai" bertanggal besok akan menjadi fixture yang mustahil.
+// Pekan berjalan menurut kalender Jakarta — sejak butir 4, pekannya SABTU s.d.
+// JUMAT. Hari awal pekan dipakai sebagai tanggal sesi (bukan hari acak dalam
+// pekan) supaya tanggalnya tidak pernah jatuh di masa depan — sesi "selesai"
+// bertanggal besok akan menjadi fixture yang mustahil.
 const HARI_INI = hariIniJakarta();
-const SENIN = awalPekan(HARI_INI);
-const SENIN_LALU = geserHari(SENIN, -7);
+const AWAL_PEKAN = awalPekan(HARI_INI);
+const AWAL_PEKAN_LALU = geserHari(AWAL_PEKAN, -7);
 
 // `berlaku_sejak` jauh sebelum seluruh tanggal sesi fixture, sehingga tarif
 // yang terpilih selalu tarif ini — tidak bergantung pada tanggal `db reset`
@@ -113,6 +122,10 @@ const SENIN_LALU = geserHari(SENIN, -7);
 const BERLAKU_SEJAK = "2020-01-06";
 
 async function bersihkan() {
+  // Penilaian DULU: FK-nya menunjuk sesi, klien, mitra, dan varian sekaligus.
+  // (`session_id` memang ON DELETE CASCADE, tetapi `partner_id` tidak — mitra
+  // fixture di bawah tidak akan bisa dihapus selama penilaiannya masih ada.)
+  await admin.from("session_ratings").delete().in("id", [NILAI_PUJIAN, NILAI_KRITIK]);
   for (const id of Object.values(SESI)) {
     await admin.from("sessions").delete().eq("id", id);
     // Tabel jejak SENGAJA tanpa foreign key, jadi penghapusan sesi di atas
@@ -220,20 +233,20 @@ beforeAll(async () => {
   };
   await admin.from("sessions").insert([
     // Tiga sesi SELESAI di pekan berjalan: dua mitra A, satu mitra B.
-    { ...dasarSesi, id: SESI.a1, partner_id: MITRA_A, tanggal: SENIN, status: "selesai" },
-    { ...dasarSesi, id: SESI.a2, partner_id: MITRA_A, tanggal: SENIN, status: "selesai" },
-    { ...dasarSesi, id: SESI.b1, partner_id: MITRA_B, tanggal: SENIN, status: "selesai" },
+    { ...dasarSesi, id: SESI.a1, partner_id: MITRA_A, tanggal: AWAL_PEKAN, status: "selesai" },
+    { ...dasarSesi, id: SESI.a2, partner_id: MITRA_A, tanggal: AWAL_PEKAN, status: "selesai" },
+    { ...dasarSesi, id: SESI.b1, partner_id: MITRA_B, tanggal: AWAL_PEKAN, status: "selesai" },
     // Pekan LALU — tidak boleh bocor ke kartu "pekan ini".
     {
       ...dasarSesi,
       id: SESI.pekanLalu,
       partner_id: MITRA_A,
-      tanggal: SENIN_LALU,
+      tanggal: AWAL_PEKAN_LALU,
       status: "selesai",
     },
     // Belum/tidak pernah dikerjakan — tidak menghasilkan honor.
-    { ...dasarSesi, id: SESI.terjadwal, partner_id: MITRA_A, tanggal: SENIN, status: "terjadwal" },
-    { ...dasarSesi, id: SESI.batal, partner_id: MITRA_A, tanggal: SENIN, status: "dibatalkan_padma" },
+    { ...dasarSesi, id: SESI.terjadwal, partner_id: MITRA_A, tanggal: AWAL_PEKAN, status: "terjadwal" },
+    { ...dasarSesi, id: SESI.batal, partner_id: MITRA_A, tanggal: AWAL_PEKAN, status: "dibatalkan_padma" },
     // Selesai, tetapi layanannya tidak punya satu baris tarif pun.
     {
       ...dasarSesi,
@@ -241,8 +254,36 @@ beforeAll(async () => {
       service_id: LAYANAN_TANPA_TARIF,
       variant_id: VARIAN_TANPA_TARIF,
       partner_id: MITRA_B,
-      tanggal: SENIN,
+      tanggal: AWAL_PEKAN,
       status: "selesai",
+    },
+  ]);
+
+  // Butir 5 — testimoni. Kritik sengaja LEBIH LAMA dari pujiannya: kalau board
+  // mengurutkan secara kronologis, pujianlah yang naik ke atas, dan tes urutan
+  // di bawah akan menangkapnya.
+  await admin.from("session_ratings").insert([
+    {
+      id: NILAI_PUJIAN,
+      session_id: SESI.a1,
+      client_id: KLIEN_UJI,
+      partner_id: MITRA_A,
+      variant_id: VARIAN_UJI,
+      bintang_layanan: 5,
+      bintang_bidan: 5,
+      komentar: KOMENTAR_PUJIAN,
+      created_at: `${AWAL_PEKAN}T10:00:00Z`,
+    },
+    {
+      id: NILAI_KRITIK,
+      session_id: SESI.a2,
+      client_id: KLIEN_UJI,
+      partner_id: MITRA_A,
+      variant_id: VARIAN_UJI,
+      bintang_layanan: 4,
+      bintang_bidan: 2,
+      komentar: KOMENTAR_KRITIK,
+      created_at: `${AWAL_PEKAN_LALU}T10:00:00Z`,
     },
   ]);
 
@@ -252,9 +293,9 @@ beforeAll(async () => {
 afterAll(bersihkan);
 
 describe("ringkasan pekan berjalan — dihitung dari data, lewat RLS sesi owner", () => {
-  it("menghitung SENIN pekan berjalan menurut kalender Jakarta", () => {
-    expect(sesudah.senin).toBe(SENIN);
-    expect(sesudah.rentang).toBe(rentangPekan(SENIN));
+  it("menghitung AWAL_PEKAN pekan berjalan menurut kalender Jakarta", () => {
+    expect(sesudah.awal).toBe(AWAL_PEKAN);
+    expect(sesudah.rentang).toBe(rentangPekan(AWAL_PEKAN));
   });
 
   it("hanya sesi SELESAI pekan ini yang dihitung (terjadwal & batal diabaikan)", () => {
@@ -283,7 +324,7 @@ describe("ringkasan pekan berjalan — dihitung dari data, lewat RLS sesi owner"
 
   it("sesi pekan LALU tidak bocor ke pekan berjalan", async () => {
     const rekap = await ambilRekap();
-    const pekanLalu = rekap.find((p) => p.senin === SENIN_LALU);
+    const pekanLalu = rekap.find((p) => p.awal === AWAL_PEKAN_LALU);
     expect(pekanLalu, "pekan lalu hilang dari rekap").toBeDefined();
     // Satu sesi mitra A di pekan lalu — honornya berdiri di embernya sendiri.
     const barisA = pekanLalu!.perMitra.find((m) => m.partnerId === MITRA_A);
@@ -293,8 +334,8 @@ describe("ringkasan pekan berjalan — dihitung dari data, lewat RLS sesi owner"
 
   it("pekan terbaru berada di atas", async () => {
     const rekap = await ambilRekap();
-    const senin = rekap.map((p) => p.senin);
-    expect([...senin].sort().reverse()).toEqual(senin);
+    const awal = rekap.map((p) => p.awal);
+    expect([...awal].sort().reverse()).toEqual(awal);
   });
 
   it("dihitung lewat sesi pengguna: admin tidak melihat satu nominal pun", async () => {
@@ -519,11 +560,23 @@ describe("beranda owner", () => {
     // jalur lain — kalau keduanya berbeda, salah satu sedang berbohong, dan
     // yang dipertaruhkan adalah honor yang dibayarkan.
     expect(nilaiStatTile(m, "Sesi selesai pekan ini")).toBe(String(kini.jumlahSesi));
-    expect(nilaiStatTile(m, "Honor dibayar Sabtu ini")).toBe(formatRupiah(kini.totalHonor));
+    expect(nilaiStatTile(m, "Honor pekan berjalan")).toBe(formatRupiah(kini.totalHonor));
     expect(nilaiStatTile(m, "Margin PADMA pekan ini")).toBe(formatRupiah(kini.margin));
     // Label rentang pekan berjalan wajib tampil juga — bukan cuma angkanya.
     // Tanpa ini, "pekan yang mana" hanya bisa ditebak dari tanggal hari ini.
     expect(m).toContain(kini.rentang);
+  });
+
+  // Sesudah pekan bergeser ke Sabtu–Jumat (butir 4), Sabtu adalah hari PERTAMA
+  // pekannya. Label lama "Honor dibayar Sabtu ini" karena itu menjadi keliru:
+  // honor pekan berjalan baru dibayar Sabtu BERIKUTNYA, sesudah pekannya tutup
+  // hari Jumat. Selisihnya satu pekan penuh honor — kalimat yang salah di sini
+  // membuat pemilik klinik membayar pekan yang belum dikerjakan.
+  it("menyebut TANGGAL Sabtu gajiannya, bukan sekadar 'Sabtu ini'", async () => {
+    const m = await markupBeranda();
+    const gajian = geserHari(awalPekan(HARI_INI), 7);
+    expect(m).toContain(formatTanggalID(gajian));
+    expect(m).not.toContain("Honor dibayar Sabtu ini");
   });
 
   it("nominal HIDUP di sini — panel ini memang satu-satunya tempatnya", async () => {
@@ -569,6 +622,45 @@ describe("beranda owner", () => {
     // perbaikannya belum diam-diam dihapus.
     expect(sumberBeranda).toContain("belum bertarif");
     expect(sumberBeranda).toContain('href="/owner/tarif"');
+  });
+
+  // -------------------------------------------------------------------------
+  // BUTIR 5 — testimoni di board owner
+  // -------------------------------------------------------------------------
+  // "Testimoni masukkan ke board owner dong mas, klo ada komen masukan/ kritik
+  // langsung tahu." Board sudah menampilkan TREN bintang; yang belum ada
+  // adalah apa yang orang KATAKAN.
+  it("menampilkan komentar penilaian, bukan hanya tren bintangnya", async () => {
+    const m = await markupBeranda();
+    expect(m).toContain(KOMENTAR_KRITIK);
+  });
+
+  it("kritik berdiri DI ATAS pujian, meski pujiannya lebih baru", async () => {
+    // Inilah anak kalimat "langsung tahu". Urutan kronologis mengubur satu
+    // keluhan di bawah pujian yang datang sesudahnya, dan pemilik klinik baru
+    // menemukannya kalau ia sudah tahu ada yang perlu dicari.
+    const m = await markupBeranda();
+    const kritik = m.indexOf(KOMENTAR_KRITIK);
+    const pujian = m.indexOf(KOMENTAR_PUJIAN);
+    expect(kritik, "komentar kritik wajib ada di halaman").toBeGreaterThan(-1);
+    expect(pujian, "komentar pujian wajib ada di halaman").toBeGreaterThan(-1);
+    expect(kritik).toBeLessThan(pujian);
+  });
+
+  it("menyebut bintang dan siapa bidannya — komentar tanpa konteks tidak bisa ditindaklanjuti", async () => {
+    const m = await markupBeranda();
+    const posisi = m.indexOf(KOMENTAR_KRITIK);
+    // Ditegaskan LEBIH DULU: tanpa ini, `indexOf` yang memulangkan -1 membuat
+    // `slice` di bawah mengambil hampir seluruh halaman, dan assertion-nya
+    // lolos karena nama bidan itu memang muncul di kartu tren — uji yang
+    // hijau tanpa pernah melihat komentarnya sama sekali.
+    expect(posisi, "komentar kritik wajib ada di halaman").toBeGreaterThan(-1);
+    // Jendela di KEDUA sisi: konteksnya boleh berdiri sebelum atau sesudah
+    // teks komentarnya, yang penting ia menempel — bukan nyasar di kartu tren
+    // nun jauh di atas halaman.
+    const sekitar = m.slice(Math.max(0, posisi - 400), posisi + KOMENTAR_KRITIK.length + 400);
+    expect(sekitar).toContain("PAD-UJI Bidan Alfa");
+    expect(sekitar).toContain("2★ bidan");
   });
 
   it("penjaga peran tepat satu kali dengan peran PERSIS owner", () => {

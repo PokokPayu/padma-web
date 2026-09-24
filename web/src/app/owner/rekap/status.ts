@@ -25,16 +25,26 @@ export type PeriksaPekan = { ok: true; nilai: string } | { ok: false; pesan: str
  *     pulang `geserHari(tgl, 0)` — aritmatika bilangan bulat murni yang
  *     mengembalikan bentuk kanonik.
  *
- *  2. HARI SENIN. Bucket rekap SELALU berkunci pada Senin. Tanda bertanggal
- *     Rabu tidak akan pernah cocok dengan bucket mana pun: honornya terlihat
- *     "belum dibayar" selamanya sementara uangnya sudah ditransfer — dan
- *     tandanya TIDAK BISA DIHAPUS, karena DELETE atas `honor_marks` sudah
- *     dicabut dari peran aplikasi (owner pun dijawab 42501).
+ *  2. HARI SABTU. Bucket rekap SELALU berkunci pada Sabtu (butir 4 umpan
+ *     balik klien 21 Sep 2026 — `AWAL_PEKAN_ISO` di lib/owner/pekan.ts).
+ *     Tanda bertanggal Rabu tidak akan pernah cocok dengan bucket mana pun:
+ *     honornya terlihat "belum dibayar" selamanya sementara uangnya sudah
+ *     ditransfer — dan tandanya TIDAK BISA DIHAPUS, karena DELETE atas
+ *     `honor_marks` sudah dicabut dari peran aplikasi (owner pun dijawab
+ *     42501). Senin, hari awal pekan yang LAMA, kini ikut ditolak di sini.
  *
  *  3. PEKANNYA SUDAH BERJALAN. Menandai pekan depan berarti menyatakan honor
  *     yang belum dikerjakan sudah dibayarkan. Karena tandanya tidak bisa
- *     dicabut, kekeliruan itu permanen. Pekan BERJALAN tetap boleh ditandai:
- *     gajian PADMA jatuh Sabtu, di dalam pekannya sendiri.
+ *     dicabut, kekeliruan itu permanen.
+ *
+ *     Pekan BERJALAN tetap boleh ditandai, dan sesudah pergeseran ke
+ *     Sabtu–Jumat itu berarti sesuatu yang BERBEDA dari sebelumnya: dulu
+ *     gajian Sabtu jatuh di tengah pekan Senin–Minggu, sekarang Sabtu adalah
+ *     hari PERTAMA pekannya dan yang lazim dibayar hari itu adalah pekan yang
+ *     baru tutup Jumat kemarin. Jadi menandai pekan berjalan kini berarti
+ *     membayar DI MUKA. Kelonggaran itu SENGAJA dipertahankan — itu keputusan
+ *     pemilik klinik, bukan keputusan validator ini — tetapi jangan lagi
+ *     dibaca sebagai "gajian ada di dalam pekannya sendiri".
  *
  * `hariIni` diberikan pemanggil (action meneruskan `hariIniJakarta()`) supaya
  * validator ini tetap murni dan bisa diuji pada pekan mana pun.
@@ -53,8 +63,8 @@ export function periksaPekan(mentah: string, hariIni: string): PeriksaPekan {
   if (kanonik !== teks) {
     return { ok: false, pesan: `Pekan ${teks} tidak ada di kalender.` };
   }
-  if (isoDow(teks) !== 1) {
-    return { ok: false, pesan: PESAN.bukanSenin };
+  if (isoDow(teks) !== 6) {
+    return { ok: false, pesan: PESAN.bukanSabtu };
   }
   if (teks > awalPekan(hariIni)) {
     return { ok: false, pesan: PESAN.pekanBelumBerjalan };
@@ -82,7 +92,7 @@ export const PESAN = {
   mitraWajib: "Mitra wajib dipilih.",
   mitraTakDikenal: "Mitra tidak dikenal. Muat ulang halaman rekap.",
   pekanTakSah: "Pekan tidak sah — honor selalu direkap per pekan (YYYY-MM-DD).",
-  bukanSenin: "Pekan honor selalu dimulai hari Senin.",
+  bukanSabtu: "Pekan honor selalu dimulai hari Sabtu.",
   pekanBelumBerjalan:
     "Pekan itu belum berjalan — honornya belum bisa ditandai dibayar, dan tanda bayar tidak bisa dibatalkan.",
   gagal: "Gagal menandai pembayaran honor.",
@@ -100,7 +110,7 @@ export const PESAN = {
 export function pesanKodePostgres(kode: string | undefined): string {
   if (kode === "23503") return PESAN.mitraTakDikenal;
   if (kode === "22P02") return PESAN.mitraTakDikenal;
-  if (kode === "23514") return PESAN.bukanSenin;
+  if (kode === "23514") return PESAN.bukanSabtu;
   if (kode === "42501") return PESAN.tidakTersimpan;
   return PESAN.gagal;
 }

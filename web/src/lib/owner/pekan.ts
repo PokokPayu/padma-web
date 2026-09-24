@@ -1,5 +1,5 @@
 // ============================================================================
-// PEKAN JAKARTA — Senin s.d. Minggu, dihitung TANPA aritmatika Date
+// PEKAN JAKARTA — Sabtu s.d. Jumat, dihitung TANPA aritmatika Date
 // ============================================================================
 // KENAPA TANPA Date — diukur, bukan dikutip.
 //
@@ -28,6 +28,13 @@
 // Howard Hinnant), bilangan bulat murni dari string tanggal. `Date` HANYA
 // dipakai untuk MEMFORMAT nama bulan dengan timeZone Asia/Jakarta, tidak pernah
 // untuk aritmatika — jadi tidak ada zona, DST, maupun ICU yang bisa menggesernya.
+//
+// CATATAN SEJARAH: paragraf di atas ditulis ketika pekan PADMA masih Senin s.d.
+// Minggu, dan contoh-contoh `mondayOf` itu sengaja DIBIARKAN apa adanya — bug
+// yang dijalankan ulang memang terjadi pada Senin, dan memalsukannya jadi
+// "Sabtu" akan membuat angka-angka yang terbukti di atas tidak lagi bisa
+// direproduksi siapa pun. Hari awal pekan yang BERLAKU sekarang adalah SABTU;
+// lihat `AWAL_PEKAN_ISO` di bawah untuk alasannya.
 
 const ZONA = "Asia/Jakarta";
 const POLA_TANGGAL = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -82,14 +89,38 @@ export function isoDow(tgl: string): number {
   return (((z + 3) % 7) + 7) % 7 + 1;
 }
 
-/** Senin dari pekan yang memuat `tgl`. Idempoten: awalPekan(awalPekan(x)) === awalPekan(x). */
+/**
+ * Hari pertama pekan honor, menurut penomoran ISO: 6 = SABTU.
+ *
+ * Bukan Senin, dan bukan pilihan gaya. Gajian PADMA jatuh hari Sabtu, dan
+ * klien memintanya lurus (umpan balik 21 Sep 2026, butir 4): "waktu sesi
+ * tolong diganti sabtu- jumat ... karena paymentnya di hari sabtu". Dengan
+ * pekan Sabtu–Jumat, Sabtu membayar pekan yang baru TUTUP Jumat kemarin.
+ *
+ * Di bawah Senin–Minggu yang lama, Sabtu jatuh di TENGAH pekannya sendiri —
+ * honor dibayar sebelum pekannya selesai, lalu sesi hari Minggu masuk ke pekan
+ * yang tandanya sudah terpasang dan TIDAK BISA dicabut. Itu pula yang membuat
+ * sesi Sabtu & Minggu lenyap dari board owner setiap Senin pagi (butir 3):
+ * ember pekannya berganti tepat di tengah akhir pekan kerja.
+ *
+ * Angka ini berpasangan dengan CHECK `honor_marks_week_start_sabtu` di basis
+ * data (migrasi `20260922100000_pekan_sabtu_jumat`). Mengubah salah satunya
+ * saja membuat setiap tanda bayar ditolak 23514 — atau, lebih buruk, diterima
+ * pada hari yang tidak pernah cocok dengan ember mana pun.
+ */
+const AWAL_PEKAN_ISO = 6;
+
+/** Sabtu dari pekan yang memuat `tgl`. Idempoten: awalPekan(awalPekan(x)) === awalPekan(x). */
 export function awalPekan(tgl: string): string {
   const z = keNomorHari(tgl);
   const dow = (((z + 3) % 7) + 7) % 7 + 1;
-  return keTanggal(z - (dow - 1));
+  // Selisih mundur ke hari awal pekan, 0..6. Modulo dirapikan dua kali supaya
+  // tetap benar ketika `dow` lebih kecil dari `AWAL_PEKAN_ISO` (Minggu s.d.
+  // Jumat), yang di JavaScript menghasilkan sisa NEGATIF.
+  return keTanggal(z - ((((dow - AWAL_PEKAN_ISO) % 7) + 7) % 7));
 }
 
-/** Minggu dari pekan yang memuat `tgl` — enam hari sesudah Seninnya. */
+/** Jumat dari pekan yang memuat `tgl` — enam hari sesudah Sabtunya. */
 export function akhirPekan(tgl: string): string {
   return keTanggal(keNomorHari(awalPekan(tgl)) + 6);
 }
@@ -144,9 +175,9 @@ export function stempelJakarta(iso: string): string {
 }
 
 /**
- * Label rentang pekan, mis. "24 – 30 Agu 2026". Bulan/tahun hanya diulang di
- * sisi kiri bila memang berbeda: "31 Agu – 6 Sep 2026",
- * "28 Des 2026 – 3 Jan 2027".
+ * Label rentang pekan SABTU–JUMAT, mis. "22 – 28 Agu 2026". Bulan/tahun hanya
+ * diulang di sisi kiri bila memang berbeda: "29 Agu – 4 Sep 2026",
+ * "26 Des 2026 – 1 Jan 2027".
  */
 export function rentangPekan(tgl: string): string {
   const senin = awalPekan(tgl);

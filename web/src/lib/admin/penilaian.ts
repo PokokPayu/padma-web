@@ -79,6 +79,47 @@ export async function ambilPenilaianTerbaru(opsi: { rendah?: boolean; batas?: nu
   })) satisfies BarisPenilaian[];
 }
 
+/**
+ * Komentar untuk board owner — KRITIK DULU, bukan yang terbaru dulu.
+ *
+ * Klien memintanya begini (umpan balik 21 Sep 2026, butir 5): "Testimoni
+ * masukkan ke board owner dong mas, klo ada komen masukan/ kritik langsung
+ * tahu." Anak kalimat terakhir itulah spesifikasinya. Urutan kronologis
+ * mengubur satu keluhan di bawah sepuluh pujian yang datang sesudahnya, dan
+ * pemilik klinik baru menemukannya kalau ia menggulir — yaitu, kalau ia sudah
+ * tahu ada yang perlu dicari.
+ *
+ * Yang diurutkan adalah bintang TERENDAH dari dua angkanya, bukan rata-rata.
+ * Sesi yang layanannya bagus tetapi bidannya bermasalah punya rata-rata yang
+ * tampak wajar — 5 dan 1 menjadi 3 — dan justru itu yang perlu dibaca manusia.
+ * Aturan yang sama sudah dipegang saringan `rendah` di `ambilPenilaianTerbaru`.
+ *
+ * Penilaian tanpa komentar DIBUANG: bintang saja bukan testimoni, dan tren
+ * bintang sudah punya kartunya sendiri di board yang sama. Kartu ini menjawab
+ * pertanyaan yang lain — apa yang dikatakan orang.
+ *
+ * MURNI, dan karena itu bisa diuji tanpa Postgres. Pemanggilnya yang menarik
+ * barisnya lewat `ambilPenilaianTerbaru` (sesi pengguna, RLS ikut berjalan).
+ */
+export function komentarKritikDulu(
+  baris: readonly BarisPenilaian[],
+  batas = 5,
+): BarisPenilaian[] {
+  return baris
+    .filter((b) => b.komentar.trim() !== "")
+    // Disalin lebih dulu oleh `.filter()` — `.sort()` memutasi di tempat, dan
+    // memutasi masukan milik pemanggil adalah cara fungsi murni berhenti murni.
+    .sort((a, b) => {
+      const ta = Math.min(a.bintangLayanan, a.bintangBidan);
+      const tb = Math.min(b.bintangLayanan, b.bintangBidan);
+      if (ta !== tb) return ta - tb;
+      // Bintang sama: yang terbaru di atas. `tanggal` YYYY-MM-DD, jadi urutan
+      // leksikografis = urutan kronologis.
+      return a.tanggal > b.tanggal ? -1 : a.tanggal < b.tanggal ? 1 : 0;
+    })
+    .slice(0, batas);
+}
+
 export type TrenPenilaian = { nama: string; jumlah: number; rata: number };
 
 /**

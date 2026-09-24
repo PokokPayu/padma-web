@@ -25,10 +25,10 @@ function mitra(nama: string, sudahDibayar: boolean): BarisMitra {
   };
 }
 
-function pekan(senin: string, perMitra: BarisMitra[]): RekapPekan {
+function pekan(awal: string, perMitra: BarisMitra[]): RekapPekan {
   return {
-    senin,
-    rentang: senin,
+    awal,
+    rentang: awal,
     jumlahSesi: perMitra.length,
     perMitra,
     totalHonor: 0,
@@ -59,25 +59,25 @@ describe("pekanTuntas", () => {
 describe("saringRekap", () => {
   it("tanpa parameter memulangkan seluruh pekan dalam urutan aslinya", () => {
     const { baris, total } = saringRekap(REKAP, param({}));
-    expect(baris.map((p) => p.senin)).toEqual(["2026-01-19", "2026-01-12", "2026-01-05"]);
+    expect(baris.map((p) => p.awal)).toEqual(["2026-01-19", "2026-01-12", "2026-01-05"]);
     expect(total).toBe(3);
   });
 
   it("honor=belum menyisakan pekan yang masih punya honor belum ditandai", () => {
     const { baris, total } = saringRekap(REKAP, param({ honor: "belum" }));
-    expect(baris.map((p) => p.senin)).toEqual(["2026-01-19", "2026-01-12"]);
+    expect(baris.map((p) => p.awal)).toEqual(["2026-01-19", "2026-01-12"]);
     expect(total).toBe(2);
   });
 
   it("honor=tuntas menyisakan pekan yang seluruh honornya sudah ditandai", () => {
-    expect(saringRekap(REKAP, param({ honor: "tuntas" })).baris.map((p) => p.senin)).toEqual([
+    expect(saringRekap(REKAP, param({ honor: "tuntas" })).baris.map((p) => p.awal)).toEqual([
       "2026-01-05",
     ]);
   });
 
   it("cari mencocokkan nama mitra, dan menyisakan KARTU pekannya UTUH", () => {
     const { baris } = saringRekap(REKAP, param({ cari: "sari" }));
-    expect(baris.map((p) => p.senin)).toEqual(["2026-01-12", "2026-01-05"]);
+    expect(baris.map((p) => p.awal)).toEqual(["2026-01-12", "2026-01-05"]);
     // Kartunya tidak dipangkas: margin dan total pekan dihitung atas SELURUH
     // mitra, jadi kartu yang isinya disaring akan menampilkan angka yang tidak
     // cocok dengan baris yang terlihat.

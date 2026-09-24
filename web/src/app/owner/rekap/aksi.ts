@@ -53,14 +53,16 @@ type Berhasil = { ok: true };
 /**
  * Menandai honor satu mitra untuk satu pekan sebagai sudah dibayar.
  *
- * `senin` adalah Senin pekan itu — kunci bucket rekap. Basis data hari ini
- * menerima tanggal apa pun di kolom itu, jadi keseninannya ditegakkan di
- * `periksaPekan`: tanda bertanggal Rabu tidak akan pernah cocok dengan bucket
- * mana pun, dan ia tidak bisa dihapus lagi setelah terlanjur masuk.
+ * `awal` adalah SABTU pekan itu — kunci bucket rekap. CHECK
+ * `honor_marks_awal_pekan_sabtu` menolak hari lain di basis data, dan
+ * `periksaPekan` menolaknya lebih dulu di sini supaya pemilik klinik membaca
+ * kalimat, bukan SQLSTATE: tanda bertanggal Rabu — atau Senin, hari awal
+ * pekan yang LAMA — tidak akan pernah cocok dengan bucket mana pun, dan ia
+ * tidak bisa dihapus lagi setelah terlanjur masuk.
  */
 export async function tandaiHonorDibayar(
   partnerId: string,
-  senin: string,
+  awal: string,
 ): Promise<Berhasil | Gagal> {
   const { userId } = await requireRole(["owner"]);
 
@@ -70,8 +72,9 @@ export async function tandaiHonorDibayar(
 
   // "Hari ini" menurut kalender JAKARTA, bukan menurut jam server (Vercel
   // berjalan UTC): di zona itu pekan berjalan bisa terbaca sebagai pekan depan
-  // selama tujuh jam setiap Senin pagi.
-  const pekan = periksaPekan(senin, hariIniJakarta());
+  // selama tujuh jam setiap SABTU pagi — jam-jam yang justru paling mungkin
+  // dipakai, karena Sabtu adalah hari gajian.
+  const pekan = periksaPekan(awal, hariIniJakarta());
   if (!pekan.ok) return { ok: false, pesan: pekan.pesan };
 
   const supabase = await createServerSupabase();

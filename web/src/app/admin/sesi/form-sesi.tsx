@@ -6,7 +6,7 @@ import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { jadwalkanSesi } from "./aksi";
 import { JENJANG_SAH } from "./status";
 import { saranJenjang } from "@/lib/transport/saran";
-import { LABEL_JENJANG } from "@/lib/transport/jarak";
+import { LABEL_JENJANG, formatJarakKm } from "@/lib/transport/jarak";
 import type { VarianPilihan } from "@/lib/admin/katalog-admin";
 import { formatJam } from "@/lib/jadwal/jam";
 
@@ -256,7 +256,7 @@ export function FormJadwalSesi({
         </span>
         {saran ? (
           <span className="mt-0.5 block">
-            Jarak garis lurus dari alamat klien ke mitra: <b>{saran.jarakKm.toFixed(1)} km</b> —
+            Jarak garis lurus dari alamat klien ke mitra: <b>{formatJarakKm(saran.jarakKm)}</b> —
             saran jenjang <b>{LABEL_JENJANG[saran.jenjang]}</b>. Ini jarak GARIS LURUS, bukan jarak
             jalan — nilai sesungguhnya bisa lebih jauh (mis. memutar sungai atau jalan searah).
           </span>

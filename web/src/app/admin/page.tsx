@@ -32,7 +32,7 @@ export default async function AdminPage() {
   ]);
 
   const titikTren = tren.map((t) => {
-    const { hari, bulan } = formatTanggalPendek(t.senin);
+    const { hari, bulan } = formatTanggalPendek(t.awal);
     // `keterangan` membawa rentang penuh ("1 – 7 Sep 2026") ke tooltip dan
     // kolom pertama tabel padanan; label pendek ("1 SEP") tetap yang dipakai
     // di sumbu-X sendiri, tempat rentang penuh akan kepanjangan.

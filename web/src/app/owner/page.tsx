@@ -4,11 +4,17 @@ import { ambilRekap } from "@/lib/owner/data";
 import { deretPekanTerakhir } from "@/lib/owner/rekap";
 import { formatRupiah } from "@/lib/owner/rupiah";
 import { formatTanggalID, formatTanggalPendek, hariIniJakarta } from "@/lib/passport/waktu";
+import { geserHari } from "@/lib/owner/pekan";
 import { StatTile } from "@/app/_shell/panel/stat-tile";
 import { Kartu } from "@/app/_shell/panel/kartu";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { GrafikPekan } from "./_shell/grafik-pekan";
-import { ambilTrenPenilaian } from "@/lib/admin/penilaian";
+import {
+  ambilTrenPenilaian,
+  ambilPenilaianTerbaru,
+  komentarKritikDulu,
+  type BarisPenilaian,
+} from "@/lib/admin/penilaian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Panel Owner" };
@@ -51,6 +57,29 @@ function KolomTren({
   );
 }
 
+/**
+ * Satu testimoni. Komentar klien adalah TEKS TAK TEPERCAYA — dirender sebagai
+ * teks biasa, tidak pernah sebagai markup (disiplin yang sama dengan panel
+ * admin dan dengan komentar pada `session_ratings` itu sendiri).
+ */
+function BarisKomentar({ baris }: { baris: BarisPenilaian }) {
+  const terendah = Math.min(baris.bintangLayanan, baris.bintangBidan);
+  return (
+    <li
+      data-komentar={baris.id}
+      className="border-b border-dashed border-panel-border py-2.5 last:border-0"
+    >
+      <p className="text-[12.5px] leading-relaxed text-panel-ink">{baris.komentar}</p>
+      <p className="mt-1 text-[11.5px] text-panel-muted">
+        <b className={terendah <= 3 ? "text-clay" : "text-panel-ink"}>
+          {baris.bintangLayanan}★ layanan · {baris.bintangBidan}★ bidan
+        </b>{" "}
+        · {baris.namaMitra} · {baris.namaLayanan} · {baris.tanggal}
+      </p>
+    </li>
+  );
+}
+
 export default async function OwnerPage() {
   const { nama } = await requireRole(["owner"]);
 
@@ -64,7 +93,21 @@ export default async function OwnerPage() {
   // Tren penilaian dibaca terpisah dari rekap: keduanya menjawab pertanyaan
   // berbeda dan tidak berbagi satu baris pun. Digabung dalam satu query,
   // penilaian akan ikut tertahan setiap kali rekap melambat.
-  const [rekap, tren] = await Promise.all([ambilRekap(), ambilTrenPenilaian()]);
+  // Komentar dibaca bersamaan dengan rekap & tren, bukan berurutan: ketiganya
+  // tidak saling bergantung, dan beranda yang menunggu tiga perjalanan
+  // berurutan ke Postgres terasa rusak meski tidak ada yang salah.
+  //
+  // `batas: 50` lalu dipangkas jadi lima di `komentarKritikDulu`: pemangkasan
+  // TIDAK BISA dilakukan di query, karena urutan yang dibutuhkan board adalah
+  // bintang terendah dulu sementara query mengurutkan menurut waktu. Mengambil
+  // lima teratas menurut waktu berarti kritik tiga pekan lalu tidak pernah
+  // terbaca sama sekali — persis yang diminta klien agar tidak terjadi.
+  const [rekap, tren, penilaian] = await Promise.all([
+    ambilRekap(),
+    ambilTrenPenilaian(),
+    ambilPenilaianTerbaru({ batas: 50 }),
+  ]);
+  const komentar = komentarKritikDulu(penilaian);
 
   // Pekan sepi tidak punya ember sendiri di `hitungRekap()`; deretPekanTerakhir
   // mengisinya dengan nol supaya sumbu waktunya tidak berlubang.
@@ -76,7 +119,7 @@ export default async function OwnerPage() {
   const jumlahTakBertarif = pekan.sesiTakBertarif.length;
 
   const labelPekan = deret.map((p) => {
-    const { hari, bulan } = formatTanggalPendek(p.senin);
+    const { hari, bulan } = formatTanggalPendek(p.awal);
     return `${hari} ${bulan}`;
   });
 
@@ -102,10 +145,19 @@ export default async function OwnerPage() {
               : `${jumlahMitra} mitra bekerja · ${pekan.rentang}`
           }
         />
+        {/* Sabtu kini hari PERTAMA pekan (butir 4), bukan hari keenam seperti
+            di bawah skema Senin–Minggu. Label lama "Honor dibayar Sabtu ini"
+            karena itu menunjuk pekan yang SALAH: honor pekan berjalan baru
+            dibayar Sabtu berikutnya, sesudah pekannya tutup Jumat. Tanggalnya
+            ditulis apa adanya supaya tidak ada yang perlu menghitung sendiri
+            "Sabtu yang mana" — selisih satu pekan di sini adalah selisih satu
+            pekan honor. */}
         <StatTile
-          label="Honor dibayar Sabtu ini"
+          label="Honor pekan berjalan"
           nilai={formatRupiah(pekan.totalHonor)}
-          keterangan={`Dari sesi berstatus Selesai pekan ${pekan.rentang}`}
+          keterangan={`Sesi Selesai pekan ${pekan.rentang} · dibayar Sabtu ${formatTanggalID(
+            geserHari(pekan.awal, 7),
+          )}`}
           href="/owner/rekap"
         />
         <StatTile
@@ -217,6 +269,37 @@ export default async function OwnerPage() {
             baris={tren.perLayanan}
             kosong="Belum ada penilaian layanan."
           />
+        </div>
+      </section>
+
+      {/* Butir 5 umpan balik klien 21 Sep 2026: "Testimoni masukkan ke board
+          owner dong mas, klo ada komen masukan/ kritik langsung tahu."
+          Kartu tren di atas menjawab "berapa"; seksi ini menjawab "apa yang
+          dikatakan orang". Urutannya KRITIK DULU, bukan kronologis — lihat
+          `komentarKritikDulu` untuk alasannya. */}
+      <section aria-label="Testimoni terbaru" className="mt-8">
+        <h2 className="text-[15px] font-bold text-panel-ink">Apa kata klien</h2>
+        <p className="mb-3 text-[12px] text-panel-muted">
+          Bintang terendah di atas, supaya masukan dan kritik terbaca lebih dulu.{" "}
+          <Link
+            href="/admin/penilaian"
+            className="font-bold text-leaf underline underline-offset-4"
+          >
+            Lihat semua penilaian
+          </Link>
+        </p>
+        <div className="rounded-lg border border-panel-border bg-panel-surface p-3.5">
+          {komentar.length === 0 ? (
+            <p className="text-[12.5px] italic text-panel-muted">
+              Belum ada komentar. Angka bintang tanpa kata-kata tetap muncul di tren di atas.
+            </p>
+          ) : (
+            <ul>
+              {komentar.map((k) => (
+                <BarisKomentar key={k.id} baris={k} />
+              ))}
+            </ul>
+          )}
         </div>
       </section>
     </main>

@@ -6,7 +6,7 @@ import { ambilDetailSesi, type SkriningPenopang } from "@/lib/admin/sesi-detail"
 import { bacaPengaturan } from "@/lib/settings";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
-import { LABEL_JENJANG } from "@/lib/transport/jarak";
+import { LABEL_JENJANG, formatJarakKm } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import { PanelSesi } from "../panel-sesi";
 import { LABEL_STATUS_SESI, KELAS_PILL_SESI } from "../status";
@@ -88,8 +88,27 @@ export default async function DetailSesiPage({
             {formatTanggalID(sesi.tanggal)} · {formatJam(jamDariDb(sesi.jamMulai))}
           </Medan>
           <Medan judul="Bidan">{sesi.namaMitra}</Medan>
+          {/* Jenjang DAN jaraknya, berdampingan. Label jenjang sendirian
+              tidak bisa dibedakan dari nilai bawaan yang tidak pernah dihitung
+              — itu persis salah baca yang dilaporkan klien (butir 2). Ketika
+              jenjang yang tersimpan berbeda dari yang disiratkan jaraknya,
+              keduanya ditampilkan apa adanya: selisihnya adalah selisih honor
+              transport mitra, dan memilih salah satu diam-diam di sini berarti
+              memutuskan soal uang tanpa sepengetahuan siapa pun. */}
           <Medan judul="Jenjang transport">
             {sesi.jenjang ? LABEL_JENJANG[sesi.jenjang] : "belum ditetapkan"}
+            {sesi.jarakKm !== null && (
+              <span className="mt-0.5 block text-[12px] font-normal text-panel-muted">
+                {formatJarakKm(sesi.jarakKm)} garis lurus, dari alamat{" "}
+                {sesi.jarakDari === "sesi" ? "sesi ini" : "default klien"}
+              </span>
+            )}
+            {sesi.jenjangHitung !== null && sesi.jenjangHitung !== sesi.jenjang && (
+              <span className="mt-1 block text-[12px] font-bold text-amber-700">
+                Berbeda dari jenjang yang tersimpan — jarak itu jatuh di{" "}
+                {LABEL_JENJANG[sesi.jenjangHitung]}. Periksa sebelum tagihannya terbit.
+              </span>
+            )}
           </Medan>
           <Medan judul="Alamat">{sesi.alamat || "—"}</Medan>
           <Medan judul="Paket">{sesi.dalamPaket ? PAKET_TAMPIL : "Sesi satuan"}</Medan>

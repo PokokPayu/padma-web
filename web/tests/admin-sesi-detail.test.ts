@@ -42,7 +42,27 @@ const KLIEN = "44444444-4444-4444-4444-444444444401"; // Ananda
 const KLIEN_LAIN = "44444444-4444-4444-4444-444444444402"; // Rina
 const SVC = "11111111-1111-1111-1111-111111111101"; // Fertility Massage
 const MITRA = "33333333-3333-3333-3333-333333333301"; // Bidan Sri Wahyuni
+/**
+ * Mitra MILIK BERKAS INI, dengan koordinat yang dipasang sendiri.
+ *
+ * Koordinat mitra seed TIDAK BISA dijadikan sandaran: beberapa berkas uji
+ * mengosongkannya sebagai bagian dari fixture mereka sendiri (mis.
+ * `admin-sesi-catatan` menormalkan `lat/lon` ke NULL di afterEach), dan vitest
+ * menjalankan berkas secara paralel. Terbukti: ketiga uji jarak di bawah hijau
+ * saat berkas ini berjalan sendiri, lalu merah dengan "jarakKm null" begitu
+ * dijalankan berdampingan — bukan karena kodenya berubah, melainkan karena
+ * Bidan Sri Wahyuni kehilangan titiknya di tengah jalan.
+ */
+const MITRA_JARAK = "33333333-3333-3333-3333-3333333333aa";
+const LAT_MITRA_JARAK = -7.96662;
+const LON_MITRA_JARAK = 112.632632;
 const TGL = "2026-12-29";
+// Titik alamat sesi uji. Bidan Sri Wahyuni (seed) duduk di -7.96662,112.632632;
+// titik ini murni digeser ke TIMUR sehingga jaraknya terhitung ~6 km — cukup
+// untuk melewati batas 5 km, jadi jenjang yang TERHITUNG berbeda dari yang
+// TERSIMPAN dan layar wajib mengatakannya.
+const LAT_SESI = -7.96662;
+const LON_SESI = 112.687132;
 const HANTU = "00000000-0000-0000-0000-000000000000";
 
 // Lapisan data memakai sesi pengguna (`createServerSupabase`). Di vitest tidak
@@ -80,6 +100,7 @@ let sesiKlien: SupabaseClient;
 let idSesiDariPengajuan = "";
 let idSesiLangsung = "";
 let idSesiKlienLain = "";
+let idSesiJarak = "";
 let idSkrining = "";
 
 async function bersihkan() {
@@ -101,6 +122,8 @@ async function bersihkan() {
   // `admin-sesi-catatan` gagal dengan "sesi tidak ditemukan" sementara berkas
   // ini sendiri hijau. Yang dibersihkan hanyalah yang diterbitkan di sini.
   if (idSkrining) await admin.from("screenings").delete().eq("id", idSkrining);
+  // SESUDAH sesi: FK `sessions.partner_id` menahan penghapusan mitra.
+  await admin.from("partners").delete().eq("id", MITRA_JARAK);
 }
 
 beforeAll(async () => {
@@ -108,6 +131,15 @@ beforeAll(async () => {
   sesiKlien = await signInAs("ananda@padma.test");
   ref.sesi = sesiAdmin;
   await bersihkan();
+
+  await admin.from("partners").upsert({
+    id: MITRA_JARAK,
+    nama: "PAD-UJI Bidan Jarak Detail",
+    no_hp: "0811-0000-93aa",
+    lat: LAT_MITRA_JARAK,
+    lon: LON_MITRA_JARAK,
+    aktif: true,
+  });
 
   const varian = await varianBaku(admin, SVC);
   idSkrining = await skriningHijau(admin, KLIEN, {
@@ -158,6 +190,23 @@ beforeAll(async () => {
         status: "terjadwal",
         alamat: "Jl. Ijen 5, Malang",
       },
+      // Sesi khusus uji JARAK: mitra milik berkas ini (bertitik pasti) dan
+      // alamat sesinya sendiri ~6 km di timurnya, TETAPI jenjang tersimpannya
+      // 0_5 — bentuk yang sama persis dengan yang terlihat di produksi.
+      {
+        client_id: KLIEN,
+        service_id: SVC,
+        variant_id: varian,
+        partner_id: MITRA_JARAK,
+        tanggal: TGL,
+        jam_mulai: "16:00",
+        status: "terjadwal",
+        alamat: "Jl. Ijen 5, Malang",
+        alamat_lat: LAT_SESI,
+        alamat_lon: LON_SESI,
+        jenjang: "0_5",
+        jenjang_sumber: "otomatis",
+      },
       // Milik klien LAIN. Di seed hanya Ananda yang punya sesi, jadi tanpa
       // baris ini tidak ada apa pun untuk diuji-tembus pada test terakhir.
       {
@@ -171,14 +220,80 @@ beforeAll(async () => {
         alamat: "Jl. Kawi 9, Malang",
       },
     ])
-    .select("id, client_id, booking_request_id")
-    .returns<{ id: string; client_id: string; booking_request_id: string | null }[]>();
+    .select("id, client_id, booking_request_id, partner_id")
+    .returns<
+      { id: string; client_id: string; booking_request_id: string | null; partner_id: string }[]
+    >();
   if (galatSesi) throw galatSesi;
 
-  const milikAnanda = tiga.filter((s) => s.client_id === KLIEN);
+  const milikAnanda = tiga.filter((s) => s.client_id === KLIEN && s.partner_id === MITRA);
   idSesiDariPengajuan = milikAnanda.find((s) => s.booking_request_id !== null)!.id;
   idSesiLangsung = milikAnanda.find((s) => s.booking_request_id === null)!.id;
+  idSesiJarak = tiga.find((s) => s.partner_id === MITRA_JARAK)!.id;
   idSesiKlienLain = tiga.find((s) => s.client_id === KLIEN_LAIN)!.id;
+});
+
+describe("jarak & jenjang transport di detail sesi (butir 2, umpan balik klien)", () => {
+  it("memulangkan JARAK dalam km, bukan hanya nama jenjangnya", async () => {
+    // Klien melaporkan "jarak mitra - klien masih 1-5 km semua". Diukur di
+    // basis data produksi, jaraknya memang 0,75–4,72 km — hitungannya benar.
+    // Yang tidak ada adalah ANGKANYA di layar: yang terlihat hanya label
+    // jenjang yang sama berulang-ulang, dan label yang selalu sama tidak bisa
+    // dibedakan dari nilai bawaan yang macet.
+    ref.sesi = sesiAdmin;
+    const sesi = await ambilDetailSesi(idSesiJarak);
+
+    // Dihitung ulang lewat jalur yang BERBEDA dari lapisan datanya: haversine
+    // dari modul murni, atas koordinat yang dipasang fixture ini sendiri.
+    const { haversineKm } = await import("@/lib/transport/jarak");
+    const harapan = haversineKm(
+      { lat: LAT_MITRA_JARAK, lon: LON_MITRA_JARAK },
+      { lat: LAT_SESI, lon: LON_SESI },
+    );
+
+    expect(sesi!.jarakKm).not.toBeNull();
+    expect(sesi!.jarakKm!).toBeCloseTo(harapan, 6);
+    expect(sesi!.jarakDari).toBe("sesi");
+  });
+
+  it("menyebut jenjang yang TERHITUNG dari jarak itu, terpisah dari yang TERSIMPAN", async () => {
+    // Keduanya sengaja berbeda di fixture ini. Menyatukannya jadi satu angka
+    // berarti memilih salah satu diam-diam — dan yang dipertaruhkan adalah
+    // honor transport mitra.
+    ref.sesi = sesiAdmin;
+    const sesi = await ambilDetailSesi(idSesiJarak);
+    expect(sesi!.jenjang).toBe("0_5");
+    expect(sesi!.jenjangHitung).toBe("5_10");
+  });
+
+  it("halaman MENAMPILKAN angka km-nya, bukan cuma nama jenjangnya", async () => {
+    ref.sesi = sesiAdmin;
+    const markup = await renderSesi(idSesiJarak);
+    expect(markup).toContain("6,0 km");
+  });
+
+  it("halaman MENGATAKAN ketika jenjang tersimpan berbeda dari yang terhitung", async () => {
+    // Diam di sini berarti dua angka berbeda hidup berdampingan tanpa satu
+    // pun orang tahu — dan yang menang diam-diam menentukan honor transport
+    // mitra. Sesi fixture ini tersimpan 0_5 sementara 6,0 km menyiratkan 5_10.
+    ref.sesi = sesiAdmin;
+    const markup = await renderSesi(idSesiJarak);
+    // `LABEL_JENJANG["5_10"]` berbunyi ">5–10 km"; React meng-escape ">"
+    // menjadi "&gt;" di markup, jadi yang dicari adalah ekornya.
+    expect(markup).toContain("5–10 km");
+    expect(markup).toMatch(/berbeda|tidak cocok|selisih/i);
+  });
+
+  it("sesi tanpa koordinat alamat memulangkan null, bukan nol", async () => {
+    // Nol adalah jarak yang SAH (mitra di alamat yang sama). Memakainya
+    // sebagai "tidak tahu" membuat sesi tanpa titik terbaca sebagai sesi
+    // paling dekat, dan itu jenjang termurah.
+    ref.sesi = sesiAdmin;
+    const sesi = await ambilDetailSesi(idSesiDariPengajuan);
+    expect(sesi!.jarakKm).toBeNull();
+    expect(sesi!.jarakDari).toBeNull();
+    expect(sesi!.jenjangHitung).toBeNull();
+  });
 });
 
 afterAll(async () => {

@@ -1053,6 +1053,51 @@ describe("halaman materi (/admin/materi)", () => {
     expect(panel).toContain("Simpan materi");
   });
 
+  // -------------------------------------------------------------------------
+  // BUTIR 6 — unggah satu langkah (umpan balik klien 21 Sep 2026)
+  // -------------------------------------------------------------------------
+  // "Cara masukkan ebook apa bisa dipersimpel, 1 klik aja gitu mas dari board
+  // admin, langsung upload?"
+  //
+  // Alur lamanya dua langkah yang terpisah layar: buat materi -> simpan ->
+  // buka "Kelola isi" -> unggah PDF -> aktifkan. Diukur di basis data produksi
+  // 22 Sep 2026, satu materi berhenti persis di langkah pertama — "Panduan
+  // Klien Garbha Couple Yoga", aktif=false dengan NOL halaman — dan klien
+  // membacanya sebagai kerusakan board, bukan sebagai pekerjaan yang belum
+  // selesai.
+  it("panel 'Materi baru' menerima BERKAS PDF-nya sekaligus", async () => {
+    const m = await markupDaftar({ ubah: "baru" });
+    const panel = m.match(/<aside[^>]*role="dialog"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    expect(panel, "panel geser tidak terender sama sekali").not.toBe("");
+    expect(panel).toContain('type="file"');
+    expect(panel).toContain('accept="application/pdf"');
+  });
+
+  it("panel 'Materi baru' TIDAK lagi menyuruh simpan dulu baru unggah", async () => {
+    const m = await markupDaftar({ ubah: "baru" });
+    const panel = m.match(/<aside[^>]*role="dialog"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    // Kalimat lama yang justru menjelaskan dua langkah itu kepada admin.
+    expect(panel).not.toMatch(/diunggah SESUDAH materi ini tersimpan/i);
+    expect(panel).not.toMatch(/simpan dulu/i);
+  });
+
+  it("formulir memakai jalur unggah BERSAMA, bukan salinannya sendiri", () => {
+    // Dua jalur unggah yang bisa menyimpang diam-diam bukan kosmetik: yang
+    // menyimpang adalah urutan yang menentukan apakah materi bisa berakhir
+    // SETENGAH terisi (halaman terunggah sebagian, baris tercatat sebagian).
+    expect(sumberForm).toContain("unggahPdfKeMateri");
+  });
+
+  it("daftar materi menyebut berapa klien DITUGASKAN dan berapa yang sudah MEMBUKA", async () => {
+    // Butir 6: "Cara tahu e book sdh diterima klien gimana?" — sebelum ini,
+    // panel tidak menjawabnya sama sekali. Dua angka, bukan persentase:
+    // "ditugaskan 4 · dibuka 0" adalah pekerjaan, "0%" menyembunyikan berapa
+    // orang yang terdampak.
+    const m = await markupDaftar();
+    expect(m).toMatch(/ditugaskan/i);
+    expect(m).toMatch(/dibuka/i);
+  });
+
   it("menyediakan jalan menambah materi, isinya diunggah lewat PengunggahPdf/PengunggahVideo", () => {
     expect(markup).toContain("Materi baru");
     expect(sumberForm).toContain("PengunggahPdf");

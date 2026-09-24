@@ -23,7 +23,7 @@ import {
 import { FormJadwalSesi, type PilihanKlien } from "./form-sesi";
 import { PanelSesi } from "./panel-sesi";
 import { LABEL_WAKTU, LABEL_STATUS_SESI, KELAS_PILL_SESI } from "./status";
-import { LABEL_JENJANG } from "@/lib/transport/jarak";
+import { LABEL_JENJANG, formatJarakKm } from "@/lib/transport/jarak";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 import {
   STATUS_SESI,
@@ -461,7 +461,26 @@ export default async function SesiPage({
                         </span>
                       </Td>
                       <Td>{s.namaMitra}</Td>
-                      <Td>{s.jenjang ? LABEL_JENJANG[s.jenjang] : "—"}</Td>
+                      {/* Jenjang DAN jaraknya. Kolom yang hanya berisi nama
+                          jenjang mengulang nilai yang sama ke bawah, dan
+                          pengulangan itu tidak bisa dibedakan dari nilai
+                          bawaan yang tidak pernah dihitung — persis salah baca
+                          yang dilaporkan klien (butir 2). Tanda ‹!› muncul
+                          ketika jarak menyiratkan jenjang LAIN dari yang
+                          tersimpan; detailnya ada di halaman sesinya. */}
+                      <Td>
+                        {s.jenjang ? LABEL_JENJANG[s.jenjang] : "—"}
+                        {s.jarakKm !== null && (
+                          <span className="block text-[11px] text-panel-muted">
+                            {formatJarakKm(s.jarakKm)}
+                            {s.jenjangHitung !== null && s.jenjangHitung !== s.jenjang && (
+                              <b className="ml-1 text-amber-700" title="Jarak menyiratkan jenjang lain">
+                                ‹!›
+                              </b>
+                            )}
+                          </span>
+                        )}
+                      </Td>
                       <Td>
                         <span
                           className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${KELAS_PILL_SESI[s.status]}`}

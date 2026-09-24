@@ -376,7 +376,7 @@ export async function ambilTandaBayar(): Promise<TandaBayar[]> {
 
   return (data ?? []).map((r) => ({
     partnerId: r.partner_id,
-    senin: r.week_start,
+    awal: r.week_start,
     dibayarPada: r.dibayar_pada,
   }));
 }
@@ -488,7 +488,7 @@ export async function ambilRekap(): Promise<RekapPekan[]> {
 }
 
 export type RingkasanPekan = {
-  senin: string;
+  awal: string;
   rentang: string;
   jumlahSesi: number;
   jumlahMitra: number;
@@ -521,14 +521,14 @@ export type RingkasanPekan = {
  * pemeriksaan silang yang membuktikan kedua jalur itu sepakat.
  */
 export async function ringkasanPekanIni(hariIni: string): Promise<RingkasanPekan> {
-  const senin = awalPekan(hariIni);
+  const awal = awalPekan(hariIni);
   const rekap = await ambilRekap();
-  const pekan = rekap.find((p) => p.senin === senin);
+  const pekan = rekap.find((p) => p.awal === awal);
 
   if (!pekan) {
     return {
-      senin,
-      rentang: rentangPekan(senin),
+      awal,
+      rentang: rentangPekan(awal),
       jumlahSesi: 0,
       jumlahMitra: 0,
       totalHonor: 0,
@@ -539,7 +539,7 @@ export async function ringkasanPekanIni(hariIni: string): Promise<RingkasanPekan
   }
 
   return {
-    senin: pekan.senin,
+    awal: pekan.awal,
     rentang: pekan.rentang,
     jumlahSesi: pekan.jumlahSesi,
     jumlahMitra: pekan.perMitra.length,

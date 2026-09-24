@@ -160,7 +160,8 @@ export default async function MateriPage({
           <Tabel label="Daftar materi">
             <thead>
               <tr>
-                <Th>Judul</Th><Th>Tipe</Th><Th>Isi</Th><Th>Layanan</Th><Th>Status</Th>
+                <Th>Judul</Th><Th>Tipe</Th><Th>Isi</Th><Th>Layanan</Th>
+                <Th>Sampai ke klien</Th><Th>Status</Th>
               </tr>
             </thead>
             <tbody>
@@ -201,6 +202,24 @@ export default async function MateriPage({
                     {m.jumlahLayanan === 0 && (
                       <span className="mt-1 block">
                         <PillTanpaLayanan />
+                      </span>
+                    )}
+                  </Td>
+                  {/* Butir 6 umpan balik klien 21 Sep 2026: "Cara tahu e book
+                      sdh diterima klien gimana?" DUA angka, bukan satu
+                      persentase — "ditugaskan 4 · dibuka 0" adalah PEKERJAAN
+                      (empat orang menunggu sesuatu yang belum mereka sentuh),
+                      sementara "0%" menyembunyikan berapa orang terdampak.
+                      Keduanya nol pun berarti hal berbeda: tanpa penugasan
+                      berarti belum dibagikan, dengan penugasan tetapi tanpa
+                      buka berarti belum sampai. */}
+                  <Td>
+                    <span className="font-mono text-[12.5px]">
+                      {m.jumlahDitugaskan} ditugaskan · {m.jumlahDibuka} dibuka
+                    </span>
+                    {m.jumlahDitugaskan > 0 && m.jumlahDibuka === 0 && (
+                      <span className="mt-1 block text-[11px] font-bold text-clay">
+                        Belum dibuka siapa pun
                       </span>
                     )}
                   </Td>

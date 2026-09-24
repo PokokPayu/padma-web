@@ -1259,3 +1259,70 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     expect(baca("src/app/admin/page.tsx")).toContain('href="/admin/skrining"');
   });
 });
+
+// ===========================================================================
+// JARAK DI KOLOM JENJANG (butir 2, umpan balik klien 21 Sep 2026)
+// ===========================================================================
+describe("daftar sesi menampilkan jarak, bukan hanya nama jenjang", () => {
+  // Mitra MILIK describe ini, bukan mitra seed. Koordinat mitra seed tidak
+  // bisa dijadikan sandaran: berkas ini sendiri mengosongkan `lat/lon` MITRA
+  // di afterEach blok sebelahnya, dan berkas uji lain melakukan hal serupa
+  // pada mitra lain — sementara vitest menjalankan berkas secara paralel.
+  const MITRA_JARAK = "33333333-3333-3333-3333-3333333333bb";
+  const LAT_MITRA = -7.96662;
+  const LON_MITRA = 112.632632;
+  let idJarak = "";
+
+  beforeAll(async () => {
+    await admin.from("partners").upsert({
+      id: MITRA_JARAK,
+      nama: "PAD-UJI Bidan Jarak Daftar",
+      no_hp: "0811-0000-93bb",
+      lat: LAT_MITRA,
+      lon: LON_MITRA,
+      aktif: true,
+    });
+  });
+
+  afterAll(async () => {
+    // Sesi DULU: FK `sessions.partner_id` menahan penghapusan mitranya.
+    if (idJarak) await admin.from("sessions").delete().eq("id", idJarak);
+    await admin.from("partners").delete().eq("id", MITRA_JARAK);
+  });
+
+  it("kolom jenjang membawa angka km-nya", async () => {
+    // Keluhan klien berbunyi "jarak mitra - klien masih 1-5 km semua". Diukur
+    // di produksi, jaraknya memang segitu — seluruh mitra berada dalam radius
+    // 7 km satu sama lain di Malang kota. Yang membuatnya terbaca sebagai
+    // kemacetan adalah kolom jenjang yang mengulang nilai sama ke bawah tanpa
+    // satu angka pun. Tes ini mengunci angkanya tetap ada.
+    const { data, error } = await admin
+      .from("sessions")
+      .insert({
+        client_id: KLIEN,
+        service_id: SVC_BARU,
+        variant_id: await varianBaku(admin, SVC_BARU),
+        partner_id: MITRA_JARAK,
+        tanggal: TGL,
+        status: "terjadwal",
+        catatan: "",
+        rekomendasi: "",
+        jam_mulai: "11:00",
+        // 0,05 derajat lintang ≈ 5,5 km ke mana pun di Bumi — melewati batas
+        // 5 km, jadi jenjang TERHITUNG berbeda dari yang TERSIMPAN.
+        alamat_lat: LAT_MITRA + 0.05,
+        alamat_lon: LON_MITRA,
+        jenjang: "0_5",
+        jenjang_sumber: "otomatis",
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (error) throw error;
+    idJarak = data!.id;
+
+    const markup = renderToStaticMarkup(
+      await SesiPage({ searchParams: Promise.resolve({ tab: "sesi" }) }),
+    );
+    expect(markup).toMatch(/5,[0-9] km/);
+  });
+});

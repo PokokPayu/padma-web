@@ -80,7 +80,7 @@ export type TransportKhususRingkas = {
 
 export type TandaBayar = {
   partnerId: string;
-  senin: string;       // honor_marks.week_start
+  awal: string;       // honor_marks.week_start
   dibayarPada: string; // honor_marks.dibayar_pada (ISO)
 };
 
@@ -119,7 +119,7 @@ export type SesiTakBertarif = {
 };
 
 export type RekapPekan = {
-  senin: string;
+  awal: string;
   rentang: string;
   jumlahSesi: number;
   perMitra: BarisMitra[];
@@ -168,12 +168,12 @@ export function tarifPadaTanggal(
 }
 
 type Ember = {
-  senin: string;
+  awal: string;
   sesi: SesiRekap[];
 };
 
 /**
- * Rekap honor per pekan Senin–Minggu (kalender Jakarta), pekan terbaru di atas.
+ * Rekap honor per pekan SABTU–JUMAT (kalender Jakarta), pekan terbaru di atas.
  * Fungsi MURNI: masukan tidak dimutasi, jam sistem tidak dibaca.
  */
 export function hitungRekap(input: {
@@ -207,17 +207,17 @@ export function hitungRekap(input: {
     if (s.status !== "selesai") continue;
     // awalPekan melempar untuk tanggal tak sah — sengaja: satu NaN yang lolos
     // akan mengelompokkan honor ke bucket hantu yang tidak pernah muncul di UI.
-    const senin = awalPekan(s.tanggal);
-    const e = ember.get(senin) ?? { senin, sesi: [] };
+    const awal = awalPekan(s.tanggal);
+    const e = ember.get(awal) ?? { awal, sesi: [] };
     e.sesi.push(s);
-    ember.set(senin, e);
+    ember.set(awal, e);
   }
 
-  // Tanda bayar dipetakan "partnerId|senin". Tanda yang seninnya tidak cocok
-  // dengan bucket mana pun (mis. week_start bukan-Senin dari data lama) tidak
+  // Tanda bayar dipetakan "partnerId|awal". Tanda yang sabtunya tidak cocok
+  // dengan bucket mana pun (mis. week_start bukan-Sabtu dari data lama) tidak
   // akan pernah terbaca — itu memang perilaku yang benar.
   const petaTanda = new Map<string, TandaBayar>();
-  for (const t of input.tanda) petaTanda.set(`${t.partnerId}|${t.senin}`, t);
+  for (const t of input.tanda) petaTanda.set(`${t.partnerId}|${t.awal}`, t);
 
   const hasil: RekapPekan[] = [];
 
@@ -402,7 +402,7 @@ export function hitungRekap(input: {
     }
 
     for (const baris of perMitra.values()) {
-      const tanda = petaTanda.get(`${baris.partnerId}|${e.senin}`);
+      const tanda = petaTanda.get(`${baris.partnerId}|${e.awal}`);
       if (!tanda) continue;
       baris.sudahDibayar = true;
       baris.dibayarPada = tanda.dibayarPada;
@@ -419,8 +419,8 @@ export function hitungRekap(input: {
     }
 
     hasil.push({
-      senin: e.senin,
-      rentang: rentangPekan(e.senin),
+      awal: e.awal,
+      rentang: rentangPekan(e.awal),
       jumlahSesi: e.sesi.length,
       // Urutan menurut nama supaya rekap tidak berubah-ubah antar render;
       // localeCompare("id") agar abjad Indonesia benar.
@@ -434,10 +434,10 @@ export function hitungRekap(input: {
     });
   }
 
-  // Pekan terbaru di atas. `senin` YYYY-MM-DD, jadi urutan leksikografis =
+  // Pekan terbaru di atas. `awal` YYYY-MM-DD, jadi urutan leksikografis =
   // kronologis; komparator mengembalikan 0 untuk nilai setara agar tidak
   // melanggar kontrak Array#sort.
-  return hasil.sort((a, b) => (a.senin > b.senin ? -1 : a.senin < b.senin ? 1 : 0));
+  return hasil.sort((a, b) => (a.awal > b.awal ? -1 : a.awal < b.awal ? 1 : 0));
 }
 
 /**
@@ -459,16 +459,16 @@ export function deretPekanTerakhir(
   hariIni: string,
   pekan = 8,
 ): RekapPekan[] {
-  const seninKini = awalPekan(hariIni);
-  const adaNya = new Map(rekap.map((p) => [p.senin, p]));
+  const awalKini = awalPekan(hariIni);
+  const adaNya = new Map(rekap.map((p) => [p.awal, p]));
 
   return Array.from({ length: pekan }, (_, i) => {
-    const senin = geserHari(seninKini, -7 * (pekan - 1 - i));
-    const punya = adaNya.get(senin);
+    const awal = geserHari(awalKini, -7 * (pekan - 1 - i));
+    const punya = adaNya.get(awal);
     if (punya) return punya;
     return {
-      senin,
-      rentang: rentangPekan(senin),
+      awal,
+      rentang: rentangPekan(awal),
       jumlahSesi: 0,
       perMitra: [],
       totalHonor: 0,
