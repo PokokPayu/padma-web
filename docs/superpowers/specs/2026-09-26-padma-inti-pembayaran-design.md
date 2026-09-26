@@ -68,7 +68,8 @@ tidak ada hubungannya dengan pembayaran.
 | Nominal yang diterima Midtrans | **Disimpan** (`notifikasi_pesanan.nominal_diterima`), ditampilkan bersebelahan dengan yang ditagih |
 | Lubang tulis `digital_entitlements` | **Ditambal di dalam P1** |
 | Tenggat pesanan | **24 jam**, satu konstanta untuk kolom kita DAN `expiry` Snap |
-| Penjadwal | **P1 melahirkan `web/vercel.json`**, berisi HANYA `/api/cron/pesanan`, kadens `*/10 * * * *` |
+| Penjadwal | **P1 melahirkan `web/vercel.json`**, berisi HANYA `/api/cron/pesanan`, kadens `0 3 * * *` (harian — batas paket Hobby) |
+| Jaring pengaman utama | **Pemeriksaan saat klien membuka halaman**, bukan cron; cron harian hanya penyapu sisa |
 | Cron `/api/cron/tenggat` | **Tidak dijadwalkan di P1** — dan sekarang dijaga uji, bukan prosa |
 | Pencabutan akses | **Tombolnya keluar dari cakupan P1**; perilaku pembelian ulang dispesifikasikan (lihat di bawah) |
 
@@ -420,10 +421,10 @@ disebutkan supaya tidak ditebak: entitlement dulu (punya → tampilkan produknya
 baru fungsi ini (→ "Pembayaran Anda sedang diproses"), baru tombol beli.
 
 `ditahan` ada supaya "uang masuk tapi jumlahnya tidak cocok" punya **keadaan
-akhir**. Tanpanya pesanan itu `menunggu_bayar` selamanya, dipanggil cron setiap
-sepuluh menit (kadens di tabel keputusan), dan melahirkan satu baris jejak per
-jalan — kejadian yang seharusnya paling langka menjadi kebisingan paling berisik
-yang tak pernah didengar.
+akhir**. Tanpanya pesanan itu `menunggu_bayar` selamanya, diperiksa ulang setiap
+kali kliennya membuka halaman DAN disapu cron harian, dan melahirkan satu baris
+jejak per jalan — kejadian yang seharusnya paling langka menjadi kebisingan
+paling berisik yang tak pernah didengar.
 
 `kedaluwarsa` lahir **hanya dari jawaban Midtrans**: notifikasi `expire`/`cancel`,
 jawaban Status API `expire`/`cancel`, atau 404 "Transaction doesn't exist"
@@ -637,6 +638,25 @@ benar tanpa ada yang perlu disapu. Ditambah `punya_pesanan_menunggu(product_id)`
 supaya orang yang baru mentransfer lewat VA melihat "Pembayaran Anda sedang
 diproses" alih-alih tombol beli, dan tidak membayar dua kali.
 
+**Lapis 1b — pemeriksaan saat halaman dibuka. Inilah jaring pengaman utama P1,
+bukan cron.** Ketika klien membuka `/produk/[slug]` atau `/passport/produk` dan
+`punya_pesanan_menunggu` menemukan pesanannya menggantung **lebih dari lima
+menit**, server menanyakan Status API Midtrans saat itu juga dan menjalankan
+jawabannya lewat jalur yang sama dengan webhook.
+
+Alasannya bukan kehematan, melainkan ketepatan sasaran: orang yang paling butuh
+pemeriksaan itu — yang baru saja membayar lalu kembali mencari produknya —
+adalah orang yang sedang membuka halaman itu. Ia memicu penyembuhannya sendiri,
+dalam hitungan detik, tanpa penjadwal apa pun. Cron harian di Lapis 3 tinggal
+menyapu sisa: pesanan milik orang yang tidak pernah kembali.
+
+Pagarnya: pemeriksaan ini **tidak pernah dipicu lebih sering dari sekali per
+pesanan per lima menit** (`diperiksa_pada`), supaya satu halaman yang di-refresh
+berkali-kali tidak berubah jadi banjir permintaan ke Midtrans. Dan ia
+**menyembunyikan kegagalannya**: kalau Midtrans tidak bisa dihubungi, halaman
+tetap terender dengan keadaan yang ia tahu — pemeriksaan yang gagal tidak boleh
+membuat orang melihat layar galat saat yang ia cari hanyalah produknya.
+
 **Lapis 2 — dipicu manusia.** `/admin/pesanan`, membaca `pesanan_item_staf` dan
 `notifikasi_pesanan` dengan sesi pemanggil (nol service role), dengan **dua blok,
 bukan satu saringan**:
@@ -694,8 +714,14 @@ yang sudah BERUANG boleh diparameterkan, karena yang diputuskan bukan "apa kata
 Midtrans" melainkan "apa yang kita lakukan terhadap uang yang sudah masuk", dan
 ia dicatat dengan nama pemutusnya.
 
-**Lapis 3 — cron.** `/api/cron/pesanan`, menanyakan Status API untuk pesanan
-terbuka yang paling lama tidak diperiksa.
+**Lapis 3 — cron harian, penyapu sisa.** `/api/cron/pesanan`, menanyakan Status
+API untuk pesanan terbuka yang paling lama tidak diperiksa.
+
+Kadensnya **sekali sehari**, dan itu bukan pilihan: paket Vercel Hobby hanya
+mengizinkan cron harian, dan ekspresi yang lebih sering **menggagalkan deploy**
+(lihat Risiko). Karena itu lapis ini bukan jaring utama — Lapis 1b yang jadi
+jaring utama, dan lapis ini hanya menangkap pesanan milik orang yang tidak
+pernah membuka halamannya lagi.
 
 - **Wajib mengekspor GET**: Vercel Cron memanggil GET, sementara rute preseden
   (`src/app/api/cron/tenggat/route.ts:22`) hanya mengekspor POST — tanpa ini
@@ -772,7 +798,7 @@ Suntingan sadar, dalam commit yang sama dengan migrasinya:
    `/api/cron/pesanan`, `/admin/pesanan`). `tests/inventaris-rute.test.ts`
    memeriksa dua arah.
 5. **`web/vercel.json` — berkas BARU, P1 yang melahirkannya.** Blok `crons`
-   berisi **hanya** `/api/cron/pesanan`, kadens `*/10 * * * *`.
+   berisi **hanya** `/api/cron/pesanan`, kadens **`0 3 * * *`** — sekali sehari.
 
    **Alamatnya `web/`, bukan akar repo**, dan itu bukan selera: tidak ada
    `package.json` maupun `next.config.*` di akar (diperiksa — keduanya hanya di
@@ -963,10 +989,15 @@ dasar larangan ini.)
   September. P1 menambah enam migrasi lagi di atasnya. Urutan penerapan ke
   produksi harus diperiksa sebagai pekerjaan tersendiri, bukan `db push`
   membabi buta: produksi berisi data klien nyata.
-- **Kadens cron menurut paket Vercel belum diperiksa.** `*/10 * * * *` adalah
-  keputusan desain; batas frekuensi yang berlaku untuk akun yang dipakai harus
-  dikonfirmasi saat penjadwalan dihidupkan. Bila kadensnya harus lebih jarang,
-  yang berubah hanya angka — Lapis 1 dan 2 tidak bergantung padanya.
+- **Kadens cron dibatasi paket Vercel, dan batasnya sudah diperiksa** ke
+  dokumentasi Vercel (`vercel.com/docs/cron-jobs/usage-and-pricing`, per 15 Juli
+  2026): paket **Hobby hanya boleh sekali sehari**, dan ekspresi yang lebih
+  sering **menggagalkan deploy** dengan pesan "Hobby accounts are limited to
+  daily cron jobs". Ketepatannya pun per-jam: `0 3 * * *` bisa berjalan kapan
+  saja antara 03:00 dan 03:59. Itulah sebabnya jaring pengaman utama P1 bukan
+  cron melainkan pemeriksaan-saat-dibuka (Lapis 1b); cron harian hanya menyapu
+  pesanan milik orang yang tidak pernah kembali. Bila akun kelak naik ke Pro,
+  yang berubah hanya satu angka di `web/vercel.json`.
 - **Cron `/api/cron/tenggat` masih terlantar.** P1 tidak menjadwalkannya, dan
   kini `tests/pesanan-vercel-cron.test.ts` yang menahannya. Menghidupkannya akan
   membatalkan sekaligus seluruh pengajuan lewat tenggat yang menumpuk sejak
