@@ -3,7 +3,7 @@
 Tanggal: 26 September 2026
 Status: **disetujui pemilik repo 26 September 2026**, termasuk lima koreksi
 sesudah tinjauan tiga kritikus (pencabutan akses, kemampuan staf yang dicabut,
-`vercel.json`, nominal sampai ke layar, nominal yang diterima disimpan).
+penjadwal lewat GitHub Actions, nominal sampai ke layar, nominal yang diterima disimpan).
 
 ## Masalah
 
@@ -68,8 +68,8 @@ tidak ada hubungannya dengan pembayaran.
 | Nominal yang diterima Midtrans | **Disimpan** (`notifikasi_pesanan.nominal_diterima`), ditampilkan bersebelahan dengan yang ditagih |
 | Lubang tulis `digital_entitlements` | **Ditambal di dalam P1** |
 | Tenggat pesanan | **24 jam**, satu konstanta untuk kolom kita DAN `expiry` Snap |
-| Penjadwal | **P1 melahirkan `web/vercel.json`**, berisi HANYA `/api/cron/pesanan`, kadens `0 3 * * *` (harian — batas paket Hobby) |
-| Jaring pengaman utama | **Pemeriksaan saat klien membuka halaman**, bukan cron; cron harian hanya penyapu sisa |
+| Penjadwal | **GitHub Actions**, bukan Vercel Cron: `.github/workflows/rekonsiliasi-pesanan.yml`, tiap 15 menit |
+| Jaring pengaman utama | **Pemeriksaan saat klien membuka halaman**, bukan penjadwal; jadwal 15 menit hanya penyapu sisa |
 | Cron `/api/cron/tenggat` | **Tidak dijadwalkan di P1** — dan sekarang dijaga uji, bukan prosa |
 | Pencabutan akses | **Tombolnya keluar dari cakupan P1**; perilaku pembelian ulang dispesifikasikan (lihat di bawah) |
 
@@ -422,7 +422,7 @@ baru fungsi ini (→ "Pembayaran Anda sedang diproses"), baru tombol beli.
 
 `ditahan` ada supaya "uang masuk tapi jumlahnya tidak cocok" punya **keadaan
 akhir**. Tanpanya pesanan itu `menunggu_bayar` selamanya, diperiksa ulang setiap
-kali kliennya membuka halaman DAN disapu cron harian, dan melahirkan satu baris
+kali kliennya membuka halaman DAN disapu penjadwal 15 menitan, dan melahirkan satu baris
 jejak per jalan — kejadian yang seharusnya paling langka menjadi kebisingan
 paling berisik yang tak pernah didengar.
 
@@ -714,27 +714,34 @@ yang sudah BERUANG boleh diparameterkan, karena yang diputuskan bukan "apa kata
 Midtrans" melainkan "apa yang kita lakukan terhadap uang yang sudah masuk", dan
 ia dicatat dengan nama pemutusnya.
 
-**Lapis 3 — cron harian, penyapu sisa.** `/api/cron/pesanan`, menanyakan Status
-API untuk pesanan terbuka yang paling lama tidak diperiksa.
+**Lapis 3 — penjadwal, penyapu sisa.** `/api/cron/pesanan`, menanyakan Status
+API untuk pesanan terbuka yang paling lama tidak diperiksa. Kadensnya **tiap 15
+menit**.
 
-Kadensnya **sekali sehari**, dan itu bukan pilihan: paket Vercel Hobby hanya
-mengizinkan cron harian, dan ekspresi yang lebih sering **menggagalkan deploy**
-(lihat Risiko). Karena itu lapis ini bukan jaring utama — Lapis 1b yang jadi
-jaring utama, dan lapis ini hanya menangkap pesanan milik orang yang tidak
-pernah membuka halamannya lagi.
+Ia tetap **bukan** jaring utama, dan itu disengaja walau kadensnya sudah rapat:
+tidak satu pun penjadwal menjamin ketepatan waktu (lihat Risiko). Lapis 1b yang
+jadi jaring utama karena ia dipicu oleh orang yang paling butuh — yang baru
+membayar lalu kembali mencari produknya. Lapis 3 hanya menangkap pesanan milik
+orang yang tidak pernah membuka halamannya lagi.
 
-- **Wajib mengekspor GET**: Vercel Cron memanggil GET, sementara rute preseden
-  (`src/app/api/cron/tenggat/route.ts:22`) hanya mengekspor POST — tanpa ini
-  lapis 3 mati dengan 405 sebelum satu baris kode kita berjalan.
-- **Tapi GET saja tidak cukup, dan ini yang hampir terlewat**: tidak ada
-  `vercel.json` di repo ini, baik di akar maupun di `web/`. Tidak ada satu pun
-  blok `crons` di mana pun. `/api/cron/tenggat` "terlantar" bukan karena
-  jadwalnya dimatikan — tidak pernah ada berkas jadwal. Jadi **P1 melahirkan
-  `vercel.json`** (lihat "Pagar repo yang tersentuh").
-- **Dijaga `CRON_SECRET`**: GET memeriksa `authorization: Bearer ${CRON_SECRET}`
+- **Dipanggil GitHub Actions, bukan Vercel Cron**, dan itu keputusan yang
+  diperiksa ke dokumentasi keduanya, bukan selera. Vercel paket Hobby hanya
+  mengizinkan cron **sekali sehari** dan ekspresi yang lebih sering
+  menggagalkan deploy. GitHub Actions mengizinkan **tiap 5 menit**, dan untuk
+  repo publik — `PokokPayu/padma-web` memang publik, diperiksa lewat API GitHub
+  (`"private": false`) — runner standarnya **gratis tanpa batas menit**.
+  Repo ini juga sudah punya polanya: `.github/workflows/backup-db.yml`.
+- **Karena itu rutenya POST**, sama seperti `/api/cron/tenggat`
+  (`src/app/api/cron/tenggat/route.ts:22`). Keharusan mengekspor GET lahir dari
+  Vercel Cron yang memanggil GET; dengan `curl` dari Actions, kita yang memilih
+  verbanya. Tidak ada `vercel.json` yang perlu lahir, dan tidak ada jebakan
+  "salah taruh di akar repo lalu gagal dalam diam".
+- **Dijaga `CRON_SECRET`**: rute memeriksa `authorization: Bearer ${CRON_SECRET}`
   dan memulangkan 401 tanpanya, fail-closed persis seperti rute tenggat
-  (`src/app/api/cron/tenggat/route.ts:23-28`). Tanpa itu, rute GET publik yang
-  menembak Status API Midtrans bisa dipanggil siapa pun berulang kali.
+  (`src/app/api/cron/tenggat/route.ts:23-28`). Tanpa itu, rute publik yang
+  menembak Status API Midtrans bisa dipanggil siapa pun berulang kali. Nilainya
+  hidup sebagai **GitHub Secret**, bukan di repo — dan repo ini publik, jadi itu
+  bukan kehati-hatian umum melainkan syarat.
   `CRON_SECRET` dibaca kode hari ini tetapi **belum ada di `.env.example`** —
   contoh nyata yang menjadi alasan `tests/env-terdokumentasi.test.ts` lahir.
 
@@ -797,16 +804,18 @@ Suntingan sadar, dalam commit yang sama dengan migrasinya:
    `/api/pesanan/[id]/tutup-tinjauan`, `/api/pembayaran/midtrans`,
    `/api/cron/pesanan`, `/admin/pesanan`). `tests/inventaris-rute.test.ts`
    memeriksa dua arah.
-5. **`web/vercel.json` — berkas BARU, P1 yang melahirkannya.** Blok `crons`
-   berisi **hanya** `/api/cron/pesanan`, kadens **`0 3 * * *`** — sekali sehari.
+5. **`.github/workflows/rekonsiliasi-pesanan.yml` — berkas BARU.** Mencontoh
+   `backup-db.yml` yang sudah ada: `workflow_dispatch` supaya bisa dipanggil
+   tangan, grup `concurrency` supaya dua jalan tidak tumpang tindih,
+   `permissions: contents: read` saja, dan `schedule` tiap 15 menit. Isinya satu
+   `curl` ber-`Bearer ${{ secrets.CRON_SECRET }}` ke `/api/cron/pesanan`
+   produksi, dengan `--fail` supaya jawaban non-2xx memerahkan job.
 
-   **Alamatnya `web/`, bukan akar repo**, dan itu bukan selera: tidak ada
-   `package.json` maupun `next.config.*` di akar (diperiksa — keduanya hanya di
-   `web/`), jadi root direktori proyek Vercel adalah `web/`, dan `vercel.json`
-   di akar repo tidak akan pernah dibaca. Bentuk kegagalannya senyap dua kali —
-   berkasnya ada, ujinya hijau, dan cron-nya tidak pernah berjalan. `tests/pesanan-vercel-cron.test.ts` karena itu
-   membaca `web/vercel.json` dengan path harfiah dan merah bila berkas itu tidak
-   ada di sana.
+   Seperti `backup-db.yml`, **blok `schedule`-nya lahir DIKOMENTARI** dan
+   dihidupkan sebagai langkah terakhir go-live — sesudah aplikasi ter-deploy dan
+   `CRON_SECRET` terpasang. Alasan yang sama dengan yang sudah tertulis di
+   berkas itu: jadwal yang aktif sebelum sasarannya ada akan gagal setiap kali
+   jalan, dan alarm yang berbunyi terus adalah alarm yang berhenti dibaca.
 6. **`tests/grant-anon.test.ts`** — tambah kelima tabel baru dan view staf.
 7. **`.env.example`** — keempat env di seksi "Env".
 
@@ -878,12 +887,14 @@ menuntut kutip penutup dan `"menunggu_bayar"` tidak cocok.
   rupiah", **atas keputusan pemilik repo**, beserta utang P3 yang tercatat di
   "Catatan: nominal di layar staf". Tanpa uji ini keputusan itu gugur lewat
   ketiadaan, karena konvensinya ditegakkan per modul.
-- `tests/pesanan-vercel-cron.test.ts` — `web/vercel.json` ada, `crons`-nya memuat
-  `/api/cron/pesanan`, dan **`/api/cron/tenggat` ABSEN dari berkas itu**. Selama
-  tidak ada berkas jadwal, "tenggat tidak dijadwalkan" adalah non-tindakan yang
-  gratis; begitu berkasnya lahir, ia berubah jadi baris yang harus sengaja TIDAK
-  diketik — dan keputusan yang bergantung pada seseorang mengingat untuk tidak
-  mengetik sesuatu bukan keputusan yang terjaga. Uji ini yang menjaganya.
+- `tests/pesanan-jadwal-actions.test.ts` — `.github/workflows/rekonsiliasi-pesanan.yml`
+  ada, menyebut `/api/cron/pesanan`, memakai `secrets.CRON_SECRET`, dan
+  **tidak menyebut `/api/cron/tenggat` sama sekali**. Selama tidak ada berkas
+  jadwal, "tenggat tidak dijadwalkan" adalah non-tindakan yang gratis; begitu
+  berkasnya lahir, ia berubah jadi baris yang harus sengaja TIDAK diketik — dan
+  keputusan yang bergantung pada seseorang mengingat untuk tidak mengetik
+  sesuatu bukan keputusan yang terjaga. Uji ini yang menjaganya. Uji yang sama
+  melarang rahasia ditulis harfiah di berkas workflow: repo ini publik.
 - `tests/pesanan-status-db.test.ts` — melingkari `pg_enum`, bukan daftar TS.
 - `tests/pesanan-nota-beku.test.ts` — UPDATE `order_items` sebagai service role
   harus 42501, dan DELETE cascade dari `orders` harus berhasil.
@@ -993,13 +1004,16 @@ dasar larangan ini.)
   dokumentasi Vercel (`vercel.com/docs/cron-jobs/usage-and-pricing`, per 15 Juli
   2026): paket **Hobby hanya boleh sekali sehari**, dan ekspresi yang lebih
   sering **menggagalkan deploy** dengan pesan "Hobby accounts are limited to
-  daily cron jobs". Ketepatannya pun per-jam: `0 3 * * *` bisa berjalan kapan
-  saja antara 03:00 dan 03:59. Itulah sebabnya jaring pengaman utama P1 bukan
-  cron melainkan pemeriksaan-saat-dibuka (Lapis 1b); cron harian hanya menyapu
-  pesanan milik orang yang tidak pernah kembali. Bila akun kelak naik ke Pro,
-  yang berubah hanya satu angka di `web/vercel.json`.
+  daily cron jobs". Karena itu penjadwalnya **bukan Vercel** melainkan GitHub
+  Actions (tiap 15 menit, gratis untuk repo publik).
+
+  Tapi Actions pun **tidak menjamin ketepatan waktu**: dokumentasinya menyatakan
+  jadwal bisa tertunda saat beban tinggi, dan "some queued jobs may be dropped"
+  — terutama di awal setiap jam. Jadi Lapis 3 tetap PENYAPU, bukan garansi, dan
+  jaring pengaman utama tetap pemeriksaan-saat-dibuka (Lapis 1b). Desain yang
+  menggantungkan uang orang pada ketepatan cron akan salah di penjadwal mana pun.
 - **Cron `/api/cron/tenggat` masih terlantar.** P1 tidak menjadwalkannya, dan
-  kini `tests/pesanan-vercel-cron.test.ts` yang menahannya. Menghidupkannya akan
+  kini `tests/pesanan-jadwal-actions.test.ts` yang menahannya. Menghidupkannya akan
   membatalkan sekaligus seluruh pengajuan lewat tenggat yang menumpuk sejak
   September — pembatalan massal ke klien nyata, di hari yang sama dengan go-live
   pembayaran. Sebelum diputuskan, hitung dulu berapa baris yang akan terkena;
