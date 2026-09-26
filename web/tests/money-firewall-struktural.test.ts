@@ -78,6 +78,22 @@ const TABEL_UANG = new Set([
   "transport_rates",
   "transport_khusus",
   "digital_product_prices",
+  // `order_items` (P1, migrasi `pesanan_tabel`) bergabung dan MEMBANTAH
+  // preseden C2 secara eksplisit. Doktrin "nominal diturunkan, tidak pernah
+  // disimpan" benar untuk TAGIHAN — pernyataan tentang apa yang HARUS dibayar,
+  // yang boleh dihitung ulang dari tarif menurut tanggal sesi — dan salah
+  // untuk PESANAN: pernyataan tentang apa yang SUDAH dibayar, yang tidak boleh
+  // dihitung ulang karena angka pembandingnya ada di tangan Midtrans dan ikut
+  // ditandatangani. Verifikasi jumlah mustahil tanpa angka beku.
+  //
+  // `orders` TIDAK ikut, dan itu bukan kelalaian: ia lahir NOL kolom nominal,
+  // dan uji "NOL kolom nominal" di tests/pesanan-nota-beku.test.ts yang
+  // menahannya tetap begitu. Totalnya dijumlahkan dari baris nota.
+  //
+  // `notifikasi_pesanan` menyusul di Tugas 3, BERSAMA kedua assertion-nya —
+  // tabelnya belum ada sekarang, jadi menuliskannya di sini membuat suite
+  // tugas ini berakhir merah.
+  "order_items",
 ]);
 
 /**
@@ -113,6 +129,16 @@ const KOLOM_UANG_VIEW_DIIZINKAN = new Map<string, Set<string>>([
   ["varian_harga_staf", new Set(["harga_klien", "harga_coret"])],
   ["harga_produk_publik", new Set(["harga", "harga_coret"])],
   ["produk_harga_staf", new Set(["harga", "harga_coret"])],
+  // `pesanan_item_staf` (P1, migrasi `pesanan_webhook_rpc`) — SATU kolom saja.
+  // Didaftarkan lebih dulu di sini, sebelum view-nya lahir, dan itu aman:
+  // entri ini adalah PENGECUALIAN, bukan assertion. Selama view-nya belum ada,
+  // ia tidak membebaskan apa pun; begitu ia lahir, uji ini tidak perlu
+  // disunting lagi oleh tugas yang sedang sibuk dengan jantung mesinnya.
+  //
+  // Ia adalah view yang DIBACA /admin/pesanan. Nominal di layar staf adalah
+  // keputusan pemilik repo, dan view bernominal tanpa pembaca berarti
+  // keputusan itu berhenti di basis data.
+  ["pesanan_item_staf", new Set(["harga_beku"])],
 ]);
 
 /**
@@ -182,6 +208,25 @@ beforeAll(async () => {
   }
 });
 
+/**
+ * Kolom bernuansa uang yang HIDUP di sebuah tabel, urut abjad.
+ *
+ * Kenapa ini perlu ada di samping `toContain` di bawah, dan bukan
+ * menggantikannya: `toContain` menjamin kolom yang SUDAH ada tetap di
+ * tempatnya, tapi tidak menahan kolom nominal BARU yang kelak ditambahkan ke
+ * tabel uang yang sama — ia akan lolos tanpa satu pun uji merah. Tabel uang
+ * yang boleh tumbuh diam-diam adalah tabel uang yang tidak dijaga.
+ *
+ * Polanya sama dengan yang sudah menjaga daftar kolom `harga_publik`.
+ */
+function kolomUangDi(tabel: string): string[] {
+  return semuaKolom
+    .filter((k) => k.table_name === tabel)
+    .map((k) => k.column_name)
+    .filter(bernuansaUang)
+    .sort();
+}
+
 describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () => {
   it("service_rates sudah tidak ada — tarif hidup di variant_rates", async () => {
     // `service_rates` dijatuhkan migration `bubarkan_service_rates` (Task 5):
@@ -224,6 +269,15 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
     // tertangkap uji ini — ia hanya menjaga variant_rates sebelumnya.
     expect(diTabelUang).toContain("transport_rates.tarif_klien");
     expect(diTabelUang).toContain("transport_rates.honor_mitra");
+    // P1: nota pesanan. Pemindahan diam-diam `harga_beku` keluar dari
+    // `order_items` mematikan verifikasi jumlah tanpa satu pun uji lain merah.
+    expect(diTabelUang).toContain("order_items.harga_beku");
+  });
+
+  it("tabel uang P1 berkolom nominal PERSIS satu — tidak boleh tumbuh diam-diam", () => {
+    // Tugas 3 menambahkan barisnya sendiri untuk `notifikasi_pesanan` di dalam
+    // `it` ini. Jangan menuliskannya sekarang: tabelnya belum ada.
+    expect(kolomUangDi("order_items")).toEqual(["harga_beku"]);
   });
 
   it("kolom STATUS bayar TIDAK dituduh sebagai nominal (bukan false positive)", () => {

@@ -24,6 +24,12 @@ describe("invarian struktural: tidak ada tabel tanpa RLS", () => {
     // API mana pun, termasuk admin. Penerbitannya lewat server action
     // service-role yang mengembalikan token mentah sekali saja.
     "client_invites",
+    // Baris nota pesanan (P1). NOL grant dan NOL policy, dua-duanya sengaja:
+    // yang dibaca layar staf adalah view `pesanan_item_staf`, yang batas
+    // kolom DAN batas perannya ada di dalam view. `orders`, `jejak_pesanan`,
+    // dan `notifikasi_pesanan` TIDAK masuk daftar ini — ketiganya punya
+    // policy baca.
+    "order_items",
     // Token klaim skrining (spec C1 J3) disimpan sebagai SHA-256 dan sengaja
     // tanpa policy sama sekali — lihat komentar tabelnya di migration
     // 20260910100000_skrining_syarat_pemesanan.sql. Hanya service role di
