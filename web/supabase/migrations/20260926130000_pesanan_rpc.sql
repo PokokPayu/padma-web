@@ -148,11 +148,22 @@ begin
   -- `sebab_tinjauan` di bawah. Refund atas pesanan `lunas` MEMANG diblokir —
   -- tapi itu tidak mengubah apa pun dalam praktik: webhook juga tidak
   -- mencabut akses pada refund, jadi entitlement-nya masih hidup dan pagar
-  -- entitlement di atas sudah lebih dulu menyala untuk kasus itu. Satu-
-  -- satunya keadaan di mana `lunas` di sini benar-benar menentukan adalah
-  -- saat entitlement-nya TIDAK ada (`akses_tertahan` atau pencabutan staf) —
-  -- dan di situ uang sudah diambil, akses belum diberikan, jawabannya
-  -- memanggil manusia, bukan menjual lagi.
+  -- entitlement di atas sudah lebih dulu menyala untuk kasus itu. `lunas` di
+  -- sini baru benar-benar menentukan saat entitlement-nya TIDAK ada —
+  -- `akses_tertahan` atau pencabutan staf — dan di situ uang sudah diambil
+  -- sementara akses belum diberikan, jadi jawabannya memanggil manusia, bukan
+  -- menjual lagi.
+  --
+  -- SATU pengecualian yang diketahui, dan ditulis di sini supaya tidak
+  -- ditemukan ulang: refund yang disusul pencabutan entitlement oleh operator
+  -- meninggalkan `lunas` tanpa akses PADAHAL uangnya sudah pulang, dan pagar
+  -- ini menolaknya. `lunas` terminal di `perpindahan_pesanan_sah` dan
+  -- `tutup_tinjauan` hanya memadamkan penandanya, jadi tidak ada jalan keluar
+  -- lewat aplikasi. Dibiarkan: satu-satunya cara masuk ke keadaan itu adalah
+  -- SQL langsung (nihil penulis `dicabut_pada` di `src/`), dan itu juga jalan
+  -- keluarnya. Yang TIDAK boleh dilakukan adalah melonggarkan pagar ini demi
+  -- kasus yang hanya bisa dibuat tangan — harganya tagihan ganda yang bisa
+  -- dibuat siapa saja.
   if exists (
     select 1
       from public.orders o

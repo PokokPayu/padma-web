@@ -58,8 +58,36 @@ const POLA_NOMINAL_TEKS = /(\b\d{1,3}(?:\.\d{3})+\b)|(rp\.?\s*\d)/i;
  * pencabutan (`format('... dicabut pada %s ...', v_dicabut)`), nomor
  * percobaan. Yang membedakan baris SAH dari baris BOCOR karena itu bukan
  * "ada angka atau tidak", melainkan KEJADIAN yang menulisnya.
+ *
+ * Tapi daftar putih kejadian saja TIDAK cukup, dan itu terbukti empiris:
+ * `lunas` bukan anggota daftar putih, jadi ia dipindai — padahal
+ * keterangannya sah berbunyi `midtrans settlement, transaksi <uuid>`, dan
+ * `akses_tertahan` berbunyi `... dicabut pada 2026-09-27 ...` yang tahunnya
+ * saja sudah empat digit. `\d{4,}` telanjang menuduh keduanya. Uji yang
+ * memerah dengan diagnosis "nominal bocor" pada baris yang tidak memuat
+ * nominal lebih buruk daripada uji yang tidak ada: ia mengirim orang
+ * memburu kebocoran yang tak pernah terjadi. Lebih buruk lagi, ia hijau
+ * hari ini HANYA karena tabelnya kebetulan kosong saat dipindai — satu
+ * baris sisa dari sesi paralel di Supabase lokal yang dipakai bersama
+ * sudah cukup menyalakannya.
+ *
+ * Lookaround-nya karena itu menuntut deretan digit yang BERDIRI SENDIRI:
+ * tidak didahului huruf, titik, titik dua, atau tanda hubung, dan tidak
+ * disusul huruf atau tanda hubung. Titik di depan membuang mikrodetik
+ * (`11:20:33.123456+00` — `123456` lolos tanpa itu); tanda hubung di kedua
+ * sisi membuang setiap segmen uuid dan setiap tanggal. `150000`,
+ * `ditagih 120000, diterima 90000`, dan `ditagih 150000.` di akhir kalimat
+ * tetap tertangkap.
+ *
+ * TITIK BUTA yang diketahui: nominal negatif (`-250000`) ikut terbuang,
+ * karena "digit yang didahului tanda hubung" adalah bentuk yang sama persis
+ * dengan segmen uuid — tidak ada cara leksikal membedakannya. Dipilih
+ * begitu dengan sadar: uuid ditulis mesin ini pada SETIAP settlement,
+ * nominal negatif belum pernah ditulis sama sekali, dan kebocoran nyata
+ * selalu datang berpasangan (`ditagih X, diterima -Y`) sehingga pasangannya
+ * yang positif tetap memerahkan barisnya.
  */
-const POLA_DIGIT_TELANJANG = /\d{4,}/;
+const POLA_DIGIT_TELANJANG = /(?<![\w.:-])\d{4,}(?![\w-])/;
 
 /**
  * Daftar putih `kejadian` yang BOLEH memuat angka nominal di
@@ -346,6 +374,45 @@ describe("jejak_pesanan.keterangan tidak memuat nominal DI LUAR daftar putih (Te
         bocoran.some((b) => b.startsWith(`jejak_pesanan.keterangan[${kejadian}]`)),
         `kejadian daftar putih dituduh: ${kejadian}`,
       ).toBe(false);
+    }
+  });
+
+  it("keterangan sah buatan mesin ini TIDAK dituduh", () => {
+    // Arah ketiga, dan yang paling mudah hilang: baris DI LUAR daftar putih
+    // pun penuh angka sah. `lunas` menulis uuid transaksi, `akses_tertahan`
+    // menulis timestamp pencabutan — keduanya bukan nominal, keduanya empat
+    // digit atau lebih.
+    //
+    // Uji tabel-penuh di atas hijau hari ini sebagian karena tabelnya
+    // kebetulan kosong saat dipindai. Supabase lokal dipakai bersama sesi
+    // lain; satu baris sisa sudah cukup menyalakannya dengan diagnosis yang
+    // SALAH — "nominal bocor" pada baris yang tidak memuat nominal. Kontrol
+    // ini mengunci polanya sendiri, lepas dari isi tabel, jadi pelebaran
+    // yang menuduh terlalu banyak memerah di sini lebih dulu.
+    for (const sah of [
+      "midtrans settlement, transaksi b3ac369e-1234-4f8a-9c21-123456789012",
+      "entitlement produk ce2f1234-0000-4aaa-8bbb-000012345678 dicabut pada 2026-09-27 11:20:33+00",
+      "entitlement dicabut pada 2026-09-27 11:20:33.123456+00",
+      "item 2026-09-27T11:20:33.123456+00:00",
+      "percobaan 2",
+    ]) {
+      expect(
+        POLA_DIGIT_TELANJANG.test(sah),
+        `keterangan sah dituduh memuat nominal: ${sah}`,
+      ).toBe(false);
+    }
+
+    // Dan arah sebaliknya, di berkas yang sama supaya keduanya bergerak
+    // bersama: mempersempit pola sampai berhenti menggigit memerahkan ini.
+    for (const bocor of [
+      "ditagih 150000, diterima 100000",
+      "ditagih 150000.",
+      "150000",
+    ]) {
+      expect(
+        POLA_DIGIT_TELANJANG.test(bocor),
+        `nominal telanjang LOLOS dari pemindai: ${bocor}`,
+      ).toBe(true);
     }
   });
 });
