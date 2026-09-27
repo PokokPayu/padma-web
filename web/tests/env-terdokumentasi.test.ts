@@ -15,12 +15,17 @@
  * lahir di tugas-tugas berikutnya. Pagar dua arah akan memaksa urutan mendarat
  * yang tidak ada hubungannya dengan kebenaran apa pun.
  *
- * ===== BATAS YANG DIKETAHUI =====
- * Pemindainya mencari literal `process.env.NAMA`. Pembacaan DINAMIS
- * (`process.env[nama]`, seperti helper `wajib()` di `src/lib/r2.ts:22`) tidak
- * terlihat olehnya — keempat env R2 memang sudah terdokumentasi, tapi itu karena
- * seseorang menulisnya, bukan karena pagar ini menuntutnya. Siapa pun yang
- * menambah pembacaan dinamis baru harus mendokumentasikannya sendiri.
+ * ===== BATASNYA DITUTUP, BUKAN LAGI DICATAT =====
+ * Pemindainya mencari literal `process.env.NAMA`, jadi pembacaan DINAMIS
+ * (`process.env[nama]`) dulu tidak terlihat olehnya. Itu pernah tercatat di
+ * sini sebagai batas yang diketahui, ditutup dengan kalimat bahwa siapa pun
+ * yang menambah pembacaan dinamis harus mendokumentasikannya sendiri.
+ *
+ * Aturan yang bersandar pada ingatan seseorang adalah yang digantikan oleh
+ * pagar-pagar di repo ini, jadi batas itu kini DITEGAKKAN alih-alih dicatat:
+ * `describe("env dibaca secara harfiah")` di bawah melarang `process.env[...]`
+ * di seluruh `src/`, dan `src/lib/r2.ts` diubah untuk mengoper NILAI env, bukan
+ * namanya. Asumsi pemindai ini karena itu tidak lagi diasumsikan.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
@@ -98,6 +103,73 @@ describe("env terdokumentasi", () => {
         : `Env ini dibaca kode tetapi tidak ada di web/.env.example: ${hilang.join(", ")}.\n` +
           `Tambahkan barisnya BESERTA komentar yang menjelaskan apa yang mati tanpanya —\n` +
           `itulah bentuk yang dipakai seluruh berkas itu, dan itulah yang membuatnya berguna.`,
+    ).toEqual([]);
+  });
+});
+
+/**
+ * Pembacaan env DINAMIS dilarang di `src/`, dan pagar ini yang menegakkannya.
+ *
+ * Pemindai di atas hanya mengenali `process.env.NAMA` yang ditulis harfiah.
+ * Selama ini itu tercatat sebagai "batas yang diketahui", ditutup dengan
+ * kalimat bahwa siapa pun yang menambah pembacaan dinamis harus
+ * mendokumentasikannya sendiri — yaitu aturan yang ditegakkan INGATAN, persis
+ * hal yang digantikan oleh pagar-pagar di repo ini.
+ *
+ * Empat env R2 memang sudah terdokumentasi, tapi karena seseorang menulisnya,
+ * bukan karena ada yang menuntutnya. Yang berikutnya tidak punya jaminan itu,
+ * dan bentuk kegagalannya sama dengan `CRON_SECRET` dulu: env yang lupa
+ * dipasang tidak melahirkan galat konfigurasi melainkan perilaku yang terlihat
+ * seperti bug lain.
+ *
+ * Memaksa bentuk harfiah lebih murah daripada mengajari pemindai nama setiap
+ * helper: satu helper baru bernama lain akan lolos, sebuah indeks ke
+ * `process.env` tidak.
+ *
+ * SATU SIFAT YANG PERLU DIKETAHUI SEBELUM MENDEBUG MERAHNYA: pemindai ini
+ * membaca per baris tanpa memisahkan komentar dari kode, jadi KOMENTAR yang
+ * mengeja bentuk terlarang itu ikut memerahkannya. Itu disengaja. Pemindai
+ * yang sadar komentar harus tahu soal `//`, komentar blok, dan string — dan
+ * kerumitan itu tidak sebanding, karena kalimat apa pun bisa ditulis ulang
+ * dengan kata (lihat dokblok `wajib()` di `src/lib/r2.ts`, yang melakukannya).
+ */
+const POLA_DINAMIS = /process\.env\s*\[/;
+
+/** Nomor baris (mulai 1) yang memuat pembacaan env dinamis. */
+function barisDinamis(isi: string): number[] {
+  return isi
+    .split("\n")
+    .map((baris, i) => (POLA_DINAMIS.test(baris) ? i + 1 : 0))
+    .filter((n) => n > 0);
+}
+
+describe("env dibaca secara harfiah", () => {
+  it("pemindai dinamis mengenali yang dinamis dan melepas yang harfiah", () => {
+    // Kontrol positif yang TINGGAL di repo. Sesudah perbaikan di bawah, jumlah
+    // temuan nyatanya nol selamanya — dan pemindai yang rusak juga memulangkan
+    // nol. Tanpa kontrol ini, keduanya tidak bisa dibedakan.
+    expect(barisDinamis("const v = process.env[nama];")).toEqual([1]);
+    expect(barisDinamis("const v = process.env [nama];")).toEqual([1]);
+    expect(barisDinamis("const v = process.env.NAMA;")).toEqual([]);
+    expect(barisDinamis("// process.env.NAMA disebut di komentar")).toEqual([]);
+  });
+
+  it("nol pembacaan env dinamis di src/", () => {
+    const temuan: string[] = [];
+    for (const berkas of berkasSumber(SRC)) {
+      for (const baris of barisDinamis(readFileSync(berkas, "utf8"))) {
+        temuan.push(`${path.relative(AKAR, berkas)}:${baris}`);
+      }
+    }
+
+    expect(
+      temuan,
+      temuan.length === 0
+        ? ""
+        : `Pembacaan env dinamis di sini tidak terlihat oleh pemindai\n` +
+          `"setiap env yang dibaca src/ punya barisnya sendiri":\n  ${temuan.join("\n  ")}\n\n` +
+          `Tulis \`process.env.NAMA\` harfiah. Bila butuh helper yang melempar saat\n` +
+          `kosong, oper NILAINYA — \`wajib("NAMA", process.env.NAMA)\` — bukan namanya.`,
     ).toEqual([]);
   });
 });

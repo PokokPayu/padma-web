@@ -18,23 +18,45 @@ export const UMUR_TONTON_DETIK = 2 * 60 * 60;
 /** Umur URL unggah: cukup untuk satu unggahan 200 MB di koneksi lambat. */
 const UMUR_UNGGAH_DETIK = 60 * 60;
 
-function wajib(nama: string): string {
-  const nilai = process.env[nama];
+/**
+ * NILAINYA yang dioper, bukan namanya — dan itu bukan selera.
+ *
+ * Bentuk sebelumnya menerima NAMA env lalu mengindeks `process.env` dengan
+ * variabel itu. Akibatnya keempat env R2 TIDAK TERLIHAT oleh pagar
+ * `tests/env-terdokumentasi.test.ts`, yang menuntut setiap env yang dibaca
+ * `src/` punya barisnya sendiri di `.env.example` — ia hanya mengenali bentuk
+ * harfiah. Keempatnya kebetulan terdokumentasi, karena seseorang menulisnya,
+ * bukan karena ada yang menuntutnya.
+ *
+ * (Bentuk terlarang itu sengaja dieja dengan kata di sini, bukan dengan
+ * lambangnya: pagar `env dibaca secara harfiah` memindai per baris tanpa
+ * memisahkan komentar dari kode, dan menulis contohnya akan memerahkannya.
+ * Pemindai yang sadar komentar butuh tahu soal `//`, blok, dan string —
+ * kerumitan yang tidak sebanding dengan satu kalimat yang bisa ditulis ulang.)
+ *
+ * `nama` tetap dioper supaya pesan galatnya menyebut env mana yang kosong.
+ * Pengulangannya disengaja: ia harga yang dibayar agar pembacaannya harfiah.
+ */
+function wajib(nama: string, nilai: string | undefined): string {
   if (!nilai) throw new Error(`Env ${nama} belum dipasang.`);
   return nilai;
 }
 
 export function bucketVideo(): string {
-  return wajib("R2_BUCKET_VIDEO");
+  return wajib("R2_BUCKET_VIDEO", process.env.R2_BUCKET_VIDEO);
 }
 
 function klien(): S3Client {
+  const akun = wajib("R2_ACCOUNT_ID", process.env.R2_ACCOUNT_ID);
   return new S3Client({
     region: "auto",
-    endpoint: `https://${wajib("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
+    endpoint: `https://${akun}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: wajib("R2_ACCESS_KEY_ID"),
-      secretAccessKey: wajib("R2_SECRET_ACCESS_KEY"),
+      accessKeyId: wajib("R2_ACCESS_KEY_ID", process.env.R2_ACCESS_KEY_ID),
+      secretAccessKey: wajib(
+        "R2_SECRET_ACCESS_KEY",
+        process.env.R2_SECRET_ACCESS_KEY,
+      ),
     },
   });
 }
