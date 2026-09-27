@@ -30,11 +30,23 @@ export async function POST(
   const { id } = await params;
 
   const sb = await createServerSupabase();
-  const { data: pesanan } = await sb
+  const { data: pesanan, error: galatPesanan } = await sb
     .from("orders")
     .select("id, status")
     .eq("id", id)
     .maybeSingle<{ id: string; status: string }>();
+
+  // `error` DIBACA, tidak dibuang. PostgREST yang gagal memulangkan
+  // `data: null` — bentuk yang SAMA PERSIS dengan "barisnya memang tidak
+  // ada". Dilaporkan 404, staf pergi mencari pesanan yang dikiranya terhapus
+  // sementara yang rusak adalah basis datanya; di jalur pembayaran, kegagalan
+  // yang melapor sebagai hal lain lebih mahal daripada kegagalan yang melapor
+  // sebagai dirinya sendiri. `bacaPesananStaf` sudah berargumen begitu lalu
+  // MELEMPAR; rute tidak bisa melempar tanpa kehilangan `pesan`-nya, jadi ia
+  // menjawab 500 dengan kalimat yang berbeda dari 404 di bawahnya.
+  if (galatPesanan) {
+    return NextResponse.json({ pesan: "Baris pesanan tidak terbaca." }, { status: 500 });
+  }
   if (!pesanan) {
     return NextResponse.json({ pesan: "Pesanan tidak ditemukan." }, { status: 404 });
   }

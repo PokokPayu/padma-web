@@ -111,8 +111,24 @@ export function TabelPesanan({ baris }: { baris: BarisPesanan[] }) {
                 </td>
 
                 <td className="p-4">
-                  <span className="block font-bold">{formatRupiah(p.nominalTagih)}</span>
-                  <span className="text-[11px] text-panel-muted">Ditagih</span>
+                  {p.nominalTagih === null ? (
+                    // Pasangan sel "PADMA ID tidak terbaca" di kolom pertama.
+                    // Sel angka yang dikarang untuk baris yang itemnya tidak
+                    // terbaca lebih buruk daripada sel kosong: ia terbaca
+                    // sebagai SELISIH terhadap nominal diterima, dan selisih
+                    // itulah yang jadi keputusan manusia. Dua sel yang
+                    // berselisih ("Item tidak terbaca" vs "Rp 0") membuat
+                    // pembacanya memilih, dan yang berangka selalu terlihat
+                    // lebih berwibawa.
+                    <span className="block text-[11px] font-bold text-clay">
+                      Nominal tidak terbaca
+                    </span>
+                  ) : (
+                    <>
+                      <span className="block font-bold">{formatRupiah(p.nominalTagih)}</span>
+                      <span className="text-[11px] text-panel-muted">Ditagih</span>
+                    </>
+                  )}
                   {p.nominalDiterima !== null && (
                     // BERDAMPINGAN, bukan menggantikan: selisih kedua angka
                     // inilah yang menjadi keputusan manusia pada baris

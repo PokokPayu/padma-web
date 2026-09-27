@@ -300,6 +300,44 @@ describe("bacaPesananStaf", () => {
     const { terbuka } = await bacaPesananStaf();
     expect(terbuka.find((p) => p.kode === K_TERBUKA_BARU)!.nominalDiterima).toBeNull();
   });
+
+  it("pesanan yang itemnya TIDAK TERBACA memulangkan nominalTagih null, bukan nol", async () => {
+    // Pelajaran repo yang sama dengan `padmaId`: pembacaan yang ditolak
+    // memulangkan KOSONG, bukan galat. `pesanan_item_staf` bergerbang
+    // `user_role()` di dalam badannya, jadi bentuk ketidakterbacaannya adalah
+    // NOL BARIS — persis yang disemai di sini.
+    //
+    // `reduce(…, 0)` atas daftar kosong memulangkan 0, dan "Rp 0 ditagih" yang
+    // diucapkan dengan yakin di sebelah "Rp 40.000 diterima" tidak terbaca
+    // sebagai data yang hilang melainkan sebagai SELISIH — kesimpulan yang
+    // persis terbalik, di kolom yang seluruh keberadaannya dibenarkan sebagai
+    // "angka yang jadi keputusan manusia".
+    //
+    // Nol yang SAH tetap harus lewat: produk gratis berharga 0 punya itemnya,
+    // jadi yang membedakan bukan jumlahnya melainkan ADA/TIDAKNYA item.
+    const kode = `${AWALAN_KODE}0008`;
+    const { data, error } = await admin
+      .from("orders")
+      .insert({
+        kode,
+        percobaan: 1,
+        client_id: KLIEN_RINA,
+        status: "lunas",
+        jumlah_item: 1,
+        kedaluwarsa_pada: new Date(Date.now() + 20 * 3_600_000).toISOString(),
+        ditutup_pada: new Date().toISOString(),
+        lunas_pada: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    idPesanan.set(kode, data!.id as string);
+
+    const { butuhPerhatian } = await bacaPesananStaf();
+    const baris = butuhPerhatian.find((p) => p.kode === kode)!;
+    expect(baris.items).toEqual([]);
+    expect(baris.nominalTagih).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -415,6 +453,22 @@ describe("TabelPesanan", () => {
     );
     expect(m).toContain("Tutup tinjauan");
     expect(m).toContain("Terbitkan akses");
+  });
+
+  it("nominal yang tidak terbaca dirender sebagai KEGAGALAN, bukan sebagai Rp 0", () => {
+    // Pasangan sel `padmaId` di atas, dan alasannya sama persis: dua sel yang
+    // berselisih membuat pembacanya memilih, dan sel ANGKA selalu terlihat
+    // lebih berwibawa daripada sel yang berkata "tidak terbaca".
+    const m = renderToStaticMarkup(
+      <TabelPesanan
+        baris={[{ ...dasar, items: [], nominalTagih: null, nominalDiterima: null }]}
+      />,
+    );
+    expect(m).toContain("Nominal tidak terbaca");
+    // Tidak satu rupiah pun boleh dicetak untuk baris yang angkanya tidak
+    // diketahui — `nominalDalam` adalah pemindai yang sama yang dipakai
+    // KEBALIKANNYA di uji halaman.
+    expect(nominalDalam(m), "nominal dikarang untuk baris yang tidak terbaca").toEqual([]);
   });
 });
 
@@ -693,5 +747,77 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
       .single();
     expect(data!.sebab_tinjauan).toBe("chargeback");
     expect(data!.butuh_tinjauan_pada).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Basis data yang GAGAL tidak boleh menyamar jadi "pesanan tidak ditemukan"
+// ---------------------------------------------------------------------------
+
+/**
+ * Sesi admin ASLI, kecuali pembacaan `orders` yang selalu gagal.
+ *
+ * Proxy, bukan klien palsu utuh: `requireRole` memakai
+ * `createServerSupabase()` yang SAMA (lewat `penggunaSaatIni` dan
+ * `profilSaatIni`), jadi klien palsu sepenuhnya akan memerahkan gerbang
+ * perannya lebih dulu dan uji ini tidak akan pernah sampai ke baris yang
+ * hendak diuji.
+ */
+function sesiOrdersGagal(asli: SupabaseClient): SupabaseClient {
+  const galat = {
+    code: "57014",
+    message: "canceling statement due to statement timeout",
+    details: "",
+    hint: "",
+  };
+  return new Proxy(asli, {
+    get(target, prop) {
+      if (prop === "from") {
+        return (tabel: string) =>
+          tabel === "orders"
+            ? {
+                select: () => ({
+                  eq: () => ({ maybeSingle: async () => ({ data: null, error: galat }) }),
+                }),
+              }
+            : (Reflect.get(target, "from") as (t: string) => unknown).call(target, tabel);
+      }
+      const nilai = Reflect.get(target, prop);
+      return typeof nilai === "function" ? nilai.bind(target) : nilai;
+    },
+  }) as SupabaseClient;
+}
+
+describe("galat basis data TIDAK dilaporkan sebagai 404", () => {
+  /**
+   * `const { data } = await sb…` membuang `error`, dan PostgREST yang gagal
+   * memulangkan `data: null` — bentuk yang sama persis dengan "barisnya
+   * memang tidak ada". Dilaporkan 404, staf pergi mencari pesanan yang
+   * dikiranya terhapus sementara yang rusak adalah basis datanya.
+   *
+   * Temuan yang sama sudah diputuskan dua kali di cabang ini (pencacah Tugas 8
+   * dan `kirimKeMesin` Tugas 10), dan `bacaPesananStaf` di modul ini sendiri
+   * sudah berargumen begitu lalu MELEMPAR. Ketiga rute harus sepakat.
+   */
+  it("periksa-ulang: 500 dengan kalimatnya sendiri, dan Midtrans tidak pernah ditanyai", async () => {
+    ref.sesi = sesiOrdersGagal(sesiAdmin);
+    const r = await periksaUlang(permintaan("periksa-ulang"), param(idPesanan.get(K_TERBUKA_BARU)!));
+    expect(r.status).toBe(500);
+    const isi = (await r.json()) as { pesan: string };
+    expect(isi.pesan).not.toContain("tidak ditemukan");
+    // Barisnya tidak pernah terbaca, jadi tidak ada yang bisa ditanyakan —
+    // bertanya tetap berarti membakar satu order_id percobaan tanpa alasan.
+    expect(midtrans.panggilan).toEqual([]);
+  });
+
+  it("terbitkan-akses: 500 dengan kalimatnya sendiri, bukan 404", async () => {
+    ref.sesi = sesiOrdersGagal(sesiAdmin);
+    const r = await terbitkanAkses(
+      permintaan("terbitkan-akses"),
+      param(idPesanan.get(K_LUNAS_TANPA_AKSES)!),
+    );
+    expect(r.status).toBe(500);
+    const isi = (await r.json()) as { pesan: string };
+    expect(isi.pesan).not.toContain("tidak ditemukan");
   });
 });

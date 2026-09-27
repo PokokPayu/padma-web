@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import {
   PESANAN_BERUANG,
   PESANAN_TERBUKA,
+  type KejadianPesanan,
   type StatusPesanan,
   type SumberItemPesanan,
 } from "@/lib/pesanan/status";
@@ -47,7 +48,15 @@ export type BarisPesanan = {
   transaksiId: string | null;
   statusMidtrans: string | null;
   items: ItemPesanan[];
-  nominalTagih: number;
+  /**
+   * null = ITEMNYA TIDAK TERBACA, bukan "totalnya nol".
+   *
+   * Pelajaran yang sama dengan `padmaId` di atas: pembacaan yang ditolak
+   * memulangkan kosong, bukan galat. Nol yang SAH (produk gratis) tetap
+   * angka nol dan tetap dirender — yang membedakan bukan jumlahnya melainkan
+   * ada/tidaknya item.
+   */
+  nominalTagih: number | null;
   /** null = belum ada notifikasi bernominal. BUKAN nol. */
   nominalDiterima: number | null;
 };
@@ -93,8 +102,19 @@ const KOLOM =
  */
 const STATUS_DIPANTAU: StatusPesanan[] = [...PESANAN_TERBUKA, ...PESANAN_BERUANG];
 
-/** Dua kejadian yang berarti "akses sudah diurus"; sisanya berarti belum. */
-const KEJADIAN_AKSES = ["akses_terbit", "akses_sudah_ada"];
+/**
+ * Dua kejadian yang berarti "akses sudah diurus"; sisanya berarti belum.
+ *
+ * BERTIPE `KejadianPesanan[]`, bukan `string[]` yang tersimpul sendiri —
+ * mekanisme yang sama dengan `Record<StatusPesanan, ...>` di `status.ts`, dan
+ * alasannya sama mahalnya. Tanpa anotasi ini, mengganti nama salah satu nilai
+ * enum `order_event` membuat kedua literal di bawah berhenti cocok TANPA satu
+ * pun galat: `punyaAkses` menjadi himpunan kosong selamanya, dan klausa kedua
+ * "Butuh perhatian" memarkir SETIAP pesanan `lunas` di sana untuk selamanya.
+ * Layar yang selalu penuh adalah layar yang berhenti dibaca — kegagalan yang
+ * persis dijaga uji "lunas yang aksesnya sudah terbit TIDAK ikut".
+ */
+const KEJADIAN_AKSES: KejadianPesanan[] = ["akses_terbit", "akses_sudah_ada"];
 
 const BATAS_BARIS = 200;
 
@@ -208,7 +228,17 @@ export async function bacaPesananStaf(): Promise<{
       items,
       // Dijumlahkan dari `harga_beku`, karena `orders` memang lahir NOL kolom
       // nominal (spec "Bentuk data / orders").
-      nominalTagih: items.reduce((n, i) => n + i.hargaBeku, 0),
+      //
+      // `null` KETIKA NOL ITEM, bukan `reduce(…, 0)` yang memulangkan nol.
+      // `pesanan_item_staf` bergerbang `user_role()` DI DALAM badan view-nya,
+      // jadi bentuk ketidakterbacaannya adalah nol baris — bukan galat yang
+      // bisa dilempar di atas. "Rp 0 ditagih" yang diucapkan dengan yakin di
+      // sebelah nominal diterima yang bukan nol tidak terbaca sebagai data
+      // yang hilang melainkan sebagai SELISIH, dan selisih itulah yang jadi
+      // keputusan manusia soal uang orang. Nol yang SAH tetap lewat: produk
+      // gratis punya itemnya, jadi `items.length` yang memisahkan keduanya,
+      // bukan jumlahnya.
+      nominalTagih: items.length === 0 ? null : items.reduce((n, i) => n + i.hargaBeku, 0),
       nominalDiterima: diterimaPer.has(b.id) ? diterimaPer.get(b.id)! : null,
     };
   });
