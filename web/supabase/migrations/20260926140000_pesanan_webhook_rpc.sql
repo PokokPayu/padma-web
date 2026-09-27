@@ -108,6 +108,18 @@ begin
     select e.id, e.dicabut_pada into v_ent_id, v_dicabut
       from public.digital_entitlements e
      where e.client_id = v_client_id and e.product_id = v_product_id;
+
+    if v_ent_id is null then
+      -- Mustahil di bawah `unique (client_id, product_id)`: INSERT gagal
+      -- karena KONFLIK, tapi SELECT ulang tidak menemukan baris yang
+      -- bertabrakan dengannya. Diam di sini berarti (2) di bawah berjalan
+      -- dengan v_ent_id NULL — UPDATE `pesanan_id` mengenai nol baris, dan
+      -- fungsi memulangkan 'akses_sudah_ada' padahal TIDAK ADA entitlement
+      -- dan TIDAK ADA tinjauan yang menyala. Mustahil yang diam-diam adalah
+      -- mustahil yang harus melempar, bukan mustahil yang harus dipercaya.
+      raise exception 'Balapan entitlement produk % tidak terselesaikan.', v_product_id
+        using errcode = 'P0002';
+    end if;
   end if;
 
   -- (2) ADA DAN BELUM DICABUT
@@ -130,11 +142,26 @@ begin
           format('entitlement produk %s dicabut pada %s — akses tidak dihidupkan',
                  v_product_id, v_dicabut));
 
+  -- Array POSITIF LIMA nilai, bukan dua: `status = any(...)` di sini bukan
+  -- pagar CHECK (UPDATE ini tidak menyentuh `status` maupun `ditutup_pada`,
+  -- jadi tidak ada kombinasi yang bisa melanggar `pesanan_tutup_bercap`),
+  -- melainkan asumsi tentang SIAPA YANG MEMANGGIL. `status in ('lunas',
+  -- 'ditahan')` benar untuk pemanggil hari ini (satu-satunya: cabang lunas
+  -- `terapkan_notifikasi_midtrans`), tapi begitu Tugas 11 ("Terbitkan akses")
+  -- memanggil fungsi ini pada baris yang SUDAH `kedaluwarsa`/`dibatalkan`/
+  -- bahkan masih `menunggu_bayar`, dua nilai itu membuat UPDATE ini mengenai
+  -- NOL baris — jejak `akses_tertahan` tetap tercatat, tapi
+  -- `butuh_tinjauan_pada` TIDAK menyala, tidak ada yang melempar, dan fungsi
+  -- memulangkan string yang SAMA dengan jalur sehat. Sama seperti langkah (5)
+  -- "Cermin kolom Midtrans" di `terapkan_notifikasi_midtrans` di bawah, array
+  -- di sini dilebarkan ke lima nilai supaya "uang masuk, barang tidak keluar"
+  -- tidak pernah diam hanya karena pemanggilnya bukan yang dibayangkan hari
+  -- ini.
   update public.orders o
      set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
          sebab_tinjauan = 'akses_tertahan'
    where o.id = v_pesanan_id
-     and o.status = any (array['lunas','ditahan']::public.order_status[]);
+     and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
 
   return 'akses_tertahan';
 end;
@@ -192,11 +219,17 @@ begin
         values (p_pesanan_id, v_padma_id, 'penangan_belum_ada',
                 format('item %s berjenis sesi — P1 belum punya penyalurnya', r.id));
 
+        -- Array POSITIF LIMA nilai — alasan yang sama persis dengan
+        -- `terbitkan_akses_item` (lihat komentarnya): `status = any(...)` di
+        -- sini adalah asumsi soal siapa pemanggil, bukan pagar CHECK, dan
+        -- pemanggil kedua (Tugas 11) bisa mengenai baris yang tidak ada di
+        -- ('lunas','ditahan'). Diam di sana berarti jejak tercatat tapi
+        -- tinjauan tidak menyala.
         update public.orders o
            set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
                sebab_tinjauan = 'penangan_belum_ada'
          where o.id = p_pesanan_id
-           and o.status = any (array['lunas','ditahan']::public.order_status[]);
+           and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
       else
         -- Nilai `order_item_source` KETIGA yang kelak lahir berhenti di sini
         -- dengan kalimat, bukan dengan `case_not_found` yang tidak menyebut
@@ -397,12 +430,20 @@ begin
   -- harga beku: angka pembandingnya ada di tangan Midtrans dan ikut
   -- ditandatangani. `nominal_diterima` sudah tersimpan di langkah (4) apa pun
   -- hasilnya di bawah.
-  if v_vonis = 'lunas' then
-    select coalesce(sum(i.harga_beku), 0)::integer, count(*)::integer
-      into v_total, v_cacah
-      from public.order_items i
-     where i.pesanan_id = v_pesanan_id;
+  --
+  -- Dihitung TANPA syarat vonis — bukan hanya di dalam `if v_vonis = 'lunas'`:
+  -- cabang `curiga -> ditahan` (capture + challenge/deny) juga menulis baris
+  -- audit `format('ditagih %s, diterima %s', v_total, ...)` di bawah, dan
+  -- v_total yang hanya terisi pada jalur 'lunas' membuat baris yang staf baca
+  -- untuk memutuskan pembayaran kartu yang dicurigai kehilangan separuh
+  -- angkanya (tertagih kosong) — pada persis kasus yang paling butuh dibaca
+  -- manusia.
+  select coalesce(sum(i.harga_beku), 0)::integer, count(*)::integer
+    into v_total, v_cacah
+    from public.order_items i
+   where i.pesanan_id = v_pesanan_id;
 
+  if v_vonis = 'lunas' then
     if p_gross_amount is distinct from v_total::numeric or v_cacah <> v_jumlah_item then
       v_vonis := 'ditahan';
       v_sebab := 'selisih_nominal';

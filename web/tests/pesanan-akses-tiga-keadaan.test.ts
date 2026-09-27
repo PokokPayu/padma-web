@@ -253,6 +253,39 @@ describe("terbitkan_akses_item — tiga keadaan, semuanya harfiah", () => {
     expect(await kejadian(p.pesananId)).toEqual(["akses_tertahan"]);
   });
 
+  it("(3b) DICABUT pada pesanan yang BUKAN lunas/ditahan: tinjauan tetap MENYALA", async () => {
+    // Perbaikan review putaran 1: array pagar UPDATE keadaan (3) hanya berisi
+    // ('lunas','ditahan') — asumsi soal SIAPA pemanggilnya, bukan pagar CHECK.
+    // Pemanggil kedua (Tugas 11, "Terbitkan akses") bisa mengenai baris yang
+    // statusnya sudah bukan keduanya (mis. masih `menunggu_bayar`), dan tanpa
+    // uji ini UPDATE-nya mengenai NOL baris — jejak akses_tertahan tetap
+    // tercatat, tapi butuh_tinjauan_pada TIDAK menyala, tanpa satu pun galat.
+    const produk = await semaiProduk("akses-tercabut-belum-lunas", 120_000);
+    const dicabut = new Date("2026-09-20T03:00:00Z").toISOString();
+    const { error: eEnt } = await svc.from("digital_entitlements").insert({
+      client_id: ANANDA_CLIENT_ID,
+      product_id: produk,
+      sumber: "beli",
+      dicabut_pada: dicabut,
+    });
+    expect(eEnt).toBeNull();
+
+    // Status DEFAULT semaiPesanan adalah `menunggu_bayar` — bukan lunas,
+    // bukan ditahan, dan justru itulah yang diuji di sini.
+    const p = await semaiPesanan({ produkId: produk, harga: 120_000 });
+    const { data, error } = await svc.rpc("terbitkan_akses_item", { p_item_id: p.itemId });
+    expect(error).toBeNull();
+    expect(data).toBe("akses_tertahan");
+
+    const { data: pesanan } = await svc
+      .from("orders")
+      .select("butuh_tinjauan_pada, sebab_tinjauan")
+      .eq("id", p.pesananId)
+      .single();
+    expect(pesanan!.butuh_tinjauan_pada).not.toBeNull();
+    expect(pesanan!.sebab_tinjauan).toBe("akses_tertahan");
+  });
+
   it("item yang tidak ada ditolak, bukan dianggap sudah tersalur", async () => {
     const { error } = await svc.rpc("terbitkan_akses_item", {
       p_item_id: "00000000-0000-0000-0000-0000000000aa",
@@ -621,6 +654,20 @@ describe("terapkan_notifikasi_midtrans — jantung mesin", () => {
     expect(baris!.status).toBe("ditahan");
     expect(baris!.sebab_tinjauan).toBe("selisih_status");
     expect(baris!.butuh_tinjauan_pada).not.toBeNull();
+
+    // Perbaikan review putaran 1: v_total dulu hanya dihitung di dalam
+    // cabang `v_vonis = 'lunas'`, jadi baris audit di jejak `selisih_status`
+    // — yang dibaca staf untuk memutuskan kartu yang dicurigai — menulis
+    // "ditagih , diterima 120000" dengan tertagih KOSONG. v_total kini
+    // dihitung tanpa syarat vonis, jadi baris ini harus memuat KEDUA angka.
+    const { data: jejakSelisih } = await svc
+      .from("jejak_pesanan")
+      .select("keterangan")
+      .eq("pesanan_id", p.pesananId)
+      .eq("kejadian", "selisih_status")
+      .single();
+    expect(jejakSelisih!.keterangan).toContain("ditagih 120000");
+    expect(jejakSelisih!.keterangan).toContain("diterima 120000");
 
     const { data: ent } = await svc
       .from("digital_entitlements")
