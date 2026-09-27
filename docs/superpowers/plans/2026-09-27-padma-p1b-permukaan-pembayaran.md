@@ -42,14 +42,68 @@ Kelas masukan yang tersirat di spec tapi mudah lolos dari uji. Masing-masing sud
 
 ---
 
+## Koreksi dari review akhir P1-A (27 Sep 2026)
+
+P1-A tuntas dan ter-merge ke `main` di `79e1e3e`. Review seluruh branch
+mengoreksi tiga hal yang rencana ini masih menyatakan keliru. Baca ini sebelum
+Tugas 8 dan Tugas 11 — ketiganya menyangkut hal yang sudah berubah di `main`.
+
+**1. `jejak_pesanan.keterangan` SUDAH punya penulis.** Catatan serah-terima P1-A
+sempat berbunyi kolom ini belum punya penulis mana pun, jadi ujinya ditunda ke
+Tugas 8. Itu sudah tidak benar sejak Tugas 5:
+`20260926140000_pesanan_webhook_rpc.sql:548` menulis
+`format('ditagih %s, diterima %s', ...)` ke sana — disengaja, karena staf butuh
+kedua angka pada baris yang mereka pakai memutuskan perkara uang.
+
+Kolomnya kini terjaga `tests/pesanan-teks-tanpa-nominal.test.ts`, lengkap dengan
+daftar putih `kejadian` yang boleh memuat angka dan kontrol dua arah. **Tugas 8
+tidak perlu memperluas uji itu.** Yang perlu dilakukan Tugas 8 hanyalah menambah
+nilai `kejadian` ke daftar putih BILA ia melahirkan penulis nominal baru — dan
+kalau tidak, tidak usah menyentuhnya sama sekali.
+
+**2. Penimpaan `sebab_tinjauan` terjangkau HARI INI, bukan hanya lewat tombol
+coba-ulang Tugas 11.** Lima dari enam UPDATE `sebab_tinjauan` menugaskan tanpa
+`coalesce`. Catatan lama mengaitkan keterjangkauannya dengan tombol yang dibangun
+Tugas 11; itu terlalu sempit. Notifikasi `refund`/`chargeback` yang mendarat pada
+pesanan yang sudah bertanda `lunas_setelah_tutup` menimpa alasannya diam-diam,
+tanpa satu pun kode baru. **Tugas 11 jangan membatasi perbaikannya pada jalur
+coba-ulang** — pagar yang hanya menutup satu pemanggil meninggalkan yang lain.
+
+**3. Pelajaran proses yang menentukan cara Tugas 8–12 ditinjau.** Review seluruh
+branch menemukan celah yang bisa menagih klien **dua kali** untuk satu produk,
+dan celah itu lolos dari SELURUH tujuh review per-tugas P1-A. Cacatnya ada di
+spec: aturannya ditulis harfiah (`status = 'ditahan'`) lalu dijelaskan sebagai
+*"belum mati dan belum melahirkan akses"* — dan pesanan `kedaluwarsa` yang
+membawa `lunas_setelah_tutup` (settlement terlambat, uang sudah masuk) memenuhi
+penjelasannya tapi tidak memenuhi aturannya. Tiap review per-tugas menilai
+terhadap brief-nya sendiri, dan brief-nya menyalin spec, jadi tak satu pun bisa
+melihatnya.
+
+Dua konsekuensi mengikat untuk rencana ini:
+
+- **Jangan ganti review menyeluruh dengan penjumlahan review per-tugas.** P1-B
+  wajib berakhir dengan review seluruh branch, sama seperti P1-A.
+- **Saat sebuah aturan datang dengan kalimat yang menjelaskannya, periksa
+  keduanya saling cocok.** Kalau penjelasan dan aturan berbeda, salah satunya
+  salah — dan yang harfiah-lah yang dikirim ke klien.
+
+---
+
 
 ## 0. KAMUS NAMA — satu nama, sekali saja
 
 ### 0.1 Cap waktu keenam migrasi (urutan MENGIKAT)
 
-Tip `main` hari ini `20260921170000_harga_produk_publik_hanya_tayang.sql` (84 berkas, diverifikasi).
-Cabang `umpan-balik-klien-gelombang-1` membawa `20260922100000` dan `20260924100000` yang belum ter-merge.
-Karena itu P1 mulai dari `20260926*`:
+**DIPERBARUI 27 Sep 2026 — keenam migrasi ini SUDAH ADA di `main`.** P1-A ter-merge
+di `79e1e3e` (fast-forward), dan `web/supabase/migrations/` kini berisi 90 berkas,
+bukan 84. Tabel di bawah karena itu bukan rencana lagi melainkan inventaris: jangan
+membuatnya, panggil isinya.
+
+Cabang `umpan-balik-klien-gelombang-1` masih membawa `20260922100000` dan
+`20260924100000` yang belum ter-merge, dan cap `20260926*` tetap dipilih supaya
+urutannya sama apa pun urutan merge-nya. Keduanya (`pekan_sabtu_jumat`,
+`materi_jejak_buka`) tidak bersinggungan dengan mesin pembayaran, jadi tidak ada
+kebergantungan fungsional ke arah mana pun.
 
 | # | Berkas (di `/Users/arvinfairuz/Documents/padma/web/supabase/migrations/`) | Tugas |
 |---|---|---|
