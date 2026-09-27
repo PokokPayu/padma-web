@@ -383,6 +383,48 @@ describe("peta kode jawaban — satu kasus per baris", () => {
     expect(status).toBe(401);
   });
 
+  it("penghitung yang GAGAL dinaikkan tidak senyap: 401 tetap, dan SEBABNYA tercetak", async () => {
+    // Pagar terhadap kegagalan yang bentuknya persis sama dengan yang pernah
+    // hidup di rute ini, satu tingkat lebih tinggi. `supabase-js` `.rpc()`
+    // TIDAK PERNAH melempar — ia memulangkan `{ error }` — jadi penghitung yang
+    // gagal naik tidak menjatuhkan apa pun dan tidak meninggalkan jejak apa pun
+    // kecuali ada yang membaca `error`-nya. Angka ini satu-satunya alarm untuk
+    // banjir notifikasi palsu, dan alarm yang gagal dalam senyap terbaca
+    // sebagai aman.
+    //
+    // Kenapa `ref.paksaGalat` dipakai ulang dan BUKAN nama RPC yang sengaja
+    // disalahtulis: cabang tanda tangan salah pulang SEBELUM RPC mesin, jadi
+    // satu-satunya `.rpc()` yang dilewatinya adalah penghitung itu sendiri.
+    // Hasilnya nol string nama fungsi di dalam uji ini — mengganti nama RPC-nya
+    // kelak tidak memerahkan uji ini dengan palsu.
+    //
+    // `order_id` ditulis harfiah, tanpa `buatPesanan()`: tanda tangannya gagal
+    // jauh sebelum satu baris pun dicari, jadi fixture pesanan hanya akan
+    // menambah biaya dan satu pesanan terbuka yang harus disapu (§0.11).
+    const matamata = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      ref.paksaGalat = true;
+      const { status, hasil } = await kirim(
+        rakit({ order_id: "PSN-990101-FFFFFF.9", signature_key: "a".repeat(128) }),
+      );
+
+      // Separuh pertama kontraknya: jawabannya TIDAK berubah. Kegagalan
+      // mencatat tidak boleh menahan 401-nya.
+      expect(status).toBe(401);
+      expect(hasil).toBe("tanda_tangan_salah");
+
+      // Separuh keduanya: sebabnya terlihat. `galat-uji` adalah `message` dari
+      // mock, jadi asersi kedua membedakan "membaca error lalu mencetaknya"
+      // dari "mencetak kalimat tetap" — hanya yang pertama yang berguna saat
+      // Postgres yang bicara.
+      const dicetak = matamata.mock.calls.map((c) => c.join(" "));
+      expect(dicetak.some((b) => b.includes("gagal mencatat notifikasi ditolak"))).toBe(true);
+      expect(dicetak.some((b) => b.includes("galat-uji"))).toBe(true);
+    } finally {
+      matamata.mockRestore();
+    }
+  });
+
   it("order_id sah bentuknya tapi bukan milik pesanan mana pun -> 200, dan tak_dikenal NAIK satu", async () => {
     // 200 memang jawaban yang benar — tanda tangannya sah dan tidak ada apa pun
     // yang bisa disembuhkan dengan mengulang. Yang TIDAK boleh adalah 200 yang
