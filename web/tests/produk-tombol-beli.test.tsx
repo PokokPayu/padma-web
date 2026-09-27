@@ -37,6 +37,7 @@ const {
   mintaCheckout,
   mintaBatal,
   pesananYangBisaDibatalkan,
+  BATAS_BARIS_PESANAN,
 } = await import("@/app/produk/[slug]/tombol-beli");
 const { urlSkripSnap } = await import("@/lib/midtrans/konfig");
 const { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } = await import(
@@ -311,12 +312,27 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     const kedua = await mintaCheckout("produk-1", pertama.orderIdTerbakar, lagi);
 
     expect(lagi.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: true });
-    expect(kedua.hasil).toEqual({ jenis: "token", token: "tok-2" });
+    expect(kedua.hasil).toEqual({ jenis: "token", token: "tok-2", pesananId: null });
   });
 
   it("token terbit juga membakar order_id — Snap sudah memegangnya", async () => {
     const ambil = fetchPalsu({ status: 200, isi: { token: "tok" } });
     expect((await mintaCheckout("produk-1", false, ambil)).orderIdTerbakar).toBe(true);
+  });
+
+  it("pesananId dari rute DISIMPAN, bukan dibuang", async () => {
+    // Satu-satunya keterangan produk↔pesanan yang pernah sampai ke peramban.
+    // Dibuang di putaran 1, dan itu yang membuat pembeli lama kehilangan
+    // tombol batalnya.
+    const ambil = fetchPalsu({
+      status: 200,
+      isi: { token: "tok", kode: "PSN-260927-A1B2C3", pesananId: "pesanan-abc", produksi: false },
+    });
+    expect((await mintaCheckout("produk-1", false, ambil)).hasil).toEqual({
+      jenis: "token",
+      token: "tok",
+      pesananId: "pesanan-abc",
+    });
   });
 
   it("jaringan mati membakar juga: tidak ada jawaban = tidak ada yang bisa disimpulkan", async () => {
@@ -410,22 +426,25 @@ describe("mintaBatal — jalan keluar pembeli yang macet", () => {
  * jadi peramban tidak bisa menautkan pesanan ke produknya sama sekali. Yang
  * bisa dibaca hanyalah `orders` (status + penanda tinjauan).
  */
-describe("pesananYangBisaDibatalkan", () => {
+describe("pesananYangBisaDibatalkan — jalan (2), tebakan konservatif sesudah muat ulang", () => {
   it("satu pesanan terbuka, nol baris tinjauan -> id-nya boleh dipakai", () => {
     // Unique parsial `pesanan_terbuka_satu_per_klien` menjamin pesanan terbuka
     // itu SATU di seluruh basis data, jadi ia pasti pesanan produk ini.
     expect(
-      pesananYangBisaDibatalkan([
-        { id: "a", status: "menunggu_bayar", sebab_tinjauan: null },
-        { id: "b", status: "dibatalkan", sebab_tinjauan: null },
-        { id: "c", status: "kedaluwarsa", sebab_tinjauan: null },
-      ]),
+      pesananYangBisaDibatalkan(
+        [
+          { id: "a", status: "menunggu_bayar", sebab_tinjauan: null },
+          { id: "b", status: "dibatalkan", sebab_tinjauan: null },
+          { id: "c", status: "kedaluwarsa", sebab_tinjauan: null },
+        ],
+        null,
+      ),
     ).toBe("a");
   });
 
   it("nol pesanan terbuka -> null", () => {
     expect(
-      pesananYangBisaDibatalkan([{ id: "a", status: "kedaluwarsa", sebab_tinjauan: null }]),
+      pesananYangBisaDibatalkan([{ id: "a", status: "kedaluwarsa", sebab_tinjauan: null }], null),
     ).toBeNull();
   });
 
@@ -440,15 +459,82 @@ describe("pesananYangBisaDibatalkan", () => {
       // punya pesanan terbuka untuk produk lain — dan membatalkannya dari
       // halaman ini akan mematikan pesanan yang salah, diam-diam.
       expect(
-        pesananYangBisaDibatalkan([
-          { id: "terbuka-produk-lain", status: "menunggu_bayar", sebab_tinjauan: null },
-          { id: "tinjauan", status, sebab_tinjauan: sebab },
-        ]),
+        pesananYangBisaDibatalkan(
+          [
+            { id: "terbuka-produk-lain", status: "menunggu_bayar", sebab_tinjauan: null },
+            { id: "tinjauan", status, sebab_tinjauan: sebab },
+          ],
+          null,
+        ),
       ).toBeNull();
     },
   );
 
   it("daftar kosong -> null", () => {
-    expect(pesananYangBisaDibatalkan([])).toBeNull();
+    expect(pesananYangBisaDibatalkan([], null)).toBeNull();
+  });
+
+  it("bacaan yang menyentuh BATAS -> null, karena baris tinjauan bisa tersembunyi", () => {
+    // Pagar terhadap `.limit()`: baris yang terpotong bisa saja baris yang
+    // seharusnya membungkam tebakan ini. Tidak tahu = tidak boleh.
+    const banyak = Array.from({ length: BATAS_BARIS_PESANAN }, (_, i) => ({
+      id: `x${i}`,
+      status: i === 0 ? "menunggu_bayar" : "kedaluwarsa",
+      sebab_tinjauan: null,
+    }));
+    expect(pesananYangBisaDibatalkan(banyak, null)).toBeNull();
+  });
+});
+
+/**
+ * JALAN (1) — id dari checkout sesi ini, dan kenapa ia harus menang.
+ *
+ * Gerbang `buat_pesanan` yang tampak menutup keadaan ini sebenarnya SE-PRODUK
+ * (`20260926130000:48-53` ber-`join order_items ... and i.product_id =
+ * p_product_id`), sementara pembacaan peramban TIDAK PUNYA filter produk dan
+ * tidak bisa punya. Akibatnya `tinjauan` menyala sesudah pembelian lunas atas
+ * produk APA PUN, dan menyala selamanya.
+ *
+ * Tanpa jalan (1), pembeli yang pernah belanja — segmen yang paling mungkin
+ * membeli lagi — kehilangan tombol batalnya PERMANEN: popup Snap yang gagal
+ * meninggalkan mereka tanpa tombol beli DAN tanpa tombol batal sampai tenggat
+ * 24 jam lewat. Itu persis keluhan Temuan 1, bertahan hidup di segmen yang
+ * paling sering menemuinya.
+ */
+describe("pesananYangBisaDibatalkan — jalan (1), id checkout sesi ini", () => {
+  it("riwayat `lunas` produk LAIN tidak lagi mengunci pembeli", () => {
+    const baris = [
+      { id: "terbuka-produk-ini", status: "menunggu_bayar", sebab_tinjauan: null },
+      // Pembelian yang sudah selesai, produk lain, bulan lalu.
+      { id: "lunas-produk-lain", status: "lunas", sebab_tinjauan: null },
+    ];
+
+    // Jalan (2) tetap diam, dan itu memang batas yang dipertahankan.
+    expect(pesananYangBisaDibatalkan(baris, null)).toBeNull();
+
+    // Jalan (1) TIDAK: checkout baru saja melahirkan pesanan ini UNTUK produk
+    // ini, jadi tidak ada yang perlu ditebak dan riwayat tidak relevan.
+    expect(pesananYangBisaDibatalkan(baris, "terbuka-produk-ini")).toBe("terbuka-produk-ini");
+  });
+
+  it("id sesi menang juga saat ada `ditahan` DAN `lunas_setelah_tutup`", () => {
+    const baris = [
+      { id: "terbuka-produk-ini", status: "menunggu_bayar", sebab_tinjauan: null },
+      { id: "ditahan-lain", status: "ditahan", sebab_tinjauan: "selisih_nominal" },
+      { id: "tutup-lain", status: "kedaluwarsa", sebab_tinjauan: "lunas_setelah_tutup" },
+    ];
+    expect(pesananYangBisaDibatalkan(baris, "terbuka-produk-ini")).toBe("terbuka-produk-ini");
+  });
+
+  it("id sesi yang pesanannya SUDAH TIDAK terbuka tidak ditawarkan", () => {
+    // Tombol yang memanggil `batalkan_pesanan_saya` atas pesanan `lunas` hanya
+    // memulangkan `dibatalkan: false` — tombol yang tidak melakukan apa-apa.
+    const baris = [{ id: "sudah-lunas", status: "lunas", sebab_tinjauan: null }];
+    expect(pesananYangBisaDibatalkan(baris, "sudah-lunas")).toBeNull();
+  });
+
+  it("id sesi yang barisnya tidak terlihat jatuh ke tebakan konservatif", () => {
+    const baris = [{ id: "a", status: "menunggu_bayar", sebab_tinjauan: null }];
+    expect(pesananYangBisaDibatalkan(baris, "id-yang-tidak-ada")).toBe("a");
   });
 });
