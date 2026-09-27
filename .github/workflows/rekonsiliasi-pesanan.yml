@@ -1,0 +1,78 @@
+name: Rekonsiliasi pesanan
+
+on:
+  workflow_dispatch:
+
+  # ===== JADWAL TIAP 15 MENIT — SENGAJA MASIH MATI =====
+  # Dihidupkan sebagai LANGKAH TERAKHIR go-live pembayaran, sesudah aplikasi
+  # ter-deploy dan CRON_SECRET terpasang DI DUA TEMPAT: sebagai GitHub Secret
+  # di repo ini, dan sebagai env di proyek Vercel. Alasannya sama persis dengan
+  # yang sudah tertulis di backup-db.yml: jadwal yang aktif sebelum sasarannya
+  # ada akan gagal setiap kali jalan, dan alarm yang berbunyi terus adalah
+  # alarm yang berhenti dibaca.
+  #
+  # Menghidupkannya juga berarti MENGHAPUS satu `it` di
+  # web/tests/pesanan-jadwal-actions.test.ts ("blok schedule LAHIR DIKOMENTARI")
+  # — satu baris yang sadar dan tercatat di git, bukan pelonggaran.
+  #
+  # GitHub Actions mengizinkan tiap 5 menit dan runner standarnya gratis tanpa
+  # batas menit untuk repo publik. Vercel paket Hobby hanya mengizinkan cron
+  # SEKALI SEHARI dan ekspresi yang lebih sering menggagalkan deploy — itulah
+  # kenapa penjadwalnya bukan Vercel Cron.
+  # schedule:
+  #   - cron: "*/15 * * * *"
+
+# Satu jalan pada satu waktu. Dua sapuan yang tumpang tindih akan menanyakan
+# pesanan yang sama ke Midtrans dua kali: `orders.diperiksa_pada` dicap sebelum
+# bertanya, tapi cap itu tidak melindungi dari dua proses yang memilih barisnya
+# pada detik yang sama.
+concurrency:
+  group: rekonsiliasi-pesanan
+  cancel-in-progress: false
+
+# Job ini tidak menyentuh isi repo sama sekali — tidak ada checkout, tidak ada
+# komentar PR, tidak ada rilis. Yang dibutuhkannya hanya satu permintaan HTTP.
+permissions:
+  contents: read
+
+jobs:
+  sapu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      # BUKAN rahasia: domain produksi PADMA sudah publik dan tertulis di
+      # web/README.md. Ia diletakkan di sini, bukan sebagai secret, supaya yang
+      # ada di daftar secret repo tetap hanya hal yang benar-benar rahasia —
+      # daftar secret yang penuh hal biasa adalah daftar yang berhenti dibaca.
+      BASIS_URL: https://padmawellnessid.com
+
+    steps:
+      - name: Sapu pesanan yang menggantung
+        env:
+          # Nilainya diambil dari GitHub Secret dan TIDAK PERNAH dicetak.
+          # Ditaruh sebagai env LANGKAH INI, bukan env job: env job-wide masuk
+          # ke setiap langkah sesudahnya tanpa diminta (pelajaran yang sudah
+          # tertulis di backup-db.yml).
+          RAHASIA: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAHASIA:-}" ]; then
+            echo "::error::Secret CRON_SECRET belum dipasang — rute akan menjawab 401."
+            exit 1
+          fi
+
+          # --fail WAJIB: tanpanya curl pulang dengan kode 0 untuk 401, dan
+          # penjadwal yang ditolak setiap 15 menit terlihat hijau selamanya.
+          # -sS: senyap kecuali galat, supaya log tidak penuh bilah kemajuan.
+          # --max-time: satu jalan menyapu paling banyak dua puluh pesanan,
+          # masing-masing satu perjalanan ke Status API Midtrans.
+          jawab=$(curl -sS --fail --max-time 120 \
+            -X POST "$BASIS_URL/api/cron/pesanan" \
+            -H "Authorization: Bearer $RAHASIA")
+
+          echo "$jawab"
+          {
+            echo "### Rekonsiliasi pesanan"
+            echo "- jawaban: \`$jawab\`"
+          } >> "$GITHUB_STEP_SUMMARY"
