@@ -62,12 +62,18 @@ nilai `kejadian` ke daftar putih BILA ia melahirkan penulis nominal baru — dan
 kalau tidak, tidak usah menyentuhnya sama sekali.
 
 **2. Penimpaan `sebab_tinjauan` terjangkau HARI INI, bukan hanya lewat tombol
-coba-ulang Tugas 11.** Lima dari enam UPDATE `sebab_tinjauan` menugaskan tanpa
-`coalesce`. Catatan lama mengaitkan keterjangkauannya dengan tombol yang dibangun
-Tugas 11; itu terlalu sempit. Notifikasi `refund`/`chargeback` yang mendarat pada
-pesanan yang sudah bertanda `lunas_setelah_tutup` menimpa alasannya diam-diam,
-tanpa satu pun kode baru. **Tugas 11 jangan membatasi perbaikannya pada jalur
-coba-ulang** — pagar yang hanya menutup satu pemanggil meninggalkan yang lain.
+coba-ulang Tugas 11.** `20260926140000_pesanan_webhook_rpc.sql` memuat TUJUH
+penugasan `sebab_tinjauan`; lima di antaranya menugaskan tanpa `coalesce`, dan
+kelimanya tersebar di TIGA fungsi — bukan hanya di `terapkan_notifikasi_midtrans`
+(`terbitkan_akses_item` dan `salurkan_pesanan` masing-masing punya satu). Catatan
+lama mengaitkan keterjangkauannya dengan tombol yang dibangun Tugas 11; itu
+terlalu sempit. Notifikasi `refund`/`chargeback` yang mendarat pada pesanan yang
+sudah bertanda `lunas_setelah_tutup` menimpa alasannya diam-diam, tanpa satu pun
+kode baru. **Tugas 11 jangan membatasi perbaikannya pada jalur coba-ulang** —
+pagar yang hanya menutup satu pemanggil meninggalkan yang lain.
+
+Perintah ini sekarang punya LANGKAH dan BERKAS, bukan hanya kalimat:
+**Tugas 11 Step 3**, `web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql`.
 
 **3. Pelajaran proses yang menentukan cara Tugas 8–12 ditinjau.** Review seluruh
 branch menemukan celah yang bisa menagih klien **dua kali** untuk satu produk,
@@ -116,6 +122,13 @@ kebergantungan fungsional ke arah mana pun.
 
 Urutan mengikat: enum (1) sebelum tabel (2); tabel sebelum jejak (3); jejak sebelum RPC (4, 5) karena
 RPC menulis jejak; `orders` (2) sebelum penambalan (6) karena `digital_entitlements.pesanan_id` menunjuk `orders`.
+
+**P1-B melahirkan SATU migrasi, dan hanya satu:**
+`20260927100000_sebab_tinjauan_lestari.sql` (migrasi ke-91), milik **Tugas 11 Step 3**. Ia nol
+objek baru — `create or replace function` atas `terbitkan_akses_item`, `salurkan_pesanan`, dan
+`terapkan_notifikasi_midtrans` untuk membungkus lima penugasan `sebab_tinjauan` dengan
+`coalesce`. Tugas 8, 9, 10, dan 12 tidak menulis SQL sama sekali; kalau salah satunya merasa
+perlu, itu tanda briefnya sudah menyimpang.
 
 ### 0.2 Objek basis data
 
@@ -203,10 +216,14 @@ yang `tests/fungsi-mesin-tertutup.test.ts` tutup).
 
 ### 0.5 Nama berkas TypeScript
 
+**DIPERBARUI 27 Sep 2026 — ketiga berkas milik T1/T4 SUDAH ADA di `main`** (P1-A ter-merge di
+`79e1e3e`), sama seperti keenam migrasi §0.1. Barisnya di bawah karena itu bukan pekerjaan
+melainkan inventaris: buka isinya, jangan membuatnya lagi.
+
 | Path (di `/Users/arvinfairuz/Documents/padma/web/`) | Isi | Lahir |
 |---|---|---|
-| `src/lib/pesanan/status.ts` | tipe & himpunan status, konstanta waktu. **Tanpa `server-only`** — diimpor komponen klien | T1 |
-| `src/lib/pesanan/order-id.ts` | bentuk `kode` & `order_id` Midtrans. Murni, tanpa `server-only` | T4 |
+| `src/lib/pesanan/status.ts` | tipe & himpunan status, konstanta waktu. **Tanpa `server-only`** — diimpor komponen klien. **SUDAH ADA di `main`** | T1 |
+| `src/lib/pesanan/order-id.ts` | bentuk `kode` & `order_id` Midtrans. Murni, tanpa `server-only`. **SUDAH ADA di `main`** | T4 |
 | `src/lib/midtrans/konfig.ts` | pilihan sandbox/produksi + kunci | T8 |
 | `src/lib/midtrans/tanda-tangan.ts` | sha512, `timingSafeEqual`, sidik | T8 |
 | `src/lib/midtrans/skema.ts` | Zod notifikasi (semua `z.string()`, TIDAK `.strict()`) | T8 |
@@ -216,21 +233,33 @@ yang `tests/fungsi-mesin-tertutup.test.ts` tutup).
 | `src/lib/pesanan/periksa-menggantung.ts` | Lapis 1b bersama (`server-only`) | T10 |
 | `src/lib/pesanan/picu-periksa.ts` | keputusan pemicu Lapis 1b, murni. **Tanpa `server-only`** — diimpor komponen klien | T10 |
 | `src/lib/admin/pesanan.ts` | pembaca layar staf | T11 |
-| `tests/helpers/klien-kedua.ts` | fixture klien KEDUA ber-akun auth (`EMAIL_KLIEN_KEDUA`, `KLIEN_KEDUA_ID`, `siapkanKlienKedua()`, `bongkarKlienKedua()`). Lahir di T4, **dipakai T4 dan T9** | T4 |
+| `tests/helpers/klien-kedua.ts` | fixture klien KEDUA ber-akun auth (`EMAIL_KLIEN_KEDUA`, `KLIEN_KEDUA_ID`, `siapkanKlienKedua()`, `bongkarKlienKedua()`). Lahir di T4, **dipakai T4, T9, dan T10** (lihat §0.11). **SUDAH ADA di `main`** | T4 |
 
 ### 0.6 Ekspor TypeScript yang dipakai lebih dari satu tugas
 
 ```ts
-// src/lib/pesanan/status.ts            (T1 melahirkan; T4,8,9,10,11,12 memakai)
-export type StatusPesanan = "menunggu_bayar" | "ditahan" | "lunas" | "kedaluwarsa" | "dibatalkan";
-export type SumberItemPesanan = "produk_digital" | "sesi";
-export const SUMBER_ITEM_PESANAN: readonly SumberItemPesanan[]; // ["produk_digital","sesi"]
-export const KEJADIAN_PESANAN_SAH: readonly KejadianPesanan[];  // 16 nilai, urut enum
+// src/lib/pesanan/status.ts            (T1 melahirkan; T4,8,9,10,11 memakai)
+// ARAH TURUNANNYA: array `as const` DULU, tipe SESUDAHNYA — itulah bentuk yang mendarat
+// di `main`, dan arahnya bukan selera. Union yang ditulis tangan lebih dulu membuat
+// arraynya sekadar mengulanginya, jadi nilai enum keenam yang ditambahkan ke salah satu
+// saja lolos tanpa satu pun galat kompilasi. Dengan arah ini arraynya SATU-SATUNYA sumber,
+// dan `tests/pesanan-status-db.test.ts` mengadunya dengan `pg_enum` menurut `enumsortorder`.
+export const STATUS_PESANAN_SAH = [
+  "menunggu_bayar", "ditahan", "lunas", "kedaluwarsa", "dibatalkan",
+] as const;                                                     // kelimanya, urut enum
+export type StatusPesanan = (typeof STATUS_PESANAN_SAH)[number];
+export const SUMBER_ITEM_PESANAN = ["produk_digital", "sesi"] as const;
+export type SumberItemPesanan = (typeof SUMBER_ITEM_PESANAN)[number];
+export const KEJADIAN_PESANAN_SAH = [                           // 16 nilai, urut enum
+  "dibuat", "token_terbit", "notifikasi", "lunas", "ditahan", "kedaluwarsa", "dibatalkan",
+  "selisih_nominal", "selisih_status", "lunas_setelah_tutup", "akses_terbit",
+  "akses_sudah_ada", "akses_tertahan", "penangan_belum_ada", "diperiksa_ulang",
+  "tinjauan_ditutup",
+] as const;
 // KejadianPesanan DITURUNKAN dari arraynya — `(typeof KEJADIAN_PESANAN_SAH)[number]`,
 // BUKAN `string & {}` (keberatan A-4, diterima): `string & {}` menerima string apa pun,
 // dan yang membuat salah ketik nama kejadian merah di kompilator T5/T8/T11 justru union-nya.
 export type KejadianPesanan = (typeof KEJADIAN_PESANAN_SAH)[number];
-export const STATUS_PESANAN_SAH: readonly StatusPesanan[];      // kelimanya, urut enum
 export const PESANAN_TERBUKA:     readonly StatusPesanan[];      // ["menunggu_bayar"]
 export const PESANAN_TIDAK_AKTIF: readonly StatusPesanan[];      // ["ditahan","lunas","kedaluwarsa","dibatalkan"]
 export const PESANAN_BERUANG:     readonly StatusPesanan[];      // ["lunas","ditahan"]
@@ -241,16 +270,21 @@ export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string>;
 export const JAM_TENGGAT_PESANAN = 24;   // SATU konstanta: kolom kedaluwarsa_pada DAN `expiry` Snap
 export const MENIT_JEDA_PERIKSA  = 5;    // pembatas Lapis 1b (diperiksa_pada)
 export const JAM_TENGGANG_404    = 1;    // margin terhadap jam Midtrans sebelum 404 = kedaluwarsa
-// PEMAKAI WAJIB (bukan anjuran — diuji): T10 menyapu dengan `.in("status",[...PESANAN_TERBUKA])`,
-// T11 memilih baris layar dengan `[...PESANAN_TERBUKA, ...PESANAN_BERUANG]` dan menyaring blok
-// "Butuh perhatian" dengan `PESANAN_BERUANG.includes(...)`. NOL literal "menunggu_bayar"/"ditahan"
-// di T10/T11, dan NOL himpunan KELIMA yang bernama lain. Himpunan tanpa konsumen adalah hiasan,
-// dan hiasan itulah yang membuat nilai enum keenam hilang dari layar diam-diam.
+// PEMAKAI WAJIB (aturan rencana ini, BUKAN pagar uji): T10 menyapu dengan
+// `.in("status",[...PESANAN_TERBUKA])` — termasuk UPDATE pencap `diperiksa_pada`, yang juga
+// dilarang membawa literal; T11 memilih baris layar dengan
+// `[...PESANAN_TERBUKA, ...PESANAN_BERUANG]` dan menyaring blok "Butuh perhatian" dengan
+// `PESANAN_BERUANG.includes(...)`. NOL literal "menunggu_bayar"/"ditahan" di T10/T11, dan NOL
+// himpunan KELIMA yang bernama lain. Himpunan tanpa konsumen adalah hiasan, dan hiasan itulah
+// yang membuat nilai enum keenam hilang dari layar diam-diam.
+// KLAIM "diuji" DICABUT 27 Sep 2026: nol uji di `main` memindai `src/` untuk literal status,
+// jadi yang menegakkannya hanyalah peninjau. Menuliskan penegak yang tidak ada lebih buruk
+// daripada tidak menuliskan apa pun — pembaca berikutnya berhenti memeriksa sendiri.
 // Peta perpindahan status SENGAJA tidak hidup di berkas ini: nol kode produksi P1
 // membutuhkannya (yang menilai adalah `perpindahan_pesanan_sah` di transaksi yang sama), dan
 // salinan TS kedua hanya jadi tempat kedua yang bisa basi. Ia hidup sebagai PENDAPAT KEDUA di
 // `tests/pesanan-status-db.test.ts` (keberatan A-5, diterima).
-// src/lib/pesanan/order-id.ts          (T4 melahirkan; T8,10,11,12 memakai)
+// src/lib/pesanan/order-id.ts          (T4 melahirkan; T8,10,11 memakai)
 // KEDUANYA WAJIB TANPA FLAG `g` (keberatan C-1, diterima — mengikat T4).
 // `RegExp.test()` pada regex ber-`g` menyimpan `lastIndex` dan memulangkan false BERGANTIAN:
 // di rute webhook itu berarti setiap notifikasi sah KEDUA dijawab 400, dan 400 memberi tahu
@@ -260,7 +294,7 @@ export const POLA_ORDER_ID: RegExp;      // /^PSN-\d{6}-[0-9A-F]{6}\.[1-9]$/  TA
 export function rakitOrderId(kode: string, percobaan: number): string;          // `${kode}.${percobaan}`
 export function uraiOrderId(orderId: string): { kode: string; percobaan: number } | null;
 
-// src/lib/midtrans/konfig.ts           (T8 melahirkan; T9,10,11,12 memakai)
+// src/lib/midtrans/konfig.ts           (T8 melahirkan; T9,10,11 memakai)
 export function midtransProduksi(): boolean;        // process.env.MIDTRANS_PRODUKSI === "true", TEPAT itu
 // Aturan "HANYA nilai true" dijaga `web/tests/midtrans-konfig.test.ts` (T8, nol basis data):
 // delapan masukan (satu positif + tujuh negatif) — "true","TRUE","1","yes","false","", undefined — dan basisSnap()/basisApiMidtrans()
@@ -270,14 +304,14 @@ export function basisSnap(): string;                // app(.sandbox).midtrans.co
 export function basisApiMidtrans(): string;         // api(.sandbox).midtrans.com/v2
 export function urlSkripSnap(produksi: boolean): string;
 
-// src/lib/midtrans/tanda-tangan.ts     (T8 melahirkan; T10,11,12 memakai lewat adapter)
+// src/lib/midtrans/tanda-tangan.ts     (T8 melahirkan; T10,11 memakai lewat adapter)
 export function hitungTandaTangan(orderId: string, statusCode: string, grossAmount: string, serverKey: string): string;
 export function tandaTanganCocok(dikirim: string, dihitung: string): boolean;
 export function hitungSidik(b: {
   orderId: string; statusCode: string; transactionStatus: string; fraudStatus: string; transactionId: string;
 }): string;   // sha256hex([orderId,statusCode,transactionStatus,fraudStatus,transactionId].join("|"))
 
-// src/lib/midtrans/skema.ts            (T8 melahirkan; T10,11,12 memakai)
+// src/lib/midtrans/skema.ts            (T8 melahirkan; T10,11 memakai)
 // z.object(...) + `export type NotifikasiMidtrans = z.infer<typeof SkemaNotifikasiMidtrans>`,
 // BUKAN anotasi `z.ZodType<...>` (keberatan C-8, diterima): anotasi itu membuang `.shape` di zod v4.
 // Bentuk tipenya identik:
@@ -292,7 +326,12 @@ export function hitungSidik(b: {
 export const SkemaNotifikasiMidtrans;
 export type NotifikasiMidtrans = z.infer<typeof SkemaNotifikasiMidtrans>;
 
-// src/lib/midtrans/kode-jawaban.ts     (T8 melahirkan; T8 saja yang memakai, tapi diuji T8 & dirujuk T12)
+// src/lib/midtrans/kode-jawaban.ts     (T8 melahirkan; dipakai T8; pagar setara WAJIB di T10)
+// DIKOREKSI 27 Sep 2026: baris ini sempat berbunyi “dirujuk T12” — grep atas SELURUH Tugas 12
+// memberi nol kecocokan untuk `kode-jawaban|KODE_JAWABAN|hasilRpcSah`. Yang benar: T10 memanggil
+// RPC yang SAMA dengan T8, jadi ia butuh penjaga himpunan tertutupnya SENDIRI — `const SAH`
+// lokal di `periksa-menggantung.ts`, bukan impor dari sini. Berkas ini hidup di sisi server-only
+// rute webhook, dan menariknya ke jalur T10 menukar satu cacat dengan cacat lain.
 export type HasilWebhook =
   | "badan_terlalu_besar" | "kunci_kosong" | "skema_gagal" | "bentuk_order_id"
   | "tanda_tangan_salah" | "duplikat" | "tanpa_efek" | "diterapkan" | "pesanan_tidak_ada" | "galat";
@@ -303,7 +342,7 @@ export function hasilRpcSah(nilai: string): nilai is HasilWebhook;
 // dipetakan terbaca `KODE_JAWABAN[undefined]` = undefined, dan `NextResponse.json(..., { status:
 // undefined })` menjawab 200 — kegagalan dilaporkan ke Midtrans sebagai selesai.
 
-// src/lib/midtrans/adapter.ts          (T8 melahirkan; T9,10,11,12 memakai)
+// src/lib/midtrans/adapter.ts          (T8 melahirkan; T9,10,11 memakai)
 export type PermintaanSnap = { orderId: string; nominal: number; judul: string; kedaluwarsaJam: number };
 export async function terbitkanTokenSnap(p: PermintaanSnap):
   Promise<{ ok: true; token: string } | { ok: false; pesan: string }>;
@@ -319,23 +358,45 @@ export async function bacaStatusTransaksi(orderId: string):
 //   0   = tidak bisa dihubungi sama sekali (jaringan/batas waktu), ATAU jawaban Midtrans yang
 //         `gross_amount`-nya hilang / bukan angka. BUKAN vonis apa pun tentang transaksinya —
 //         T10/T11/T12 TIDAK BOLEH menerjemahkannya jadi status (keberatan C-5, diterima).
+//  -1   = `MIDTRANS_SERVER_KEY` belum terpasang; nol permintaan keluar. Kode SENDIRI, bukan 0,
+//         karena kedua sebab itu menuntut dua kalimat yang berbeda kepada manusia: jaringan
+//         sembuh dengan dicoba lagi, kunci server yang belum dipasang TIDAK PERNAH. T8 sudah
+//         memisahkannya di dua permukaan lain (webhook menjawab 503 `kunci_kosong`;
+//         `terbitkanTokenSnap` memulangkan "Pembayaran belum aktif. Hubungi tim PADMA."),
+//         dan hanya jalur Status API yang sempat meleburnya.
 // `gross_amount` pada jalur `ok: true` karena itu SELALU string berbentuk angka. Ia TIDAK
 // pernah dipalsukan menjadi "0": "tidak tahu berapa" bukan "nol rupiah", dan memalsukannya
 // menggeser pesanan yang SUDAH DIBAYAR PENUH ke `ditahan` ber-nominal_diterima 0 — yang lalu
 // tidak bisa diputuskan siapa pun karena `putuskan_pesanan_ditahan` menuntut nominal tercatat.
 
 // src/lib/pesanan/periksa-menggantung.ts   (T10 melahirkan; T11 & T12 memakai)
-export const BATAS_PERIKSA_SEKALI = 3;
+export const BATAS_PERIKSA_SEKALI = 3;   // batas baris per PEMBUKAAN HALAMAN (Lapis 1b)
+// Pasangannya milik T12 dan SENGAJA tidak diekspor dari sini: `const BATAS_SAPUAN = 20` hidup
+// sebagai konstanta lokal di `src/app/api/cron/pesanan/route.ts`. Dua angka, dua pemilik, dua
+// alasan — tiga karena satu klien hanya punya satu pesanan terbuka, dua puluh karena satu job
+// Actions harus selesai sebelum waktunya habis. Menyatukannya berarti mengubah kadens penjadwal
+// dengan menyunting pagar laju halaman.
 export type PesananDiperiksa = { id: string; kode: string; percobaan: number; kedaluwarsaPada: string };
 export type HasilPeriksaPesanan =
   | "diterapkan" | "duplikat" | "tanpa_efek" | "pesanan_tidak_ada"
-  | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "galat_basis_data";
+  | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "kunci_belum_terpasang"
+  | "galat_basis_data";
+// SEMBILAN nilai. `kunci_belum_terpasang` lahir dari `kode: -1` adapter dan TIDAK boleh
+// dilebur ke `midtrans_tak_terjawab`: yang kedua menyuruh staf mencoba lagi, dan kunci server
+// yang belum dipasang tidak pernah sembuh dengan dicoba lagi. Tipe, bukan komentar — inilah
+// satu-satunya mekanisme di repo ini yang membuat "lupa menangani satu kasus" jadi galat
+// kompilasi: `Record<HasilPeriksaPesanan, string>` di T11 memerah sampai petanya lengkap.
 export async function terapkanJawabanMidtrans(p: PesananDiperiksa): Promise<HasilPeriksaPesanan>;
 // TIDAK PERNAH melempar — termasuk `rakitOrderId`, yang MELEMPAR untuk kode cacat dan karena itu
 // WAJIB berada DI DALAM try; hasilnya `"bentuk_order_id"` (keberatan pemeriksa L0-6, diterima).
+// Nilai balik RPC-nya dijaga penjaga himpunan tertutup LOKAL (`const SAH`), sikap kepercayaan
+// yang sama dengan `hasilRpcSah` di T8 atas RPC yang sama. Nilai di luar himpunan menjadi
+// `"galat_basis_data"`, bukan di-cast diam-diam.
 export async function sapuPesananMenggantung(
-  pemilih: SupabaseClient, batasBaris: number, clientId?: string | null,
+  pemilih: SupabaseClient, batasBaris: number, clientId: string | null = null,
 ): Promise<{ diperiksa: number }>;   // MELEMPAR bila PEMILIHAN barisnya gagal
+// Tanda tangannya `clientId: string | null = null`, BUKAN `clientId?: string | null` — satu
+// ejaan saja, karena berkas ini seluruh alasan keberadaannya adalah tanda tangan yang PERSIS.
 // `clientId` menyempitkan radius ke satu klien. Lapis 1b WAJIB mengisinya (lihat di bawah);
 // Lapis 3 (cron, service role, lintas klien) membiarkannya null.
 // Loopnya membungkus SETIAP baris dengan try sendiri: satu baris cacat tidak boleh memakan sapuan.
@@ -344,8 +405,13 @@ export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }
 // terapkan_notifikasi_midtrans DENGAN SERVICE ROLE. Menyembunyikan kegagalan: never throws.
 // RADIUSNYA TIDAK BOLEH BERSANDAR PADA RLS SAJA: `orders` punya DUA policy SELECT, dan yang
 // kedua (`"pesanan: staf baca"`) memulangkan pesanan SELURUH klien untuk sesi admin/owner.
-// Karena itu fungsi ini membaca `clients` milik pemanggil lebih dulu; tanpa baris klien ia
-// memulangkan `{ diperiksa: 0 }`, dan dengan baris klien ia mengoper `clientId` ke penyapu.
+// Karena itu fungsi ini membaca `clients` milik pemanggil lebih dulu — dengan
+// `.eq("user_id", user.id)` EKSPLISIT (pola `ambilKlien`, `src/lib/passport/data.ts:66`),
+// bukan `maybeSingle()` telanjang: tanpa klausa itu sesi staf memungut baris `clients`
+// siapa saja yang kebetulan pertama, gerbangnya berhenti menggerbang, dan uji
+// "SESI STAF tidak memicu pemeriksaan apa pun" lulus karena alasan yang salah (sesi admin
+// kebetulan tidak punya baris `clients` di seed hari ini). Tanpa baris klien ia memulangkan
+// `{ diperiksa: 0 }`; dengan baris klien ia mengoper `clientId` ke penyapu.
 
 // src/lib/pesanan/picu-periksa.ts       (T10 melahirkan; dipakai komponen klien T9/T10)
 export async function picuPeriksaSekali(
@@ -393,7 +459,7 @@ Tiga salinan menuntut pengikat yang menyentuh ketiganya, dan pengikatnya hidup d
 `kode` hasil `buat_pesanan` dikirim lewat `terapkan_notifikasi_midtrans` dan hasilnya wajib
 BUKAN `'pesanan_tidak_ada'`. Tanpa itu, satu orang yang menurunkan `upper(...)` di penerbit
 membuat SETIAP notifikasi dijawab 200 lalu dibuang, tanpa galat di mana pun.
-**Jangan `gen_random_bytes`** — pgcrypto nol hasil di seluruh 84 migrasi (diverifikasi).
+**Jangan `gen_random_bytes`** — pgcrypto nol hasil di seluruh 90 migrasi (diverifikasi).
 
 ### 0.10 Nama daftar putih di `tests/fungsi-mesin-tertutup.test.ts` (T7)
 
@@ -414,8 +480,11 @@ membuat SETIAP notifikasi dijawab 200 lalu dibuang, tanpa galat di mana pun.
     tutup_tinjauan:            "user_role",
   } as const;
   ```
-- `POLA_PENULIS` = `/(insert\s+into|update)\s+(public\.)?(orders|order_items|jejak_pesanan|digital_entitlements)\b/i`
-  dijalankan atas `pg_proc.prosrc` **yang komentarnya sudah dibuang**.
+- `POLA_PENULIS` = `/(insert\s+into|update)\s+(public\.)?(orders|order_items|jejak_pesanan|digital_entitlements|notifikasi_pesanan)\b/i`
+  dijalankan atas `pg_proc.prosrc` **yang komentarnya sudah dibuang**. Disalin ulang dari
+  `tests/fungsi-mesin-tertutup.test.ts:114-115` di `main` (T7 sudah mendarat): `notifikasi_pesanan`
+  ikut karena `terapkan_notifikasi_midtrans` menyisipkan sidiknya ke sana, dan kamus yang
+  kehilangan satu tabel membuat penulis baru atas tabel itu lolos tanpa masuk daftar mana pun.
 
 Pengikatnya: setiap fungsi yang cocok `POLA_PENULIS` wajib ada di **tepat satu** daftar.
 `MESIN_TERTUTUP` di-assert per-nama (bukan `toEqual` atas himpunan turunan), supaya
@@ -434,6 +503,89 @@ tertutup tapi bukan penulis — tidak memerahkan apa pun.
    lalu diadu dengan literal. Badan yang HANYA memuat `-- auth.uid()` wajib DITOLAK; badan yang
    memuat `user_role()` sungguhan wajib diterima; dan badan ber-`auth.uid()` wajib ditolak ketika
    gerbang yang diharapkan `user_role`.
+
+**Pagar kedua yang menyentuh KELIMA tugas: `tests/pesanan-teks-tanpa-nominal.test.ts` (T2).**
+Ia tidak memindai fixture-nya sendiri — ia memindai SELURUH ISI tabel `jejak_pesanan` yang ada
+saat ia berjalan, dengan `POLA_DIGIT_TELANJANG = /(?<![\w.:-])\d{4,}(?![\w-])/` dan daftar putih
+`kejadian` yang hanya berisi `selisih_nominal` dan `selisih_status`. Karena `fileParallelism: false`,
+baris yang ditinggalkan berkas lain tetap HIDUP saat pagar ini jalan, jadi fixture tugas mana pun
+bisa memerahkannya — di berkas orang lain, dengan sebab yang tidak disebut di berkas mana pun.
+Kelima pembaca pra-terbang menemukan risiko ini terpisah dan menyimpulkan "aman" terpisah; hijaunya
+hari ini bergantung pada kebetulan bahwa judul fixture tidak memuat empat digit berturut. Kebetulan
+bukan kewajiban, jadi kewajibannya ditulis di sini, satu kali, untuk semua:
+
+> Setiap fixture P1-B — `judul` produk, `judul_beku`, `transaction_id`,
+> `keterangan` jejak — DILARANG memuat empat digit berturut-turut yang tidak
+> diapit `-`, `.`, `:`, atau huruf. Pagarnya `tests/pesanan-teks-tanpa-nominal.test.ts`
+> dan ia memindai baris HIDUP lintas berkas, bukan fixture-nya sendiri.
+
+Bentuk `kode` (`PSN-260926-XX0001`) dan `trx-<kode>.<percobaan>` sudah memenuhi larangan itu karena
+setiap deret digitnya diapit `-` atau huruf. Yang berbahaya adalah judul produk uji ber-tahun
+(`"Kelas 2026"`), nominal yang diketik ke `keterangan`, dan `transaction_id` buatan tangan
+berupa angka telanjang.
+
+### 0.11 Peta fixture: berkas uji → klien seed
+
+`pesanan_terbuka_satu_per_klien` adalah unique partial atas `(client_id) where status =
+'menunggu_bayar'` (`20260926110000:116-117`). Ia berlaku **per KLIEN, bukan per produk**: satu
+klien hanya boleh punya SATU pesanan terbuka di seluruh basis data, jadi dua fixture terbuka atas
+klien yang sama — walau produknya berbeda — mustahil hidup bersamaan.
+
+`tests/pesanan-teks-tanpa-nominal.test.ts:110-112` sudah memilih Rina dengan alasan tertulis
+("supaya fixture di sini tidak bertabrakan dengan `pesanan_terbuka_satu_per_klien` milik berkas uji
+lain") dan menunjuk "peta §13.2" yang tidak pernah ada. Inilah petanya.
+
+Ketiga klien seed yang dipakai: **Ananda** `44444444-4444-4444-4444-444444444401` (ber-akun
+auth), **Rina** `44444444-4444-4444-4444-444444444402` (sengaja TANPA akun auth), dan **Klien
+Kedua** `KLIEN_KEDUA_ID` = `44444444-4444-4444-4444-4444444444c2` (fixture yang dibuat dan
+dibongkar sendiri oleh berkas yang memakainya).
+
+| Berkas uji | Klien yang menampung pesanan `menunggu_bayar` | Catatan |
+|---|---|---|
+| `tests/pesanan-teks-tanpa-nominal.test.ts` (T2, sudah di `main`) | Rina | pagar lintas-berkas; presedennya lahir di sini |
+| `tests/pesanan-webhook.test.ts` (T8) | Ananda | pesanan lahir lewat `buat_pesanan` dengan sesi Ananda |
+| `tests/pesanan-checkout-rute.test.ts` (T9) | Ananda | `KLIEN_KEDUA_ID` dipakai sebagai SESI kedua saja ("klien B tidak bisa membatalkan pesanan klien A") — nol pesanan atas namanya |
+| `tests/pesanan-periksa-dibuka.test.ts` (T10) | Ananda + Rina + Klien Kedua | baris ber-`kode` SENGAJA CACAT wajib di `KLIEN_KEDUA_ID` |
+| `tests/admin-pesanan.test.tsx` (T11) | Ananda + Rina | dua baris blok "Terbuka", satu per klien |
+| `tests/pesanan-jadwal-actions.test.ts` (T12) | Ananda | satu baris terbuka |
+
+**Dua aturan mengikat, dan keduanya berlaku untuk setiap berkas uji P1-B:**
+
+1. **Satu pesanan `menunggu_bayar` per klien per berkas.** Butuh baris terbuka kedua? Pakai klien
+   seed berikutnya dari peta di atas, atau `siapkanKlienKedua()` (`tests/helpers/klien-kedua.ts`,
+   sudah ada di `main`) — jangan menambah produk kedua dan berharap indeksnya per produk.
+   Dan begitu sebuah berkas mengambil klien baru, **barisnya ditambahkan ke peta ini**: peta yang
+   berhenti diperbarui adalah peta yang menyesatkan lebih buruk daripada ketiadaan peta.
+2. **Pembersih fixture mencari lewat KUNCI PRIMER, tidak pernah lewat kolom yang bisa disunting
+   ujinya sendiri.** `bersihkan()` menghapus lewat `id` yang sudah dipegang (dikumpulkan saat
+   menyemai), bukan lewat `.like("kode", ...)`, `.eq("status", ...)`, atau `.eq("slug", ...)`.
+   Bentuk kegagalannya bukan uji merah melainkan basis data yang TERACUNI PERMANEN: T10 mengganti
+   `orders.kode` jadi `"bukan-kode-pesanan"` untuk menguji jalur `bentuk_order_id`, dan pembersih
+   yang mencari lewat `kode` tidak akan pernah menemukan barisnya lagi. Baris terbuka yang hidup
+   selamanya membuat SETIAP `buat_pesanan` untuk klien itu gagal di T8, T11, dan T12 — dan karena
+   Supabase lokal dipakai bersama sesi lain, racunnya menyeberang keluar dari suite ini.
+
+   Yang mengikat adalah LARANGANNYA, bukan mekanismenya: berkas yang tidak pernah menyunting
+   `kode` (T8, T11, T12) boleh tetap memakai awalan `kode` untuk menyapu sisa run sebelumnya,
+   dan T10 memakainya sekali di `beforeAll` untuk hal yang sama. Yang dilarang adalah
+   penghapusan DALAM-RUN yang bersandar pada kolom yang disunting ujinya sendiri — dan T10
+   satu-satunya berkas P1-B yang menyunting salah satu.
+
+### 0.12 Perintah menghapus tidak pernah memakai nomor baris
+
+Setiap langkah yang menyuruh MENGHAPUS sesuatu dari berkas yang sudah ada menyebut **namanya**
+— komponen, fungsi, baris tabel — dan batasnya ("dari dokbloknya sampai kurung tutupnya"),
+**bukan rentang baris**. Alasannya bukan kerapian: nomor baris adalah satu-satunya bentuk
+rujukan di dokumen ini yang bisa SALAH tanpa terlihat salah. Rencana ini sendiri membawa
+buktinya — perintah "hapus baris 119–137" pada `tombol-ambil.tsx` menunjuk `return baris !== null;`
+milik `punyaProdukDiPeramban`, fungsi yang tugas yang sama IMPOR; dituruti harfiah, fungsinya
+rusak dan ekor komponen yang mau dihapus justru menggantung.
+
+Kelas yang sama berlaku untuk **menyisipkan**: keempat suntingan `web/README.md` di rencana ini
+menyebut baris jangkarnya (`` `/api/cron/tenggat` ``, `` `/admin/bayar` ``,
+`` `/api/pesanan/[id]/batal` ``, `` `/api/produk/[id]/unduh` ``) dan menambahkan
+"**cari barisnya, jangan percaya nomornya**" — karena setiap tugas menggeser nomor tugas
+berikutnya. Nomor baris boleh tetap ditulis sebagai ancar-ancar; ia tidak pernah jadi perintah.
 
 ---
 ---
@@ -483,14 +635,12 @@ Ini **pintu masuk uang** ke PADMA. Mendarat sesudah Task 1–7.
 - Test: `web/tests/pesanan-webhook.test.ts`, `web/tests/midtrans-konfig.test.ts`
 
 **Interfaces:**
-- Consumes (T1): `web/src/lib/pesanan/status.ts` → `export const JAM_TENGGAT_PESANAN = 24`
 - Consumes (T3): `public.catat_notifikasi_ditolak() returns void` dan
   `public.catat_notifikasi_tak_dikenal() returns void` — keduanya dipanggil dengan
   **service role**, `security definer`, upsert `+ 1` pada `current_date`. Yang pertama untuk
   tanda tangan salah (sebelum 401), yang kedua untuk `pesanan_tidak_ada` (sebelum 200).
 - Consumes (T4): `web/src/lib/pesanan/order-id.ts` →
   `export const POLA_ORDER_ID: RegExp` (`/^PSN-\d{6}-[0-9A-F]{6}\.[1-9]$/`),
-  `export const POLA_KODE_PESANAN: RegExp`,
   `export function rakitOrderId(kode: string, percobaan: number): string`;
   dan RPC `public.buat_pesanan(p_product_id uuid, p_ulang boolean default false) returns table (pesanan_id uuid, kode text, percobaan smallint, nominal_tagih integer, judul text)`
   (dipakai uji untuk menyemai pesanan lewat jalur sungguhan).
@@ -1003,13 +1153,27 @@ export type StatusMidtrans = {
  *   0   = tidak bisa dihubungi sama sekali (jaringan/batas waktu), ATAU jawaban
  *         yang `gross_amount`-nya hilang / bukan angka. Bukan vonis apa pun
  *         tentang transaksinya; jangan pernah diterjemahkan jadi status.
+ *  -1   = `MIDTRANS_SERVER_KEY` belum terpasang. Nol permintaan keluar.
  * Nilai lain = jawaban HTTP Midtrans apa adanya.
+ *
+ * ===== KENAPA -1 PUNYA KODE SENDIRI, BUKAN IKUT 0 =====
+ * Keduanya berarti "tidak ada jawaban", tapi keduanya menuntut KALIMAT yang
+ * berbeda kepada manusia yang menekan tombolnya: jaringan yang mati sembuh
+ * dengan dicoba lagi, kunci server yang belum dipasang TIDAK PERNAH. Dilebur,
+ * layar staf berkata "Midtrans tidak menjawab. Coba lagi beberapa saat lagi."
+ * untuk keadaan yang tidak akan berubah sampai seseorang memasang env — dan
+ * staf mencoba lagi selamanya. Kedua permukaan T8 yang lain sudah memisahkannya
+ * (rute webhook menjawab 503 `kunci_kosong`, `terbitkanTokenSnap` di atas
+ * memulangkan "Pembayaran belum aktif. Hubungi tim PADMA."); hanya jalur Status
+ * API yang sempat meleburnya. Pemetaannya di T10: `kode === -1` →
+ * `"kunci_belum_terpasang"`, dan `Record<HasilPeriksaPesanan, string>` di T11
+ * memaksa kalimatnya ditulis.
  */
 export async function bacaStatusTransaksi(
   orderId: string,
 ): Promise<{ ok: true; status: StatusMidtrans } | { ok: false; kode: number; pesan: string }> {
   if (serverKeyMidtrans() === "") {
-    return { ok: false, kode: 0, pesan: "Kunci Midtrans belum dipasang." };
+    return { ok: false, kode: -1, pesan: "Kunci Midtrans belum dipasang." };
   }
 
   let jawab: Response;
@@ -2033,9 +2197,10 @@ Mendarat sesudah Task 8 (ia memakai `terbitkanTokenSnap` dan `urlSkripSnap`).
 - Create: `web/src/app/api/pesanan/[id]/batal/route.ts`
 - Create: `web/src/lib/midtrans/snap-peramban.ts`
 - Create: `web/src/app/produk/[slug]/tombol-beli.tsx`
-- Modify: `web/src/app/produk/[slug]/tombol-ambil.tsx:22` (`function BlokBuka` →
-  `export function BlokBuka`) dan `:119-137` (hapus `TautanBuka`, yang diserap
-  `TombolBeli`)
+- Modify: `web/src/app/produk/[slug]/tombol-ambil.tsx` — dua suntingan, keduanya
+  **berbasis nama, bukan nomor baris** (§0.12): `function BlokBuka` → `export function BlokBuka`,
+  dan HAPUS komponen `TautanBuka` seutuhnya (dokblok sampai kurung tutup badannya), yang
+  pekerjaannya diserap `TombolBeli`
 - Modify: `web/src/app/produk/[slug]/page.tsx:5,17-58,62-97` (impor, dua prop baru pada
   `HargaProduk`, cabang berbayar merender `<TombolBeli>`)
 - Modify: `web/README.md:158` (menyisipkan DUA baris tepat sesudah baris
@@ -2875,7 +3040,8 @@ Harapan: hanya `src/app/produk/[slug]/tombol-ambil.tsx` (definisi) dan
 
 Lalu di `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-ambil.tsx`:
 
-1. Baris 22, ubah `function BlokBuka({ slug }: { slug: string }) {` menjadi:
+1. Cari deklarasi `function BlokBuka({ slug }: { slug: string }) {` (baris 22 pada `main`
+   hari ini — cari namanya, jangan percaya nomornya) dan ganti menjadi:
 
 ```tsx
 /**
@@ -2887,10 +3053,18 @@ Lalu di `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-amb
 export function BlokBuka({ slug }: { slug: string }) {
 ```
 
-2. Hapus SELURUH komponen `TautanBuka` (dokblok + badan, baris 119–137) — pekerjaannya
-   diserap `TombolBeli`. `PanelAmbil`, `TombolAmbil`, dan `punyaProdukDiPeramban` tidak
-   disentuh; `tests/produk-tombol-ambil.test.tsx` tidak menyebut `TautanBuka` sama sekali
-   (diperiksa), jadi ia tetap hijau.
+2. Hapus komponen bernama `TautanBuka` — **dari baris pertama dokbloknya (`/**`) sampai
+   kurung tutup badannya (`}`)**, dan **JANGAN memakai nomor baris**. Pekerjaannya diserap
+   `TombolBeli`. `PanelAmbil`, `TombolAmbil`, dan `punyaProdukDiPeramban` tidak disentuh;
+   `tests/produk-tombol-ambil.test.tsx` tidak menyebut `TautanBuka` sama sekali (diperiksa),
+   jadi ia tetap hijau.
+
+   Versi pertama langkah ini berbunyi "baris 119–137", dan nomor itu **salah sejak rencana
+   ini ditulis** — bukan akibat P1-A. Di `main` hari ini baris 119 adalah `return baris !== null;`,
+   ekor `punyaProdukDiPeramban`: fungsi yang tugas ini sendiri IMPOR. Dituruti harfiah,
+   fungsinya rusak dan ekor komponen yang mau dihapus justru menggantung. Aturan umumnya
+   §0.12. Sesudah menghapus, jalankan `grep -n "TautanBuka" src/ tests/` lagi: nol hasil, dan
+   `npx tsc --noEmit` hijau.
 
 ---
 
@@ -3374,6 +3548,10 @@ membayar lalu kembali mencari produknya — adalah orang yang sedang membuka hal
     transactionStatus: string; fraudStatus: string; transactionId: string }): string;`
 - Consumes (repo): `createServerSupabase()` dari `@/lib/supabase/server`,
   `createAdminSupabase()` dari `@/lib/supabase/admin`.
+- Consumes (T4, sudah ada di `main`) — `web/tests/helpers/klien-kedua.ts`:
+  `KLIEN_KEDUA_ID`, `siapkanKlienKedua()`, `bongkarKlienKedua()`. Dipakai **hanya** oleh berkas
+  uji, dan hanya untuk menampung satu baris: pesanan yang `kode`-nya sengaja dirusak. Lihat
+  §0.11 — baris itu tidak boleh menyentuh klien yang dipakai Tugas 8, 11, dan 12.
 - Produces (dipakai Task 11 dan Task 12 — tanda tangan PERSIS):
   ```ts
   // web/src/lib/pesanan/periksa-menggantung.ts
@@ -3383,13 +3561,20 @@ membayar lalu kembali mencari produknya — adalah orang yang sedang membuka hal
   };
   export type HasilPeriksaPesanan =
     | "diterapkan" | "duplikat" | "tanpa_efek" | "pesanan_tidak_ada"
-    | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "galat_basis_data";
+    | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "kunci_belum_terpasang"
+    | "galat_basis_data";
   export async function terapkanJawabanMidtrans(p: PesananDiperiksa): Promise<HasilPeriksaPesanan>;
   export async function sapuPesananMenggantung(
-    pemilih: SupabaseClient, batasBaris: number, clientId?: string | null,
+    pemilih: SupabaseClient, batasBaris: number, clientId: string | null = null,
   ): Promise<{ diperiksa: number }>;                 // MELEMPAR bila PEMILIHAN barisnya gagal
   export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }>;  // TIDAK PERNAH melempar
   ```
+  **SEMBILAN nilai, bukan delapan.** `kunci_belum_terpasang` datang dari `kode: -1` adapter
+  (Tugas 8) dan sengaja TIDAK dilebur ke `midtrans_tak_terjawab`: yang kedua menyuruh staf
+  mencoba lagi, dan kunci server yang belum dipasang tidak pernah sembuh dengan dicoba lagi.
+  Tugas 11 memetakannya ke kalimat yang sudah dipilih Tugas 8 — *"Pembayaran belum aktif.
+  Hubungi tim PADMA."* — dan `Record<HasilPeriksaPesanan, string>` di sana yang MEMAKSA
+  petanya lengkap.
   ```ts
   // web/src/lib/pesanan/picu-periksa.ts   (tanpa server-only — diimpor komponen klien)
   export async function picuPeriksaSekali(
@@ -3445,6 +3630,10 @@ import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+// Klien KEDUA ber-akun auth, lahir di Tugas 4 dan sudah ada di `main`. Dipakai
+// di sini HANYA untuk menampung baris yang `kode`-nya sengaja dirusak — lihat
+// `bersihkan()` dan §0.11.
+import { KLIEN_KEDUA_ID, siapkanKlienKedua, bongkarKlienKedua } from "./helpers/klien-kedua";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -3499,6 +3688,15 @@ const AWALAN_KODE = "PSN-260926-1B";
 
 let produkId: string;
 
+/**
+ * Kunci primer setiap baris `orders` yang berkas ini semai, dikumpulkan saat
+ * menyemai. `bersihkan()` menghapus lewat DAFTAR INI, bukan lewat `kode`
+ * — aturan §0.11 nomor 2, dan berkas inilah yang membayarnya: uji
+ * "bentuk_order_id" MENGGANTI `orders.kode` jadi "bukan-kode-pesanan", jadi
+ * pembersih yang mencari lewat `kode` tidak akan pernah menemukan barisnya lagi.
+ */
+const idDisemai: string[] = [];
+
 // ---------------------------------------------------------------------------
 // Perkakas
 // ---------------------------------------------------------------------------
@@ -3546,6 +3744,7 @@ async function semaiPesanan(o: {
     urutan: 1,
   });
   if (galatItem) throw galatItem;
+  idDisemai.push(data!.id as string);
   return data!.id as string;
 }
 
@@ -3569,14 +3768,29 @@ async function statusPesanan(id: string): Promise<string> {
   return data!.status as string;
 }
 
+/**
+ * Menghapus lewat KUNCI PRIMER yang sudah dipegang — tidak pernah lewat `kode`.
+ *
+ * Versi pertama rencana ini mencari barisnya dengan
+ * `.like("kode", "PSN-260926-1B%")`, dan uji "bentuk_order_id" di bawah
+ * mengganti `orders.kode` jadi `"bukan-kode-pesanan"` beberapa baris sebelum
+ * pembersih itu jalan. Akibatnya bukan uji merah melainkan basis data yang
+ * teracuni PERMANEN: barisnya `menunggu_bayar`, `pesanan_terbuka_satu_per_klien`
+ * berlaku per KLIEN, dan sesudah berkas ini berjalan SEKALI setiap
+ * `buat_pesanan` untuk klien itu gagal — di Tugas 8, 11, dan 12, dan di sesi
+ * orang lain yang memakai Supabase lokal yang sama.
+ *
+ * Aturan umumnya §0.11 nomor 2: pembersih fixture tidak pernah mencari lewat
+ * kolom yang bisa disunting ujinya sendiri.
+ */
 async function bersihkan() {
   // Entitlement DULU: `digital_entitlements.pesanan_id` menunjuk `orders`
-  // dengan `on delete restrict` (migrasi 6), jadi pesanan tidak bisa dihapus
-  // selama entitlementnya masih ada.
+  // dengan `on delete restrict` (migrasi 5 — kolomnya dipindah ke sana, lihat
+  // §0.2), jadi pesanan tidak bisa dihapus selama entitlementnya masih ada.
+  // `product_id` aman dipakai di sini: tidak ada satu pun uji yang menyuntingnya.
   await admin.from("digital_entitlements").delete().eq("product_id", produkId);
 
-  const { data } = await admin.from("orders").select("id").like("kode", `${AWALAN_KODE}%`);
-  const ids = (data ?? []).map((b) => b.id as string);
+  const ids = idDisemai.splice(0);
   if (ids.length === 0) return;
   // Jejak & notifikasi SENGAJA tanpa FK (pola `jejak_status_bayar`), jadi
   // keduanya tidak ikut tersapu dan harus dihapus sendiri — lihat
@@ -3589,6 +3803,23 @@ async function bersihkan() {
 
 beforeAll(async () => {
   ref.sesi = await signInAs("ananda@padma.test");
+  // Klien KETIGA yang dipakai berkas ini, dan satu-satunya yang menampung
+  // baris ber-`kode` sengaja cacat. `siapkanKlienKedua()` MENYAPU sisa run
+  // sebelumnya lebih dulu, dan sapuannya berkunci `client_id` — bukan `kode`
+  // — sehingga baris cacat dari run yang mati di tengah jalan tetap terhapus.
+  // Itulah pagar kedua di bawah `bersihkan()`: poin 1 memperbaiki sebabnya,
+  // poin ini membuat kegagalannya tidak fatal (§0.11).
+  await siapkanKlienKedua();
+
+  // Sisa run SEBELUMNYA yang `kode`-nya masih utuh. Pembersih dalam-run
+  // memakai kunci primer (lihat `bersihkan()`); sapuan berkunci awalan hanya
+  // dipakai SEKALI di sini, untuk baris yatim yang id-nya sudah tidak dipegang
+  // siapa pun. Baris yang `kode`-nya sudah dirusak tidak tertangkap di sini —
+  // ia milik `KLIEN_KEDUA_ID`, dan `siapkanKlienKedua()` di atas yang
+  // menyapunya.
+  const { data: yatim } = await admin
+    .from("orders").select("id").like("kode", `${AWALAN_KODE}%`);
+  for (const b of yatim ?? []) idDisemai.push(b.id as string);
 
   await admin.from("digital_products").delete().eq("slug", SLUG);
   const { data, error } = await admin
@@ -3617,6 +3848,9 @@ beforeEach(async () => {
 afterAll(async () => {
   await bersihkan();
   await admin.from("digital_products").delete().eq("id", produkId);
+  // Membongkar klien kedua BESERTA akun auth-nya — fixture yang dibuat sendiri
+  // dibongkar sendiri, dan urutannya sudah dikunci di helper itu.
+  await bongkarKlienKedua();
 });
 
 // ---------------------------------------------------------------------------
@@ -3746,11 +3980,20 @@ describe("kegagalan disembunyikan", () => {
     // bisa lahir dari fixture service role atau perbaikan SQL manual: keduanya
     // melewati CHECK karena `kode` memang tidak punya CHECK bentuk.
     //
-    // SATU pesanan saja: `pesanan_terbuka_satu_per_klien` adalah indeks unik
-    // GLOBAL per klien, jadi dua pesanan `menunggu_bayar` untuk klien yang
-    // sama mustahil disemai. Yang diuji di sini memang
+    // ===== KENAPA `KLIEN_KEDUA_ID`, BUKAN ANANDA =====
+    // Ini SATU-SATUNYA baris di seluruh P1-B yang namanya sengaja dirusak, dan
+    // baris yang namanya dirusak adalah baris yang paling mungkin lolos dari
+    // pembersih mana pun. Ia karena itu tidak pernah menyentuh klien yang
+    // dipakai tiga tugas lain: kalau ia toh tertinggal,
+    // `pesanan_terbuka_satu_per_klien` (unik per KLIEN) hanya mengunci klien
+    // fixture yang dibongkar `bongkarKlienKedua()` di `afterAll` — bukan
+    // Ananda, yang setiap `buat_pesanan`-nya di Tugas 8, 11, dan 12 akan gagal
+    // selamanya. Lihat §0.11.
+    //
+    // SATU pesanan saja per klien: `pesanan_terbuka_satu_per_klien` adalah
+    // indeks unik GLOBAL per klien. Yang diuji di sini memang
     // `terapkanJawabanMidtrans` langsung, bukan pemilihnya.
-    const id = await semaiPesanan({ kode: `${AWALAN_KODE}0011` });
+    const id = await semaiPesanan({ kode: `${AWALAN_KODE}0011`, clientId: KLIEN_KEDUA_ID });
     await admin.from("orders").update({ kode: "bukan-kode-pesanan" }).eq("id", id);
 
     const hasil = await terapkanJawabanMidtrans({
@@ -3821,6 +4064,14 @@ describe("radius pemeriksaan", () => {
     // Ongkosnya dua, dan yang kedua lebih halus: kuota Midtrans dipakai untuk
     // orang yang tidak memintanya, DAN `diperiksa_pada` mereka tercap,
     // sehingga penyapu Lapis 3 melewatinya selama lima menit berikutnya.
+    //
+    // Uji ini hanya memaku yang diklaimnya bila gerbangnya benar-benar
+    // menggerbang: `periksaPesananMenggantung` membaca `clients` dengan
+    // `.eq("user_id", user.id)`. Tanpa klausa itu ia tetap HIJAU hari ini —
+    // bukan karena gerbangnya bekerja, melainkan karena `admin@padma.test`
+    // kebetulan tidak punya baris `clients` di seed. Satu baris klien untuk
+    // akun staf, kapan pun kelak ditambahkan, langsung membalik kelulusan itu
+    // menjadi kebocoran senyap.
     const kode = `${AWALAN_KODE}0010`;
     const id = await semaiPesanan({ kode });
     midtrans.jawaban = jawabanSukses(`${kode}.1`, "settlement");
@@ -3980,10 +4231,15 @@ export type PesananDiperiksa = {
 
 /**
  * Empat nilai pertama datang APA ADANYA dari `terapkan_notifikasi_midtrans`;
- * tiga sisanya lahir di sini karena RPC-nya tidak pernah dipanggil untuk kasus
+ * lima sisanya lahir di sini karena RPC-nya tidak pernah dipanggil untuk kasus
  * itu. Dibedakan supaya pemanggil (rute staf) bisa mengatakan "Midtrans tidak
  * menjawab" alih-alih "tidak ada yang berubah" — dua kalimat yang menuntut dua
  * tindakan berbeda dari manusia yang menekan tombolnya.
+ *
+ * Union, bukan komentar: `Record<HasilPeriksaPesanan, string>` di Tugas 11
+ * memerah di kompilator sampai setiap nilai punya kalimatnya. Inilah
+ * satu-satunya mekanisme di repo ini yang mengubah "lupa menangani satu kasus"
+ * dari kalimat salah di layar staf menjadi galat kompilasi.
  */
 export type HasilPeriksaPesanan =
   | "diterapkan"
@@ -3995,6 +4251,15 @@ export type HasilPeriksaPesanan =
   | "bentuk_order_id"
   | "belum_kedaluwarsa"
   | "midtrans_tak_terjawab"
+  // TERPISAH dari `midtrans_tak_terjawab`, dan pemisahan itu seluruh gunanya:
+  // jaringan yang mati sembuh dengan dicoba lagi, `MIDTRANS_SERVER_KEY` yang
+  // belum terpasang TIDAK PERNAH. Dilebur, staf membaca "Coba lagi beberapa
+  // saat lagi." untuk keadaan yang tidak akan berubah sampai seseorang
+  // memasang env — dan mencoba lagi selamanya. Adapter sudah memisahkannya di
+  // sumbernya (`kode: -1`), dan dua permukaan Tugas 8 yang lain sudah lama
+  // mengatakan kalimat yang benar (webhook 503 `kunci_kosong`,
+  // `terbitkanTokenSnap` "Pembayaran belum aktif. Hubungi tim PADMA.").
+  | "kunci_belum_terpasang"
   | "galat_basis_data";
 
 type BarisMenggantung = {
@@ -4043,9 +4308,15 @@ export async function terapkanJawabanMidtrans(
   }
 
   if (!jawaban.ok) {
+    // `-1` DULU, sebelum saringan 404: kunci server yang belum terpasang berarti
+    // NOL permintaan pernah keluar, jadi ini bukan "Midtrans tidak menjawab"
+    // melainkan "kita tidak pernah bertanya". Kalimatnya di Tugas 11 menyuruh
+    // menghubungi tim, bukan mencoba lagi — dan itulah satu-satunya tindakan
+    // yang bisa mengubah keadaannya.
+    if (jawaban.kode === -1) return "kunci_belum_terpasang";
     // 404 "Transaction doesn't exist" adalah SATU-SATUNYA kegagalan yang boleh
-    // dibaca sebagai vonis; sisanya (5xx, timeout, kunci salah) berarti kita
-    // belum tahu apa-apa.
+    // dibaca sebagai vonis; sisanya (5xx, timeout) berarti kita belum tahu
+    // apa-apa.
     if (jawaban.kode !== 404) return "midtrans_tak_terjawab";
 
     const tenggang = Date.parse(p.kedaluwarsaPada) + JAM_TENGGANG_404 * 3_600_000;
@@ -4107,6 +4378,24 @@ export async function terapkanJawabanMidtrans(
 }
 
 /**
+ * Nilai balik SAH `terapkan_notifikasi_midtrans`, sebagai himpunan tertutup.
+ *
+ * Kembaran `hasilRpcSah` di `src/lib/midtrans/kode-jawaban.ts` (Tugas 8), dan
+ * itu disengaja: rute webhook dan berkas ini memanggil RPC yang SAMA, jadi
+ * keduanya harus punya sikap kepercayaan yang sama terhadap nilainya. Tanpa
+ * penjaga di sini, `data as HasilPeriksaPesanan` membuat nilai kelima yang
+ * kelak lahir masuk diam-diam sebagai tipe yang salah — rute Tugas 8 berhenti
+ * aman, sementara jalur ini menyalurkan string asing ke `Record<...>` dan
+ * memulangkan `undefined` sebagai kalimat ke layar staf.
+ *
+ * TIDAK mengimpor `hasilRpcSah`: `kode-jawaban.ts` hidup di sisi server-only
+ * rute webhook bersama tipe `HasilWebhook` yang memuat nilai-nilai yang tidak
+ * berarti apa-apa di sini (`badan_terlalu_besar`, `tanda_tangan_salah`).
+ * Menariknya ke jalur ini menukar satu cacat dengan cacat lain.
+ */
+const SAH = new Set(["diterapkan", "duplikat", "tanpa_efek", "pesanan_tidak_ada"]);
+
+/**
  * SERVICE ROLE, dan itu disengaja: `terapkan_notifikasi_midtrans` ada di
  * `MESIN_TERTUTUP` (tests/fungsi-mesin-tertutup.test.ts) — tertutup bagi
  * `authenticated` justru supaya vonis Midtrans tidak pernah bisa diketik
@@ -4143,7 +4432,17 @@ async function kirimKeMesin(a: {
     p_sumber: "status_api",
   });
   if (error) return "galat_basis_data";
-  return (data as HasilPeriksaPesanan | null) ?? "tanpa_efek";
+  if (data == null) return "tanpa_efek";
+  // Nilai di LUAR himpunan bukan "tanpa efek" dan bukan hasil yang bisa
+  // dipetakan — ia berarti mesinnya sudah berubah dan jalur ini belum.
+  // `galat_basis_data` karena itu jawaban yang jujur: ia memaksa 500 di rute
+  // staf dan TIDAK menaikkan penghitung sapuan, alih-alih memalsukan "sudah
+  // diperiksa" untuk nilai yang tidak seorang pun di sini mengerti.
+  if (!SAH.has(data as string)) {
+    console.error(`[pesanan] nilai balik terapkan_notifikasi_midtrans tak dikenal: ${data}`);
+    return "galat_basis_data";
+  }
+  return data as HasilPeriksaPesanan;
 }
 
 /**
@@ -4202,9 +4501,16 @@ export async function sapuPesananMenggantung(
   //
   // UPDATE ini memakai service role dan menyentuh `orders` dari TypeScript —
   // satu-satunya di seluruh P1. Ia sempit dengan sengaja: satu kolom yang
-  // bukan status dan bukan uang, dan `where`-nya tetap membawa
-  // `status = 'menunggu_bayar'` supaya baris yang sudah bergerak di antara
-  // SELECT dan UPDATE tidak ikut tersentuh.
+  // bukan status dan bukan uang, dan `where`-nya tetap membawa pagar status
+  // supaya baris yang sudah bergerak di antara SELECT dan UPDATE tidak ikut
+  // tersentuh.
+  //
+  // Pagarnya `PESANAN_TERBUKA`, bukan literal "menunggu_bayar" — himpunan yang
+  // SAMA dengan yang dipakai pemilih di atas. Dua predikat yang harus selalu
+  // sepakat tidak boleh ditulis dua cara: nilai enum keenam yang kelak
+  // diklasifikasikan terbuka akan ikut terpilih tapi TIDAK ikut tercap, dan
+  // pesanan yang tidak pernah tercap adalah pesanan yang ditanyakan ulang ke
+  // Midtrans setiap kali halamannya dibuka.
   const admin = createAdminSupabase();
   const { error: galatCap } = await admin
     .from("orders")
@@ -4213,7 +4519,7 @@ export async function sapuPesananMenggantung(
       "id",
       data.map((b) => b.id),
     )
-    .eq("status", "menunggu_bayar");
+    .in("status", [...PESANAN_TERBUKA]);
   // Gagal mencap -> BERHENTI, jangan bertanya. Bertanya tanpa cap adalah
   // bentuk banjir yang paling mudah lolos review.
   if (galatCap) throw galatCap;
@@ -4239,10 +4545,18 @@ export async function sapuPesananMenggantung(
       continue;
     }
     // "Diperiksa" berarti jawabannya SAMPAI, apa pun isinya. Yang tidak
-    // dihitung hanyalah dua kegagalan infrastruktur — kalau keduanya ikut
-    // dihitung, angka yang dilaporkan penjadwal tidak bisa dibedakan dari
-    // penjadwal yang jalan sempurna.
-    if (hasil !== "midtrans_tak_terjawab" && hasil !== "galat_basis_data") diperiksa += 1;
+    // dihitung hanyalah KETIGA kegagalan infrastruktur — kalau ikut dihitung,
+    // angka yang dilaporkan penjadwal tidak bisa dibedakan dari penjadwal yang
+    // jalan sempurna. `kunci_belum_terpasang` yang paling mahal bila lolos:
+    // server tanpa kunci akan melaporkan "diperiksa: 20" tiap lima belas menit
+    // tanpa satu permintaan pun pernah keluar.
+    if (
+      hasil !== "midtrans_tak_terjawab" &&
+      hasil !== "kunci_belum_terpasang" &&
+      hasil !== "galat_basis_data"
+    ) {
+      diperiksa += 1;
+    }
   }
   return { diperiksa };
 }
@@ -4277,9 +4591,24 @@ export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }
     // penyapu Lapis 3 `nulls first` jadi diperdaya: pesanan yang "baru
     // diperiksa" oleh orang yang cuma lewat dilewati penyapu selama lima
     // menit berikutnya.
+    //
+    // Gerbangnya `.eq("user_id", user.id)`, dan klausa itu BUKAN hiasan.
+    // `clients` punya policy baca staf juga, jadi tanpa klausa itu sesi
+    // admin/owner memungut baris `clients` siapa saja yang kebetulan pertama
+    // dipulangkan — `maybeSingle()` bahkan melempar untuk lebih dari satu
+    // baris, jadi gerbangnya "berhasil" hanya selama seed kebetulan punya satu
+    // klien. Polanya `ambilKlien` (`src/lib/passport/data.ts:66`), dan alasan
+    // yang ditulis di sana sama: operator setara atas `user_id`, tidak pernah
+    // pola.
+    const {
+      data: { user },
+    } = await sesi.auth.getUser();
+    if (!user) return { diperiksa: 0 };
+
     const { data: klien } = await sesi
       .from("clients")
       .select("id")
+      .eq("user_id", user.id)
       .maybeSingle<{ id: string }>();
     // Nol baris klien = pemanggilnya anon, staf, atau akun yang belum tertaut.
     // Tidak ada pesanan MILIKNYA untuk diperiksa, dan tidak ada apa pun yang
@@ -4529,7 +4858,7 @@ menyembuhkan.
 - `/Users/arvinfairuz/Documents/padma/web/tests/helpers/nominal.ts` — `nominalDalam()`, yang di
   sini dipakai dengan assertion KEBALIKAN.
 - `/Users/arvinfairuz/Documents/padma/web/tests/admin-shell.test.ts` baris 401-450 dan 604-651 —
-  empat suntingan Step 9 ada di sana, dan sapuan "nol service role di `src/app/admin/**`"
+  empat suntingan Step 10 ada di sana, dan sapuan "nol service role di `src/app/admin/**`"
   (baris 643-651) adalah alasan keempat rute hidup di `src/app/api/**`.
 
 **Batas yang perlu diketahui sebelum menulis satu baris pun:**
@@ -4549,6 +4878,9 @@ menyembuhkan.
 
 **Files:**
 
+- Create: `web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql` — migrasi
+  **ke-91**, satu-satunya berkas SQL di seluruh P1-B. `create or replace function` atas tiga
+  fungsi yang sudah ada; nol objek baru (Step 3)
 - Create: `web/src/lib/admin/pesanan.ts`
 - Create: `web/src/app/admin/pesanan/page.tsx`
 - Create: `web/src/app/admin/pesanan/tabel-pesanan.tsx`
@@ -4559,17 +4891,25 @@ menyembuhkan.
 - Create: `web/src/app/api/pesanan/[id]/tutup-tinjauan/route.ts`
 - Modify: `web/src/app/admin/_shell/nav-admin.tsx:34-36`
 - Modify: `web/tests/admin-shell.test.ts:408`, `:410-423`, `:432`, `:442-448`
-- Modify: `web/README.md:129` (satu baris halaman) dan akhir tabel rute non-halaman (empat baris)
+- Modify: `web/README.md` — satu baris HALAMAN tepat sesudah baris `` `/admin/bayar` ``
+  (:129 pada `main` hari ini) dan EMPAT baris rute tepat sesudah baris
+  `` `/api/pesanan/[id]/batal` `` milik Tugas 9. **Cari baris jangkarnya, jangan percaya
+  nomornya** (§0.12)
 - Test: `web/tests/admin-pesanan.test.tsx` (**ekstensi `.tsx`**, bukan `.ts`: berkas ini
   merender `<TabelPesanan …/>` dengan sintaks JSX, mengikuti `tests/produk-tombol-ambil.test.tsx`.
   `tests/admin-bayar.test.ts` bisa `.ts` karena ia memakai `createElement`, bukan JSX.)
 
 **Interfaces:**
 
-- Consumes (Task 1) — `web/src/lib/pesanan/status.ts`:
-  - `export type StatusPesanan = "menunggu_bayar" | "ditahan" | "lunas" | "kedaluwarsa" | "dibatalkan";`
-  - `export type SumberItemPesanan = "produk_digital" | "sesi";`
+- Consumes (Task 1) — `web/src/lib/pesanan/status.ts` (**sudah ada di `main`**):
+  - `export type StatusPesanan = (typeof STATUS_PESANAN_SAH)[number];` — DITURUNKAN dari
+    `export const STATUS_PESANAN_SAH = ["menunggu_bayar","ditahan","lunas","kedaluwarsa","dibatalkan"] as const`,
+    bukan union yang ditulis tangan. Arahnya penting bagi tugas ini: nilai enum keenam cukup
+    ditambahkan ke arraynya, dan `Record<StatusPesanan, string>` di bawah langsung memerah.
+  - `export type SumberItemPesanan = (typeof SUMBER_ITEM_PESANAN)[number];`
   - `export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string>;`
+  - `export const PESANAN_TERBUKA` dan `export const PESANAN_BERUANG` — dipakai memilih baris
+    layar dan menyaring blok "Butuh perhatian" (§0.6).
 - Consumes (Task 2) — `public.orders`, dibaca DENGAN SESI PEMANGGIL lewat policy
   `"pesanan: staf baca"`. `public.order_items` — **nol grant, nol policy**: hanya service role.
 - Consumes (Task 3) — `public.notifikasi_pesanan (pesanan_id, nominal_diterima, diterima_pada)`
@@ -4588,11 +4928,15 @@ menyembuhkan.
   export type PesananDiperiksa = { id: string; kode: string; percobaan: number; kedaluwarsaPada: string };
   export type HasilPeriksaPesanan =
     | "diterapkan" | "duplikat" | "tanpa_efek" | "pesanan_tidak_ada"
-    | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "galat_basis_data";
+    | "bentuk_order_id" | "belum_kedaluwarsa" | "midtrans_tak_terjawab" | "kunci_belum_terpasang"
+    | "galat_basis_data";
   export async function terapkanJawabanMidtrans(p: PesananDiperiksa): Promise<HasilPeriksaPesanan>;
   ```
-  **Delapan nilai, bukan tujuh.** `bentuk_order_id` lahir karena `rakitOrderId` MELEMPAR untuk
+  **SEMBILAN nilai, bukan delapan.** `bentuk_order_id` lahir karena `rakitOrderId` MELEMPAR untuk
   `kode`/`percobaan` cacat dan `terapkanJawabanMidtrans` dikontrakkan tidak pernah melempar.
+  `kunci_belum_terpasang` lahir dari `kode: -1` adapter: kunci server yang belum dipasang tidak
+  pernah sembuh dengan dicoba lagi, jadi ia TIDAK boleh ikut kalimat "Coba lagi beberapa saat
+  lagi." milik `midtrans_tak_terjawab`.
   `PESAN` di rute "Periksa ulang" adalah `Record<HasilPeriksaPesanan, string>`, jadi nilai yang
   lupa dipetakan MERAH di kompilator — tapi hanya kalau petanya memang lengkap.
 - Consumes (repo): `requireRole(allowed: AppRole[])` dari `@/lib/auth/require-role`
@@ -4618,7 +4962,9 @@ menyembuhkan.
   ```
   Kontrak keempat rute (dipakai `tombol-pesanan.tsx`):
   - `POST /api/pesanan/[id]/periksa-ulang` → `200 { hasil: HasilPeriksaPesanan, pesan: string }`
-    | `404` | `502` (Midtrans tak terjawab) | `500`
+    | `404` | `502` (Midtrans tak terjawab) | `503` (kunci server belum terpasang) | `500`
+    — setiap kode selain 200 membawa `pesan`, karena `tombol-pesanan.tsx` HANYA menampilkan
+    `pesan` ketika `res.ok` bernilai false.
   - `POST /api/pesanan/[id]/terbitkan-akses` → `200 { terbit: string[], belumAdaPenangan: number[] }`
     | `404` | `409` (pesanan belum lunas) | `500`
   - `POST /api/pesanan/[id]/putuskan` body `{ putusan: "lunas" | "dibatalkan" }`
@@ -4815,9 +5161,14 @@ async function bersihkan() {
 }
 
 /**
- * Lima pesanan yang menutupi ketiga klausa "Butuh perhatian" sekaligus kedua
+ * Lima pesanan yang menutupi KEDUA klausa "Butuh perhatian" sekaligus kedua
  * urutan blok "Terbuka". Dua pesanan `menunggu_bayar` WAJIB milik dua klien
  * berbeda: `pesanan_terbuka_satu_per_klien` hanya mengizinkan satu per klien.
+ *
+ * DUA, bukan tiga: `bacaPesananStaf` menyaring dengan `butuhTinjauanPada !== null`
+ * ATAU `PESANAN_BERUANG.includes(...) && belum ada akses`. Hitungan "tiga" adalah
+ * sisa desain sebelum kedua klausa lama (`status === "ditahan"` tanpa syarat, dan
+ * `status === "lunas" && belum ada akses`) dilebur jadi satu lewat himpunan Tugas 1.
  */
 async function siapkan() {
   await bersihkan();
@@ -4894,13 +5245,13 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe("bacaPesananStaf", () => {
-  it("Butuh perhatian memuat ketiga klausa, dan lunas yang aksesnya sudah terbit TIDAK ikut", async () => {
+  it("Butuh perhatian memuat kedua klausa, dan lunas yang aksesnya sudah terbit TIDAK ikut", async () => {
     const { butuhPerhatian } = await bacaPesananStaf();
     const kode = butuhPerhatian.map((p) => p.kode);
 
     expect(kode).toContain(K_DITAHAN); // uang masuk, barang belum keluar
     expect(kode).toContain(K_LUNAS_TANPA_AKSES); // jaring yang tidak menunggu siapa pun ingat
-    // Klausa ketiga TIDAK boleh menangkap pesanan yang sudah beres: layar yang
+    // Klausa kedua TIDAK boleh menangkap pesanan yang sudah beres: layar yang
     // selalu penuh adalah layar yang berhenti dibaca.
     expect(kode).not.toContain(K_LUNAS_BERAKSES);
   });
@@ -5254,7 +5605,695 @@ cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.
 Kegagalan yang diharapkan: `Failed to load url @/lib/admin/pesanan` — seluruh berkas merah
 karena modulnya belum ada.
 
-- [ ] **Step 3: Tulis pembaca layar staf**
+- [ ] **Step 3: Migrasi ke-91 — `sebab_tinjauan` yang pertama tidak pernah tertimpa**
+
+Koreksi "review akhir P1-A" di kepala rencana ini (butir 2) memerintahkan perbaikan lima
+UPDATE `sebab_tinjauan` yang menugaskan tanpa `coalesce`, dan menambahkan *"jangan membatasi
+perbaikannya pada jalur coba-ulang"*. Perintah itu sebelumnya tidak punya LANGKAH: nol berkas
+`.sql` di blok Files mana pun, nol Step yang menulis migrasi, nol uji yang menegaskan
+`sebab_tinjauan` bertahan. Perintah yang tidak punya langkah bukan perintah — ia hanya kalimat.
+Langkah ini yang memilikinya.
+
+**Kenapa Tugas 11, bukan tugas baru:** layar inilah yang MENAMPILKAN `sebab_tinjauan`
+(`tabel-pesanan.tsx`, kolom "Butuh perhatian"). Orang yang membangun layarnya adalah orang yang
+peduli alasannya benar; memisahkannya jadi tugas sendiri berarti menyerahkan kebenaran isi
+kolom kepada orang yang tidak pernah melihat kolomnya.
+
+**Dua aturan yang mengikat isi migrasinya:**
+
+1. **Pakai `create or replace function`**, supaya **ACL-nya lestari**. Ketiga fungsi yang
+   disentuh ada di `MESIN_TERTUTUP`; `create or replace` mempertahankan OID-nya, jadi
+   pencabutan hak dan `comment on function` ikut bertahan tanpa ditulis ulang.
+2. **Bila toh memilih `drop` + `create`, WAJIB menulis ulang**
+   `revoke all on function public.terapkan_notifikasi_midtrans(...) from public, anon, authenticated;`
+   — berikut dua saudaranya. Kalau lupa, `tests/fungsi-mesin-tertutup.test.ts` menangkapnya,
+   dan itu memang gunanya.
+
+**Yang berubah: LIMA assignment, dari tujuh.** Kelimanya dibungkus
+`coalesce(o.sebab_tinjauan, …)` — sepasang dengan `butuh_tinjauan_pada` yang sudah
+`coalesce(o.butuh_tinjauan_pada, now())` di baris atasnya:
+
+| # | Fungsi | Nilai yang ditugaskan | Kapan penimpaannya terjadi |
+|---|---|---|---|
+| 1 | `terbitkan_akses_item` | `'akses_tertahan'` | pesanan yang sudah bertanda `selisih_nominal` gagal menerbitkan akses |
+| 2 | `salurkan_pesanan` | `'penangan_belum_ada'` | item kedua berjenis `sesi` menimpa alasan item pertama |
+| 3 | `terapkan_notifikasi_midtrans` | `v_sebab` (cabang refund/chargeback/asing) | **terjangkau hari ini**: `refund` mendarat pada pesanan bertanda `lunas_setelah_tutup` |
+| 4 | `terapkan_notifikasi_midtrans` | `'lunas_setelah_tutup'` | pesanan `dibatalkan` yang sudah bertanda `selisih_status` |
+| 5 | `terapkan_notifikasi_midtrans` | `'selisih_status'` (transisi ditolak) | baris `menunggu_bayar` yang sudah bertanda dari tombol Tugas 11 |
+
+**Dua yang TIDAK disentuh**, dan keduanya sengaja: cabang "notifikasi mendarat pada pesanan
+yang sedang ditahan" sudah menulis `coalesce(o.sebab_tinjauan, 'selisih_status')` sejak hari
+pertama — dialah cetakan yang kelima di atas ikuti — dan UPDATE transisi menulis
+`coalesce(v_sebab, o.sebab_tinjauan)`, arah KEBALIKAN yang memang benar di sana: baris itu
+satu-satunya yang benar-benar MEMINDAHKAN pesanan, dan alasan keadaan barunya menggantikan
+alasan keadaan lamanya.
+
+**Uji DULU.** Tambahkan blok berikut di **akhir**
+`/Users/arvinfairuz/Documents/padma/web/tests/admin-pesanan.test.tsx` — ia memakai perkakas
+yang sudah ada di berkas itu (`semai`, `admin`, `AWALAN_KODE`, `KLIEN_RINA`):
+
+```ts
+// ---------------------------------------------------------------------------
+// sebab_tinjauan lestari (migrasi 20260927100000)
+// ---------------------------------------------------------------------------
+
+describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
+  it("refund yang mendarat pada pesanan bertanda lunas_setelah_tutup TIDAK menimpa alasannya", async () => {
+    // Jalur yang terjangkau HARI INI, tanpa satu baris kode baru — dan yang
+    // hilang adalah satu-satunya petunjuk bahwa uang pernah masuk pada pesanan
+    // yang sudah kami tutup. `butuh_tinjauan_pada` sudah ber-`coalesce` sejak
+    // awal, jadi sebelum migrasi ini cap waktunya menyebut kejadian PERTAMA
+    // sementara alasannya menyebut kejadian TERAKHIR.
+    const kode = `${AWALAN_KODE}0006`;
+    const id = await semai({
+      kode, clientId: KLIEN_RINA, status: "lunas", harga: 50_000,
+      butuhTinjauan: "lunas_setelah_tutup",
+    });
+
+    const { error } = await admin.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: `${kode}.1`,
+      p_transaction_status: "refund",
+      p_fraud_status: "",
+      p_transaction_id: `trx-${kode}-refund`,
+      p_payment_type: "bank_transfer",
+      p_gross_amount: 50_000,
+      p_sidik: `sidik-${kode}-refund`,
+      p_sumber: "webhook",
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from("orders")
+      .select("sebab_tinjauan, butuh_tinjauan_pada")
+      .eq("id", id)
+      .single();
+    expect(data!.sebab_tinjauan).toBe("lunas_setelah_tutup");
+    expect(data!.butuh_tinjauan_pada).not.toBeNull();
+  });
+
+  it("pesanan yang BELUM bertanda tetap mendapat sebabnya", async () => {
+    // Kontrol positif, dan ia wajib: `coalesce` hanya boleh mempertahankan yang
+    // sudah ada, bukan berhenti menulis. Tanpa pasangan ini, migrasi yang
+    // keliru membuang assignment-nya sama sekali tetap hijau — dan pesanan
+    // yang di-refund berhenti muncul di "Butuh perhatian" dengan alasan apa pun.
+    const kode = `${AWALAN_KODE}0007`;
+    const id = await semai({ kode, clientId: KLIEN_RINA, status: "lunas", harga: 40_000 });
+
+    await admin.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: `${kode}.1`,
+      p_transaction_status: "chargeback",
+      p_fraud_status: "",
+      p_transaction_id: `trx-${kode}-cb`,
+      p_payment_type: "credit_card",
+      p_gross_amount: 40_000,
+      p_sidik: `sidik-${kode}-cb`,
+      p_sumber: "webhook",
+    });
+
+    const { data } = await admin
+      .from("orders")
+      .select("sebab_tinjauan, butuh_tinjauan_pada")
+      .eq("id", id)
+      .single();
+    expect(data!.sebab_tinjauan).toBe("chargeback");
+    expect(data!.butuh_tinjauan_pada).not.toBeNull();
+  });
+});
+```
+
+```bash
+cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.test.tsx -t "sebab_tinjauan"
+```
+
+Kasus pertama MERAH dengan `expected 'refund' to be 'lunas_setelah_tutup'` — merah yang
+bermakna, bukan "modul belum ada". Kasus kedua sudah hijau, dan memang harus: ia kontrol
+positif, bukan perbaikan.
+
+Lalu buat `/Users/arvinfairuz/Documents/padma/web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql`.
+Badan ketiga fungsinya **disalin dari `20260926140000_pesanan_webhook_rpc.sql` yang ada di
+`main`**, bukan ditulis ulang dari ingatan — `create or replace` menimpa SELURUH badan, jadi
+satu baris yang hilang saat menyalin adalah satu perilaku yang hilang dari mesin pembayaran:
+
+```sql
+-- ===========================================================================
+-- sebab_tinjauan LESTARI — alasan PERTAMA tidak pernah tertimpa
+-- ===========================================================================
+-- Migrasi ke-91, dan ia tidak melahirkan apa pun: ketiga fungsi di bawah sudah
+-- ada sejak `20260926140000_pesanan_webhook_rpc.sql`. Yang berubah cuma LIMA
+-- assignment `sebab_tinjauan`, masing-masing dibungkus
+-- `coalesce(o.sebab_tinjauan, …)`.
+--
+-- ===== KENAPA =====
+-- Setiap UPDATE penanda tinjauan sudah menulis
+-- `butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now())` — cap WAKTU
+-- pertama yang bertahan. Pasangannya, `sebab_tinjauan`, menugaskan telanjang di
+-- lima tempat, jadi cap waktunya menyebut kejadian pertama sementara alasannya
+-- menyebut kejadian terakhir. Dua kolom yang hidup berpasangan dan bercerita
+-- beda adalah kolom yang membuat staf memutuskan perkara uang dengan alasan
+-- yang salah.
+--
+-- Jalannya terjangkau HARI INI, tanpa satu baris kode baru: notifikasi `refund`
+-- atau `chargeback` yang mendarat pada pesanan yang sudah bertanda
+-- `lunas_setelah_tutup` menimpa alasannya diam-diam — dan `lunas_setelah_tutup`
+-- adalah satu-satunya petunjuk bahwa uang pernah masuk pada pesanan yang sudah
+-- kami tutup.
+--
+-- ===== LIMA, BUKAN TUJUH =====
+-- Dua UPDATE `sebab_tinjauan` yang lain TIDAK disentuh, dan keduanya sengaja:
+--   * cabang "notifikasi mendarat pada pesanan yang sedang ditahan" sudah
+--     menulis `coalesce(o.sebab_tinjauan, 'selisih_status')` sejak hari
+--     pertama — dialah cetakan yang empat lainnya ikuti;
+--   * UPDATE transisi (`set status = v_tujuan …`) menulis
+--     `coalesce(v_sebab, o.sebab_tinjauan)`, arah yang KEBALIKAN dan memang
+--     benar di sana: baris itu satu-satunya yang benar-benar MEMINDAHKAN
+--     pesanan, dan alasan keadaan barunya menggantikan alasan keadaan lamanya.
+--
+-- ===== KENAPA `create or replace`, BUKAN `drop` + `create` =====
+-- Ketiganya ada di `MESIN_TERTUTUP` (`tests/fungsi-mesin-tertutup.test.ts`):
+-- hak eksekusinya sudah dicabut dari `public`, `anon`, dan `authenticated`.
+-- `create or replace` mempertahankan OID fungsinya, jadi ACL DAN
+-- `comment on function` ikut lestari tanpa satu baris pun ditulis ulang di
+-- sini. `drop` + `create` mengembalikan default privileges Supabase, dan fungsi
+-- mesin yang terbuka bagi `authenticated` berarti vonis Midtrans bisa diketik
+-- pemanggil bersesi.
+--
+-- Bila revisi berikutnya TETAP memilih `drop` + `create`, ia WAJIB menulis ulang
+-- ketiga barisnya:
+--   revoke all on function public.terbitkan_akses_item(uuid) from public, anon, authenticated;
+--   revoke all on function public.salurkan_pesanan(uuid) from public, anon, authenticated;
+--   revoke all on function
+--     public.terapkan_notifikasi_midtrans(text, text, text, text, text, numeric, text, text)
+--     from public, anon, authenticated;
+-- Lupa menulisnya bukan kegagalan senyap — `tests/fungsi-mesin-tertutup.test.ts`
+-- menangkapnya, dan itu memang gunanya.
+--
+-- Badan ketiga fungsi di bawah adalah SALINAN PERSIS dari
+-- `20260926140000_pesanan_webhook_rpc.sql`, kecuali kelima baris `coalesce` itu
+-- dan komentar yang menjelaskannya. Menyalin dari berkas itu, bukan menulis
+-- ulang dari ingatan, adalah bagian dari perintahnya.
+
+-- ---------------------------------------------------------------------------
+-- 1/3 — terbitkan_akses_item: `akses_tertahan`
+-- ---------------------------------------------------------------------------
+create or replace function public.terbitkan_akses_item(p_item_id uuid)
+returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_pesanan_id uuid;
+  v_client_id uuid;
+  v_padma_id text;
+  v_product_id uuid;
+  v_jenis public.order_item_source;
+  v_ent_id uuid;
+  v_dicabut timestamptz;
+  v_baru uuid;
+begin
+  select i.pesanan_id, i.product_id, i.jenis, o.client_id, c.padma_id
+    into v_pesanan_id, v_product_id, v_jenis, v_client_id, v_padma_id
+    from public.order_items i
+    join public.orders o on o.id = i.pesanan_id
+    join public.clients c on c.id = o.client_id
+   where i.id = p_item_id;
+
+  if v_pesanan_id is null then
+    raise exception 'Item pesanan % tidak ditemukan.', p_item_id using errcode = 'P0002';
+  end if;
+  if v_jenis <> 'produk_digital' then
+    raise exception 'Item % bukan produk digital; aksesnya bukan urusan fungsi ini.', p_item_id
+      using errcode = 'P0001';
+  end if;
+
+  select e.id, e.dicabut_pada into v_ent_id, v_dicabut
+    from public.digital_entitlements e
+   where e.client_id = v_client_id and e.product_id = v_product_id
+   for update;
+
+  -- (1) BELUM ADA BARISNYA
+  if v_ent_id is null then
+    insert into public.digital_entitlements (client_id, product_id, sumber, pesanan_id)
+    values (v_client_id, v_product_id, 'beli', v_pesanan_id)
+    on conflict (client_id, product_id) do nothing
+    returning id into v_baru;
+
+    if v_baru is not null then
+      insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+      values (v_pesanan_id, v_padma_id, 'akses_terbit', format('produk %s', v_product_id));
+      return 'akses_terbit';
+    end if;
+
+    -- Balapan: barisnya lahir di antara SELECT dan INSERT (jalur gratis
+    -- berjalan bersamaan). Nilai ulang, jangan menebak.
+    select e.id, e.dicabut_pada into v_ent_id, v_dicabut
+      from public.digital_entitlements e
+     where e.client_id = v_client_id and e.product_id = v_product_id;
+
+    if v_ent_id is null then
+      -- Mustahil di bawah `unique (client_id, product_id)`: INSERT gagal
+      -- karena KONFLIK, tapi SELECT ulang tidak menemukan baris yang
+      -- bertabrakan dengannya. Diam di sini berarti (2) di bawah berjalan
+      -- dengan v_ent_id NULL — UPDATE `pesanan_id` mengenai nol baris, dan
+      -- fungsi memulangkan 'akses_sudah_ada' padahal TIDAK ADA entitlement
+      -- dan TIDAK ADA tinjauan yang menyala. Mustahil yang diam-diam adalah
+      -- mustahil yang harus melempar, bukan mustahil yang harus dipercaya.
+      raise exception 'Balapan entitlement produk % tidak terselesaikan.', v_product_id
+        using errcode = 'P0002';
+    end if;
+  end if;
+
+  -- (2) ADA DAN BELUM DICABUT
+  if v_dicabut is null then
+    -- `sumber` TIDAK dinaikkan menjadi 'beli': entitlement gratis yang
+    -- produknya kemudian dibeli tetap gratis. Yang mencatat pendapatan adalah
+    -- `orders`, bukan kolom ini.
+    update public.digital_entitlements e
+       set pesanan_id = v_pesanan_id
+     where e.id = v_ent_id and e.pesanan_id is null;
+
+    insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+    values (v_pesanan_id, v_padma_id, 'akses_sudah_ada', format('produk %s', v_product_id));
+    return 'akses_sudah_ada';
+  end if;
+
+  -- (3) ADA DAN SUDAH DICABUT
+  insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+  values (v_pesanan_id, v_padma_id, 'akses_tertahan',
+          format('entitlement produk %s dicabut pada %s — akses tidak dihidupkan',
+                 v_product_id, v_dicabut));
+
+  -- Array POSITIF LIMA nilai, bukan dua: `status = any(...)` di sini bukan
+  -- pagar CHECK (UPDATE ini tidak menyentuh `status` maupun `ditutup_pada`,
+  -- jadi tidak ada kombinasi yang bisa melanggar `pesanan_tutup_bercap`),
+  -- melainkan asumsi tentang SIAPA YANG MEMANGGIL. `status in ('lunas',
+  -- 'ditahan')` benar untuk pemanggil hari ini (satu-satunya: cabang lunas
+  -- `terapkan_notifikasi_midtrans`), tapi begitu Tugas 11 ("Terbitkan akses")
+  -- memanggil fungsi ini pada baris yang SUDAH `kedaluwarsa`/`dibatalkan`/
+  -- bahkan masih `menunggu_bayar`, dua nilai itu membuat UPDATE ini mengenai
+  -- NOL baris — jejak `akses_tertahan` tetap tercatat, tapi
+  -- `butuh_tinjauan_pada` TIDAK menyala, tidak ada yang melempar, dan fungsi
+  -- memulangkan string yang SAMA dengan jalur sehat. Sama seperti langkah (5)
+  -- "Cermin kolom Midtrans" di `terapkan_notifikasi_midtrans` di bawah, array
+  -- di sini dilebarkan ke lima nilai supaya "uang masuk, barang tidak keluar"
+  -- tidak pernah diam hanya karena pemanggilnya bukan yang dibayangkan hari
+  -- ini.
+  update public.orders o
+     set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+         -- coalesce: sebab PERTAMA yang menyalakan tinjauan bertahan, sepasang
+         -- dengan `butuh_tinjauan_pada` sebaris di atasnya. Baris `lunas` yang
+         -- sudah bertanda `selisih_nominal` lalu gagal menerbitkan akses akan
+         -- kehilangan alasan pertamanya kalau baris ini menugaskan telanjang.
+         sebab_tinjauan = coalesce(o.sebab_tinjauan, 'akses_tertahan')
+   where o.id = v_pesanan_id
+     and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
+
+  return 'akses_tertahan';
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2/3 — salurkan_pesanan: `penangan_belum_ada`
+-- ---------------------------------------------------------------------------
+create or replace function public.salurkan_pesanan(p_pesanan_id uuid)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  r record;
+  v_padma_id text;
+begin
+  select c.padma_id into v_padma_id
+    from public.orders o
+    join public.clients c on c.id = o.client_id
+   where o.id = p_pesanan_id;
+  if v_padma_id is null then
+    raise exception 'Pesanan % tidak ditemukan.', p_pesanan_id using errcode = 'P0002';
+  end if;
+
+  for r in
+    select i.id, i.jenis
+      from public.order_items i
+     where i.pesanan_id = p_pesanan_id
+     order by i.urutan
+  loop
+    case r.jenis
+      when 'produk_digital' then
+        perform public.terbitkan_akses_item(r.id);
+      when 'sesi' then
+        -- Nilai enum `sesi` lahir sebelum penulisnya (P3). Yang lahir di sini
+        -- bukan penanganan diam-diam, melainkan panggilan kepada manusia.
+        insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+        values (p_pesanan_id, v_padma_id, 'penangan_belum_ada',
+                format('item %s berjenis sesi — P1 belum punya penyalurnya', r.id));
+
+        -- Array POSITIF LIMA nilai — alasan yang sama persis dengan
+        -- `terbitkan_akses_item` (lihat komentarnya): `status = any(...)` di
+        -- sini adalah asumsi soal siapa pemanggil, bukan pagar CHECK, dan
+        -- pemanggil kedua (Tugas 11) bisa mengenai baris yang tidak ada di
+        -- ('lunas','ditahan'). Diam di sana berarti jejak tercatat tapi
+        -- tinjauan tidak menyala.
+        update public.orders o
+           set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+               -- coalesce, alasan yang sama dengan `terbitkan_akses_item`:
+               -- pesanan berisi DUA item bisa lebih dulu menyalakan tinjauan
+               -- lewat item pertama, dan item kedua tidak boleh menimpanya.
+               sebab_tinjauan = coalesce(o.sebab_tinjauan, 'penangan_belum_ada')
+         where o.id = p_pesanan_id
+           and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
+      else
+        -- Nilai `order_item_source` KETIGA yang kelak lahir berhenti di sini
+        -- dengan kalimat, bukan dengan `case_not_found` yang tidak menyebut
+        -- apa pun. Fail-closed disengaja: diam berarti uang diambil untuk
+        -- barang yang tidak ada yang tahu cara menyerahkannya.
+        raise exception 'Jenis item pesanan % belum punya penyalur: %', r.id, r.jenis
+          using errcode = 'P0001';
+    end case;
+  end loop;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 3/3 — terapkan_notifikasi_midtrans: `v_sebab` (refund/chargeback/asing),
+--       `lunas_setelah_tutup`, dan `selisih_status` (transisi ditolak)
+-- ---------------------------------------------------------------------------
+create or replace function public.terapkan_notifikasi_midtrans(
+  p_order_id text,
+  p_transaction_status text,
+  p_fraud_status text,
+  p_transaction_id text,
+  p_payment_type text,
+  p_gross_amount numeric,
+  p_sidik text,
+  p_sumber text default 'webhook'
+) returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_kode text;
+  v_percobaan smallint;
+  v_percobaan_kini smallint;
+  v_pesanan_id uuid;
+  v_status public.order_status;
+  v_jumlah_item smallint;
+  v_padma_id text;
+  v_notif_id uuid;
+  v_total integer;
+  v_cacah integer;
+  v_baris integer;
+  v_vonis text;
+  v_tujuan public.order_status;
+  v_kejadian public.order_event;
+  v_sebab text;
+begin
+  if p_sumber not in ('webhook', 'status_api') then
+    raise exception 'Sumber notifikasi tidak dikenal: %', p_sumber using errcode = 'P0001';
+  end if;
+
+  -- (1) BENTUK order_id. Rute sudah menyaringnya sebelum satu sha512 pun
+  -- dihitung, tapi Lapis 1b dan Lapis 3 memanggil fungsi ini juga. Bentuk yang
+  -- tidak dikenal berarti tidak ada pesanan untuk disembuhkan — bukan galat
+  -- yang layak di-retry.
+  if p_order_id !~ '^PSN-[0-9]{6}-[0-9A-F]{6}\.[1-9]$' then
+    return 'pesanan_tidak_ada';
+  end if;
+  v_kode := split_part(p_order_id, '.', 1);
+  v_percobaan := split_part(p_order_id, '.', 2)::smallint;
+
+  -- (2) Pesanan dicari lewat KODE saja, sengaja BUKAN kode+percobaan.
+  -- Notifikasi bisa datang untuk percobaan lama (popup Snap lama yang masih
+  -- terbuka saat klien menekan "coba lagi"), dan uang yang mendarat lewat
+  -- percobaan lama tetap uang yang mendarat. Selisih percobaan dicatat di
+  -- jejak, tidak dipakai untuk membuang notifikasinya.
+  select o.id, o.status, o.percobaan, o.jumlah_item, c.padma_id
+    into v_pesanan_id, v_status, v_percobaan_kini, v_jumlah_item, v_padma_id
+    from public.orders o
+    join public.clients c on c.id = o.client_id
+   where o.kode = v_kode
+   for update of o;
+
+  if v_pesanan_id is null then
+    return 'pesanan_tidak_ada';
+  end if;
+
+  -- (3) PEMERIKSAAN ULANG DICATAT SEBELUM PINTU SIDIK.
+  -- Kalau `diperiksa_pada` hanya disetel pada jalur yang lolos sidik, Status
+  -- API yang memulangkan status yang SAMA akan selalu 'duplikat', kolomnya
+  -- tidak pernah bergerak, dan pembatas "sekali per lima menit" di Lapis 1b
+  -- tidak pernah berlaku — satu halaman yang di-refresh berkali-kali berubah
+  -- menjadi banjir permintaan ke Midtrans.
+  if p_sumber = 'status_api' then
+    update public.orders o
+       set diperiksa_pada = now()
+     where o.id = v_pesanan_id
+       and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
+
+    insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+    values (v_pesanan_id, v_padma_id, 'diperiksa_ulang',
+            format('status api menjawab %s', p_transaction_status));
+  end if;
+
+  -- (4) IDEMPOTENSI. `sidik` dihitung di rute (Node crypto) atas lima medan
+  -- notifikasi, BUKAN atas order_id saja: Midtrans mengirim beberapa
+  -- notifikasi per pesanan (`pending` lalu `settlement`), dan sidik sepesanan
+  -- akan menolak `settlement` sebagai duplikat — pembeli membayar, uang masuk,
+  -- pesanan tinggal `menunggu_bayar` selamanya.
+  insert into public.notifikasi_pesanan (
+    pesanan_id, sidik, transaksi_id, status_midtrans, kanal, nominal_diterima
+  ) values (
+    v_pesanan_id, p_sidik, nullif(p_transaction_id, ''), p_transaction_status,
+    nullif(p_payment_type, ''), p_gross_amount
+  )
+  on conflict (sidik) do nothing
+  returning id into v_notif_id;
+
+  if v_notif_id is null then
+    return 'duplikat';
+  end if;
+
+  -- (5) Cermin kolom Midtrans pada barisnya. `status = any(<array positif>)`
+  -- ditulis walau UPDATE ini tidak menyentuh status: nilai enum keenam yang
+  -- kelak lahir tanpa diklasifikasikan jatuh ke luar array dan TIDAK mendapat
+  -- cermin — kehilangan yang kecil dan terbatas, dibanding UPDATE tanpa pagar
+  -- status yang menjadi kebiasaan lalu ditiru cabang yang benar-benar
+  -- memindahkan baris.
+  update public.orders o
+     set notifikasi_pada  = case when p_sumber = 'webhook' then now() else o.notifikasi_pada end,
+         transaksi_id     = coalesce(nullif(p_transaction_id, ''), o.transaksi_id),
+         status_midtrans  = p_transaction_status,
+         kanal            = coalesce(nullif(p_payment_type, ''), o.kanal)
+   where o.id = v_pesanan_id
+     and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
+
+  insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+  values (v_pesanan_id, v_padma_id, 'notifikasi',
+          p_transaction_status
+          || coalesce(' / ' || nullif(p_fraud_status, ''), '')
+          || case when v_percobaan <> v_percobaan_kini
+                  then format(' (order_id percobaan %s, baris kini di %s)', v_percobaan, v_percobaan_kini)
+                  else '' end);
+
+  -- (6) VONIS. `fraud_status` ikut karena `capture`+`challenge` dan
+  -- `capture`+`accept` adalah dua keputusan berbeda atas transaksi yang sama.
+  if p_transaction_status = 'settlement'
+     or (p_transaction_status = 'capture'
+         and coalesce(nullif(p_fraud_status, ''), 'accept') = 'accept') then
+    v_vonis := 'lunas';
+  elsif p_transaction_status = 'capture' then
+    -- capture + challenge/deny: uangnya ditahan Midtrans, bukan kita.
+    v_vonis := 'curiga';
+  elsif p_transaction_status in ('expire', 'cancel') then
+    v_vonis := 'kedaluwarsa';
+  elsif p_transaction_status = 'deny' then
+    v_vonis := 'dibatalkan';
+  elsif p_transaction_status in ('pending', 'authorize') then
+    v_vonis := 'menunggu';
+  elsif p_transaction_status in ('refund', 'partial_refund') then
+    v_vonis := 'refund';
+  elsif p_transaction_status in ('chargeback', 'partial_chargeback') then
+    v_vonis := 'chargeback';
+  else
+    v_vonis := 'asing';
+  end if;
+
+  if v_vonis = 'menunggu' then
+    return 'tanpa_efek';
+  end if;
+
+  -- Pengembalian uang & status asing: status TIDAK bergerak, akses TIDAK
+  -- dicabut, manusia dipanggil. Repo ini tidak punya mekanisme pengembalian
+  -- uang di mana pun; menebak kebijakannya di webhook lebih buruk daripada
+  -- memanggil manusia.
+  if v_vonis in ('refund', 'chargeback', 'asing') then
+    v_sebab := case when v_vonis = 'asing' then 'selisih_status' else v_vonis end;
+
+    insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+    values (v_pesanan_id, v_padma_id, 'selisih_status',
+            format('midtrans menjawab %s — ditangani manusia', p_transaction_status));
+
+    update public.orders o
+       set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+           -- coalesce: INI kasus yang terjangkau hari ini tanpa satu baris kode
+           -- baru. Notifikasi `refund`/`chargeback` yang mendarat pada pesanan
+           -- yang sudah bertanda `lunas_setelah_tutup` menimpa alasannya, dan
+           -- staf kehilangan satu-satunya petunjuk bahwa uang pernah masuk pada
+           -- pesanan yang sudah ditutup.
+           sebab_tinjauan = coalesce(o.sebab_tinjauan, v_sebab)
+     where o.id = v_pesanan_id
+       and o.status = any (array['menunggu_bayar','ditahan','lunas','kedaluwarsa','dibatalkan']::public.order_status[]);
+
+    return 'diterapkan';
+  end if;
+
+  -- (7) VERIFIKASI JUMLAH terhadap angka yang KITA simpan. Mustahil tanpa
+  -- harga beku: angka pembandingnya ada di tangan Midtrans dan ikut
+  -- ditandatangani. `nominal_diterima` sudah tersimpan di langkah (4) apa pun
+  -- hasilnya di bawah.
+  --
+  -- Dihitung TANPA syarat vonis — bukan hanya di dalam `if v_vonis = 'lunas'`:
+  -- cabang `curiga -> ditahan` (capture + challenge/deny) juga menulis baris
+  -- audit `format('ditagih %s, diterima %s', v_total, ...)` di bawah, dan
+  -- v_total yang hanya terisi pada jalur 'lunas' membuat baris yang staf baca
+  -- untuk memutuskan pembayaran kartu yang dicurigai kehilangan separuh
+  -- angkanya (tertagih kosong) — pada persis kasus yang paling butuh dibaca
+  -- manusia.
+  select coalesce(sum(i.harga_beku), 0)::integer, count(*)::integer
+    into v_total, v_cacah
+    from public.order_items i
+   where i.pesanan_id = v_pesanan_id;
+
+  if v_vonis = 'lunas' then
+    if p_gross_amount is distinct from v_total::numeric or v_cacah <> v_jumlah_item then
+      v_vonis := 'ditahan';
+      v_sebab := 'selisih_nominal';
+    end if;
+  end if;
+
+  if v_vonis = 'curiga' then
+    v_vonis := 'ditahan';
+    v_sebab := 'selisih_status';
+  end if;
+
+  if v_vonis = 'lunas' then
+    v_tujuan := 'lunas'; v_kejadian := 'lunas';
+  elsif v_vonis = 'ditahan' then
+    v_tujuan := 'ditahan'; v_kejadian := 'ditahan';
+  elsif v_vonis = 'kedaluwarsa' then
+    v_tujuan := 'kedaluwarsa'; v_kejadian := 'kedaluwarsa';
+  else
+    v_tujuan := 'dibatalkan'; v_kejadian := 'dibatalkan';
+  end if;
+
+  -- (8a) Pesanan yang SUDAH TIDAK TERBUKA. Webhook tidak pernah memindahkan
+  -- `ditahan` — itu putusan staf, dan satu-satunya jalannya
+  -- `putuskan_pesanan_ditahan`.
+  if v_status <> 'menunggu_bayar' then
+    if v_vonis = 'lunas'
+       and v_status = any (array['kedaluwarsa','dibatalkan']::public.order_status[]) then
+      -- Settlement yang mendarat pada pesanan yang sudah kami tutup: tidak ada
+      -- transisi, penyalur tidak berjalan, akses tidak terbit — dan tanpa
+      -- penanda di bawah barisnya tidak muncul di blok mana pun meski uangnya
+      -- sudah masuk.
+      insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+      values (v_pesanan_id, v_padma_id, 'lunas_setelah_tutup',
+              format('settlement %s mendarat pada pesanan %s', p_transaction_id, v_status));
+
+      update public.orders o
+         set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+             -- coalesce: pesanan `dibatalkan` bisa sudah bertanda `selisih_status`
+             -- dari notifikasi sebelumnya, dan alasan pertama itulah yang
+             -- menjelaskan kenapa barisnya ditutup begitu.
+             sebab_tinjauan = coalesce(o.sebab_tinjauan, 'lunas_setelah_tutup')
+       where o.id = v_pesanan_id
+         and o.status = any (array['kedaluwarsa','dibatalkan']::public.order_status[]);
+
+    elsif v_status = 'ditahan' and v_vonis in ('lunas', 'ditahan') then
+      insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+      values (v_pesanan_id, v_padma_id, 'selisih_status',
+              format('notifikasi %s mendarat pada pesanan yang sedang ditahan', p_transaction_status));
+
+      update public.orders o
+         set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+             sebab_tinjauan = coalesce(o.sebab_tinjauan, 'selisih_status')
+       where o.id = v_pesanan_id
+         and o.status = any (array['ditahan']::public.order_status[]);
+    end if;
+
+    return 'tanpa_efek';
+  end if;
+
+  -- (8b) Penjaga transisi. `coalesce(..., false)` WAJIB: `not NULL` adalah
+  -- NULL dan `if NULL then` tidak dieksekusi — tanpa pembungkus ini penjaganya
+  -- fail-OPEN.
+  if not coalesce(public.perpindahan_pesanan_sah(v_status, v_tujuan), false) then
+    insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+    values (v_pesanan_id, v_padma_id, 'selisih_status',
+            format('mesin status menolak %s -> %s', v_status, v_tujuan));
+
+    update public.orders o
+       set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+           -- coalesce: baris `menunggu_bayar` yang ditolak mesin status bisa
+           -- sudah bertanda sebab lain (mis. `akses_tertahan` dari tombol
+           -- "Terbitkan akses" Tugas 11), dan sebab pertama yang bertahan.
+           sebab_tinjauan = coalesce(o.sebab_tinjauan, 'selisih_status')
+     where o.id = v_pesanan_id
+       and o.status = any (array['menunggu_bayar']::public.order_status[]);
+
+    return 'tanpa_efek';
+  end if;
+
+  update public.orders o
+     set status = v_tujuan,
+         ditutup_pada = now(),
+         lunas_pada = case when v_tujuan = 'lunas' then now() else o.lunas_pada end,
+         butuh_tinjauan_pada = case when v_sebab is null
+                                    then o.butuh_tinjauan_pada
+                                    else coalesce(o.butuh_tinjauan_pada, now()) end,
+         sebab_tinjauan = coalesce(v_sebab, o.sebab_tinjauan)
+   where o.id = v_pesanan_id
+     and o.status = any (array['menunggu_bayar']::public.order_status[]);
+
+  get diagnostics v_baris = row_count;
+  if v_baris = 0 then
+    -- Balapan yang kalah: barisnya sudah dipindahkan transaksi lain. Keadaan
+    -- akhir sudah tercapai, dan 200 adalah jawabannya.
+    return 'tanpa_efek';
+  end if;
+
+  insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+  values (v_pesanan_id, v_padma_id, v_kejadian,
+          format('midtrans %s, transaksi %s', p_transaction_status, p_transaction_id));
+
+  if v_sebab is not null then
+    -- Aturan penanda tinjauan: kelima kejadian dalam KEJADIAN_BUTUH_TINJAUAN
+    -- WAJIB menyetel butuh_tinjauan_pada + sebab_tinjauan di transaksi yang
+    -- sama dengan jejaknya. Penandanya sudah disetel UPDATE di atas.
+    insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+    values (v_pesanan_id, v_padma_id, v_sebab::public.order_event,
+            format('ditagih %s, diterima %s', v_total, p_gross_amount));
+  end if;
+
+  -- (9) PENYALURAN, di transaksi yang SAMA, dan HANYA dari cabang yang
+  -- benar-benar memindahkan baris.
+  if v_tujuan = 'lunas' then
+    perform public.salurkan_pesanan(v_pesanan_id);
+  end if;
+
+  return 'diterapkan';
+end;
+$$;
+```
+
+Terapkan lalu jalankan lagi:
+
+```bash
+cd /Users/arvinfairuz/Documents/padma/web && npx supabase migration up && npx vitest run tests/admin-pesanan.test.tsx tests/fungsi-mesin-tertutup.test.ts
+```
+
+Keduanya hijau. `fungsi-mesin-tertutup` ikut karena migrasi ini menyentuh tiga fungsi yang ada
+di daftar `MESIN_TERTUTUP`-nya: kalau `create or replace` tanpa sengaja berubah jadi
+`drop` + `create`, di sanalah merahnya muncul. `migration up` dipakai, **bukan `db reset`** —
+Supabase lokal di mesin ini dipakai bersama sesi lain.
+
+- [ ] **Step 4: Tulis pembaca layar staf**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/lib/admin/pesanan.ts`:
 
@@ -5524,7 +6563,7 @@ export async function bacaPesananStaf(): Promise<{
 }
 ```
 
-- [ ] **Step 4: Tulis tombolnya (komponen klien)**
+- [ ] **Step 5: Tulis tombolnya (komponen klien)**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/tombol-pesanan.tsx`:
 
@@ -5642,7 +6681,7 @@ export function TombolPesanan({
 }
 ```
 
-- [ ] **Step 5: Tulis tabelnya**
+- [ ] **Step 6: Tulis tabelnya**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/tabel-pesanan.tsx`:
 
@@ -5653,9 +6692,15 @@ import type { BarisPesanan } from "@/lib/admin/pesanan";
 import { TombolPesanan } from "./tombol-pesanan";
 
 /**
- * Tabel pesanan staf — SATU-SATUNYA permukaan admin PADMA yang menampilkan
- * nominal, dan satu-satunya tempat di seluruh aplikasi dua angka uang perlu
- * dibaca BERDAMPINGAN.
+ * Tabel pesanan staf — satu-satunya permukaan admin PADMA yang menampilkan
+ * nominal PESANAN (yang ditagih dan yang diterima), dan satu-satunya tempat di
+ * seluruh aplikasi dua angka uang perlu dibaca BERDAMPINGAN.
+ *
+ * Bukan satu-satunya layar admin bernominal, dan klaim itu sengaja tidak
+ * ditulis: `/admin/produk` sudah menampilkan harga hari ini (README.md:134,
+ * "harga TAMPIL tapi tidak bisa disunting admin"), dan empat berkas di
+ * `src/app/admin/**` sudah mengimpor `formatRupiah`. Yang baru di sini adalah
+ * nominal PESANAN — uang yang benar-benar berpindah — bukan nominal apa pun.
  *
  * `formatRupiah` diimpor dari `@/lib/rupiah-publik` dan itu memang ganjil
  * dibaca sekilas di bawah `src/app/admin/**` — lihat dokblok berkas itu.
@@ -5788,7 +6833,7 @@ export function TabelPesanan({ baris }: { baris: BarisPesanan[] }) {
 }
 ```
 
-- [ ] **Step 6: Tulis halamannya**
+- [ ] **Step 7: Tulis halamannya**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/page.tsx`:
 
@@ -5833,7 +6878,8 @@ export default async function PesananPage() {
           <b>Tutup tinjauan</b> mengosongkan penanda tanpa menyentuh status — ia sengaja
           menolak baris Ditahan, karena pesanan Ditahan menuntut putusan, bukan penutupan.
           {" "}
-          Nominal ditampilkan di halaman ini — satu-satunya di panel admin — karena
+          Nominal pesanan ditampilkan di halaman ini — satu-satunya di panel admin yang
+          menunjukkan yang ditagih bersebelahan dengan yang diterima — karena
           pertanyaan &ldquo;berapa yang klien ini bayar&rdquo; harus bisa dijawab dari dalam
           PADMA, bukan dari dashboard Midtrans. Pengembalian uang tidak dilakukan dari sini;
           yang disediakan hanyalah nomor transaksi untuk diurus di dashboard Midtrans.
@@ -5870,7 +6916,7 @@ export default async function PesananPage() {
 }
 ```
 
-- [ ] **Step 7: Tulis rute "periksa ulang" dan "terbitkan akses"**
+- [ ] **Step 8: Tulis rute "periksa ulang" dan "terbitkan akses"**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/periksa-ulang/route.ts`:
 
@@ -5909,6 +6955,12 @@ const PESAN: Record<HasilPeriksaPesanan, string> = {
   belum_kedaluwarsa:
     "Midtrans belum mengenal transaksinya, dan tenggang satu jam sesudah tenggat belum lewat.",
   midtrans_tak_terjawab: "Midtrans tidak menjawab. Coba lagi beberapa saat lagi.",
+  // Kalimat yang SAMA PERSIS dengan yang sudah dipilih `terbitkanTokenSnap`
+  // (Tugas 8) untuk keadaan yang sama, dan sengaja TIDAK menyuruh mencoba
+  // lagi: `MIDTRANS_SERVER_KEY` yang belum terpasang tidak berubah karena
+  // tombolnya ditekan ulang. Satu-satunya tindakan yang menolong adalah
+  // memanggil orang yang bisa memasang env-nya.
+  kunci_belum_terpasang: "Pembayaran belum aktif. Hubungi tim PADMA.",
   galat_basis_data: "Jawaban Midtrans gagal diterapkan.",
 };
 
@@ -5943,6 +6995,15 @@ export async function POST(
   // terjadi membuat staf berhenti memeriksanya.
   if (hasil === "midtrans_tak_terjawab") {
     return NextResponse.json({ hasil, pesan: PESAN[hasil] }, { status: 502 });
+  }
+  // 503, angka yang sama dengan jawaban rute webhook untuk keadaan yang sama
+  // (`kunci_kosong`, Tugas 8), dan BUKAN 200 — `tombol-pesanan.tsx` hanya
+  // menampilkan `pesan` ketika `res.ok` bernilai false, jadi 200 di sini
+  // membuat kalimat "Pembayaran belum aktif" tidak pernah sampai ke layar dan
+  // tombolnya terlihat berhasil. Bukan 502: tidak ada gerbang hulu yang gagal,
+  // yang belum siap adalah SERVER INI.
+  if (hasil === "kunci_belum_terpasang") {
+    return NextResponse.json({ hasil, pesan: PESAN[hasil] }, { status: 503 });
   }
   // 500: yang rusak adalah baris kita, bukan pihak ketiga, dan tidak ada yang
   // bisa disembuhkan dengan menekan tombolnya lagi.
@@ -6045,7 +7106,7 @@ export async function POST(
 }
 ```
 
-- [ ] **Step 8: Tulis rute "putuskan" dan "tutup tinjauan"**
+- [ ] **Step 9: Tulis rute "putuskan" dan "tutup tinjauan"**
 
 Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/putuskan/route.ts`:
 
@@ -6153,7 +7214,7 @@ export async function POST(
 }
 ```
 
-- [ ] **Step 9: Daftarkan tujuan ke sidebar admin + perbaiki pagarnya**
+- [ ] **Step 10: Daftarkan tujuan ke sidebar admin + perbaiki pagarnya**
 
 Sunting `/Users/arvinfairuz/Documents/padma/web/src/app/admin/_shell/nav-admin.tsx`. Sisipkan
 tujuan ke-12 di `MENU`, tepat **sesudah** butir `/admin/produk` (baris 34) dan **sebelum**
@@ -6205,7 +7266,7 @@ tapi ia bukan regresi P1, dan menambalnya di tengah rencana pembayaran mencampur
 satu commit yang seluruh isinya tentang uang. Tambahkan **`"/admin/pesanan"` saja**; catat
 `/admin/produk` sebagai utang terpisah.
 
-- [ ] **Step 10: Daftarkan kelima rute ke README**
+- [ ] **Step 11: Daftarkan kelima rute ke README**
 
 Sunting `/Users/arvinfairuz/Documents/padma/web/README.md`. `tests/inventaris-rute.test.ts`
 memeriksa **dua arah**, jadi berkas tanpa baris dan baris tanpa berkas sama-sama merah.
@@ -6214,17 +7275,22 @@ Sisipkan satu baris tepat sesudah baris `/admin/bayar` (README.md:129 pada `main
 **cari barisnya, jangan percaya nomornya**).
 
 Dan sadari apa yang baris ini lakukan pada tugas SESUDAHNYA: ia disisipkan di ATAS tabel rute,
-jadi seluruh tabel rute bergeser satu baris ke bawah dan `` `/api/cron/tenggat` `` pindah dari
-158 ke 159. Tugas 12 menyisipkan barisnya di sana; peringatan itu sudah ada di sana juga.
+jadi SELURUH tabel rute bergeser satu baris ke bawah — setiap nomor baris yang Tugas 12 pegang
+menjadi salah. Itulah kenapa langkah ini, dan langkah Tugas 12, menyebut baris jangkarnya dan
+bukan nomornya (§0.12).
 
 ```
-| `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan Midtrans: blok "Butuh perhatian" (ditahan / bertanda tinjauan / lunas tanpa akses) dan "Terbuka"; SATU-SATUNYA layar admin bernominal — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
+| `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan Midtrans: blok "Butuh perhatian" (bertanda tinjauan, atau uang sudah masuk tapi akses belum tercatat terbit) dan "Terbuka"; satu-satunya layar admin yang menampilkan nominal PESANAN (yang ditagih vs yang diterima) — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
 ```
 
-Lalu tambahkan empat baris di **akhir** tabel rute non-halaman, tepat sesudah baris
-`` `/api/produk/[id]/unduh` ``. Nama segmen dinamis ditulis **harfiah `[id]`** — uji
-inventaris memungut rute dari sistem berkas, jadi `:id` sekaligus jadi "hantu" dan
-"tak terdaftar":
+Lalu tambahkan empat baris rute **tepat sesudah baris `` `/api/pesanan/[id]/batal` ``**
+milik Tugas 9 — bukan di akhir tabel. Kelima rute `/api/pesanan/*` P1-B karena itu duduk
+berurutan sebagai satu blok, dan `/api/cron/pesanan` milik Tugas 12 menutup tabelnya di
+bawah. `tests/inventaris-rute.test.ts` hanya memungut kolom pertama dan BUTA terhadap urutan,
+jadi tidak ada uji yang memerah bila blok ini tercerai — yang rusak hanya satu-satunya peta
+PADMA yang dibaca manusia. **Cari baris jangkarnya, jangan percaya nomornya** (§0.12).
+Nama segmen dinamis ditulis **harfiah `[id]`** — uji inventaris memungut rute dari sistem
+berkas, jadi `:id` sekaligus jadi "hantu" dan "tak terdaftar":
 
 ```
 | `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Status API Midtrans untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_midtrans` (service role). Vonisnya datang dari Midtrans, tidak pernah dari badan permintaan |
@@ -6233,7 +7299,7 @@ inventaris memungut rute dari sistem berkas, jadi `:id` sekaligus jadi "hantu" d
 | `/api/pesanan/[id]/tutup-tinjauan` | Admin, Owner | POST mengosongkan penanda tinjauan tanpa menyentuh status; MENOLAK baris `ditahan` — yang itu menuntut putusan, bukan penutupan |
 ```
 
-- [ ] **Step 11: Jalankan uji, pastikan LULUS**
+- [ ] **Step 12: Jalankan uji, pastikan LULUS**
 
 ```bash
 cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.test.tsx tests/admin-shell.test.ts tests/inventaris-rute.test.ts
@@ -6245,22 +7311,24 @@ Lalu pagar yang tersentuh secara tidak langsung:
 cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/panel-primitif.test.ts tests/pagar-batas-server-klien.test.ts tests/identitas-aplikasi.test.ts tests/admin-bayar.test.ts tests/e2e-selektor.test.ts
 ```
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/src/lib/admin/pesanan.ts web/src/app/admin/pesanan web/src/app/api/pesanan web/src/app/admin/_shell/nav-admin.tsx web/tests/admin-pesanan.test.tsx web/tests/admin-shell.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
+cd /Users/arvinfairuz/Documents/padma && git add web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql web/src/lib/admin/pesanan.ts web/src/app/admin/pesanan web/src/app/api/pesanan web/src/app/admin/_shell/nav-admin.tsx web/tests/admin-pesanan.test.tsx web/tests/admin-shell.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
 feat(pesanan): layar /admin/pesanan + empat rute pemulihan
 
 Lapis 2 rekonsiliasi: dipicu manusia. Dua blok, bukan satu saringan —
 "Butuh perhatian" menjawab apa yang salah, "Terbuka" menjawab apa yang
-sedang berjalan. Klausa ketiga ("lunas tanpa jejak akses") sengaja tidak
-bergantung pada siapa pun mengingat menyalakan penanda.
+sedang berjalan. Klausa kedua ("uang sudah masuk, akses belum tercatat terbit")
+sengaja tidak bergantung pada siapa pun mengingat menyalakan penanda.
 
-Layar ini SATU-SATUNYA permukaan admin bernominal, atas keputusan pemilik
-repo, dan ujinya menegaskannya dengan assertion kebalikan konvensi rumah
-supaya keputusan itu tidak gugur lewat pintu ketiadaan. Untuk baris
-ditahan, yang ditagih dan yang diterima terbaca berdampingan — selisihnya
-yang jadi keputusan manusia.
+Layar ini satu-satunya permukaan admin yang menampilkan nominal PESANAN
+(yang ditagih vs yang diterima), atas keputusan pemilik repo, dan ujinya
+menegaskannya dengan assertion kebalikan konvensi rumah supaya keputusan itu
+tidak gugur lewat pintu ketiadaan. Bukan satu-satunya layar admin bernominal
+— /admin/produk sudah menampilkan harga hari ini. Untuk baris ditahan, yang
+ditagih dan yang diterima terbaca berdampingan — selisihnya yang jadi
+keputusan manusia.
 
 Empat tombol punya alamatnya masing-masing. Dua yang menulis lewat fungsi
 mesin hidup sebagai rute di src/app/api/** karena src/app/admin/** dilarang
@@ -6269,6 +7337,14 @@ auditnya menyebut manusia, bukan mesin. "Terbitkan akses" memanggil
 terbitkan_akses_item langsung, bukan penyalur, supaya aturan "penyalur
 hanya dari transisi" tetap utuh — dan menolak pesanan yang belum lunas,
 karena tombol bukan pagar.
+
+Migrasi ke-91 ikut di sini karena layar inilah yang menampilkan
+sebab_tinjauan: lima UPDATE membungkus penugasannya dengan coalesce supaya
+alasan PERTAMA bertahan, sepasang dengan butuh_tinjauan_pada yang sudah
+begitu sejak awal. Terjangkau hari ini tanpa kode baru — refund yang
+mendarat pada pesanan bertanda lunas_setelah_tutup menimpa satu-satunya
+petunjuk bahwa uang pernah masuk. create or replace, supaya pencabutan hak
+ketiga fungsi mesin itu lestari.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 PESAN
@@ -6301,7 +7377,8 @@ membuka halamannya lagi.
 - Create: `web/src/app/api/cron/pesanan/route.ts`
 - Create: `/Users/arvinfairuz/Documents/padma/.github/workflows/rekonsiliasi-pesanan.yml`
   ← **AKAR REPO**
-- Modify: `web/README.md:158` (satu baris, tepat sesudah `` `/api/cron/tenggat` ``)
+- Modify: `web/README.md` — satu baris di AKHIR tabel rute non-halaman, tepat sesudah
+  baris `` `/api/produk/[id]/unduh` `` (**cari barisnya, jangan percaya nomornya**, §0.12)
 - Test: `web/tests/pesanan-jadwal-actions.test.ts`
 
 **Interfaces:**
@@ -6309,9 +7386,13 @@ membuka halamannya lagi.
 - Consumes (Task 10) — `web/src/lib/pesanan/periksa-menggantung.ts`:
   ```ts
   export async function sapuPesananMenggantung(
-    pemilih: SupabaseClient, batasBaris: number, clientId?: string | null,
+    pemilih: SupabaseClient, batasBaris: number, clientId: string | null = null,
   ): Promise<{ diperiksa: number }>;   // MELEMPAR bila PEMILIHAN barisnya gagal
   ```
+  Parameter ketiganya ber-**nilai bawaan**, bukan opsional ber-`?` — satu ejaan saja untuk
+  tanda tangan yang seluruh alasan keberadaannya adalah PERSIS (§0.6). `BATAS_SAPUAN = 20`
+  yang dioper sebagai argumen kedua hidup sebagai konstanta LOKAL di rute cron, bukan ekspor
+  Tugas 10: ia pasangan `BATAS_PERIKSA_SEKALI = 3`, dan keduanya punya alasan yang berbeda.
   Jalur penerapannya SAMA dengan Lapis 1b; yang berbeda hanya DUA argumen pertama-dan-ketiga —
   service role sebagai `pemilih` dan `clientId: null` (lintas klien) di sini, versus sesi
   pemanggil berikut `clientId`-nya (hanya miliknya) di sana. `clientId` ditulis EKSPLISIT di
@@ -6871,17 +7952,18 @@ jobs:
 
 - [ ] **Step 5: Daftarkan rutenya ke README**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/README.md`. Sisipkan satu baris **tepat
-sesudah** baris `` `/api/cron/tenggat` ``.
+Sunting `/Users/arvinfairuz/Documents/padma/web/README.md`. Sisipkan satu baris di **AKHIR
+tabel rute non-halaman**, tepat sesudah baris `` `/api/produk/[id]/unduh` `` — bukan di
+sebelah `` `/api/cron/tenggat` ``. Kedua rute mesin memang bersaudara, tapi Tugas 11 sudah
+menempatkan kelima rute `/api/pesanan/*` sebagai satu blok berurutan, dan menyelipkan rute
+ini ke tengah tabel memisahkan blok itu tanpa alasan.
 
-**Nomor 158 itu benar pada `main` hari ini dan SUDAH PASTI SALAH saat tugas ini mendarat —
-cari barisnya, jangan percaya nomornya.** Tugas 11 menyisipkan satu baris HALAMAN di
-README.md:129, yaitu di ATAS tabel rute, sehingga `` `/api/cron/tenggat` `` bergeser ke 159;
-Tugas 8 dan Tugas 9 menambah tiga baris lagi di bawahnya. `tests/inventaris-rute.test.ts`
-memungut kolom pertama dengan regex dan BUTA terhadap urutan, jadi baris yang mendarat di
-tempat yang salah tidak memerahkan apa pun — yang rusak hanya satu-satunya peta PADMA yang
-dibaca manusia. (Peringatan yang sama sudah dibawa Tugas 8 dan Tugas 9; tugas ini terakhir,
-jadi ia yang paling jauh bergeser.)
+**Jangan memakai nomor baris sama sekali di langkah ini** (§0.12). Tugas 8 menambah satu
+baris, Tugas 9 dua, dan Tugas 11 satu baris HALAMAN di ATAS tabel rute berikut empat baris
+rute — delapan pergeseran sebelum tugas ini mendarat, dan tugas ini yang paling jauh
+bergeser. `tests/inventaris-rute.test.ts` memungut kolom pertama dengan regex dan BUTA
+terhadap urutan, jadi baris yang mendarat di tempat yang salah tidak memerahkan apa pun —
+yang rusak hanya satu-satunya peta PADMA yang dibaca manusia.
 
 `tests/inventaris-rute.test.ts` memeriksa dua arah, jadi rute tanpa baris dan baris tanpa rute
 sama-sama merah:
