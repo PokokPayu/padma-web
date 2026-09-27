@@ -1038,7 +1038,7 @@ describe("MIDTRANS_PRODUKSI memilih lingkungan", () => {
 ```
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/midtrans-konfig.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/midtrans-konfig.test.ts
 ```
 
 Kesembilan kasus hijau. Bila `nilai "TRUE" jatuh ke SANDBOX` merah, `konfig.ts` memakai
@@ -1870,7 +1870,7 @@ async function jumlahTakDikenalHariIni(): Promise<number> {
 - [ ] **Step 6: Jalankan uji, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-webhook.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-webhook.test.ts
 ```
 
 Kegagalan yang DIHARAPKAN: berkas gagal dimuat seluruhnya —
@@ -2076,7 +2076,7 @@ export async function POST(request: Request) {
 - [ ] **Step 8: Jalankan uji, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-webhook.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-webhook.test.ts
 ```
 
 Seluruh kasus hijau. Bila `dua order_id sah berturut-turut sama-sama lolos saringan
@@ -2100,7 +2100,7 @@ baris README tanpa berkas sama-sama merah. Sisipkan **satu baris** tepat sesudah
 Lalu:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/inventaris-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/inventaris-rute.test.ts
 ```
 
 ---
@@ -2108,7 +2108,7 @@ cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/inventaris-rut
 - [ ] **Step 10: Jalankan pagar yang bersinggungan**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-webhook.test.ts tests/midtrans-konfig.test.ts tests/inventaris-rute.test.ts tests/env-terdokumentasi.test.ts tests/jejak-yatim.test.ts tests/pesanan-jejak-yatim.test.ts tests/fungsi-mesin-tertutup.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-webhook.test.ts tests/midtrans-konfig.test.ts tests/inventaris-rute.test.ts tests/env-terdokumentasi.test.ts tests/jejak-yatim.test.ts tests/pesanan-jejak-yatim.test.ts tests/fungsi-mesin-tertutup.test.ts
 ```
 
 Ketujuhnya hijau. `env-terdokumentasi` ikut karena rute ini adalah pembaca pertama
@@ -2587,7 +2587,7 @@ describe("POST /api/pesanan/[id]/batal", () => {
 - [ ] **Step 2: Jalankan uji rute, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-checkout-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-checkout-rute.test.ts
 ```
 
 Kegagalan yang DIHARAPKAN: berkas gagal dimuat —
@@ -2775,7 +2775,7 @@ export async function POST(
 - [ ] **Step 4: Jalankan uji rute, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-checkout-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-checkout-rute.test.ts
 ```
 
 ---
@@ -2959,7 +2959,7 @@ describe("muatSkripSnap", () => {
 - [ ] **Step 6: Jalankan uji komponen, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/produk-tombol-beli.test.tsx
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/produk-tombol-beli.test.tsx
 ```
 
 Kegagalan yang DIHARAPKAN: `Cannot find module '@/app/produk/[slug]/tombol-beli'`.
@@ -3047,7 +3047,7 @@ export async function muatSkripSnap(clientKey: string, produksi: boolean): Promi
 pasti berbeda jawabannya suatu hari. Sebelum mencabut, buktikan tidak ada pemakai lain:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && grep -rn "TautanBuka" src/ tests/
+cd "$(git rev-parse --show-toplevel)/web" && grep -rn "TautanBuka" src/ tests/
 ```
 
 Harapan: hanya `src/app/produk/[slug]/tombol-ambil.tsx` (definisi) dan
@@ -3412,7 +3412,7 @@ function HargaProduk({
 - [ ] **Step 11: Jalankan kedua uji komponen & rute, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/produk-tombol-beli.test.tsx tests/produk-tombol-ambil.test.tsx tests/pesanan-checkout-rute.test.ts tests/pagar-batas-server-klien.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/produk-tombol-beli.test.tsx tests/produk-tombol-ambil.test.tsx tests/pesanan-checkout-rute.test.ts tests/pagar-batas-server-klien.test.ts
 ```
 
 Keempatnya hijau. `produk-tombol-ambil` ikut karena `tombol-ambil.tsx` disunting;
@@ -3434,7 +3434,7 @@ yang ditulis `:id` akan sekaligus menjadi "hantu" dan "tak terdaftar":
 ```
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/inventaris-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/inventaris-rute.test.ts
 ```
 
 ---
@@ -3442,7 +3442,7 @@ cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/inventaris-rut
 - [ ] **Step 13: Jalankan pagar yang bersinggungan**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-checkout-rute.test.ts tests/produk-tombol-beli.test.tsx tests/produk-tombol-ambil.test.tsx tests/inventaris-rute.test.ts tests/env-terdokumentasi.test.ts tests/pesanan-jejak-yatim.test.ts tests/jejak-yatim.test.ts tests/landing-produk.test.tsx tests/produk-katalog.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-checkout-rute.test.ts tests/produk-tombol-beli.test.tsx tests/produk-tombol-ambil.test.tsx tests/inventaris-rute.test.ts tests/env-terdokumentasi.test.ts tests/pesanan-jejak-yatim.test.ts tests/jejak-yatim.test.ts tests/landing-produk.test.tsx tests/produk-katalog.test.ts
 ```
 
 Seluruhnya hijau. `env-terdokumentasi` ikut karena `page.tsx` adalah pembaca pertama
@@ -4226,7 +4226,7 @@ describe("kabel Lapis 1b di /produk/[slug]", () => {
 - [ ] **Step 2: Jalankan uji, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-periksa-dibuka.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-periksa-dibuka.test.ts
 ```
 
 Kegagalan yang diharapkan: `Error: Failed to load url /Users/.../src/lib/pesanan/periksa-menggantung.ts`
@@ -4833,13 +4833,13 @@ Bila Task 9 belum mendeklarasikan `router` di komponen itu, tambahkan
 - [ ] **Step 8: Jalankan uji, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-periksa-dibuka.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-periksa-dibuka.test.ts
 ```
 
 Lalu pastikan tetangganya tidak ikut tergeser:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/produk-ambil-gratis.test.ts tests/produk-tombol-ambil.test.tsx tests/pagar-batas-server-klien.test.ts tests/inventaris-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/produk-ambil-gratis.test.ts tests/produk-tombol-ambil.test.tsx tests/pagar-batas-server-klien.test.ts tests/inventaris-rute.test.ts
 ```
 
 - [ ] **Step 9: Commit**
@@ -5653,7 +5653,7 @@ describe("POST /api/pesanan/[id]/periksa-ulang", () => {
 - [ ] **Step 2: Jalankan uji, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.test.tsx
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/admin-pesanan.test.tsx
 ```
 
 Kegagalan yang diharapkan: `Failed to load url @/lib/admin/pesanan` — seluruh berkas merah
@@ -5776,7 +5776,7 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
 ```
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.test.tsx -t "sebab_tinjauan"
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/admin-pesanan.test.tsx -t "sebab_tinjauan"
 ```
 
 Kasus pertama MERAH dengan `expected 'refund' to be 'lunas_setelah_tutup'` — merah yang
@@ -6339,7 +6339,7 @@ $$;
 Terapkan lalu jalankan lagi:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx supabase migration up && npx vitest run tests/admin-pesanan.test.tsx tests/fungsi-mesin-tertutup.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx supabase migration up && npx vitest run tests/admin-pesanan.test.tsx tests/fungsi-mesin-tertutup.test.ts
 ```
 
 Keduanya hijau. `fungsi-mesin-tertutup` ikut karena migrasi ini menyentuh tiga fungsi yang ada
@@ -7389,13 +7389,13 @@ berkas, jadi `:id` sekaligus jadi "hantu" dan "tak terdaftar":
 - [ ] **Step 12: Jalankan uji, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/admin-pesanan.test.tsx tests/admin-shell.test.ts tests/inventaris-rute.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/admin-pesanan.test.tsx tests/admin-shell.test.ts tests/inventaris-rute.test.ts
 ```
 
 Lalu pagar yang tersentuh secara tidak langsung:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/panel-primitif.test.ts tests/pagar-batas-server-klien.test.ts tests/identitas-aplikasi.test.ts tests/admin-bayar.test.ts tests/e2e-selektor.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/panel-primitif.test.ts tests/pagar-batas-server-klien.test.ts tests/identitas-aplikasi.test.ts tests/admin-bayar.test.ts tests/e2e-selektor.test.ts
 ```
 
 - [ ] **Step 13: Commit**
@@ -7895,7 +7895,7 @@ describe("sapuan /api/cron/pesanan", () => {
 - [ ] **Step 2: Jalankan uji, pastikan GAGAL**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-jadwal-actions.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-jadwal-actions.test.ts
 ```
 
 Kegagalan yang diharapkan: `Failed to load url @/app/api/cron/pesanan/route` — seluruh berkas
@@ -8103,13 +8103,13 @@ sama-sama merah:
 - [ ] **Step 6: Jalankan uji, pastikan LULUS**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/pesanan-jadwal-actions.test.ts tests/inventaris-rute.test.ts tests/cron-tenggat.test.ts
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-jadwal-actions.test.ts tests/inventaris-rute.test.ts tests/cron-tenggat.test.ts
 ```
 
 Lalu, sesudah berkoordinasi soal Supabase lokal yang dipakai bersama, suite penuh:
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma/web && npm test
+cd "$(git rev-parse --show-toplevel)/web" && npm test
 ```
 
 - [ ] **Step 7: Commit**
