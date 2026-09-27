@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { LABEL_JENIS } from "@/lib/produk/status";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { TombolAmbil, TautanBuka } from "./tombol-ambil";
+import { midtransProduksi } from "@/lib/midtrans/konfig";
+import { TombolAmbil } from "./tombol-ambil";
+import { TombolBeli } from "./tombol-beli";
 
 // Sama seperti etalase: katalog berubah lewat panel staf, jadi halaman satu
 // produk tidak boleh dibekukan selamanya di waktu build.
@@ -19,11 +21,15 @@ function HargaProduk({
   productId,
   harga,
   hargaCoret,
+  produksi,
+  clientKey,
 }: {
   slug: string;
   productId: string;
   harga: number | null;
   hargaCoret: number | null;
+  produksi: boolean;
+  clientKey: string;
 }) {
   if (harga === null) {
     return <p className="mt-4 text-[15px] text-ink-soft">Harga segera diumumkan</p>;
@@ -51,10 +57,16 @@ function HargaProduk({
           <s className="text-[15px] text-ink-soft/70">{formatRupiah(hargaCoret)}</s>
         )}
       </div>
-      {/* Tahap 1 belum punya checkout — tidak ada tombol beli di sini. Yang ada
-          hanyalah jalan masuk bagi yang SUDAH memiliki (mis. pemberian admin),
-          dan komponen itu tidak merender apa pun untuk yang belum. */}
-      <TautanBuka slug={slug} productId={productId} />
+      {/* `TombolBeli` MENYERAP `TautanBuka` yang dulu berdiri di sini: yang
+          sudah memiliki tetap melihat "Buka", yang punya pembayaran
+          menggantung melihat "sedang diproses", dan sisanya melihat tombol
+          beli. Satu komponen, karena ketiganya menjawab satu pertanyaan. */}
+      <TombolBeli
+        slug={slug}
+        productId={productId}
+        produksi={produksi}
+        clientKey={clientKey}
+      />
     </>
   );
 }
@@ -81,11 +93,18 @@ export default async function ProdukDetailPage({
           </p>
         )}
 
+        {/* Keduanya dibaca DI SERVER. `MIDTRANS_PRODUKSI` sengaja tanpa prefiks
+            NEXT_PUBLIC_, jadi peramban tidak bisa membacanya sendiri — dan
+            komponen klien yang mencoba akan selalu mendapat sandbox, senyap.
+            Karena halaman ini `revalidate = 300`, keduanya juga harus sudah
+            terpasang saat build/revalidasi, bukan hanya saat request. */}
         <HargaProduk
           slug={produk.slug}
           productId={produk.id}
           harga={produk.harga}
           hargaCoret={produk.hargaCoret}
+          produksi={midtransProduksi()}
+          clientKey={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY ?? ""}
         />
 
         <p className="mt-6 rounded-xl border border-black/10 bg-white p-4 text-[13px] text-ink-soft">

@@ -18,8 +18,13 @@ import { ambilProdukGratis } from "./ambil";
  */
 export type KeadaanAmbil = "belum" | "punya" | "cabut";
 
-/** Satu bentuk "sudah dimiliki", dipakai dua pemanggil — gratis dan berbayar. */
-function BlokBuka({ slug }: { slug: string }) {
+/**
+ * Satu bentuk "sudah dimiliki", dipakai TIGA pemanggil — gratis (`PanelAmbil`),
+ * berbayar (`PanelBeli`), dan siapa pun sesudahnya. Diekspor supaya kedua panel
+ * tidak menumbuhkan salinannya masing-masing: dua blok "Buka" yang berbeda
+ * tautannya adalah cacat yang hanya terlihat oleh yang sudah membayar.
+ */
+export function BlokBuka({ slug }: { slug: string }) {
   return (
     <div className="mt-4">
       <Link
@@ -117,30 +122,6 @@ export async function punyaProdukDiPeramban(
     .is("dicabut_pada", null)
     .maybeSingle();
   return baris !== null;
-}
-
-/**
- * Jalan masuk untuk produk BERBAYAR yang ternyata sudah dimiliki — mis. hadiah
- * admin (`sumber = 'pemberian_admin'`). Tahap 1 belum punya checkout, jadi di
- * sini tidak ada tombol beli apa pun: yang belum memiliki tidak melihat
- * SEPATAH KATA pun tambahan, dan layar pengunjung anon karena itu persis sama
- * seperti sebelumnya.
- */
-export function TautanBuka({ slug, productId }: { slug: string; productId: string }) {
-  const [punya, setPunya] = useState(false);
-
-  useEffect(() => {
-    let hidup = true;
-    void punyaProdukDiPeramban(createBrowserSupabase(), productId).then((ada) => {
-      if (hidup && ada) setPunya(true);
-    });
-    return () => {
-      hidup = false;
-    };
-  }, [productId]);
-
-  if (!punya) return null;
-  return <BlokBuka slug={slug} />;
 }
 
 // Tombol hanya mengirim slug produk. Sisanya — sesi ada atau tidak, produknya
