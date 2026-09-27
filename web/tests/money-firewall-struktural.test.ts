@@ -94,6 +94,13 @@ const TABEL_UANG = new Set([
   // tabelnya belum ada sekarang, jadi menuliskannya di sini membuat suite
   // tugas ini berakhir merah.
   "order_items",
+  // `notifikasi_pesanan` (P1, migrasi `pesanan_jejak`) menyimpan
+  // `nominal_diterima`: gross_amount notifikasi yang SUDAH lolos signature.
+  // Untuk pesanan `ditahan` — satu-satunya baris yang angkanya jadi keputusan
+  // manusia — tanpa kolom itu yang tersimpan hanyalah angka yang KITA tagih,
+  // dan staf tetap harus membuka dashboard Midtrans untuk tahu selisihnya.
+  // Ongkosnya: tabel ini ikut masuk daftar, dan policy-nya baca staf saja.
+  "notifikasi_pesanan",
 ]);
 
 /**
@@ -272,12 +279,14 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
     // P1: nota pesanan. Pemindahan diam-diam `harga_beku` keluar dari
     // `order_items` mematikan verifikasi jumlah tanpa satu pun uji lain merah.
     expect(diTabelUang).toContain("order_items.harga_beku");
+    expect(diTabelUang).toContain("notifikasi_pesanan.nominal_diterima");
   });
 
   it("tabel uang P1 berkolom nominal PERSIS satu — tidak boleh tumbuh diam-diam", () => {
     // Tugas 3 menambahkan barisnya sendiri untuk `notifikasi_pesanan` di dalam
     // `it` ini. Jangan menuliskannya sekarang: tabelnya belum ada.
     expect(kolomUangDi("order_items")).toEqual(["harga_beku"]);
+    expect(kolomUangDi("notifikasi_pesanan")).toEqual(["nominal_diterima"]);
   });
 
   it("kolom STATUS bayar TIDAK dituduh sebagai nominal (bukan false positive)", () => {
