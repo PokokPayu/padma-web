@@ -32,6 +32,15 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   // (layanan) — tidak ada ikon "produk" tersendiri, dan menambah satu SVG
   // baru hanya untuk satu butir menu bukan bagian dari task ini.
   { href: "/admin/produk", label: "Produk", ikon: "katalog" },
+  // Judul halamannya "Pesanan". Ikon "bayar" dipakai ulang — ia memang tujuan
+  // uang. Tanpa badge: "butuh perhatian" bukan antrean yang bisa dibereskan
+  // dengan menekan tombol berulang kali, dan angka merah permanen di sidebar
+  // adalah alarm yang dinormalkan.
+  //
+  // SIDEBAR SAJA. `RINGKAS` (bar bawah) tetap empat tujuan tersibuk klinik;
+  // pesanan digital bukan salah satunya, dan bar bawah yang tumbuh jadi lima
+  // memotong label justru di tujuan yang paling perlu dikenali.
+  { href: "/admin/pesanan", label: "Pesanan", ikon: "bayar" },
   // Judul halamannya "Pengaturan".
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
 ];

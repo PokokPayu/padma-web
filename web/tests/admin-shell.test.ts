@@ -405,7 +405,7 @@ describe("navigasi admin", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat sebelas tujuan berbahasa Indonesia di sidebar", () => {
+  it("memuat dua belas tujuan berbahasa Indonesia di sidebar", () => {
     const m = markupNav("/admin");
     const tujuan = [
       ["/admin", "Beranda"],
@@ -420,16 +420,18 @@ describe("navigasi admin", () => {
       // Produk Digital (rencana produk-digital-tahap1, Task 5): master
       // produk digital di panel admin.
       ["/admin/produk", "Produk"],
+      // Pesanan (P1 inti pembayaran, Task 11): layar rekonsiliasi Lapis 2.
+      ["/admin/pesanan", "Pesanan"],
       ["/admin/pengaturan", "Setelan"],
     ];
     for (const [href, label] of tujuan) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
     }
-    // Sebelas tautan sidebar + empat tautan bar bawah. Dikunci PERSIS:
+    // Dua belas tautan sidebar + empat tautan bar bawah. Dikunci PERSIS:
     // tujuan yang lahir tanpa memperbarui daftar di atas akan lolos dari
     // seluruh assertion `toContain` tanpa satu pun test merah.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(11 + 4);
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(12 + 4);
   });
 
   it("bar bawah memuat empat tujuan tersibuk, bukan salinan seluruh menu", () => {
@@ -444,6 +446,7 @@ describe("navigasi admin", () => {
       "/admin/penilaian",
       "/admin/layanan",
       "/admin/materi",
+      "/admin/pesanan",
       "/admin/pengaturan",
     ]) {
       expect([...m.matchAll(new RegExp(`href="${href}"`, "g"))], href).toHaveLength(1);

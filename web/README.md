@@ -127,6 +127,7 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/penilaian` | Admin, Owner | Penilaian sesi: dua angka TERPISAH (sesi & bidan), saringan bintang ≤ 3, komentar klien sebagai teks biasa |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
+| `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan Midtrans: blok "Butuh perhatian" (bertanda tinjauan, atau uang sudah masuk tapi akses belum tercatat terbit) dan "Terbuka"; satu-satunya layar admin yang menampilkan nominal PESANAN (yang ditagih vs yang diterima) — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
 | `/admin/layanan` | Admin, Owner | Daftar layanan datar: cari, saring ketersediaan, paginasi; baris menaut ke detail |
 | `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
 | `/admin/materi` | Admin, Owner | Daftar materi datar: cari, saring aktif/tipe/kelengkapan isi, paginasi; baris menaut ke detail |
@@ -158,6 +159,10 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/cron/tenggat` | Mesin | POST pembatal pengajuan yang lewat tenggat bayar. Dijaga `CRON_SECRET`, fail-closed bila secret tidak terpasang |
 | `/api/pesanan/checkout` | Klien | POST membuat pesanan lalu menerbitkan token Snap. Rute TIPIS: RPC `buat_pesanan` dipanggil dengan SESI PEMANGGIL, tidak pernah service role — `client_id` dipilih dari `auth.uid()` di dalam RPC, harga dibekukan di sana, dan pesanan terbuka kedua ditolak unique parsial |
 | `/api/pesanan/[id]/batal` | Klien | POST pembatalan mandiri pesanan sendiri yang masih `menunggu_bayar`. Ada karena satu klien hanya boleh punya satu pesanan terbuka: tanpanya, berubah pikiran soal produk berarti menunggu 24 jam |
+| `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Status API Midtrans untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_midtrans` (service role). Vonisnya datang dari Midtrans, tidak pernah dari badan permintaan |
+| `/api/pesanan/[id]/terbitkan-akses` | Admin, Owner | POST menerbitkan ulang akses untuk pesanan **lunas** yang aksesnya tidak pernah terbit; memanggil `terbitkan_akses_item` per item, bukan penyalur — aturan "penyalur hanya dari transisi" tetap utuh |
+| `/api/pesanan/[id]/putuskan` | Admin, Owner | POST putusan staf atas pesanan `ditahan`: `lunas` atau `dibatalkan`. RPC dengan sesi pemanggil, bergerbang `user_role()`, nama pemutus ikut tercatat di jejak |
+| `/api/pesanan/[id]/tutup-tinjauan` | Admin, Owner | POST mengosongkan penanda tinjauan tanpa menyentuh status; MENOLAK baris `ditahan` — yang itu menuntut putusan, bukan penutupan |
 | `/api/pembayaran/midtrans` | Mesin | POST notifikasi Midtrans. Berlapis: batas 16 KB body → kunci server terpasang (kosong = 503, supaya Midtrans mengirim ulang) → skema Zod non-strict → bentuk `order_id` → tanda tangan sha512 waktu-tetap → idempotensi lewat `unique (sidik)`. Verifikasi jumlah, transisi status, dan penerbitan akses terjadi di SATU transaksi di dalam RPC |
 | `/api/skrining/akun` | Klien | POST skrining dari dalam Passport dengan **service role**; `client_id` diambil dari SESI, tidak pernah dari body. Pembatas berkunci `client_id`, terpisah dari ember anonim |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
