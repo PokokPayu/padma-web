@@ -143,7 +143,7 @@ perlu, itu tanda briefnya sudah menyimpang.
 | tabel | `public.notifikasi_pesanan` | T3 |
 | tabel | `public.notifikasi_ditolak_harian` | T3 |
 | view | `public.pesanan_item_staf` | T5 |
-| kolom baru | `public.digital_entitlements.pesanan_id uuid null references public.orders(id) on delete restrict` | **T5** (dipindah dari T6 — lihat §16 keberatan B-1) |
+| kolom baru | `public.digital_entitlements.pesanan_id uuid null references public.orders(id) on delete restrict` | **T5** (dipindah dari T6 — keberatan B-1, diterima) |
 | kolom baru | `public.notifikasi_ditolak_harian.tak_dikenal integer not null default 0` | T3 |
 
 Campuran Inggris/Indonesia (`orders`/`order_items` vs `jejak_pesanan`) **disengaja dan mengikuti spec harfiah** —
@@ -274,9 +274,15 @@ export const JAM_TENGGANG_404    = 1;    // margin terhadap jam Midtrans sebelum
 // `.in("status",[...PESANAN_TERBUKA])` — termasuk UPDATE pencap `diperiksa_pada`, yang juga
 // dilarang membawa literal; T11 memilih baris layar dengan
 // `[...PESANAN_TERBUKA, ...PESANAN_BERUANG]` dan menyaring blok "Butuh perhatian" dengan
-// `PESANAN_BERUANG.includes(...)`. NOL literal "menunggu_bayar"/"ditahan" di T10/T11, dan NOL
-// himpunan KELIMA yang bernama lain. Himpunan tanpa konsumen adalah hiasan, dan hiasan itulah
-// yang membuat nilai enum keenam hilang dari layar diam-diam.
+// `PESANAN_BERUANG.includes(...)`; `tombol-pesanan.tsx` menggerbangi "Periksa ulang" dengan
+// `PESANAN_TERBUKA.includes(status)`. Kedua anggota `PESANAN_BERUANG` di sana menuntut tombol
+// yang BERLAWANAN (`lunas` menerbitkan barangnya, `ditahan` meminta manusia memutuskan), dan
+// himpunan tidak bisa memisahkan mereka tanpa melahirkan yang kelima — pemisahnya karena itu
+// `Record<StatusPesanan, ...>` PENUH, mekanisme `LABEL_STATUS_PESANAN`: nama status jadi KUNCI
+// yang diperiksa kompilator, bukan literal yang dibandingkan.
+// NOL literal "menunggu_bayar"/"ditahan" di T10/T11, dan NOL himpunan KELIMA yang bernama
+// lain. Himpunan tanpa konsumen adalah hiasan, dan hiasan itulah yang membuat nilai enum
+// keenam hilang dari layar diam-diam.
 // KLAIM "diuji" DICABUT 27 Sep 2026: nol uji di `main` memindai `src/` untuk literal status,
 // jadi yang menegakkannya hanyalah peninjau. Menuliskan penegak yang tidak ada lebih buruk
 // daripada tidak menuliskan apa pun — pembaca berikutnya berhenti memeriksa sendiri.
@@ -342,7 +348,15 @@ export function hasilRpcSah(nilai: string): nilai is HasilWebhook;
 // dipetakan terbaca `KODE_JAWABAN[undefined]` = undefined, dan `NextResponse.json(..., { status:
 // undefined })` menjawab 200 — kegagalan dilaporkan ke Midtrans sebagai selesai.
 
-// src/lib/midtrans/adapter.ts          (T8 melahirkan; T9,10,11 memakai)
+// src/lib/midtrans/adapter.ts          (T8 melahirkan; T9,10,11 memakai; T12 me-`vi.mock`)
+// "12" sempat ikut dicabut bersama lima modul lain pada 27 Sep 2026. Untuk kelimanya itu benar
+// (grep atas seluruh Tugas 12 memberi nol kecocokan); untuk berkas INI tidak:
+// `tests/pesanan-jadwal-actions.test.ts` menulis `vi.mock("@/lib/midtrans/adapter", ...)` beserta
+// kedua ekspornya. Mock ADALAH pemakaian, dan bentuk pemakaian yang paling rapuh pula — ia
+// mengunci path modul DAN bentuk kedua ekspornya tanpa satu pun impor yang bisa dilihat
+// kompilator. Mengganti nama berkas ini membuat mock T12 diam-diam tidak terpasang, dan yang
+// menyelamatkannya hanya pagar `fetch` berkas itu, bukan tipe. Kamus yang menyangkal pemakaian
+// itu sama menyesatkannya dengan kamus yang melebih-lebihkannya.
 export type PermintaanSnap = { orderId: string; nominal: number; judul: string; kedaluwarsaJam: number };
 export async function terbitkanTokenSnap(p: PermintaanSnap):
   Promise<{ ok: true; token: string } | { ok: false; pesan: string }>;
@@ -533,7 +547,9 @@ klien yang sama — walau produknya berbeda — mustahil hidup bersamaan.
 
 `tests/pesanan-teks-tanpa-nominal.test.ts:110-112` sudah memilih Rina dengan alasan tertulis
 ("supaya fixture di sini tidak bertabrakan dengan `pesanan_terbuka_satu_per_klien` milik berkas uji
-lain") dan menunjuk "peta §13.2" yang tidak pernah ada. Inilah petanya.
+lain") dan dulu menunjuk "peta §13.2" yang tidak pernah ada. Inilah petanya — dan rujukan di
+berkas itu sudah diarahkan ke sini (27 Sep 2026), bukan dibuang: alasan memilih Rina tetap
+berlaku, yang hilang hanya alamatnya.
 
 Ketiga klien seed yang dipakai: **Ananda** `44444444-4444-4444-4444-444444444401` (ber-akun
 auth), **Rina** `44444444-4444-4444-4444-444444444402` (sengaja TANPA akun auth), dan **Klien
@@ -2104,7 +2120,7 @@ lalu menghapus pesanan.
 - [ ] **Step 11: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/src/lib/midtrans web/src/app/api/pembayaran web/tests/pesanan-webhook.test.ts web/tests/midtrans-konfig.test.ts web/README.md && git commit -F - <<'PESAN'
+cd "$(git rev-parse --show-toplevel)" && git add web/src/lib/midtrans web/src/app/api/pembayaran web/tests/pesanan-webhook.test.ts web/tests/midtrans-konfig.test.ts web/README.md && git commit -F - <<'PESAN'
 feat(pesanan): webhook Midtrans — pintu masuk uang, sepuluh langkah urut
 
 Rute POST /api/pembayaran/midtrans plus lima modul adapter. Urutannya
@@ -3438,7 +3454,7 @@ halaman produk baru saja disunting.
 - [ ] **Step 14: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/src/app/api/pesanan web/src/lib/midtrans/snap-peramban.ts "web/src/app/produk/[slug]" web/tests/pesanan-checkout-rute.test.ts web/tests/produk-tombol-beli.test.tsx web/README.md && git commit -F - <<'PESAN'
+cd "$(git rev-parse --show-toplevel)" && git add web/src/app/api/pesanan web/src/lib/midtrans/snap-peramban.ts "web/src/app/produk/[slug]" web/tests/pesanan-checkout-rute.test.ts web/tests/produk-tombol-beli.test.tsx web/README.md && git commit -F - <<'PESAN'
 feat(pesanan): checkout — dua rute tipis, Snap popup, tombol beli
 
 Rute TIPIS dan itu keputusan, bukan gaya: keduanya memanggil RPC dengan
@@ -4032,6 +4048,42 @@ describe("kegagalan disembunyikan", () => {
     const { data: notif } = await admin
       .from("notifikasi_pesanan").select("id").eq("pesanan_id", id);
     expect(notif ?? []).toEqual([]);
+  });
+
+  it('kunci server yang belum terpasang BUKAN "Midtrans tak terjawab"', async () => {
+    // Adapter sudah memisahkan keduanya di sumbernya, dan pemisahan itu tidak
+    // punya satu pun uji sampai hari ini — cabang yang tidak bisa merah adalah
+    // cabang yang belum terbukti ada.
+    //
+    // `kode: 0` berarti kita SUDAH bertanya dan tidak mendapat jawaban;
+    // `kode: -1` berarti NOL permintaan pernah keluar karena
+    // `MIDTRANS_SERVER_KEY` kosong. Satu nilai bedanya, dua tindakan manusia
+    // yang berbeda: yang pertama sembuh dengan dicoba lagi, yang kedua tidak
+    // akan pernah sembuh sampai seseorang memasang env. Dilebur jadi
+    // `midtrans_tak_terjawab`, Tugas 11 menjawab 502 "Coba lagi beberapa saat
+    // lagi." untuk keadaan yang tidak bisa berubah — dan staf mencoba lagi
+    // selamanya alih-alih menghubungi orang yang memegang envnya.
+    const kode = `${AWALAN_KODE}0014`;
+    const id = await semaiPesanan({ kode });
+    midtrans.jawaban = {
+      ok: false as const,
+      kode: -1,
+      pesan: "Kunci Midtrans belum dipasang.",
+    };
+
+    const hasil = await terapkanJawabanMidtrans({
+      id,
+      kode,
+      percobaan: 1,
+      kedaluwarsaPada: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+
+    expect(hasil).toBe("kunci_belum_terpasang");
+    // `panggilan` memaku bahwa order_id-nya memang dirakit dan diajukan ke
+    // adapter: nilai balik saja tidak menyatakan permintaan mana yang dibentuk
+    // — atau apakah ada yang dibentuk sama sekali.
+    expect(midtrans.panggilan).toEqual([`${kode}.1`]);
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
   });
 
   it("adapter yang melempar TIDAK melempar keluar, dan halaman tetap terender", async () => {
@@ -4793,7 +4845,7 @@ cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/produk-ambil-g
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/src/lib/pesanan/periksa-menggantung.ts web/src/lib/pesanan/picu-periksa.ts "web/src/app/produk/[slug]/periksa.ts" "web/src/app/produk/[slug]/tombol-beli.tsx" web/src/app/passport/produk/page.tsx web/tests/pesanan-periksa-dibuka.test.ts && git commit -m "$(cat <<'PESAN'
+cd "$(git rev-parse --show-toplevel)" && git add web/src/lib/pesanan/periksa-menggantung.ts web/src/lib/pesanan/picu-periksa.ts "web/src/app/produk/[slug]/periksa.ts" "web/src/app/produk/[slug]/tombol-beli.tsx" web/src/app/passport/produk/page.tsx web/tests/pesanan-periksa-dibuka.test.ts && git commit -m "$(cat <<'PESAN'
 feat(pesanan): Lapis 1b — pemeriksaan pesanan menggantung saat halaman dibuka
 
 Jaring pengaman utama P1, dan sengaja bukan cron: yang paling butuh
@@ -4909,7 +4961,9 @@ menyembuhkan.
   - `export type SumberItemPesanan = (typeof SUMBER_ITEM_PESANAN)[number];`
   - `export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string>;`
   - `export const PESANAN_TERBUKA` dan `export const PESANAN_BERUANG` — dipakai memilih baris
-    layar dan menyaring blok "Butuh perhatian" (§0.6).
+    layar dan menyaring blok "Butuh perhatian" (§0.6). `PESANAN_TERBUKA` juga yang menggerbangi
+    tombol "Periksa ulang" di `tombol-pesanan.tsx`; pemisah `lunas`/`ditahan` di berkas itu
+    BUKAN himpunan melainkan `Record<StatusPesanan, ...>` penuh — lihat dokbloknya.
 - Consumes (Task 2) — `public.orders`, dibaca DENGAN SESI PEMANGGIL lewat policy
   `"pesanan: staf baca"`. `public.order_items` — **nol grant, nol policy**: hanya service role.
 - Consumes (Task 3) — `public.notifikasi_pesanan (pesanan_id, nominal_diterima, diterima_pada)`
@@ -6572,7 +6626,33 @@ Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/tombol-pesana
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { StatusPesanan } from "@/lib/pesanan/status";
+import { PESANAN_TERBUKA, type StatusPesanan } from "@/lib/pesanan/status";
+
+/**
+ * Pemecah `PESANAN_BERUANG`, dan satu-satunya tempat di berkas ini yang
+ * menyebut nama status.
+ *
+ * Kenapa bukan himpunan seperti di `bacaPesananStaf`: "Periksa ulang" memang
+ * bisa dinyatakan dengan `PESANAN_TERBUKA` (lihat JSX di bawah), tapi kedua
+ * anggota `PESANAN_BERUANG` menuntut tombol yang BERLAWANAN — `lunas`
+ * menerbitkan barangnya, `ditahan` justru meminta manusia memutuskan lebih
+ * dulu. Himpunan Tugas 1 sengaja tidak memecah keduanya, dan §0.6 melarang
+ * melahirkan himpunan kelima yang bernama lain di sini.
+ *
+ * Yang memaksa kelengkapannya karena itu `Record` BERTIPE PENUH, mekanisme
+ * yang sama dengan `LABEL_STATUS_PESANAN` di `status.ts`: nama status hidup
+ * sebagai KUNCI yang diperiksa kompilator, bukan sebagai literal yang
+ * dibandingkan. Nilai enum keenam memerahkan berkas ini sampai seseorang
+ * memutuskan tombol apa yang pantas untuknya — alih-alih menghilangkan
+ * tombolnya dari layar staf tanpa suara.
+ */
+const TOMBOL_BERUANG: Record<StatusPesanan, "akses" | "putusan" | null> = {
+  menunggu_bayar: null,
+  ditahan: "putusan",
+  lunas: "akses",
+  kedaluwarsa: null,
+  dibatalkan: null,
+};
 
 /**
  * Empat tindakan pemulihan Lapis 2, masing-masing dengan alamatnya sendiri.
@@ -6592,6 +6672,13 @@ import type { StatusPesanan } from "@/lib/pesanan/status";
  * tidak akan ditepati. `Tutup tinjauan` khususnya: pada baris `ditahan` ia
  * ditolak `P0001`, dan seandainya tidak ditolak ia akan mengubur pesanan yang
  * uangnya sudah di tangan Midtrans dan barangnya belum keluar.
+ *
+ * ===== NOL LITERAL STATUS =====
+ * Tidak satu pun cabang di bawah membandingkan `status` dengan string yang
+ * diketik di tempat. Pelajaran repo yang sudah dibayar sekali: nilai enum baru
+ * membuat konstanta tunggal salah DIAM-DIAM — dan di layar ini bentuk salahnya
+ * adalah tombol pemulihan yang berhenti muncul untuk status yang justru paling
+ * butuh dipulihkan, tanpa satu pun galat.
  */
 export function TombolPesanan({
   pesananId,
@@ -6639,17 +6726,17 @@ export function TombolPesanan({
   return (
     <div className="flex flex-col items-start gap-1.5">
       <div className="flex flex-wrap gap-1.5">
-        {status === "menunggu_bayar" && (
+        {PESANAN_TERBUKA.includes(status) && (
           <button type="button" disabled={mati} className={kelas} onClick={() => void kirim("periksa-ulang")}>
             Periksa ulang
           </button>
         )}
-        {status === "lunas" && (
+        {TOMBOL_BERUANG[status] === "akses" && (
           <button type="button" disabled={mati} className={kelas} onClick={() => void kirim("terbitkan-akses")}>
             Terbitkan akses
           </button>
         )}
-        {status === "ditahan" && (
+        {TOMBOL_BERUANG[status] === "putusan" && (
           <>
             <button
               type="button"
@@ -6669,7 +6756,7 @@ export function TombolPesanan({
             </button>
           </>
         )}
-        {butuhTinjauan && status !== "ditahan" && (
+        {butuhTinjauan && TOMBOL_BERUANG[status] !== "putusan" && (
           <button type="button" disabled={mati} className={kelas} onClick={() => void kirim("tutup-tinjauan")}>
             Tutup tinjauan
           </button>
@@ -7314,7 +7401,7 @@ cd /Users/arvinfairuz/Documents/padma/web && npx vitest run tests/panel-primitif
 - [ ] **Step 13: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql web/src/lib/admin/pesanan.ts web/src/app/admin/pesanan web/src/app/api/pesanan web/src/app/admin/_shell/nav-admin.tsx web/tests/admin-pesanan.test.tsx web/tests/admin-shell.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
+cd "$(git rev-parse --show-toplevel)" && git add web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql web/src/lib/admin/pesanan.ts web/src/app/admin/pesanan web/src/app/api/pesanan web/src/app/admin/_shell/nav-admin.tsx web/tests/admin-pesanan.test.tsx web/tests/admin-shell.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
 feat(pesanan): layar /admin/pesanan + empat rute pemulihan
 
 Lapis 2 rekonsiliasi: dipicu manusia. Dua blok, bukan satu saringan —
@@ -7761,6 +7848,47 @@ describe("sapuan /api/cron/pesanan", () => {
     expect(midtrans.panggilan).not.toContain(`${kode}.1`);
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
   });
+
+  it("kunci server yang belum terpasang melaporkan diperiksa: 0, BUKAN jumlah barisnya", async () => {
+    // Kegagalan termahal yang bisa lolos dari berkas ini, dan satu-satunya
+    // yang tidak menghasilkan galat di mana pun: server tanpa
+    // `MIDTRANS_SERVER_KEY` melaporkan "diperiksa: 20" tiap lima belas menit
+    // tanpa satu permintaan pun pernah keluar. Penjadwal yang sakit terbaca
+    // PERSIS seperti penjadwal yang sehat, dan angka di badan jawaban inilah
+    // satu-satunya hal yang pernah dicatat siapa pun — `curl --fail` tidak
+    // menolongnya, karena 200 memang jawaban yang benar.
+    //
+    // Lewat rute, bukan memanggil `sapuPesananMenggantung` langsung: yang
+    // dibaca penjadwal adalah angka yang keluar dari rute, dan rute yang
+    // meneruskannya apa adanya itulah yang dijanjikan.
+    //
+    // `toBe(0)` boleh EKSAK di sini sementara uji penyembuhan di atas terpaksa
+    // menulis `toBeGreaterThanOrEqual(1)`: penyapu memilih barisnya LINTAS
+    // KLIEN, jadi pesanan menggantung milik berkas lain ikut terbawa — tapi
+    // semuanya jatuh ke jawaban bawaan `kode: 500`, yang juga tidak dihitung.
+    // Nol karena itu berarti nol, bukan "kebetulan sedang sepi".
+    process.env.CRON_SECRET = "rahasia-uji";
+    const kode = `${AWALAN_KODE}0004`;
+    const id = await semaiMenggantung(kode);
+    midtrans.jawabPer.set(`${kode}.1`, {
+      ok: false,
+      kode: -1,
+      pesan: "Kunci Midtrans belum dipasang.",
+    });
+
+    const r = await POST(permintaan("Bearer rahasia-uji"));
+    expect(r.status).toBe(200);
+
+    // Barisnya BENAR-BENAR terpilih dan diproses. Tanpa baris ini `0` juga
+    // dipulangkan oleh sapuan yang tidak menemukan apa-apa, dan ujinya hijau
+    // untuk alasan yang salah — persis bentuk kegagalan yang sedang dijaga.
+    expect(midtrans.panggilan).toContain(`${kode}.1`);
+
+    const isi = (await r.json()) as { diperiksa: number };
+    expect(isi.diperiksa).toBe(0);
+    // Dan tidak ada vonis yang dibuat dari ketiadaan jawaban.
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
 });
 ```
 
@@ -7987,7 +8115,7 @@ cd /Users/arvinfairuz/Documents/padma/web && npm test
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/arvinfairuz/Documents/padma && git add web/src/app/api/cron/pesanan/route.ts .github/workflows/rekonsiliasi-pesanan.yml web/tests/pesanan-jadwal-actions.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
+cd "$(git rev-parse --show-toplevel)" && git add web/src/app/api/cron/pesanan/route.ts .github/workflows/rekonsiliasi-pesanan.yml web/tests/pesanan-jadwal-actions.test.ts web/README.md && git commit -m "$(cat <<'PESAN'
 feat(pesanan): Lapis 3 — rute penyapu + jadwal GitHub Actions
 
 Penyapu sisa, bukan jaring utama: yang ditangkap di sini hanyalah pesanan

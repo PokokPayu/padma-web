@@ -107,7 +107,8 @@ const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status"]);
 const svc = createAdminSupabase();
 
 /** Klien seed kedua; dipakai supaya fixture di sini tidak bertabrakan dengan
- *  `pesanan_terbuka_satu_per_klien` milik berkas uji lain (peta §13.2). */
+ *  `pesanan_terbuka_satu_per_klien` milik berkas uji lain (peta "berkas uji → klien seed":
+ *  rencana P1-B §0.11). */
 const RINA_CLIENT_ID = "44444444-4444-4444-4444-444444444402";
 
 const pesananSampah: string[] = [];
