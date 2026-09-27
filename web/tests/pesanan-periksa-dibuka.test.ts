@@ -77,9 +77,8 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const { periksaPesananMenggantung, terapkanJawabanMidtrans } = await import(
-  "@/lib/pesanan/periksa-menggantung"
-);
+const { periksaPesananMenggantung, terapkanJawabanMidtrans, sapuPesananMenggantung } =
+  await import("@/lib/pesanan/periksa-menggantung");
 const { picuPeriksaSekali } = await import("@/lib/pesanan/picu-periksa");
 const { default: HalamanProdukSaya } = await import("@/app/passport/produk/page");
 
@@ -170,6 +169,74 @@ function jawabanSukses(orderId: string, status: string) {
 async function statusPesanan(id: string): Promise<string> {
   const { data } = await admin.from("orders").select("status").eq("id", id).single();
   return data!.status as string;
+}
+
+type SaringanTercatat = { metode: string; kolom: string; nilai: unknown };
+
+/**
+ * Klien Supabase PALSU yang mencatat setiap saringan yang dipasang padanya.
+ *
+ * ===== KENAPA IA ADA, DAN KENAPA BUKAN UJI BER-BASIS DATA =====
+ * Radius Lapis 1b dijaga DUA baris — `.eq("user_id", user.id)` saat membaca
+ * `clients`, dan `.eq("client_id", clientId)` saat memilih `orders` — dan
+ * SATU PUN dari keduanya tidak bisa dimerahkan oleh uji ber-basis data di
+ * berkas ini: hapus salah satunya, kedelapan belas uji lain tetap hijau.
+ * Sebabnya kebetulan seed, bukan kebenaran. `admin@padma.test` tidak punya
+ * baris `clients`, jadi gerbang pertama "berhasil" lewat jalan yang salah;
+ * dan sesudah gerbang pertama memulangkan klien yang benar, saringan
+ * `client_id` jadi mubazir terhadap RLS — untuk sesi KLIEN. Untuk sesi staf
+ * yang kelak punya baris `clients`, saringan itulah satu-satunya yang berdiri
+ * di antara satu pembukaan halaman dan pesanan SELURUH klien, karena
+ * `"pesanan: staf baca"` memulangkan semuanya.
+ *
+ * Batas otorisasi yang tidak bisa dimerahkan bukan batas, melainkan kebiasaan.
+ * Yang dipaku di sini karena itu bukan hasilnya melainkan SARINGAN YANG
+ * DIPASANG — satu-satunya bentuk bukti yang tidak menunggu seseorang menambah
+ * baris `clients` untuk akun staf ke seed. Nol tulisan basis data: kueri
+ * `orders` memulangkan daftar kosong, jadi `sapuPesananMenggantung` berhenti
+ * sebelum menyentuh service role.
+ */
+function klienPerekamSaringan(userId: string, clientId: string) {
+  const saringan: Record<string, SaringanTercatat[]> = {};
+
+  function pembangunUntuk(tabel: string) {
+    saringan[tabel] ??= [];
+    const catat =
+      (metode: string) =>
+      (kolom: string, nilai?: unknown) => {
+        saringan[tabel].push({ metode, kolom, nilai });
+        return pembangun;
+      };
+    const pembangun = {
+      select: () => pembangun,
+      eq: catat("eq"),
+      in: catat("in"),
+      lt: catat("lt"),
+      or: () => pembangun,
+      order: () => pembangun,
+      limit: () => pembangun,
+      returns: () => pembangun,
+      // `clients` dibaca lewat `maybeSingle()`; selalu memulangkan baris klien
+      // supaya alur berlanjut sampai kueri `orders` — gerbang yang dicabut
+      // harus terlihat sebagai SARINGAN YANG HILANG, bukan sebagai alur yang
+      // berhenti lebih awal karena alasan lain.
+      maybeSingle: async () => ({ data: { id: clientId }, error: null }),
+      // Kueri `orders` di-`await` langsung. Daftar KOSONG: yang diuji di sini
+      // predikatnya, dan baris kosong membuat pencap service role tidak pernah
+      // berjalan.
+      then: (
+        selesai: (h: { data: unknown[]; error: null }) => unknown,
+      ) => selesai({ data: [], error: null }),
+    };
+    return pembangun;
+  }
+
+  const klien = {
+    auth: { getUser: async () => ({ data: { user: { id: userId } }, error: null }) },
+    from: (tabel: string) => pembangunUntuk(tabel),
+  } as unknown as SupabaseClient;
+
+  return { klien, saringan };
 }
 
 /**
@@ -411,6 +478,21 @@ describe("kegagalan disembunyikan", () => {
     expect(hasil).toBe("bentuk_order_id");
     expect(midtrans.panggilan).toEqual([]);
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
+
+    // ===== DAN TIDAK IKUT DIHITUNG SEBAGAI "DIPERIKSA" =====
+    // Kriterianya sama persis dengan `kunci_belum_terpasang`: nol permintaan
+    // pernah keluar untuk baris ini. Dipaku lewat SAPUAN, karena penghitungnya
+    // hidup di `sapuPesananMenggantung` dan panggilan langsung di atas tidak
+    // pernah menyentuhnya — pelajaran yang sudah dibayar sekali di berkas ini.
+    //
+    // `sapuPesananMenggantung` dipanggil LANGSUNG dengan service role dan
+    // `KLIEN_KEDUA_ID`, persis bentuk yang dipakai Lapis 3 (Tugas 12), bukan
+    // lewat `periksaPesananMenggantung()`. Sebabnya §0.11: baris ber-`kode`
+    // cacat tidak boleh menyentuh Ananda, sementara sapuan sesi selalu
+    // beradius Ananda.
+    const sapuan = await sapuPesananMenggantung(admin, 5, KLIEN_KEDUA_ID);
+    expect(sapuan).toEqual({ diperiksa: 0 });
+    expect(midtrans.panggilan).toEqual([]);
   });
 
   it("jawaban Status API TANPA gross_amount tidak menggeser apa pun", async () => {
@@ -558,6 +640,51 @@ describe("radius pemeriksaan", () => {
       const { data } = await admin
         .from("orders").select("diperiksa_pada").eq("id", id).single();
       expect(data!.diperiksa_pada).toBeNull();
+    } finally {
+      ref.sesi = sesiSemula;
+    }
+  });
+
+  it("KEDUA saringan radius benar-benar dipasang, bukan diserahkan ke RLS", async () => {
+    // Pasangan struktural untuk kedua uji ber-basis data di describe ini, dan
+    // ia ada karena keduanya TIDAK memakunya: hapus `.eq("user_id", …)` atau
+    // `.eq("client_id", …)` dari sumbernya dan seluruh berkas ini tetap hijau.
+    // Lihat dokblok `klienPerekamSaringan` untuk kenapa kebetulan seed-lah
+    // yang membuatnya hijau, bukan kebenaran.
+    const USER_PALSU = "11111111-1111-1111-1111-111111111199";
+    const KLIEN_PALSU = "22222222-2222-2222-2222-222222222299";
+    const { klien, saringan } = klienPerekamSaringan(USER_PALSU, KLIEN_PALSU);
+
+    const sesiSemula = ref.sesi;
+    ref.sesi = klien;
+    try {
+      const hasil = await periksaPesananMenggantung();
+      expect(hasil).toEqual({ diperiksa: 0 });
+
+      // ANTI-HAMPA. `periksaPesananMenggantung` menelan SETIAP lemparan jadi
+      // `{diperiksa: 0}`, jadi tanpa kedua baris ini sebuah stub yang pecah
+      // di tengah jalan akan terbaca seperti gerbang yang bekerja.
+      expect(saringan.clients, "kueri clients tidak pernah berjalan").toBeDefined();
+      expect(saringan.orders, "kueri orders tidak pernah berjalan").toBeDefined();
+
+      // GERBANG SATU: baris `clients` dipungut lewat operator setara atas
+      // `user_id` pemanggil — pola `ambilKlien` (`src/lib/passport/data.ts:66`).
+      // Tanpanya, sesi admin/owner memungut baris klien siapa saja yang
+      // kebetulan dipulangkan policy baca staf.
+      expect(saringan.clients).toContainEqual({
+        metode: "eq",
+        kolom: "user_id",
+        nilai: USER_PALSU,
+      });
+
+      // GERBANG DUA: pemilihan `orders` disaring ke klien YANG BARU DIPUNGUT
+      // itu, bukan diserahkan kepada RLS. Nilainya ikut dipaku — saringan atas
+      // kolom yang benar dengan id orang lain adalah kebocoran yang sama.
+      expect(saringan.orders).toContainEqual({
+        metode: "eq",
+        kolom: "client_id",
+        nilai: KLIEN_PALSU,
+      });
     } finally {
       ref.sesi = sesiSemula;
     }

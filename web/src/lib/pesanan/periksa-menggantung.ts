@@ -78,6 +78,17 @@ type BarisMenggantung = {
 };
 
 /**
+ * Teks sebab untuk log, dari nilai `catch` yang bertipe `unknown`.
+ *
+ * JavaScript membolehkan melempar apa saja, dan `${galat}` atas objek biasa
+ * menghasilkan `[object Object]` — baris log yang ada tapi tidak memberi tahu
+ * apa pun adalah bentuk paling meyakinkan dari kegagalan yang tersembunyi.
+ */
+function sebab(galat: unknown): string {
+  return galat instanceof Error ? galat.message : String(galat);
+}
+
+/**
  * Menanyakan Status API untuk SATU pesanan lalu menjalankan jawabannya lewat
  * jalur yang sama dengan webhook.
  *
@@ -111,7 +122,16 @@ export async function terapkanJawabanMidtrans(
   let jawaban: Awaited<ReturnType<typeof bacaStatusTransaksi>>;
   try {
     jawaban = await bacaStatusTransaksi(orderId);
-  } catch {
+  } catch (galat) {
+    // SEBABNYA DICATAT. `bacaStatusTransaksi` sudah menangkap jaringan mati dan
+    // batas waktu sendiri (`{ok:false, kode:0}`), jadi lemparan yang sampai ke
+    // sini adalah yang TIDAK diramalkan adapter — dan justru itu yang tidak
+    // boleh hilang. Tanpa baris ini jalurnya bisu sempurna: nilai baliknya
+    // ditelan jadi `diperiksa: 0`, dan "penyapu tidak menemukan apa-apa"
+    // terbaca sama persis dengan "setiap permintaan mati sebelum berangkat".
+    console.error(
+      `[pesanan] Status API melempar untuk ${orderId}: ${sebab(galat)}`,
+    );
     return "midtrans_tak_terjawab";
   }
 
@@ -196,10 +216,25 @@ export async function terapkanJawabanMidtrans(
  * aman, sementara jalur ini menyalurkan string asing ke `Record<...>` dan
  * memulangkan `undefined` sebagai kalimat ke layar staf.
  *
- * TIDAK mengimpor `hasilRpcSah`: `kode-jawaban.ts` hidup di sisi server-only
- * rute webhook bersama tipe `HasilWebhook` yang memuat nilai-nilai yang tidak
- * berarti apa-apa di sini (`badan_terlalu_besar`, `tanda_tangan_salah`).
- * Menariknya ke jalur ini menukar satu cacat dengan cacat lain.
+ * TIDAK mengimpor `hasilRpcSah`, dan alasannya TIPE — bukan letak berkas.
+ * (Dokblok versi pertama berbunyi "`kode-jawaban.ts` hidup di sisi server-only
+ * rute webhook"; itu tidak benar. Berkas itu nol impor dan tanpa `server-only`,
+ * jadi menariknya ke sini tidak melanggar batas apa pun. Alasan yang salah
+ * untuk keputusan yang benar tetap harus diperbaiki: ia mengundang orang
+ * berikutnya mencabut keputusannya begitu ia memeriksa dan menemukan
+ * alasannya bohong.)
+ *
+ * Alasan yang sebenarnya: `hasilRpcSah(nilai): nilai is HasilWebhook`
+ * menyempitkan ke union MILIK RUTE WEBHOOK, yang memuat lima nilai yang tidak
+ * pernah bisa dipulangkan RPC (`badan_terlalu_besar`, `tanda_tangan_salah`,
+ * `skema_gagal`, `kunci_kosong`, `galat`) dan tidak memuat satu pun nilai
+ * khas jalur ini. Dipakai di sini, `return data` sesudah penjaganya TIDAK
+ * lolos kompilasi — `HasilWebhook` bukan `HasilPeriksaPesanan`.
+ *
+ * Duplikasinya karena itu bukan kelalaian melainkan sikap: dua pemanggil RPC
+ * yang sama masing-masing memegang himpunan tertutupnya sendiri, sehingga
+ * nilai kelima yang kelak lahir di SQL harus diakui SADAR di dua tempat, bukan
+ * menyelinap ke salah satunya.
  */
 const SAH = new Set(["diterapkan", "duplikat", "tanpa_efek", "pesanan_tidak_ada"]);
 
@@ -239,7 +274,23 @@ async function kirimKeMesin(a: {
     // membedakannya dari notifikasi webhook di layar staf.
     p_sumber: "status_api",
   });
-  if (error) return "galat_basis_data";
+  if (error) {
+    // Jantung mesin pembayaran GAGAL, dan sampai baris ini ditulis kegagalan
+    // itu tidak meninggalkan satu jejak pun di mana pun: nilai baliknya
+    // `galat_basis_data`, penghitung sapuan tidak naik, dan yang terbaca di
+    // luar adalah `diperiksa: 0` — angka yang sama persis dengan penyapu yang
+    // berjalan sempurna dan memang tidak menemukan apa-apa.
+    //
+    // Cabang "nilai balik tak dikenal" delapan baris di bawah sudah mencatat
+    // sebabnya, dan rute webhook mencatatnya juga untuk RPC yang SAMA
+    // (`src/app/api/pembayaran/midtrans/route.ts:160`). Dua jalur ke satu
+    // fungsi yang hanya satu di antaranya bersuara berarti kegagalan yang
+    // terlihat atau tidak bergantung pada pintu mana yang kebetulan dipakai.
+    console.error(
+      `[pesanan] terapkan_notifikasi_midtrans gagal untuk ${a.orderId}: ${error.message}`,
+    );
+    return "galat_basis_data";
+  }
   if (data == null) return "tanpa_efek";
   // Nilai di LUAR himpunan bukan "tanpa efek" dan bukan hasil yang bisa
   // dipetakan — ia berarti mesinnya sudah berubah dan jalur ini belum.
@@ -261,9 +312,18 @@ async function kirimKeMesin(a: {
  * miliknya" yang memutuskan, jadi hanya pesanan sendiri), Lapis 3 mengoper
  * service role (lintas klien). Satu kueri, dua radius, nol duplikasi predikat.
  *
- * MELEMPAR bila pemilihannya gagal — pemanggil yang harus bertahan hidup
- * (`periksaPesananMenggantung`) menangkapnya sendiri, pemanggil yang harus
- * melapor (rute cron) menerjemahkannya jadi 500.
+ * MELEMPAR pada DUA kegagalan, bukan satu: PEMILIHAN barisnya gagal, ATAU
+ * PENCAPAN `diperiksa_pada` gagal. Yang kedua sengaja tidak diturunkan jadi
+ * `{diperiksa: 0}` — bertanya ke Midtrans tanpa berhasil mencap adalah bentuk
+ * banjir yang paling mudah lolos review, jadi cabang itu berhenti keras.
+ *
+ * Kontraknya ditulis lengkap di sini karena rute cron (Tugas 12) memanggil
+ * fungsi ini LANGSUNG dan membangun jawabannya di atas janji ini: pemanggil
+ * yang harus bertahan hidup (`periksaPesananMenggantung`) menangkap keduanya
+ * sendiri, pemanggil yang harus melapor menerjemahkan keduanya jadi 500.
+ * Tanda tangan yang hanya menyebut satu dari dua jalur lempar adalah tanda
+ * tangan yang menjanjikan 500 untuk separuh kegagalan dan kejutan untuk
+ * separuh sisanya.
  */
 export async function sapuPesananMenggantung(
   pemilih: SupabaseClient,
@@ -352,13 +412,24 @@ export async function sapuPesananMenggantung(
       console.error(`[pesanan] pemeriksaan baris ${b.id} melempar; sapuan diteruskan.`);
       continue;
     }
-    // "Diperiksa" berarti jawabannya SAMPAI, apa pun isinya. Yang tidak
-    // dihitung hanyalah KETIGA kegagalan infrastruktur — kalau ikut dihitung,
-    // angka yang dilaporkan penjadwal tidak bisa dibedakan dari penjadwal yang
-    // jalan sempurna. `kunci_belum_terpasang` yang paling mahal bila lolos:
-    // server tanpa kunci akan melaporkan "diperiksa: 20" tiap lima belas menit
-    // tanpa satu permintaan pun pernah keluar.
+    // "Diperiksa" berarti KITA BERTANYA DAN JAWABANNYA SAMPAI, apa pun isinya.
+    // Yang tidak dihitung adalah KEEMPAT keadaan yang tidak memenuhi kalimat
+    // itu — kalau ikut dihitung, angka yang dilaporkan penjadwal tidak bisa
+    // dibedakan dari penjadwal yang jalan sempurna.
+    //
+    // `kunci_belum_terpasang` yang paling mahal bila lolos: server tanpa kunci
+    // akan melaporkan "diperiksa: 20" tiap lima belas menit tanpa satu
+    // permintaan pun pernah keluar.
+    //
+    // `bentuk_order_id` ikut dikecualikan atas ALASAN YANG SAMA PERSIS, dan
+    // itulah kenapa ia ada di sini: baris ber-`kode` cacat berhenti sebelum
+    // `bacaStatusTransaksi` dipanggil, jadi nol permintaan keluar untuknya —
+    // kriteria yang identik dengan `kunci_belum_terpasang`. Menghitungnya
+    // berarti aturannya berlaku untuk satu anggota dan tidak untuk anggota
+    // lain yang memenuhi syarat yang sama, dan aturan yang begitu akan
+    // dibongkar pembaca berikutnya sebagai kebetulan.
     if (
+      hasil !== "bentuk_order_id" &&
       hasil !== "midtrans_tak_terjawab" &&
       hasil !== "kunci_belum_terpasang" &&
       hasil !== "galat_basis_data"
