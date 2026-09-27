@@ -324,12 +324,26 @@ async function kirimKeMesin(a: {
  * Tanda tangan yang hanya menyebut satu dari dua jalur lempar adalah tanda
  * tangan yang menjanjikan 500 untuk separuh kegagalan dan kejutan untuk
  * separuh sisanya.
+ *
+ * ===== KENAPA DUA ANGKA DIPULANGKAN, BUKAN SATU =====
+ * `diperiksa` sendirian AMBIGU, dan ambiguitasnya persis sebentuk dengan
+ * lubang "server tanpa kunci melaporkan 20" yang sudah ditutup penghitung di
+ * bawah: `{diperiksa: 0}` berarti "tidak ada yang perlu disapu" DAN "SETIAP
+ * baris yang terpilih gagal". Yang pertama sehat, yang kedua adalah mesin
+ * pembayaran yang mati — dan keduanya menulis angka yang sama ke satu-satunya
+ * tempat yang pernah dibaca siapa pun (badan jawaban rute cron).
+ *
+ * `dilewati` adalah jumlah baris yang TERPILIH DAN DIPROSES tetapi tidak
+ * memenuhi kalimat "kita bertanya dan jawabannya sampai" — keempat keadaan
+ * yang dikecualikan penghitung, ditambah baris yang penerapannya melempar.
+ * Dengan begitu `{0,0}` (sepi) dan `{0,10}` (mati total) berhenti terbaca
+ * sama.
  */
 export async function sapuPesananMenggantung(
   pemilih: SupabaseClient,
   batasBaris: number,
   clientId: string | null = null,
-): Promise<{ diperiksa: number }> {
+): Promise<{ diperiksa: number; dilewati: number }> {
   const batas = new Date(Date.now() - MENIT_JEDA_PERIKSA * 60_000).toISOString();
 
   let kueri = pemilih
@@ -356,7 +370,7 @@ export async function sapuPesananMenggantung(
 
   const { data, error } = await kueri.returns<BarisMenggantung[]>();
   if (error) throw error;
-  if (!data || data.length === 0) return { diperiksa: 0 };
+  if (!data || data.length === 0) return { diperiksa: 0, dilewati: 0 };
 
   // ===== CAP DULU, BARU BERTANYA =====
   // `terapkan_notifikasi_midtrans` juga menyetel `diperiksa_pada`, tapi ia
@@ -393,6 +407,7 @@ export async function sapuPesananMenggantung(
   if (galatCap) throw galatCap;
 
   let diperiksa = 0;
+  let dilewati = 0;
   for (const b of data) {
     // TRY PER BARIS. `terapkanJawabanMidtrans` sudah dikontrakkan tidak pernah
     // melempar, tapi kontrak yang dijaga di satu tempat saja adalah kontrak
@@ -410,6 +425,10 @@ export async function sapuPesananMenggantung(
       });
     } catch {
       console.error(`[pesanan] pemeriksaan baris ${b.id} melempar; sapuan diteruskan.`);
+      // Terpilih, dicap, lalu gagal: itu DILEWATI, bukan "tidak ada". Tanpa
+      // baris ini sapuan yang setiap barisnya melempar pulang `{0, 0}` —
+      // tidak terbedakan dari sapuan yang memang tidak menemukan apa pun.
+      dilewati += 1;
       continue;
     }
     // "Diperiksa" berarti KITA BERTANYA DAN JAWABANNYA SAMPAI, apa pun isinya.
@@ -435,9 +454,16 @@ export async function sapuPesananMenggantung(
       hasil !== "galat_basis_data"
     ) {
       diperiksa += 1;
+    } else {
+      // Cerminan penghitung di atas, dan sengaja ditulis sebagai `else`
+      // ketimbang daftar kedua: dua daftar yang harus selalu berkebalikan
+      // adalah dua peluang untuk berselisih, dan yang berselisih di sini
+      // adalah angka yang dibaca orang untuk memutuskan apakah mesin
+      // pembayaran masih hidup.
+      dilewati += 1;
     }
   }
-  return { diperiksa };
+  return { diperiksa, dilewati };
 }
 
 /**
@@ -494,7 +520,19 @@ export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }
     // boleh dipicu atas nama orang lain.
     if (!klien) return { diperiksa: 0 };
 
-    return await sapuPesananMenggantung(sesi, BATAS_PERIKSA_SEKALI, klien.id);
+    // DIPERSEMPIT ke `{diperiksa}` dengan sengaja, bukan diteruskan apa
+    // adanya. `dilewati` lahir untuk PENJADWAL — sesuatu yang membedakan
+    // "sepi" dari "mati" di log yang dibaca operator. Di Lapis 1b tidak ada
+    // operator: pemanggilnya `picuPeriksaSekali` di peramban, yang hanya
+    // memutuskan menyegarkan halaman atau tidak. Melebarkan tipe ini berarti
+    // melebarkan tipe server action `periksaPesananSaya` juga, demi angka yang
+    // tidak seorang pun di jalur itu bisa membaca.
+    const { diperiksa } = await sapuPesananMenggantung(
+      sesi,
+      BATAS_PERIKSA_SEKALI,
+      klien.id,
+    );
+    return { diperiksa };
   } catch {
     return { diperiksa: 0 };
   }

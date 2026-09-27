@@ -65,14 +65,45 @@ jobs:
           # --fail WAJIB: tanpanya curl pulang dengan kode 0 untuk 401, dan
           # penjadwal yang ditolak setiap 15 menit terlihat hijau selamanya.
           # -sS: senyap kecuali galat, supaya log tidak penuh bilah kemajuan.
-          # --max-time: satu jalan menyapu paling banyak dua puluh pesanan,
-          # masing-masing satu perjalanan ke Status API Midtrans.
-          jawab=$(curl -sS --fail --max-time 120 \
+          #
+          # --max-time 270 SENGAJA LEBIH BESAR daripada `maxDuration = 240`
+          # milik rutenya. Dibalik, curl menyerah lebih dulu sementara
+          # fungsinya terus berjalan: jobnya merah tanpa sebab yang bisa
+          # dibaca, dan barisnya tetap tersapu di server tanpa ada yang tahu.
+          # Selisih 30 detik itu ruang bagi Vercel memulangkan 504-nya sendiri.
+          # Pagar ini dipaku uji: tests/pesanan-jadwal-actions.test.ts membaca
+          # ANGKA DI BARIS INI dan membandingkannya dengan `maxDuration`.
+          jawab=$(curl -sS --fail --max-time 270 \
             -X POST "$BASIS_URL/api/cron/pesanan" \
             -H "Authorization: Bearer $RAHASIA")
 
           echo "$jawab"
+
+          # ===== DIURAI, BUKAN SEKADAR DIGEMAKAN =====
+          # `--fail` hanya menyaring kode status. Jawaban 2xx yang badannya
+          # BUKAN JSON — halaman galat Vercel, HTML pengalihan, badan kosong
+          # dari proksi — lolos sepenuhnya dan mendarat di ringkasan sebagai
+          # teks yang terlihat seperti laporan. Penjadwal yang menggemakan
+          # halaman galat setiap 15 menit terbaca hijau selamanya.
+          diperiksa=$(printf '%s' "$jawab" | jq -er '.diperiksa') || {
+            echo "::error::Jawaban rute bukan JSON ber-\`diperiksa\`: $jawab"
+            exit 1
+          }
+          dilewati=$(printf '%s' "$jawab" | jq -er '.dilewati') || {
+            echo "::error::Jawaban rute tanpa \`dilewati\`: $jawab"
+            exit 1
+          }
+
+          # BUKAN kegagalan job: sapuan yang seluruh barisnya gagal tetap
+          # sapuan yang berjalan, dan memerahkannya berarti alarm tiap 15 menit
+          # untuk keadaan yang sudah punya alarmnya sendiri (webhook, Lapis 1b).
+          # Yang dituntut di sini hanyalah bahwa angkanya TERLIHAT.
+          if [ "$dilewati" -gt 0 ]; then
+            echo "::warning::$dilewati pesanan terpilih tetapi tidak terjawab Midtrans."
+          fi
+
           {
             echo "### Rekonsiliasi pesanan"
-            echo "- jawaban: \`$jawab\`"
+            echo "- diperiksa: \`$diperiksa\`"
+            echo "- dilewati: \`$dilewati\`"
           } >> "$GITHUB_STEP_SUMMARY"

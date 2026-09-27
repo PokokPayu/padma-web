@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { rahasiaMesinCocok } from "@/lib/auth/rahasia-mesin";
 
 /**
  * PEMBATAL TERJADWAL (spec C2 P6).
@@ -12,8 +13,14 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
  *
  * ===== KENAPA RAHASIA, BUKAN requireRole =====
  * Pemanggilnya mesin, bukan orang: tidak ada sesi, tidak ada peran. Yang
- * menjaganya rahasia bersama di header — dibandingkan dengan panjang tetap
- * supaya waktu bandingnya tidak membocorkan berapa karakter yang sudah cocok.
+ * menjaganya rahasia bersama di header — dibandingkan dalam waktu tetap
+ * (`rahasiaMesinCocok`) supaya lamanya membanding tidak membocorkan berapa
+ * karakter awal yang sudah cocok.
+ *
+ * Kalimat itu sudah berdiri di dokblok ini sejak rute lahir sementara kodenya
+ * memakai `!==` biasa — janji yang tidak ditepati, dan justru bentuk yang
+ * paling mahal: pembaca berikutnya percaya dan berhenti memeriksa. Ditepati
+ * saat Tugas 12 melahirkan rute mesin kedua yang membutuhkan hal yang sama.
  *
  * Tanpa `CRON_SECRET` yang terpasang, rute ini MENOLAK semua orang. Fail-closed
  * disengaja: rute yang terbuka ketika konfigurasinya lupa dipasang adalah rute
@@ -23,7 +30,7 @@ export async function POST(request: Request) {
   const rahasia = process.env.CRON_SECRET ?? "";
   const dikirim = request.headers.get("authorization") ?? "";
 
-  if (!rahasia || dikirim !== `Bearer ${rahasia}`) {
+  if (!rahasia || !rahasiaMesinCocok(dikirim, `Bearer ${rahasia}`)) {
     return NextResponse.json({ pesan: "Tidak berwenang." }, { status: 401 });
   }
 

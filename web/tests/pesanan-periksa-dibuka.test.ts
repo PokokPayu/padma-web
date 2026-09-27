@@ -491,7 +491,11 @@ describe("kegagalan disembunyikan", () => {
     // cacat tidak boleh menyentuh Ananda, sementara sapuan sesi selalu
     // beradius Ananda.
     const sapuan = await sapuPesananMenggantung(admin, 5, KLIEN_KEDUA_ID);
-    expect(sapuan).toEqual({ diperiksa: 0 });
+    // `dilewati: 1`, bukan sekadar `diperiksa: 0`: barisnya TERPILIH dan
+    // diproses, lalu tidak dihitung. Kedua angka bersama itulah yang
+    // membedakan "ada satu baris dan ia gagal" dari "tidak ada baris sama
+    // sekali" — dan `toEqual` di sini memakukan keduanya.
+    expect(sapuan).toEqual({ diperiksa: 0, dilewati: 1 });
     expect(midtrans.panggilan).toEqual([]);
   });
 

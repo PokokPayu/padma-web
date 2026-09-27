@@ -173,7 +173,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/produk/[id]/video` | Klien pemilik | Alih ke presigned R2 untuk video produk; bukan-pemilik menerima 404 |
 | `/api/produk/[id]/halaman/[n]` | Klien pemilik | Satu halaman PDF produk, ber-watermark identitas pembaca |
 | `/api/produk/[id]/unduh` | Klien pemilik | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
-| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. Dipanggil `.github/workflows/rekonsiliasi-pesanan.yml` tiap 15 menit — GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
+| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan

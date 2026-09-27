@@ -115,6 +115,32 @@ describe(".github/workflows/rekonsiliasi-pesanan.yml", () => {
     }
   });
 
+  it("MENGURAI jawabannya, bukan sekadar menggemakannya", () => {
+    // `--fail` hanya menyaring kode status. Jawaban 2xx ber-badan BUKAN JSON
+    // (halaman galat Vercel, HTML pengalihan, badan kosong dari proksi) lolos
+    // utuh, dan langkah yang cuma `echo` menuliskannya ke ringkasan sebagai
+    // sesuatu yang terlihat seperti laporan. Itu hijau selamanya untuk rute
+    // yang sudah tidak menjawab apa pun.
+    const isi = yml();
+    expect(isi, "tidak ada jq yang mengurai badan jawaban").toMatch(/jq\s+-[a-z]*e/);
+    expect(isi).toContain(".diperiksa");
+    expect(isi).toContain(".dilewati");
+  });
+
+  it("curl menunggu LEBIH LAMA daripada maxDuration rutenya", () => {
+    // Pagar lintas-berkas, dan satu-satunya yang memeriksanya. Bila
+    // `--max-time` turun di bawah `maxDuration`, curl menyerah sementara
+    // fungsinya terus berjalan: jobnya merah tanpa sebab yang terbaca, dan
+    // barisnya tetap tersapu di server. Keduanya hidup di berkas berbeda,
+    // jadi tidak ada satu pun pembaca yang melihat keduanya sekaligus.
+    const cocok = yml().match(/--max-time\s+(\d+)/);
+    expect(cocok, "tidak ada --max-time di workflow").not.toBeNull();
+    const maksCurl = Number(cocok![1]);
+    const maksFungsi = (modulRute as Record<string, unknown>).maxDuration;
+    expect(typeof maksFungsi, "rute tidak mengekspor maxDuration").toBe("number");
+    expect(maksCurl).toBeGreaterThan(maksFungsi as number);
+  });
+
   it("blok schedule LAHIR DIKOMENTARI", () => {
     // Mengikuti backup-db.yml. Jadwal yang aktif sebelum sasarannya ada gagal
     // setiap kali jalan, dan alarm yang berbunyi terus adalah alarm yang
@@ -266,6 +292,18 @@ describe("gerbang rahasia /api/cron/pesanan", () => {
     expect((await POST(permintaan("rahasia-uji"))).status).toBe(401);
   });
 
+  it("membatasi durasi fungsinya, dan muat di paket Hobby", async () => {
+    // Batas yang MENGIKAT bukan `timeout-minutes` job Actions melainkan durasi
+    // fungsi Vercel: Hobby + fluid compute memberi 300 detik dan TIDAK BISA
+    // dinaikkan tanpa pindah paket (docs "Duration limits"). Tanpa ekspor ini
+    // sapuan yang menggantung dipotong pada bawaannya dengan barisnya sudah
+    // tercap; dengan angka di atas 300 ia ditolak diam-diam oleh platform.
+    const maks = (modulRute as Record<string, unknown>).maxDuration;
+    expect(typeof maks).toBe("number");
+    expect(maks as number).toBeGreaterThan(0);
+    expect(maks as number, "di atas batas Hobby (300 s)").toBeLessThanOrEqual(300);
+  });
+
   it("NOL ekspor GET", async () => {
     // Keharusan mengekspor GET lahir dari Vercel Cron yang memanggil GET.
     // Penjadwalnya kini GitHub Actions dengan `curl`, jadi kitalah yang
@@ -381,9 +419,61 @@ describe("sapuan /api/cron/pesanan", () => {
     // untuk alasan yang salah — persis bentuk kegagalan yang sedang dijaga.
     expect(midtrans.panggilan).toContain(`${kode}.1`);
 
-    const isi = (await r.json()) as { diperiksa: number };
+    const isi = (await r.json()) as { diperiksa: number; dilewati: number };
     expect(isi.diperiksa).toBe(0);
+    // Dan barisnya TERHITUNG sebagai dilewati. Inilah pasangan dari assertion
+    // di atas: `diperiksa: 0` sendirian juga dipulangkan sapuan yang tidak
+    // menemukan apa-apa, dan penjadwal tidak bisa membedakan keduanya.
+    expect(isi.dilewati).toBeGreaterThanOrEqual(1);
     // Dan tidak ada vonis yang dibuat dari ketiadaan jawaban.
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
+
+  it("sapuan SEPI dan sapuan MATI TOTAL tidak terbaca sama", async () => {
+    // Kegagalan yang ditutup di sini: `{diperiksa: 0}` berarti DUA hal yang
+    // berlawanan. Yang satu sehat (tidak ada yang perlu disapu), yang lain
+    // adalah mesin pembayaran yang tidak bisa bertanya sama sekali — dan
+    // sampai `dilewati` ada, keduanya menulis angka yang identik ke
+    // satu-satunya tempat yang pernah dibaca siapa pun.
+    //
+    // Keduanya dijalankan DI SATU `it` supaya yang dipaku adalah PERBEDAANNYA.
+    // Dipecah dua, keduanya bisa hijau sambil tetap memulangkan angka yang sama.
+    process.env.CRON_SECRET = "rahasia-uji";
+
+    async function sapu(): Promise<{ diperiksa: number; dilewati: number }> {
+      const r = await POST(permintaan("Bearer rahasia-uji"));
+      expect(r.status).toBe(200);
+      return (await r.json()) as { diperiksa: number; dilewati: number };
+    }
+
+    // ===== PEMANASAN: MENGURAS, BUKAN BERHARAP =====
+    // Sapuan ini LINTAS KLIEN, jadi pesanan menggantung milik berkas uji lain
+    // — atau milik sesi lain di Supabase lokal yang dipakai bersama — ikut
+    // terbawa, dan angka "sepi" jadi bergantung pada kebetulan. Sapuan
+    // berulang mencap semuanya; cap itu menahan mereka selama
+    // MENIT_JEDA_PERIKSA (5 menit), jauh lebih lama daripada sisa `it` ini.
+    // Sesudah terkuras, NOL benar-benar berarti nol.
+    let sepi = await sapu();
+    for (let i = 0; i < 5 && (sepi.diperiksa > 0 || sepi.dilewati > 0); i += 1) {
+      sepi = await sapu();
+    }
+    // (a) SEPI — tidak ada satu pun baris yang layak ditanyakan.
+    expect(sepi, "populasi tidak terkuras; angka di bawah tidak bisa dipercaya").toEqual({
+      diperiksa: 0,
+      dilewati: 0,
+    });
+
+    // (b) MATI TOTAL — satu baris, dan Midtrans tidak menjawabnya.
+    const kode = `${AWALAN_KODE}0005`;
+    await semaiMenggantung(kode);
+    midtrans.jawabPer.set(`${kode}.1`, { ok: false, kode: 503, pesan: "Service unavailable" });
+    const mati = await sapu();
+
+    expect(midtrans.panggilan).toContain(`${kode}.1`);
+    // Kedua keadaan memulangkan `diperiksa` yang SAMA — itulah sebab
+    // `dilewati` harus ada...
+    expect(mati.diperiksa).toBe(sepi.diperiksa);
+    // ...dan inilah yang membedakannya.
+    expect(mati).toEqual({ diperiksa: 0, dilewati: 1 });
   });
 });
