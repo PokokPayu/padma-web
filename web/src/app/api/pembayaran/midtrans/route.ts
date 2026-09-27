@@ -113,10 +113,20 @@ export async function POST(request: Request) {
   if (!tandaTanganCocok(n.signature_key, dihitung)) {
     // Satu angka per hari, NOL teks penyerang. Kegagalan mencatat tidak boleh
     // mengubah jawabannya: yang penting 401-nya sampai.
-    try {
-      await createAdminSupabase().rpc("catat_notifikasi_ditolak");
-    } catch {
-      console.error("[midtrans] gagal mencatat notifikasi ditolak.");
+    //
+    // ===== KENAPA `error` DIBACA, DAN KENAPA TANPA try/catch =====
+    // `supabase-js` `.rpc()` TIDAK MELEMPAR pada kegagalan — ia memulangkan
+    // `{ error }`, bahkan ketika host-nya sama sekali tak terjangkau. Jadi
+    // `try/catch` di sini adalah cabang MATI yang menjanjikan perlindungan
+    // yang tidak pernah ia berikan, dan `error` yang tidak dibaca membuat
+    // kegagalannya mustahil dilihat: penghitungnya diam DAN lognya diam.
+    //
+    // Yang membuat itu mahal: angka ini satu-satunya alarm untuk banjir
+    // notifikasi palsu. Alarm yang gagal dalam senyap bukan alarm — ia lebih
+    // buruk daripada tidak ada alarm, karena diamnya terbaca sebagai aman.
+    const { error: galatCatat } = await createAdminSupabase().rpc("catat_notifikasi_ditolak");
+    if (galatCatat) {
+      console.error(`[midtrans] gagal mencatat notifikasi ditolak: ${galatCatat.message}`);
     }
     return jawab("tanda_tangan_salah");
   }
@@ -170,15 +180,23 @@ export async function POST(request: Request) {
   // Notifikasi bertanda tangan sah yang kita buang tidak boleh lebih sunyi
   // daripada notifikasi bertanda tangan palsu. Satu angka per hari, nol teks
   // disimpan — dan angka itu yang kelak menyalakan alarm saat seseorang
-  // "merapikan" pencarian pesanan menjadi kode+percobaan, atau menurunkan
-  // `upper(...)` di penerbit kode.
+  // "merapikan" pencarian pesanan menjadi kode+percobaan, atau saat barisnya
+  // memang sudah tidak ada lagi (basis data di-reset atau dipulihkan
+  // sementara Midtrans masih mengulang transaksi lama).
+  //
+  // Yang BUKAN ditangkap penghitung ini, ditulis supaya tidak ada yang
+  // mengira sebaliknya: `kode` yang turun jadi huruf kecil. `rakitOrderId`
+  // sudah MELEMPAR di checkout (`POLA_KODE_PESANAN` menuntut heksadesimal
+  // HURUF BESAR), dan andai satu toh mendarat di sini ia mati di langkah 4
+  // sebagai `bentuk_order_id` — 400, tanpa menyentuh penghitung mana pun.
   if (hasil === "pesanan_tidak_ada") {
     console.error(`[midtrans] order_id bertanda tangan sah tapi tak dikenal: ${n.order_id}`);
-    try {
-      await createAdminSupabase().rpc("catat_notifikasi_tak_dikenal");
-    } catch {
-      // Kegagalan mencatat tidak boleh mengubah jawabannya.
-      console.error("[midtrans] gagal mencatat notifikasi tak dikenal.");
+    // `error` dibaca, tanpa try/catch — alasan lengkapnya di langkah 5.
+    // Kegagalan mencatat tidak boleh mengubah jawabannya, tapi ia wajib
+    // terlihat.
+    const { error: galatCatat } = await createAdminSupabase().rpc("catat_notifikasi_tak_dikenal");
+    if (galatCatat) {
+      console.error(`[midtrans] gagal mencatat notifikasi tak dikenal: ${galatCatat.message}`);
     }
   }
 
