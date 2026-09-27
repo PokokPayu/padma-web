@@ -41,6 +41,41 @@ import { querySql } from "./helpers/db";
  */
 const POLA_NOMINAL_TEKS = /(\b\d{1,3}(?:\.\d{3})+\b)|(rp\.?\s*\d)/i;
 
+/**
+ * PERBAIKAN REVIEW AKHIR P1-A, TEMUAN 2 — `jejak_pesanan.keterangan`.
+ *
+ * `POLA_NOMINAL_TEKS` di atas TIDAK menangkap "150000": ia menuntut pemisah
+ * ribuan, dan baris audit uang di `terapkan_notifikasi_midtrans`
+ * (`20260926140000_pesanan_webhook_rpc.sql:548`,
+ * `format('ditagih %s, diterima %s', v_total, p_gross_amount)`) menulis angka
+ * MENTAH, tanpa titik. Pola kedua ini karena itu lebih lebar SENGAJA: deretan
+ * digit TELANJANG, empat atau lebih, tanpa syarat pemisah sama sekali.
+ *
+ * Pelebaran ini TIDAK aman dipasang di `POLA_NOMINAL_TEKS` yang sudah ada:
+ * `sebab_tinjauan` & `judul_beku` tidak pernah punya alasan sah memuat angka
+ * sama sekali, tapi `jejak_pesanan.keterangan` PENUH angka sah yang bukan
+ * nominal — uuid produk (`format('produk %s', v_product_id)`), timestamp
+ * pencabutan (`format('... dicabut pada %s ...', v_dicabut)`), nomor
+ * percobaan. Yang membedakan baris SAH dari baris BOCOR karena itu bukan
+ * "ada angka atau tidak", melainkan KEJADIAN yang menulisnya.
+ */
+const POLA_DIGIT_TELANJANG = /\d{4,}/;
+
+/**
+ * Daftar putih `kejadian` yang BOLEH memuat angka nominal di
+ * `keterangan` — DITURUNKAN DARI KODE, bukan dari ingatan (Ruling Temuan 2).
+ *
+ * Satu-satunya pemanggil `format('ditagih %s, diterima %s', ...)` di seluruh
+ * repo ada di `20260926140000_pesanan_webhook_rpc.sql:548`, dan ia menulis
+ * `v_sebab::public.order_event` sebagai `kejadian`-nya. `v_sebab` hanya
+ * pernah diisi DUA nilai yang bisa mencapai baris itu: `'selisih_nominal'`
+ * (`:449`, verifikasi jumlah meleset) dan `'selisih_status'` (`:455`, capture
+ * kartu yang dicurigai). Assignment KETIGA (`:414`, di dalam cabang
+ * refund/chargeback/asing) sudah `return` di `:426` sebelum baris `:548`
+ * tercapai — tidak pernah ikut. Kedua nilai inilah, dan HANYA itu.
+ */
+const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status"]);
+
 const svc = createAdminSupabase();
 
 /** Klien seed kedua; dipakai supaya fixture di sini tidak bertabrakan dengan
@@ -49,9 +84,16 @@ const RINA_CLIENT_ID = "44444444-4444-4444-4444-444444444402";
 
 const pesananSampah: string[] = [];
 const produkSampah: string[] = [];
+// `jejak_pesanan` TANPA foreign key (disengaja, lihat dokblok Tugas 5) — baris
+// yang disemai langsung di sini TIDAK ikut lenyap lewat cascade `orders`, dan
+// harus dibongkar sendiri lewat `id`-nya.
+const jejakSampah: string[] = [];
 let nomorSlug = 0;
 
 afterEach(async () => {
+  while (jejakSampah.length) {
+    await svc.from("jejak_pesanan").delete().eq("id", jejakSampah.pop()!);
+  }
   // Urutan MENGIKAT: pesanan dulu (cascade menyapu `order_items`), baru produk
   // — `order_items.product_id` tanpa cascade menahan penghapusan produk.
   while (pesananSampah.length) {
@@ -106,6 +148,28 @@ function bocor(baris: Teks[]): string[] {
   return baris
     .filter((b) => POLA_NOMINAL_TEKS.test(b.isi))
     .map((b) => `${b.sumber}: ${JSON.stringify(b.isi)}`);
+}
+
+type Jejak = { kejadian: string; keterangan: string };
+
+/**
+ * SELURUH `jejak_pesanan.keterangan` yang terisi — bukan hanya baris berkas
+ * ini. Sama seperti `teksNota()`: yang dipindai sumbernya, bukan fixture kita
+ * sendiri, supaya kebocoran dari jalur mana pun tetap tertangkap.
+ */
+async function jejakKeterangan(): Promise<Jejak[]> {
+  return querySql<Jejak>(
+    `select kejadian::text as kejadian, keterangan
+       from public.jejak_pesanan
+      where keterangan is not null`,
+  );
+}
+
+function bocorJejak(baris: Jejak[]): string[] {
+  return baris
+    .filter((b) => !KEJADIAN_BOLEH_ANGKA.has(b.kejadian))
+    .filter((b) => POLA_DIGIT_TELANJANG.test(b.keterangan))
+    .map((b) => `jejak_pesanan.keterangan[${b.kejadian}]: ${JSON.stringify(b.keterangan)}`);
 }
 
 describe("judul produk — hulu satu-satunya judul_beku", () => {
@@ -211,6 +275,77 @@ describe("kolom teks tabel pesanan tidak memuat nominal", () => {
       "chargeback",
     ]) {
       expect(POLA_NOMINAL_TEKS.test(sah), `kosakata sah dituduh: ${sah}`).toBe(false);
+    }
+  });
+});
+
+describe("jejak_pesanan.keterangan tidak memuat nominal DI LUAR daftar putih (Temuan 2)", () => {
+  it("baris jejak yang BENAR-BENAR ada ikut terpindai, dan bersih", async () => {
+    // `jejak_pesanan` tidak berpolicy FK — baris disemai LANGSUNG, tanpa
+    // pesanan sungguhan, persis pola `orders`/`order_items` di atas.
+    const { data, error } = await svc
+      .from("jejak_pesanan")
+      .insert({
+        pesanan_id: null,
+        kejadian: "dibuat",
+        keterangan: "checkout produk digital",
+      })
+      .select("id")
+      .single();
+    expect(error).toBeNull();
+    jejakSampah.push(data!.id);
+
+    const baris = await jejakKeterangan();
+    expect(baris.length, "pemindai jejak tidak melihat satu baris pun").toBeGreaterThan(0);
+    expect(bocorJejak(baris)).toEqual([]);
+  });
+
+  it("pemindai jejak_pesanan.keterangan benar-benar bisa merah (kontrol positif)", async () => {
+    // Pelanggaran SUNGGUHAN: kejadian di LUAR daftar putih, nominal TELANJANG
+    // (tanpa pemisah ribuan) di keterangan — persis bentuk yang lolos dari
+    // `POLA_NOMINAL_TEKS` lama.
+    const { data, error } = await svc
+      .from("jejak_pesanan")
+      .insert({
+        pesanan_id: null,
+        kejadian: "dibuat",
+        keterangan: "checkout dengan harga 150000 disebut di sini",
+      })
+      .select("id")
+      .single();
+    expect(error).toBeNull();
+    jejakSampah.push(data!.id);
+
+    expect(bocorJejak(await jejakKeterangan()).some((b) => b.includes("150000"))).toBe(true);
+  });
+
+  it("kejadian dalam daftar putih (keputusan uang Tugas 5) TIDAK dituduh walau memuat nominal", async () => {
+    // Arah kedua: `selisih_nominal`/`selisih_status` ADALAH baris yang
+    // sengaja menulis kedua angka (Ruling 4b, Temuan 2) — pagar yang
+    // menuduh keduanya adalah pagar yang menghukum keputusan yang benar.
+    const baris = await Promise.all(
+      [...KEJADIAN_BOLEH_ANGKA].map(async (kejadian) => {
+        const { data, error } = await svc
+          .from("jejak_pesanan")
+          .insert({
+            pesanan_id: null,
+            kejadian,
+            keterangan: "ditagih 120000, diterima 120000",
+          })
+          .select("id")
+          .single();
+        expect(error).toBeNull();
+        jejakSampah.push(data!.id);
+        return kejadian;
+      }),
+    );
+
+    const bocoran = bocorJejak(await jejakKeterangan());
+    for (const kejadian of baris) {
+      expect(
+        bocoran.some((b) => b.startsWith(`jejak_pesanan.keterangan[${kejadian}]`)),
+        `kejadian daftar putih dituduh: ${kejadian}`,
+      ).toBe(false);
     }
   });
 });

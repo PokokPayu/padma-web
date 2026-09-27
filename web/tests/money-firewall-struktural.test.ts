@@ -89,10 +89,6 @@ const TABEL_UANG = new Set([
   // `orders` TIDAK ikut, dan itu bukan kelalaian: ia lahir NOL kolom nominal,
   // dan uji "NOL kolom nominal" di tests/pesanan-nota-beku.test.ts yang
   // menahannya tetap begitu. Totalnya dijumlahkan dari baris nota.
-  //
-  // `notifikasi_pesanan` menyusul di Tugas 3, BERSAMA kedua assertion-nya —
-  // tabelnya belum ada sekarang, jadi menuliskannya di sini membuat suite
-  // tugas ini berakhir merah.
   "order_items",
   // `notifikasi_pesanan` (P1, migrasi `pesanan_jejak`) menyimpan
   // `nominal_diterima`: gross_amount notifikasi yang SUDAH lolos signature.
@@ -137,10 +133,9 @@ const KOLOM_UANG_VIEW_DIIZINKAN = new Map<string, Set<string>>([
   ["harga_produk_publik", new Set(["harga", "harga_coret"])],
   ["produk_harga_staf", new Set(["harga", "harga_coret"])],
   // `pesanan_item_staf` (P1, migrasi `pesanan_webhook_rpc`) — SATU kolom saja.
-  // Didaftarkan lebih dulu di sini, sebelum view-nya lahir, dan itu aman:
-  // entri ini adalah PENGECUALIAN, bukan assertion. Selama view-nya belum ada,
-  // ia tidak membebaskan apa pun; begitu ia lahir, uji ini tidak perlu
-  // disunting lagi oleh tugas yang sedang sibuk dengan jantung mesinnya.
+  // Entri ini adalah PENGECUALIAN, bukan assertion: ia tidak membebaskan
+  // apa pun di luar kolom yang didaftarkan, sekalipun view-nya sendiri
+  // sudah lahir.
   //
   // Ia adalah view yang DIBACA /admin/pesanan. Nominal di layar staf adalah
   // keputusan pemilik repo, dan view bernominal tanpa pembaca berarti
@@ -283,8 +278,6 @@ describe("MONEY FIREWALL STRUKTURAL — nominal uang hanya di tabel uang", () =>
   });
 
   it("tabel uang P1 berkolom nominal PERSIS satu — tidak boleh tumbuh diam-diam", () => {
-    // Tugas 3 menambahkan barisnya sendiri untuk `notifikasi_pesanan` di dalam
-    // `it` ini. Jangan menuliskannya sekarang: tabelnya belum ada.
     expect(kolomUangDi("order_items")).toEqual(["harga_beku"]);
     expect(kolomUangDi("notifikasi_pesanan")).toEqual(["nominal_diterima"]);
   });

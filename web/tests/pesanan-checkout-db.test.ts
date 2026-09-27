@@ -380,6 +380,128 @@ describe("buat_pesanan", () => {
     expect((data as BarisPesanan[])[0].nominal_tagih).toBe(120_000);
   });
 
+  it("REGRESI CRITICAL: expire lalu settlement TERLAMBAT — buat_pesanan kedua DITOLAK, bukan ditagih dua kali", async () => {
+    // Jalan kejadian PERSIS yang reviewer jalankan sampai tuntas di DB lokal:
+    // VA dibayar lewat 24 jam, Midtrans mengirim `expire`, lalu `settlement`
+    // yang terlambat — urutan yang DIDESAIN spec ini, bukan skenario karangan.
+    // Pesanan berakhir `kedaluwarsa` + `lunas_setelah_tutup`, nol entitlement.
+    // Dijalankan lewat webhook NYATA (`terapkan_notifikasi_midtrans`), bukan
+    // `update` kolom langsung — yang diuji adalah keadaan yang mesin ini
+    // SENDIRI melahirkan, bukan keadaan yang kita karang dengan tangan.
+    const produk = await semaiProduk("regresi-tagih-dua-kali", 120_000);
+    const pertama = await pesananBaru(produk);
+    const orderId = rakitOrderId(pertama.kode, pertama.percobaan);
+
+    const expire = await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderId,
+      p_transaction_status: "expire",
+      p_fraud_status: "",
+      p_transaction_id: "",
+      p_payment_type: "",
+      p_gross_amount: 0,
+      p_sidik: randomUUID(),
+    });
+    expect(expire.error).toBeNull();
+    expect(expire.data).toBe("diterapkan");
+
+    const settelmenTerlambat = await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderId,
+      p_transaction_status: "settlement",
+      p_fraud_status: "",
+      p_transaction_id: "trx-terlambat",
+      p_payment_type: "bank_transfer",
+      p_gross_amount: 120_000,
+      p_sidik: randomUUID(),
+    });
+    expect(settelmenTerlambat.error).toBeNull();
+    expect(settelmenTerlambat.data).toBe("tanpa_efek");
+
+    const { data: sesudahWebhook } = await svc
+      .from("orders")
+      .select("status, sebab_tinjauan")
+      .eq("id", pertama.pesanan_id)
+      .single();
+    expect(sesudahWebhook!.status).toBe("kedaluwarsa");
+    expect(sesudahWebhook!.sebab_tinjauan).toBe("lunas_setelah_tutup");
+
+    const klien = await signInAs(KLIEN_EMAIL);
+    const { error } = await klien.rpc("buat_pesanan", { p_product_id: produk });
+    // INILAH gerbangnya: sebelum pelebaran, status `kedaluwarsa` tidak cocok
+    // `o.status = 'ditahan'` dan tidak ada entitlement hidup — kedua pagar
+    // diam, dan checkout kedua LOLOS. Klien membayar untuk produk yang sama
+    // dua kali.
+    expect(error?.code).toBe("P0001");
+    expect(error!.message).toContain("sedang ditinjau staf");
+
+    // NOL pesanan baru lahir — hanya pesanan pertama yang tadinya ada.
+    const { data: pesanan } = await svc
+      .from("orders")
+      .select("id")
+      .eq("client_id", ANANDA_CLIENT_ID);
+    expect((pesanan ?? []).length).toBe(1);
+  });
+
+  it("REGRESI CRITICAL: pesanan LUNAS tanpa entitlement hidup (akses_tertahan) — buat_pesanan kedua DITOLAK", async () => {
+    // Varian kedua, lebih jarang tapi lebih ganas: pesanan `lunas` yang
+    // aksesnya tertahan karena entitlement lamanya DICABUT. Tidak ada
+    // entitlement hidup (gerbang entitlement diam) dan statusnya bukan
+    // `ditahan` (gerbang lama diam juga) — sebelum pelebaran, loop-nya tidak
+    // terbatas: klien bisa melunasi pesanan yang sama berkali-kali, nol akses
+    // setiap kalinya.
+    const produk = await semaiProduk("regresi-akses-tertahan", 120_000);
+    const { error: eEnt } = await svc.from("digital_entitlements").insert({
+      client_id: ANANDA_CLIENT_ID,
+      product_id: produk,
+      sumber: "beli",
+      dicabut_pada: new Date("2026-09-01T00:00:00Z").toISOString(),
+    });
+    expect(eEnt).toBeNull();
+
+    const pertama = await pesananBaru(produk);
+    const orderId = rakitOrderId(pertama.kode, pertama.percobaan);
+    const settlement = await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderId,
+      p_transaction_status: "settlement",
+      p_fraud_status: "",
+      p_transaction_id: "trx-akses-tertahan",
+      p_payment_type: "bank_transfer",
+      p_gross_amount: 120_000,
+      p_sidik: randomUUID(),
+    });
+    expect(settlement.error).toBeNull();
+    expect(settlement.data).toBe("diterapkan");
+
+    const { data: sesudahWebhook } = await svc
+      .from("orders")
+      .select("status, sebab_tinjauan")
+      .eq("id", pertama.pesanan_id)
+      .single();
+    expect(sesudahWebhook!.status).toBe("lunas");
+    expect(sesudahWebhook!.sebab_tinjauan).toBe("akses_tertahan");
+
+    // Kontrol: entitlement yang HIDUP (dicabut_pada null) memang tidak ada —
+    // pagar entitlement seharusnya diam di sini, dan pagar STATUS-lah yang
+    // wajib menyala.
+    const { data: entHidup } = await svc
+      .from("digital_entitlements")
+      .select("id")
+      .eq("client_id", ANANDA_CLIENT_ID)
+      .eq("product_id", produk)
+      .is("dicabut_pada", null);
+    expect(entHidup ?? []).toEqual([]);
+
+    const klien = await signInAs(KLIEN_EMAIL);
+    const { error } = await klien.rpc("buat_pesanan", { p_product_id: produk });
+    expect(error?.code).toBe("P0001");
+    expect(error!.message).toContain("sedang ditinjau staf");
+
+    const { data: pesanan } = await svc
+      .from("orders")
+      .select("id")
+      .eq("client_id", ANANDA_CLIENT_ID);
+    expect((pesanan ?? []).length).toBe(1);
+  });
+
   it("produk yang belum tayang tidak bisa dipesan lewat id yang bocor dari panel", async () => {
     const produk = await semaiProduk("checkout-belum-tayang", 120_000, { aktif: false });
     const klien = await signInAs(KLIEN_EMAIL);
@@ -634,6 +756,59 @@ describe("punya_pesanan_menunggu", () => {
       .eq("id", pesanan.pesanan_id);
     const mati = await klien.rpc("punya_pesanan_menunggu", { p_product_id: produk });
     expect(mati.data).toBe(false);
+  });
+
+  it("true untuk kedaluwarsa+lunas_setelah_tutup DAN untuk lunas+akses_tertahan", async () => {
+    // Cermin dari dua REGRESI CRITICAL di atas: pagar SQL `buat_pesanan` yang
+    // benar tapi kliennya tak pernah diberi tahu tetap menampilkan tombol
+    // beli DAN membiarkan Lapis 1b diam. Kedua keadaan di sini persis dua
+    // keadaan yang REGRESI CRITICAL tolak checkout-nya.
+    const klien = await signInAs(KLIEN_EMAIL);
+
+    const produkA = await semaiProduk("menunggu-lunas-setelah-tutup", 120_000);
+    const pertamaA = await pesananBaru(produkA);
+    const orderIdA = rakitOrderId(pertamaA.kode, pertamaA.percobaan);
+    await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderIdA,
+      p_transaction_status: "expire",
+      p_fraud_status: "",
+      p_transaction_id: "",
+      p_payment_type: "",
+      p_gross_amount: 0,
+      p_sidik: randomUUID(),
+    });
+    await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderIdA,
+      p_transaction_status: "settlement",
+      p_fraud_status: "",
+      p_transaction_id: "trx-menunggu-a",
+      p_payment_type: "bank_transfer",
+      p_gross_amount: 120_000,
+      p_sidik: randomUUID(),
+    });
+    const hasilA = await klien.rpc("punya_pesanan_menunggu", { p_product_id: produkA });
+    expect(hasilA.data).toBe(true);
+
+    const produkB = await semaiProduk("menunggu-akses-tertahan", 90_000);
+    await svc.from("digital_entitlements").insert({
+      client_id: ANANDA_CLIENT_ID,
+      product_id: produkB,
+      sumber: "beli",
+      dicabut_pada: new Date("2026-09-01T00:00:00Z").toISOString(),
+    });
+    const pertamaB = await pesananBaru(produkB);
+    const orderIdB = rakitOrderId(pertamaB.kode, pertamaB.percobaan);
+    await svc.rpc("terapkan_notifikasi_midtrans", {
+      p_order_id: orderIdB,
+      p_transaction_status: "settlement",
+      p_fraud_status: "",
+      p_transaction_id: "trx-menunggu-b",
+      p_payment_type: "bank_transfer",
+      p_gross_amount: 90_000,
+      p_sidik: randomUUID(),
+    });
+    const hasilB = await klien.rpc("punya_pesanan_menunggu", { p_product_id: produkB });
+    expect(hasilB.data).toBe(true);
   });
 });
 

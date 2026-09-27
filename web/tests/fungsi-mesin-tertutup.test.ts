@@ -112,7 +112,7 @@ export function bergerbang(badan: string, gerbang: Gerbang): boolean {
  * daripada tidak ada.
  */
 const POLA_PENULIS =
-  /(insert\s+into|update)\s+(public\.)?(orders|order_items|jejak_pesanan|digital_entitlements)\b/i;
+  /(insert\s+into|update)\s+(public\.)?(orders|order_items|jejak_pesanan|digital_entitlements|notifikasi_pesanan)\b/i;
 
 type Fungsi = {
   nama: string;

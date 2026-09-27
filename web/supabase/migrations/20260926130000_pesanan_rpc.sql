@@ -121,17 +121,48 @@ begin
   end if;
 
   -- Pesanan BERUANG untuk produk yang sama menutup checkout ulang. `ditahan`
-  -- berarti uangnya sudah masuk dan hanya nominalnya meleset; menjualnya lagi
-  -- berarti menagih orang dua kali untuk satu barang. Pemeriksaan yang hanya
-  -- hidup di TypeScript adalah pemeriksaan yang bisa dilewati satu `curl` —
-  -- alasan yang sama dengan yang tertulis di `ambil_produk_gratis`.
+  -- dan `lunas` berarti uangnya sudah masuk; menjualnya lagi berarti menagih
+  -- orang dua kali untuk satu barang. Pemeriksaan yang hanya hidup di
+  -- TypeScript adalah pemeriksaan yang bisa dilewati satu `curl` — alasan yang
+  -- sama dengan yang tertulis di `ambil_produk_gratis`.
+  --
+  -- SATU status saja TIDAK CUKUP — perbaikan review akhir P1-A, Temuan 1
+  -- (CRITICAL). Versi pertama pagar ini hanya memeriksa `status = 'ditahan'`,
+  -- dan lolos dari situ bukan berarti lolos dari bahaya: `expire` yang
+  -- disusul `settlement` TERLAMBAT (urutan yang memang DIDESAIN spec ini)
+  -- mendarat pada pesanan yang sudah `kedaluwarsa` — statusnya bukan
+  -- `ditahan` dan bukan `lunas`, satu-satunya jejaknya adalah
+  -- `sebab_tinjauan = 'lunas_setelah_tutup'` (lihat
+  -- `KEJADIAN_BUTUH_TINJAUAN` di `src/lib/pesanan/status.ts:118-128`, yang
+  -- menuliskan bahaya ini kata demi kata). Gerbang lama diam, gerbang
+  -- entitlement pun diam (nol entitlement lahir dari pesanan yang tertutup
+  -- sebelum lunas), dan klien membayar produk yang sama untuk KEDUA kalinya.
+  -- Varian kedua: pesanan `lunas` yang aksesnya `akses_tertahan` karena
+  -- entitlement lamanya sudah DICABUT — tidak ada entitlement hidup, dan
+  -- `lunas` tidak pernah masuk daftar lama sama sekali.
+  --
+  -- Refund/chargeback TIDAK ikut terblokir oleh pelebaran ini:
+  -- `terapkan_notifikasi_midtrans` (`20260926140000:409-424`) mencatat
+  -- `sebab_tinjauan` sendiri ('refund'/'chargeback'/'selisih_status') TANPA
+  -- menggerakkan `status`, jadi baris itu tidak pernah cocok array atau
+  -- `sebab_tinjauan` di bawah. Refund atas pesanan `lunas` MEMANG diblokir —
+  -- tapi itu tidak mengubah apa pun dalam praktik: webhook juga tidak
+  -- mencabut akses pada refund, jadi entitlement-nya masih hidup dan pagar
+  -- entitlement di atas sudah lebih dulu menyala untuk kasus itu. Satu-
+  -- satunya keadaan di mana `lunas` di sini benar-benar menentukan adalah
+  -- saat entitlement-nya TIDAK ada (`akses_tertahan` atau pencabutan staf) —
+  -- dan di situ uang sudah diambil, akses belum diberikan, jawabannya
+  -- memanggil manusia, bukan menjual lagi.
   if exists (
     select 1
       from public.orders o
       join public.order_items i on i.pesanan_id = o.id
      where o.client_id = v_client_id
-       and o.status = 'ditahan'
        and i.product_id = p_product_id
+       and (
+         o.status = any (array['ditahan','lunas']::public.order_status[])
+         or o.sebab_tinjauan = 'lunas_setelah_tutup'
+       )
   ) then
     raise exception 'Pembayaran Anda untuk produk ini sedang ditinjau staf.'
       using errcode = 'P0001';
@@ -421,6 +452,16 @@ grant execute on function public.batalkan_pesanan_saya(uuid) to authenticated;
 -- meleset, dan menghitungnya sebagai "tidak ada pesanan" mengembalikan tombol
 -- beli kepada orang yang sudah menyetor.
 --
+-- SET-NYA HARUS CERMIN PERSIS gerbang `buat_pesanan` — perbaikan review akhir
+-- P1-A, Temuan 1 (CRITICAL). Ketidakcocokan ini yang melahirkan bug: gerbang
+-- SQL `buat_pesanan` sempat lebih sempit dari yang seharusnya, dan fungsi ini
+-- ikut sempit dengan cara yang SAMA persis — keduanya diam pada pesanan yang
+-- `kedaluwarsa` bercap `sebab_tinjauan = 'lunas_setelah_tutup'` (settlement
+-- terlambat yang mendarat sesudah `expire`) dan pada pesanan `lunas` yang
+-- aksesnya `akses_tertahan`. Pagar SQL yang benar tapi layar yang tak pernah
+-- diberi tahu tetap menampilkan tombol beli, dan Lapis 1b tetap tidak
+-- menyala — keduanya bersandar pada fungsi ini.
+--
 -- `security definer` bukan kemewahan: `order_items` lahir tanpa policy sama
 -- sekali, jadi fungsi ber-invoker akan selalu memulangkan false.
 create or replace function public.punya_pesanan_menunggu(p_product_id uuid)
@@ -434,14 +475,20 @@ as $$
       join public.clients c on c.id = o.client_id
      where c.user_id = auth.uid()
        and i.product_id = p_product_id
-       and o.status = any (array['menunggu_bayar','ditahan']::public.order_status[])
+       and (
+         o.status = any (array['menunggu_bayar','ditahan','lunas']::public.order_status[])
+         or o.sebab_tinjauan = 'lunas_setelah_tutup'
+       )
   );
 $$;
 
 comment on function public.punya_pesanan_menunggu(uuid) is
   'Benar bila pemanggil punya pesanan yang belum mati dan belum melahirkan '
-  'akses untuk produk ini: menunggu_bayar ATAU ditahan. Urutan layar: '
-  'entitlement dulu, lalu fungsi ini, baru tombol beli.';
+  'akses untuk produk ini: menunggu_bayar, ditahan, ATAU lunas — ditambah '
+  'kedaluwarsa/dibatalkan yang bersebab_tinjauan lunas_setelah_tutup (settlement '
+  'terlambat yang mendarat sesudah pesanan ditutup). Set ini WAJIB cermin '
+  'persis gerbang beruang di buat_pesanan; ketidakcocokan keduanya adalah bug. '
+  'Urutan layar: entitlement dulu, lalu fungsi ini, baru tombol beli.';
 
 revoke all on function public.punya_pesanan_menunggu(uuid) from public, anon;
 grant execute on function public.punya_pesanan_menunggu(uuid) to authenticated;
