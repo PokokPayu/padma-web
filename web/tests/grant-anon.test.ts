@@ -79,6 +79,37 @@ const TABEL_TERTUTUP_ANON = [
   // dengan view ini — beda dari `harga_publik` yang justru SENGAJA
   // digrant ke anon.
   "varian_harga_staf",
+  // Pesanan (P1) — kelima tabel dan SATU view, didaftarkan sekali jalan di
+  // migrasi kelima karena daftar ini menerjemahkan setiap nama lewat
+  // `format('public.%I', $1::text)::regclass`: relasi yang belum ada MELEMPAR
+  // 42P01, bukan lolos. `pesanan_item_staf` baru lahir bersama migrasi ini,
+  // jadi lebih awal dari sini mustahil — dan karena daftar izin tidak
+  // memerahkan apa pun saat ditambah, tidak ada yang hilang dengan menunggu.
+  //
+  // `orders` memberi SELECT kepada `authenticated` saja (dua policy di
+  // dalamnya yang membedakan klien dari staf); `order_items` tidak memberi
+  // apa pun kepada siapa pun; `notifikasi_ditolak_harian` nol policy, nol
+  // grant. Anon tidak pernah punya urusan dengan satu pun di antaranya:
+  // etalase publik membaca produk dan harga, tidak pernah membaca nota.
+  "orders",
+  "order_items",
+  "jejak_pesanan",
+  "notifikasi_pesanan",
+  "notifikasi_ditolak_harian",
+  // View bernominal, dan SATU-SATUNYA jalan `harga_beku` keluar dari
+  // `order_items` — plus `kode` dan `judul_beku` SELURUH pesanan. Batas
+  // perannya ada DI DALAM badan view (`user_role() in ('admin','owner')`),
+  // bukan di GRANT-nya, persis seperti `varian_harga_staf` di atas. Bedanya
+  // dari `harga_publik`, yang justru SENGAJA digrant ke anon: yang ini tidak
+  // pernah, dalam keadaan apa pun.
+  //
+  // Tanpa baris ini, satu `grant select on public.pesanan_item_staf to anon`
+  // di migrasi P2/P4 mana pun — atau satu `create or replace view` yang
+  // mengembalikan default privileges — membuka seluruh harga beku, kode
+  // pesanan, dan judul item ke internet, dan NOL uji merah:
+  // `money-firewall-struktural` justru sudah membebaskan kolomnya lewat
+  // `KOLOM_UANG_VIEW_DIIZINKAN`, dan `struktur-rls` tidak melihat view.
+  "pesanan_item_staf",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
