@@ -31,6 +31,63 @@ const TOMBOL_BERUANG: Record<StatusPesanan, "akses" | "putusan" | null> = {
 };
 
 /**
+ * Alamat dan muatan tindakan "Putuskan", sebagai konstanta.
+ *
+ * Bukan kerapian: `panduanSesudah` di bawah memutuskan kalimatnya dengan
+ * MEMBANDINGKAN keduanya, jadi literal yang diketik dua kali adalah dua
+ * literal yang bisa berselisih — dan bentuk selisihnya adalah panduan yang
+ * berhenti muncul tanpa satu pun galat, yaitu persis keadaan yang butir ini
+ * ada untuk memperbaikinya.
+ *
+ * Nilai putusannya `satisfies StatusPesanan`, dan itu benar bukan kebetulan:
+ * `putuskan_pesanan_ditahan` menerimanya sebagai TEXT lalu memakainya sebagai
+ * status TUJUAN (`v_tujuan public.order_status`). Mengganti nama nilai enum
+ * memerahkan `tsc` di sini, alih-alih membuat rute menjawab 400 untuk setiap
+ * penekanan tombol.
+ */
+const JALUR_PUTUSKAN = "putuskan";
+const PUTUSAN_LUNAS = "lunas" satisfies StatusPesanan;
+const PUTUSAN_BATAL = "dibatalkan" satisfies StatusPesanan;
+
+/**
+ * Kalimat LANGKAH BERIKUTNYA untuk tindakan yang baru saja berhasil — atau
+ * `null` bila tindakan itu memang selesai dengan sendirinya.
+ *
+ * ===== KENAPA "Putuskan lunas" MENUNTUT KALIMAT INI =====
+ * `putuskan_pesanan_ditahan` memindahkan status, menulis jejak, dan
+ * membiarkan `butuh_tinjauan_pada` menyala. Ia TIDAK memanggil
+ * `salurkan_pesanan` maupun `terbitkan_akses_item` di badannya sama sekali —
+ * nol entitlement lahir. `ditahan` karena itu satu-satunya alur di seluruh P1
+ * di mana uang PASTI sudah masuk dan barangnya PASTI belum keluar, dan
+ * separuh kedua keputusan staf harus ditekan manusia.
+ *
+ * Sebelum ini barisnya menawarkan "Terbitkan akses" DAN "Tutup tinjauan"
+ * tanpa satu kalimat pun yang menyatakan yang mana. Kerusakannya terbatas —
+ * klausa kedua "Butuh perhatian" (`PESANAN_BERUANG && !punyaAkses`) menahan
+ * barisnya tetap terlihat bahkan sesudah "Tutup tinjauan", jadi ia tidak bisa
+ * terkubur — tetapi kliennya menunggu sampai ada yang menebak tombol yang
+ * benar.
+ *
+ * Perbaikan STRUKTURALNYA (menyambungkan penyalur ke transisi
+ * `ditahan -> lunas`) ada di RPC milik P1-A dan di luar lingkup permukaan ini;
+ * yang bisa dilakukan di sini adalah berhenti diam.
+ *
+ * ===== KENAPA FUNGSI MURNI, BUKAN KALIMAT DI DALAM `kirim()` =====
+ * Selama ia tinggal di dalam handler, tidak satu pun uji di repo ini bisa
+ * menjalankannya: `renderToStaticMarkup` tidak menjalankan handler dan repo
+ * ini nol jsdom. Seseorang boleh menghapus kalimatnya besok dan semuanya tetap
+ * hijau. Resep yang sama dengan `keadaanBeli` di `tombol-beli.tsx`, dan
+ * `kirim()` benar-benar MEMANGGIL fungsi ini alih-alih menyalin isinya.
+ */
+export function panduanSesudah(jalur: string, badan?: unknown): string | null {
+  const putusan = (badan as { putusan?: unknown } | undefined)?.putusan;
+  if (jalur === JALUR_PUTUSKAN && putusan === PUTUSAN_LUNAS) {
+    return 'Ditandai lunas. Sekarang tekan "Terbitkan akses" supaya kliennya menerima produknya.';
+  }
+  return null;
+}
+
+/**
  * Empat tindakan pemulihan Lapis 2, masing-masing dengan alamatnya sendiri.
  *
  * ===== KENAPA fetch KE RUTE, BUKAN SERVER ACTION =====
@@ -69,9 +126,19 @@ export function TombolPesanan({
   const [menyegarkan, mulai] = useTransition();
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
+  /**
+   * Hasil tindakan yang BERHASIL — dan kenapa ia terpisah dari `pesan`:
+   * `pesan` adalah kegagalan (dirender merah), yang ini adalah laporan.
+   * Sebelum keduanya ada, satu-satunya umpan balik untuk tindakan yang
+   * berhasil adalah halaman yang menyegarkan diri — dan "akses terbit",
+   * "akses sudah ada", "akses SENGAJA ditahan" serta "jenis item ini belum
+   * punya penangan" terlihat identik bagi operator yang melihatnya.
+   */
+  const [laporan, setLaporan] = useState<string | null>(null);
 
   async function kirim(jalur: string, badan?: unknown) {
     setPesan(null);
+    setLaporan(null);
     setSibuk(true);
     try {
       const res = await fetch(`/api/pesanan/${pesananId}/${jalur}`, {
@@ -87,6 +154,10 @@ export function TombolPesanan({
         setPesan(isi.pesan ?? "Tindakan gagal dijalankan.");
         return;
       }
+      // Kalimat RUTE menang atas panduan lokal: hanya rute yang tahu hasil
+      // yang sebenarnya terjadi di basis data. Panduan lokal mengisi kasus
+      // sebaliknya — tindakan yang berhasil tapi BELUM selesai.
+      setLaporan(isi.pesan ?? panduanSesudah(jalur, badan));
       mulai(() => router.refresh());
     } catch {
       setPesan("Jaringan tidak menjawab. Coba lagi.");
@@ -118,7 +189,7 @@ export function TombolPesanan({
               type="button"
               disabled={mati}
               className={kelas}
-              onClick={() => void kirim("putuskan", { putusan: "lunas" })}
+              onClick={() => void kirim(JALUR_PUTUSKAN, { putusan: PUTUSAN_LUNAS })}
             >
               Putuskan lunas
             </button>
@@ -126,7 +197,7 @@ export function TombolPesanan({
               type="button"
               disabled={mati}
               className={kelas}
-              onClick={() => void kirim("putuskan", { putusan: "dibatalkan" })}
+              onClick={() => void kirim(JALUR_PUTUSKAN, { putusan: PUTUSAN_BATAL })}
             >
               Putuskan batal
             </button>
@@ -139,6 +210,11 @@ export function TombolPesanan({
         )}
       </div>
       {pesan && <p className="text-[11.5px] font-semibold text-clay">{pesan}</p>}
+      {laporan && (
+        <p className="rounded-lg border border-panel-border bg-panel-bg px-2 py-1 text-[11.5px] font-semibold text-panel-ink">
+          {laporan}
+        </p>
+      )}
     </div>
   );
 }

@@ -77,6 +77,7 @@ vi.mock("@/lib/midtrans/adapter", () => ({
 const { bacaPesananStaf } = await import("@/lib/admin/pesanan");
 const { default: PesananPage } = await import("@/app/admin/pesanan/page");
 const { TabelPesanan } = await import("@/app/admin/pesanan/tabel-pesanan");
+const { panduanSesudah } = await import("@/app/admin/pesanan/tombol-pesanan");
 const { POST: periksaUlang } = await import("@/app/api/pesanan/[id]/periksa-ulang/route");
 const { POST: terbitkanAkses } = await import("@/app/api/pesanan/[id]/terbitkan-akses/route");
 const { POST: putuskan } = await import("@/app/api/pesanan/[id]/putuskan/route");
@@ -374,6 +375,18 @@ describe("halaman /admin/pesanan", () => {
     await expect(markup()).rejects.toThrow("REDIRECT /setelah-masuk");
   });
 
+  it('teks bantuan berhenti menyebut "Terbitkan akses" sebagai penerbitan ULANG', async () => {
+    // Kata "ulang" membuat tombol itu terbaca sebagai alat PERBAIKAN untuk
+    // pesanan yang aksesnya gagal — padahal ia separuh kedua dari keputusan
+    // yang baru saja staf ambil: `putuskan_pesanan_ditahan` tidak menerbitkan
+    // satu pun entitlement. Selama kalimatnya berbunyi "ulang", staf yang
+    // menekan "Putuskan lunas" tidak punya alasan menekannya, dan kliennya
+    // menunggu.
+    const m = await markup();
+    expect(m).not.toContain("menerbitkan ulang");
+    expect(m).toContain("Terbitkan akses");
+  });
+
   it("nol service role di seluruh modul layar", async () => {
     // Ditegaskan ulang di sini meski `tests/admin-shell.test.ts:643` sudah
     // menyapu `src/app/admin/**`: sapuan itu punya daftar pengecualian, dan
@@ -469,6 +482,44 @@ describe("TabelPesanan", () => {
     // diketahui — `nominalDalam` adalah pemindai yang sama yang dipakai
     // KEBALIKANNYA di uji halaman.
     expect(nominalDalam(m), "nominal dikarang untuk baris yang tidak terbaca").toEqual([]);
+  });
+});
+
+describe('"Putuskan lunas" menyuruh langkah berikutnya', () => {
+  /**
+   * `putuskan_pesanan_ditahan` TIDAK memanggil `salurkan_pesanan` maupun
+   * `terbitkan_akses_item` di badannya sama sekali: ia memindahkan status,
+   * menulis jejak, dan membiarkan `butuh_tinjauan_pada` menyala. Nol
+   * entitlement lahir. Jadi `ditahan` adalah satu-satunya alur di mana uang
+   * PASTI sudah masuk dan barangnya PASTI belum keluar, dan separuh kedua
+   * keputusan itu — "Terbitkan akses" — harus ditekan manusia.
+   *
+   * Sebelum ini tidak ada satu kalimat pun yang mengatakannya. Barisnya
+   * menawarkan dua tombol baru dan staf menebak yang mana, sementara kliennya
+   * menunggu. Perbaikan STRUKTURALNYA (menyambungkan penyalur ke transisi
+   * `ditahan -> lunas`) ada di RPC milik P1-A dan di luar lingkup branch ini;
+   * yang bisa dilakukan di permukaan adalah berhenti diam.
+   *
+   * Diuji sebagai FUNGSI MURNI karena itulah satu-satunya bentuk yang bisa
+   * dijalankan di sini: `renderToStaticMarkup` tidak menjalankan handler dan
+   * repo ini nol jsdom. Resep yang sama dengan `keadaanBeli` di
+   * `tombol-beli.tsx`, dan `kirim()` benar-benar memanggil fungsi ini —
+   * bukan menyalin kalimatnya.
+   */
+  it("putusan lunas memulangkan kalimat yang menyebut tombol berikutnya", () => {
+    const kalimat = panduanSesudah("putuskan", { putusan: "lunas" });
+    expect(kalimat).toBeTruthy();
+    expect(kalimat).toContain("Terbitkan akses");
+  });
+
+  it("putusan BATAL tidak menyuruh menerbitkan apa pun", () => {
+    expect(panduanSesudah("putuskan", { putusan: "dibatalkan" })).toBeNull();
+  });
+
+  it("tindakan yang selesai dengan sendirinya tidak menambah kalimat", () => {
+    expect(panduanSesudah("terbitkan-akses")).toBeNull();
+    expect(panduanSesudah("periksa-ulang")).toBeNull();
+    expect(panduanSesudah("tutup-tinjauan")).toBeNull();
   });
 });
 

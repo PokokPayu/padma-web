@@ -533,7 +533,26 @@ export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }
       klien.id,
     );
     return { diperiksa };
-  } catch {
+  } catch (galat) {
+    // SEBABNYA DICATAT — dan justru di sini lebih mendesak daripada di rute
+    // cron yang sudah mencatatnya. Keduanya menelan dua jalur lempar yang SAMA
+    // PERSIS (`sapuPesananMenggantung`: pemilihan baris gagal, dan pencapan
+    // `diperiksa_pada` gagal, keduanya bisu), tapi rute cron masih meninggalkan
+    // 500 di stderr `curl` dan job Actions yang MERAH. Lapis 1b tidak
+    // meninggalkan apa pun: nilai baliknya hanya memutuskan menyegarkan halaman
+    // atau tidak, dan `{diperiksa: 0}` dari jaring yang MATI byte-identik
+    // dengan `{diperiksa: 0}` dari jaring yang sehat dan sepi.
+    //
+    // Yang membuatnya mahal: spec menyebut Lapis 1b jaring pengaman UTAMA, dan
+    // jadwal Lapis 3 dikirim dalam keadaan dikomentari — jadi saat go-live ini
+    // SATU-SATUNYA jalur rekonsiliasi yang hidup. Kunci service role yang salah
+    // pasang, atau UPDATE pencapan yang ditolak, mematikannya permanen; tanpa
+    // baris ini tidak ada satu tempat pun di mana itu terlihat.
+    //
+    // Yang TIDAK berubah: ia tetap menelan. Pemanggilnya LATAR, bukan gerbang,
+    // dan orang yang sedang mencari produknya tidak boleh melihat layar galat
+    // karena pemeriksaan latar gagal.
+    console.error(`[pesanan] Lapis 1b gagal menyapu: ${sebab(galat)}`);
     return { diperiksa: 0 };
   }
 }

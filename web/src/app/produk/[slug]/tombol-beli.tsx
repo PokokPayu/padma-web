@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } from "@/lib/midtrans/snap-peramban";
 import { PESANAN_BERUANG, PESANAN_TERBUKA } from "@/lib/pesanan/status";
@@ -65,6 +66,50 @@ export async function keadaanBeli(
 ): Promise<KeadaanBeli> {
   if (await punyaProduk()) return "punya";
   return (await punyaPesanan()) ? "menunggu" : "belum";
+}
+
+/**
+ * "Orang ini punya pesanan terbuka atas produk ini" — DAN JAWABANNYA GAGAL
+ * TERTUTUP.
+ *
+ * ===== KENAPA `error` TIDAK BOLEH DIBUANG DI SINI =====
+ * `const { data } = await sb.rpc(...)` terbaca tidak berbahaya, dan arah
+ * kegagalannya justru yang paling mahal: RPC yang gagal memulangkan
+ * `data: null`, `data === true` jadi false, `keadaanBeli` jatuh ke `"belum"`,
+ * dan tombol BELI muncul untuk orang yang baru saja mentransfer lewat VA.
+ * Itu persis kalimat yang spec tulis untuk dicegah, dibatalkan oleh sebuah
+ * destructuring.
+ *
+ * Karena itu kegagalan pembacaan dibaca sebagai "punya" — TEBAKAN
+ * KONSERVATIF, bukan kebenaran. Ongkosnya disebut terbuka: orang yang
+ * sebenarnya belum memesan apa pun akan melihat "Pembayaran Anda sedang
+ * diproses" selama PostgREST-nya sakit, dan satu muat ulang sesudah pulih
+ * mengembalikan tombolnya. Ongkos arah sebaliknya adalah pembeli yang
+ * ditawari membayar dua kali; pagar basis data
+ * (`pesanan_terbuka_satu_per_klien`) memang menangkapnya sebagai 409/502,
+ * tapi yang dia lihat adalah layar galat alih-alih kalimat yang menerangkan.
+ *
+ * `sb` diterima sebagai PARAMETER, bukan dibuat di dalam — resep yang sama
+ * dengan `punyaProdukDiPeramban` di `tombol-ambil.tsx`, dan dengan alasan
+ * yang sama: selama ia tinggal di dalam `useCallback`, tidak satu pun uji di
+ * repo ini bisa menjalankannya (`renderToStaticMarkup` tidak menjalankan
+ * efek, dan repo ini nol jsdom).
+ */
+export async function punyaPesananMenungguDiPeramban(
+  sb: SupabaseClient,
+  productId: string,
+): Promise<boolean> {
+  const { data, error } = await sb.rpc("punya_pesanan_menunggu", {
+    p_product_id: productId,
+  });
+  if (error) {
+    // Konsol PENGUNJUNG, dan itu memang satu-satunya tempat yang tersedia di
+    // peramban. Tanpa baris ini, "semua orang melihat 'sedang diproses'"
+    // terbaca sama persis dengan "semua orang memang sedang memproses".
+    console.error(`[pesanan] punya_pesanan_menunggu tidak terbaca: ${error.message}`);
+    return true;
+  }
+  return data === true;
 }
 
 /** Baris `orders` yang boleh dibaca peramban — RLS "pesanan: klien baca miliknya". */
@@ -462,10 +507,7 @@ export function TombolBeli({
     // Urutannya hidup di `keadaanBeli`, bukan di sini — lihat dokbloknya.
     const hasil = await keadaanBeli(
       () => punyaProdukDiPeramban(sb, productId),
-      async () => {
-        const { data } = await sb.rpc("punya_pesanan_menunggu", { p_product_id: productId });
-        return data === true;
-      },
+      () => punyaPesananMenungguDiPeramban(sb, productId),
     );
 
     // Perjalanan KETIGA ini hanya dibayar oleh yang memang macet. Yang belum

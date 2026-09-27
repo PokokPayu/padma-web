@@ -116,7 +116,15 @@ const STATUS_DIPANTAU: StatusPesanan[] = [...PESANAN_TERBUKA, ...PESANAN_BERUANG
  */
 const KEJADIAN_AKSES: KejadianPesanan[] = ["akses_terbit", "akses_sudah_ada"];
 
-const BATAS_BARIS = 200;
+/**
+ * Batas baris per kueri — DIEKSPOR karena layarnya menyebut angkanya.
+ *
+ * Batas yang tidak diumumkan adalah batas yang berbohong: blok yang terpotong
+ * di 200 terlihat persis seperti blok yang memang hanya punya 200. Halaman
+ * karena itu mencetak angka ini apa adanya (`page.tsx`), bukan menuliskannya
+ * ulang sebagai "200" yang akan basi diam-diam begitu angka di sini bergerak.
+ */
+export const BATAS_BARIS = 200;
 
 export async function bacaPesananStaf(): Promise<{
   butuhPerhatian: BarisPesanan[];
@@ -141,7 +149,26 @@ export async function bacaPesananStaf(): Promise<{
       .from("orders")
       .select(KOLOM)
       .in("status", STATUS_DIPANTAU)
-      .order("dibuat_pada", { ascending: false })
+      // DIURUTKAN SEPERTI IA DITAMPILKAN, dan itu bukan kerapian.
+      //
+      // Versi pertama memilih `dibuat_pada desc` lalu blok "Terbuka"
+      // mengurutkan ulang di memori dengan `diperiksa_pada nulls first`
+      // (lihat `.sort()` di bawah). Dua urutan yang berbeda tidak masalah
+      // selama tidak ada batas — tapi ada: `limit(BATAS_BARIS)` memotong
+      // menurut urutan PEMILIHAN, jadi yang terbuang adalah pesanan TERTUA,
+      // dan yang tertua adalah persis yang paling lama tidak diperiksa.
+      // Dengan kata lain: blok yang ada untuk memunculkan pesanan yang
+      // menggantung tanpa ada yang tahu adalah blok yang membuang justru
+      // pesanan itu, tanpa satu pun galat.
+      //
+      // `nullsFirst` DITULIS EKSPLISIT: bawaan Postgres untuk ASC adalah NULLS
+      // LAST, dan pesanan yang BELUM PERNAH diperiksa justru yang paling
+      // mungkin menggantung tanpa ada yang tahu — membiarkannya di ekor
+      // berarti membuangnya duluan. (`orders_sapuan_idx` mengurutkan dengan
+      // cara yang sama, tapi ia PARSIAL `where status = 'menunggu_bayar'`
+      // sementara saringan di sini lebih lebar, jadi jangan berharap ia
+      // dipakai perencana — ini urutan demi kebenaran, bukan demi indeks.)
+      .order("diperiksa_pada", { ascending: true, nullsFirst: true })
       .limit(BATAS_BARIS)
       .returns<BarisOrders[]>(),
   ]);
@@ -168,7 +195,25 @@ export async function bacaPesananStaf(): Promise<{
       .select("pesanan_id, nominal_diterima, diterima_pada")
       .in("pesanan_id", ids)
       .not("nominal_diterima", "is", null)
-      .order("diterima_pada", { ascending: false }),
+      .order("diterima_pada", { ascending: false })
+      // PEMECAH SERI, dan tugasnya STABILITAS — bukan makna.
+      //
+      // `diterima_pada` hanyalah `default now()`; tidak ada satu pun batasan
+      // yang membuatnya unik per pesanan, dan dua baris BOLEH memikul cap yang
+      // sama persis (backfill, fixture, atau dua transaksi yang mulai di
+      // mikrodetik yang sama). Untuk baris yang seri, `order by diterima_pada
+      // desc` sendirian tidak menentukan apa pun: Postgres bebas memulangkan
+      // urutan mana saja, dan `if (!diterimaPer.has(...))` di bawah memungut
+      // yang KEBETULAN pertama.
+      //
+      // Akibatnya sel "Diterima" bisa berganti angka antar muat ulang — di
+      // satu-satunya layar yang menaruh dua angka uang bersebelahan untuk
+      // dibandingkan manusia. Angka yang berubah sendiri lebih buruk daripada
+      // angka yang sekadar salah: ia membuat pembacanya berhenti memercayai
+      // keduanya. `id` dipilih karena ia kunci primer dan pasti unik; mana
+      // yang "menang" di antara dua baris seri memang sembarang, dan yang
+      // dijanjikan di sini hanya bahwa jawabannya tidak berubah-ubah.
+      .order("id", { ascending: false }),
     sb
       .from("jejak_pesanan")
       .select("pesanan_id, kejadian")

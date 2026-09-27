@@ -37,6 +37,7 @@ const {
   mintaCheckout,
   mintaBatal,
   pesananYangBisaDibatalkan,
+  punyaPesananMenungguDiPeramban,
   BATAS_BARIS_PESANAN,
 } = await import("@/app/produk/[slug]/tombol-beli");
 const { urlSkripSnap } = await import("@/lib/midtrans/konfig");
@@ -46,6 +47,9 @@ const { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } = await import(
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
+
+/** Satu id produk untuk seluruh berkas — nilainya tidak pernah jadi assertion. */
+const PRODUK = "99999999-9999-9999-9999-999999999999";
 
 const kosong = {
   slug: "panduan-menyusui",
@@ -201,6 +205,60 @@ describe("urutan keadaan — DIJALANKAN, bukan dibaca dari teks sumber", () => {
 
   it("belum punya dan tidak ada pesanan -> 'belum'", async () => {
     expect(await keadaanBeli(async () => false, async () => false)).toBe("belum");
+  });
+});
+
+describe("punyaPesananMenungguDiPeramban gagal TERTUTUP", () => {
+  /**
+   * Versi pertama menulis `const { data } = await sb.rpc(...)` dan membuang
+   * `error`. Bentuk kegagalannya: RPC yang gagal memulangkan `data: null`,
+   * `data === true` jadi false, keadaan jatuh ke `"belum"`, dan orang yang
+   * BARU SAJA mentransfer lewat VA ditawari membeli lagi — persis kalimat yang
+   * spec tulis untuk dicegah.
+   *
+   * Pagar basis data (`pesanan_terbuka_satu_per_klien`) memang menangkapnya di
+   * hilir, jadi nol tagih ganda. Yang hilang bukan uangnya melainkan
+   * kalimatnya: pembelinya dapat 409/502 alih-alih "Pembayaran Anda sedang
+   * diproses", dan galat itu muncul di layar orang yang tidak melakukan
+   * kesalahan apa pun.
+   */
+  /** `sb` palsu seukuran yang dipakai fungsinya: satu `rpc`, nol tabel. */
+  function sbPalsu(jawaban: { data: unknown; error: unknown }) {
+    const dipanggil: unknown[] = [];
+    const sb = {
+      rpc: async (nama: string, arg: unknown) => {
+        dipanggil.push({ nama, arg });
+        return jawaban;
+      },
+    };
+    return { sb: sb as never, dipanggil };
+  }
+
+  it("RPC yang GAGAL dibaca sebagai 'menunggu', bukan sebagai 'belum'", async () => {
+    const { sb } = sbPalsu({ data: null, error: { message: "PostgREST tumbang" } });
+    const mata = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await punyaPesananMenungguDiPeramban(sb, PRODUK)).toBe(true);
+      // Dan kegagalannya TIDAK bisu: tebakan konservatif yang tidak
+      // meninggalkan jejak berarti "semua orang melihat 'sedang diproses'"
+      // terbaca sama persis dengan "semua orang memang sedang memproses".
+      expect(mata).toHaveBeenCalled();
+    } finally {
+      mata.mockRestore();
+    }
+  });
+
+  it("jawaban true tetap true, dan produknya yang ditanyakan", async () => {
+    const { sb, dipanggil } = sbPalsu({ data: true, error: null });
+    expect(await punyaPesananMenungguDiPeramban(sb, PRODUK)).toBe(true);
+    expect(dipanggil).toEqual([
+      { nama: "punya_pesanan_menunggu", arg: { p_product_id: PRODUK } },
+    ]);
+  });
+
+  it("jawaban false tetap false — gagal-tertutup tidak boleh jadi selalu-tertutup", async () => {
+    const { sb } = sbPalsu({ data: false, error: null });
+    expect(await punyaPesananMenungguDiPeramban(sb, PRODUK)).toBe(false);
   });
 });
 

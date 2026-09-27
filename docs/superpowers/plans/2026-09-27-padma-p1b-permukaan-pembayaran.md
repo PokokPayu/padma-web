@@ -8204,10 +8204,18 @@ terhadap urutan, jadi baris yang mendarat di tempat yang salah tidak memerahkan 
 yang rusak hanya satu-satunya peta PADMA yang dibaca manusia.
 
 `tests/inventaris-rute.test.ts` memeriksa dua arah, jadi rute tanpa baris dan baris tanpa rute
-sama-sama merah:
+sama-sama merah.
+
+**Barisnya berkata "Belum terjadwal", dan itu disengaja.** Versi pertama langkah ini
+meresepkan "Dipanggil `.github/workflows/rekonsiliasi-pesanan.yml` tiap 15 menit" — klaim
+yang TIDAK benar pada hari rute ini lahir: blok `schedule:` di workflow itu dikirim dalam
+keadaan dikomentari (lihat `it("blok schedule LAHIR DIKOMENTARI")`), dan menyalakannya
+adalah langkah terakhir go-live pembayaran di README, bukan bagian dari tugas ini. Siapa
+pun yang menurunkan ulang README dari rencana ini harus menurunkan baris di bawah, bukan
+kalimat lamanya:
 
 ```
-| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. Dipanggil `.github/workflows/rekonsiliasi-pesanan.yml` tiap 15 menit — GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
+| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
 ```
 
 - [ ] **Step 6: Jalankan uji, pastikan LULUS**

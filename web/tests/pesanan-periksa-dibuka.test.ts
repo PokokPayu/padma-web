@@ -601,6 +601,77 @@ describe("kegagalan disembunyikan", () => {
     const markup = renderToStaticMarkup(await HalamanProdukSaya());
     expect(markup).toContain("Pembelian Saya");
   });
+
+  it("kegagalan BASIS DATA tetap ditelan, tapi meninggalkan JEJAK bersebab di log", async () => {
+    // ===== KENAPA UJI INI ADA =====
+    // Lapis 1b adalah jaring pengaman UTAMA, dan saat go-live ia satu-satunya
+    // yang hidup: jadwal Lapis 3 dikirim dalam keadaan dikomentari. Menelan
+    // lemparan memang benar — pemanggilnya LATAR, dan orang yang sedang
+    // mencari produknya tidak boleh melihat layar galat — tapi menelannya
+    // TANPA JEJAK membuat jaring yang MATI memulangkan `{diperiksa: 0}` yang
+    // byte-identik dengan jaring yang sehat dan sepi. Yang diuji di sini bukan
+    // bahwa ia tidak melempar (uji di atas sudah), melainkan bahwa
+    // kematiannya bisa DIKETAHUI.
+    //
+    // ===== KENAPA LEWAT ENV, DAN KENAPA ITU BUKAN AKAL-AKALAN =====
+    // `sapuPesananMenggantung` memanggil `createAdminSupabase()` SENDIRI untuk
+    // mencap `diperiksa_pada`, dan `createAdminSupabase()` MELEMPAR — bukan
+    // memulangkan error — ketika `SUPABASE_SERVICE_ROLE_KEY` tidak ada
+    // (`src/lib/supabase/admin.ts` memakai `!`, dan `createClient` menolaknya
+    // di konstruktor). Jadi jalur lempar "pencapan gagal" terjangkau tanpa
+    // mengubah satu objek basis data bersama pun: kunci yang salah pasang di
+    // Vercel adalah bentuk kegagalan yang PERSIS ini, dan ia permanen.
+    // `admin` di berkas ini sudah lahir sebelum env dicabut, jadi penyemaian
+    // dan pembersihan tidak ikut mati.
+    const kode = `${AWALAN_KODE}0009`;
+    const id = await semaiPesanan({ kode });
+
+    const kunci = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const baris: string[] = [];
+    const mata = vi
+      .spyOn(console, "error")
+      .mockImplementation((...a: unknown[]) => void baris.push(a.map(String).join(" ")));
+
+    let hasil: { diperiksa: number };
+    let pesanAsli = "";
+    try {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // Sebab yang SEBENARNYA dilempar, dipungut dari sumber yang sama alih-alih
+      // ditulis mati di sini: uji yang mengeja "supabaseKey is required" akan
+      // merah karena supabase-js mengganti kalimatnya, bukan karena jejaknya
+      // hilang — dan merah yang salah sebab adalah merah yang dihapus orang.
+      try {
+        createAdminSupabase();
+      } catch (galat) {
+        pesanAsli = galat instanceof Error ? galat.message : String(galat);
+      }
+      hasil = await periksaPesananMenggantung();
+    } finally {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = kunci;
+      mata.mockRestore();
+    }
+
+    expect(
+      pesanAsli,
+      "createAdminSupabase() tidak melempar tanpa kunci — premis uji ini gugur",
+    ).not.toBe("");
+
+    // Kontraknya TIDAK berubah: tetap ditelan, halaman tetap hidup.
+    expect(hasil).toEqual({ diperiksa: 0 });
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+    // Dan ia mati DI PENCAPAN, sebelum bertanya: nol permintaan keluar.
+    expect(midtrans.panggilan).toEqual([]);
+
+    // Inilah assertion yang memerah bila `console.error`-nya dihapus.
+    const jejak = baris.filter((b) => b.includes("[pesanan]") && b.includes("Lapis 1b"));
+    expect(jejak, `nol jejak Lapis 1b di console.error; yang tercatat: ${baris.join(" | ")}`)
+      .not.toHaveLength(0);
+    // SEBABNYA ikut, bukan hanya fakta bahwa sesuatu gagal. Baris log yang
+    // berbunyi "gagal" tanpa menyebut apa adalah bentuk paling meyakinkan dari
+    // kegagalan yang tersembunyi (dokblok `sebab()`).
+    expect(jejak.some((b) => b.includes(pesanAsli)), `sebab "${pesanAsli}" tidak ikut tercatat`)
+      .toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

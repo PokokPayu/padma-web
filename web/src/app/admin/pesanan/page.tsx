@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { Bantuan } from "@/app/_shell/panel/bantuan";
-import { bacaPesananStaf } from "@/lib/admin/pesanan";
+import { bacaPesananStaf, BATAS_BARIS } from "@/lib/admin/pesanan";
 import { TabelPesanan } from "./tabel-pesanan";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -33,16 +33,25 @@ export default async function PesananPage() {
           {" "}
           <b>Periksa ulang</b> menanyakan keadaan transaksi ke Midtrans lalu menjalankan
           jawabannya — vonisnya tetap datang dari Midtrans, bukan dari tombol ini.{" "}
-          <b>Terbitkan akses</b> menerbitkan ulang akses produk untuk pesanan yang sudah
-          lunas. <b>Putuskan</b> hanya untuk baris Ditahan, dan nama Anda ikut tercatat.{" "}
-          <b>Tutup tinjauan</b> mengosongkan penanda tanpa menyentuh status — ia sengaja
-          menolak baris Ditahan, karena pesanan Ditahan menuntut putusan, bukan penutupan.
+          <b>Putuskan</b> hanya untuk baris Ditahan, dan nama Anda ikut tercatat. Ia
+          memindahkan status dan menulis jejaknya, tetapi <b>tidak</b> menyerahkan
+          produknya. <b>Terbitkan akses</b>-lah yang menyerahkannya: sesudah{" "}
+          <i>Putuskan lunas</i> tombol itu masih harus ditekan, kalau tidak uangnya sudah
+          masuk dan barangnya tidak pernah keluar. Ia juga dipakai untuk pesanan Lunas yang
+          aksesnya tidak pernah terbit. <b>Tutup tinjauan</b> mengosongkan penanda tanpa
+          menyentuh status — ia sengaja menolak baris Ditahan, karena pesanan Ditahan
+          menuntut putusan, bukan penutupan.
           {" "}
           Nominal pesanan ditampilkan di halaman ini — satu-satunya di panel admin yang
           menunjukkan yang ditagih bersebelahan dengan yang diterima — karena
           pertanyaan &ldquo;berapa yang klien ini bayar&rdquo; harus bisa dijawab dari dalam
           PADMA, bukan dari dashboard Midtrans. Pengembalian uang tidak dilakukan dari sini;
           yang disediakan hanyalah nomor transaksi untuk diurus di dashboard Midtrans.
+          {" "}
+          Layar ini membaca paling banyak {BATAS_BARIS} baris per kueri. Kalau pesanan
+          yang memenuhi syarat lebih banyak dari itu, ada yang tidak terlihat di sini —
+          yang paling lama tidak diperiksa selalu ikut terbaca lebih dulu, jadi kerjakan
+          dari atas.
         </Bantuan>
       </header>
 

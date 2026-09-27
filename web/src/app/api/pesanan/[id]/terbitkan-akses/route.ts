@@ -2,8 +2,55 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import type { KejadianPesanan, StatusPesanan } from "@/lib/pesanan/status";
 
 export const runtime = "nodejs";
+
+/**
+ * SATU nilai, bukan himpunan — dan itu keputusan, bukan kelalaian.
+ *
+ * Keempat himpunan Tugas 1 tidak ada yang cocok: `PESANAN_BERUANG` memuat
+ * `ditahan`, dan pesanan `ditahan` adalah persis yang aksesnya TIDAK boleh
+ * terbit sebelum manusia memutuskannya. §0.6 melarang melahirkan himpunan
+ * kelima untuk satu pemakai, jadi yang tersisa adalah satu nilai — tapi satu
+ * nilai yang DIPERIKSA KOMPILATOR.
+ *
+ * `satisfies StatusPesanan` adalah mekanisme yang sama dengan
+ * `Record<StatusPesanan, ...>` di `tombol-pesanan.tsx` dan
+ * `KejadianPesanan[]` di `lib/admin/pesanan.ts`, dan tanpanya berkas ini
+ * adalah satu-satunya literal status pesanan yang tersisa di kode keputusan
+ * permukaan — di sebelah dokblok tombol yang mengaku "NOL LITERAL STATUS".
+ * Mengganti nama nilai enum `lunas` kelak akan memerahkan `tsc` di sini,
+ * alih-alih membuat gerbang ini menolak SETIAP pesanan tanpa satu pun galat.
+ */
+const STATUS_BOLEH_TERBIT = "lunas" satisfies StatusPesanan;
+
+/**
+ * Ketiga nilai balik `terbitkan_akses_item`, sebagai kalimat operator.
+ *
+ * ===== KENAPA RUTE INI HARUS BICARA =====
+ * Sebelumnya ia memulangkan `{terbit, belumAdaPenangan}` yang tombolnya tidak
+ * pernah render — `TombolPesanan` hanya menampilkan `pesan`, dan hanya saat
+ * `!res.ok`. Akibatnya ketiga hasil di bawah terlihat IDENTIK bagi staf yang
+ * menekan tombolnya: halaman menyegarkan diri, titik. Dan ketiganya menuntut
+ * tindakan yang berbeda — `akses_tertahan` khususnya berarti entitlementnya
+ * DICABUT dan aksesnya sengaja tidak dihidupkan, keadaan yang tidak akan
+ * membaik dengan menekan tombol yang sama sekali lagi.
+ *
+ * Kuncinya BERTIPE, bukan string bebas. Ketiganya juga anggota enum
+ * `order_event`, dan `Partial<Record<KejadianPesanan, string>>` memaksa
+ * setiap kunci di bawah tetap menjadi nama kejadian yang sah — mengganti nama
+ * salah satunya memerahkan `tsc` di sini, alih-alih diam-diam menjatuhkannya
+ * ke cabang "tidak dikenal". `Partial`, karena ketiga belas kejadian lain
+ * memang bukan urusan rute ini; `Record` penuh akan menuntut kalimat untuk
+ * `dibuat` dan `kedaluwarsa` juga.
+ */
+const KALIMAT_HASIL = {
+  akses_terbit: "akses terbit",
+  akses_sudah_ada: "akses sudah ada sebelumnya",
+  akses_tertahan:
+    "akses DITAHAN — entitlementnya sudah dicabut, jadi aksesnya sengaja tidak dihidupkan dan pesanan ini ditandai butuh tinjauan",
+} satisfies Partial<Record<KejadianPesanan, string>>;
 
 /**
  * TERBITKAN ULANG AKSES (Lapis 2).
@@ -34,7 +81,7 @@ export async function POST(
     .from("orders")
     .select("id, status")
     .eq("id", id)
-    .maybeSingle<{ id: string; status: string }>();
+    .maybeSingle<{ id: string; status: StatusPesanan }>();
 
   // `error` DIBACA, tidak dibuang. PostgREST yang gagal memulangkan
   // `data: null` — bentuk yang SAMA PERSIS dengan "barisnya memang tidak
@@ -54,7 +101,7 @@ export async function POST(
   // Tombolnya memang hanya dirender untuk baris `lunas`, tetapi rute adalah
   // endpoint MANDIRI: tanpa gerbang ini, satu curl sudah cukup memberikan
   // barang yang belum dibayar.
-  if (pesanan.status !== "lunas") {
+  if (pesanan.status !== STATUS_BOLEH_TERBIT) {
     return NextResponse.json(
       { pesan: "Akses hanya bisa diterbitkan untuk pesanan yang sudah lunas." },
       { status: 409 },
@@ -92,5 +139,28 @@ export async function POST(
     terbit.push(String(data));
   }
 
-  return NextResponse.json({ terbit, belumAdaPenangan });
+  return NextResponse.json({ terbit, belumAdaPenangan, pesan: rangkum(terbit, belumAdaPenangan) });
+}
+
+/**
+ * Satu kalimat Indonesia dari hasil mentah, untuk dibaca operator.
+ *
+ * Nilai yang TIDAK dikenal diteruskan apa adanya alih-alih disembunyikan di
+ * balik "berhasil": nilai balik keempat yang lahir kelak akan terlihat sebagai
+ * kata asing di layar — canggung, dan jauh lebih murah daripada tindakan yang
+ * melaporkan keberhasilan untuk sesuatu yang belum pernah ditafsirkan siapa
+ * pun.
+ */
+function rangkum(terbit: string[], belumAdaPenangan: number[]): string {
+  const hitung = new Map<string, number>();
+  for (const h of terbit) hitung.set(h, (hitung.get(h) ?? 0) + 1);
+
+  const kamus: Record<string, string | undefined> = KALIMAT_HASIL;
+  const bagian = [...hitung].map(([hasil, n]) => `${n} item: ${kamus[hasil] ?? hasil}`);
+  if (belumAdaPenangan.length > 0) {
+    bagian.push(
+      `item urutan ${belumAdaPenangan.join(", ")} dilewati — jenisnya belum punya penangan`,
+    );
+  }
+  return `${bagian.join("; ")}.`;
 }

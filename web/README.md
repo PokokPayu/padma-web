@@ -365,6 +365,8 @@ data acuan yang dirujuk kode, jadi ia ditanam lewat migrasi
 `20260908120000_tanam_fase_acuan.sql`. Jangan mengembalikannya ke `seed.sql`.
 
 **Fase 1 — Vercel:** import repo, pasang env produksi (lihat §6 spec), deploy.
+§6 ditulis 7 September 2026, sebelum pembayaran Midtrans ada; keempat env
+pembayaran menyusul di Fase 3 di bawah, bukan di sana.
 
 **Fase 2 — sesudah domain tertempel dan sertifikatnya terbit**
 
@@ -381,6 +383,44 @@ data acuan yang dirujuk kode, jadi ia ditanam lewat migrasi
 4. Cloudflare R2: tambahkan domain ke `AllowedOrigins` bucket `padma`.
 5. Isi data lewat panel: `nomor_wa`, tarif transport, katalog layanan asli.
    **Jangan** jalankan `npm run seed:users` — itu akun dev bersandi seragam.
+
+**Fase 3 — go-live pembayaran Midtrans**
+
+Urutannya mengikat, dan langkah 6 adalah yang paling mudah terlupa justru karena
+ia tidak ada di dalam repo: sampai ia dikerjakan, webhook tidak pernah menyala
+sekali pun dan setiap pembayaran hanya terbaca ketika kliennya kebetulan membuka
+halamannya lagi (Lapis 1b).
+
+1. **Putuskan urutan migrasi P1 terhadap cabang `umpan-balik-klien-gelombang-1`**
+   — keputusan pemilik repo, dan diambil SEBELUM apa pun diterapkan. Cabang itu
+   membawa `20260922100000` dan `20260924100000`, dan cap waktu keduanya lebih
+   TUA daripada seluruh migrasi P1; menggabungkannya belakangan berarti Supabase
+   menjalankan migrasi di luar urutan versinya.
+2. **Terapkan tujuh migrasi P1** ke produksi — enam dari P1-A
+   (`20260926100000` … `20260926150000`) dan satu dari P1-B
+   (`20260927100000_sebab_tinjauan_lestari.sql`) — **sengaja, satu per satu,
+   bukan `npx supabase db push`.** `db push` menjalankan apa pun yang kebetulan
+   belum tercatat, termasuk yang belum diputuskan di langkah 1, pada basis data
+   yang sudah memuat pesanan orang sungguhan.
+3. **Pasang empat env pembayaran di Vercel:** `MIDTRANS_SERVER_KEY`,
+   `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, `MIDTRANS_PRODUKSI`, `CRON_SECRET`.
+   Bentuk dan jebakan masing-masing ada di `.env.example` — terutama bahwa
+   `MIDTRANS_PRODUKSI` sengaja TIDAK berprefix `NEXT_PUBLIC_`.
+4. **Pastikan Fluid Compute menyala** di proyek Vercel. Ini setelan proyek,
+   bukan kode: kalau mati, batas fungsi paket Hobby adalah 60 detik sementara
+   `/api/cron/pesanan` menyatakan `maxDuration = 240` — dan akibatnya **build
+   GAGAL**, bukan berjalan lebih lambat.
+5. **Deploy.**
+6. **Daftarkan Payment Notification URL di dasbor merchant Midtrans:**
+   `https://padmawellnessid.com/api/pembayaran/midtrans`. Tidak ada satu pun
+   langkah di repo ini yang bisa menggantikannya, dan tanpa ia pintu masuk uang
+   tidak pernah terbuka.
+7. **Pasang `CRON_SECRET` yang sama sebagai GitHub Secret**, supaya
+   `.github/workflows/rekonsiliasi-pesanan.yml` bisa memanggil rutenya.
+8. **Hidupkan penjadwalnya:** buka komentar blok `schedule:` di workflow itu,
+   lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di
+   `tests/pesanan-jadwal-actions.test.ts`. Uji itu memang ada untuk merah pada
+   hari ini, dan membiarkannya berarti langkah ini tidak pernah selesai.
 
 **Verifikasi rilis** adalah uji asap manual, bukan E2E: skrip E2E menulis lewat
 service role, dan mengarahkannya ke produksi berarti skrip uji memegang basis
