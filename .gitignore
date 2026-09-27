@@ -13,3 +13,8 @@ node_modules/
 
 # Ruang kerja SDD (ledger, brief, laporan review). Perancah proses, bukan sumber.
 .superpowers/
+
+# Dump skema produksi — diambil dengan tangan saat menyiapkan lingkungan dev.
+# Tidak memuat baris data, tetapi memuat peta lengkap skema produksi berikut
+# seluruh policy-nya; repo ini publik.
+web/prod-skema.sql
