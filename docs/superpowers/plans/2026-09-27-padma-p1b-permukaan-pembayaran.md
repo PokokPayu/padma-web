@@ -4,7 +4,7 @@
 
 **Goal:** Menyambungkan mesin pembayaran yang sudah ada di basis data ke dunia luar — adapter Midtrans, webhook bertanda tangan, checkout Snap, layar pemulihan staf, dan penjadwal rekonsiliasi.
 
-**Architecture:** Rute webhook memverifikasi tanda tangan lalu menyerahkan seluruh keputusan ke fungsi mesin; ia tidak pernah memutuskan sendiri. Jaring pengaman utamanya BUKAN penjadwal melainkan pemeriksaan saat klien membuka halaman — orang yang paling butuh memicu penyembuhannya sendiri dalam hitungan detik. GitHub Actions tiap 15 menit hanya menyapu pesanan milik orang yang tidak pernah kembali.
+**Architecture:** Rute webhook memverifikasi tanda tangan lalu menyerahkan seluruh keputusan ke fungsi mesin; ia tidak pernah memutuskan sendiri. Jaring pengaman utamanya BUKAN penjadwal melainkan pemeriksaan saat klien membuka halaman — orang yang paling butuh memicu penyembuhannya sendiri dalam hitungan detik. GitHub Actions hanya menyapu pesanan milik orang yang tidak pernah kembali — pada kadens 15 menit ketika jadwalnya dinyalakan, yang TIDAK terjadi saat merge: blok `schedule` lahir dikomentari dan dibuka di langkah go-live.
 
 **Tech Stack:** Next.js 16 (route handler, server component), Midtrans Snap, Zod, GitHub Actions, Vitest.
 
