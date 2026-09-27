@@ -1255,6 +1255,101 @@ export async function bacaStatusTransaksi(
 
 ---
 
+- [ ] **Step 4b: Tambah dua uji ke `tests/midtrans-konfig.test.ts` — sumber `kunci_belum_terpasang`, bukan konsumennya**
+
+Ditulis di sini, SESUDAH Step 4, bukan digabung ke Step 3b: `bacaStatusTransaksi` baru lahir di
+Step 4 di atas, dan mengimpornya dari Step 3b membuat perintah "jalankan uji, pastikan hijau" di
+sana gagal dengan `Failed to load url @/lib/midtrans/adapter` — kegagalan modul yang belum ada,
+bukan kegagalan yang sedang diuji.
+
+**Kenapa langkah ini perlu ada sama sekali:** setiap uji yang menyentuh `kunci_belum_terpasang`
+(`tests/pesanan-periksa-dibuka.test.ts` di T10, `tests/admin-pesanan.test.tsx` di T11) men-`vi.mock`
+SELURUH modul `@/lib/midtrans/adapter` — mereka menguji bahwa KONSUMEN kode `-1` bersikap benar,
+bukan bahwa adapter ini pernah benar-benar memulangkannya. Andai `bacaStatusTransaksi` sungguhan
+berhenti memulangkan `-1` sama sekali, seluruh rantai `kunci_belum_terpasang` jadi pagar yang
+menjaga kegagalan yang MASIH terjadi diam-diam: server tanpa kunci akan tetap melaporkan
+"diperiksa: 20" tiap lima belas menit sementara nol permintaan pernah keluar ke Midtrans.
+
+Dua kasus di bawah berbagi BENTUK yang sama hari ini (`{ ok: false, kode }`) tapi menuntut kalimat
+yang berlawanan bagi manusia: kunci kosong TIDAK PERNAH sembuh dengan dicoba ulang, jaringan mati
+MUNGKIN sembuh. Berkas ini tetap nol basis data, nol jaringan sungguhan: kasus kunci kosong pulang
+SEBELUM satu `fetch` pun dipanggil — diuji langsung lewat mata-mata, bukan diasumsikan dari baca
+kode — dan kasus jaringan mati memalsukan kegagalannya lewat `vi.stubGlobal` seperti yang
+diwajibkan `tests/setup-fetch-guard.ts` untuk layanan pihak ketiga, bukan dibiarkan menabrak pagar
+itu. Menabrak pagar itu KEBETULAN berbuah bentuk yang sama (tertangkap try/catch adapter sebagai
+kode 0), tapi bersandar pada kebetulan itu berarti uji ini diam-diam berhenti menguji "jaringan
+mati" begitu sandbox Midtrans suatu hari masuk `AKHIRAN_HOST_DIIZINKAN` pagar itu untuk alasan
+lain — dan pecahnya baru terlihat di situ, bukan di sini.
+
+Dua perubahan di `/Users/arvinfairuz/Documents/padma/web/tests/midtrans-konfig.test.ts`:
+
+1. Baris impor (baris 1-2) — tambahkan `vi` ke impor `"vitest"` yang sudah ada, dan satu impor baru:
+
+```ts
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { midtransProduksi, basisSnap, basisApiMidtrans, urlSkripSnap } from "@/lib/midtrans/konfig";
+import { bacaStatusTransaksi } from "@/lib/midtrans/adapter";
+```
+
+2. Tambahkan blok berikut di **akhir** berkas, sesudah `describe("MIDTRANS_PRODUKSI memilih lingkungan", ...)`:
+
+```ts
+describe("bacaStatusTransaksi membedakan kunci kosong dari jaringan mati", () => {
+  const kunciAsli = process.env.MIDTRANS_SERVER_KEY;
+
+  afterEach(() => {
+    if (kunciAsli === undefined) delete process.env.MIDTRANS_SERVER_KEY;
+    else process.env.MIDTRANS_SERVER_KEY = kunciAsli;
+    vi.unstubAllGlobals();
+  });
+
+  it("MIDTRANS_SERVER_KEY kosong -> kode -1, NOL fetch dipanggil", async () => {
+    delete process.env.MIDTRANS_SERVER_KEY;
+    const fetchMataMata = vi.fn();
+    vi.stubGlobal("fetch", fetchMataMata);
+
+    const hasil = await bacaStatusTransaksi("PSN-260927-KUNCIKOSONG");
+
+    expect(hasil).toEqual({
+      ok: false,
+      kode: -1,
+      pesan: "Kunci Midtrans belum dipasang.",
+    });
+    // Baris inilah yang membuat pagar ini berguna: geser pengecekan kunci ke
+    // BAWAH pemanggilan fetch, dan baris ini merah walau bentuk pulangannya
+    // sendiri masih terlihat benar.
+    expect(fetchMataMata).not.toHaveBeenCalled();
+  });
+
+  it("kunci TERPASANG tapi Midtrans tidak terjawab -> kode 0, bukan -1", async () => {
+    process.env.MIDTRANS_SERVER_KEY = "SB-Mid-server-uji-tidak-pernah-dipakai-sungguhan";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("jaringan mati (disengaja oleh uji)")),
+    );
+
+    const hasil = await bacaStatusTransaksi("PSN-260927-JARINGANMATI");
+
+    expect(hasil).toEqual({
+      ok: false,
+      kode: 0,
+      pesan: "Layanan pembayaran tidak bisa dihubungi.",
+    });
+  });
+});
+```
+
+```bash
+cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/midtrans-konfig.test.ts
+```
+
+Sebelas kasus hijau — dua yang baru menguji sumber `kunci_belum_terpasang` (`bacaStatusTransaksi`),
+bukan konsumennya. Bila uji kode `-1` merah karena `fetchMataMata` justru TERPANGGIL, pengecekan
+kunci kosong di `adapter.ts` sudah bergeser ke bawah pemanggilan `fetch` — kembalikan ke atas kode,
+jangan menghapus asersi `not.toHaveBeenCalled()`.
+
+---
+
 - [ ] **Step 5: Tulis `tests/pesanan-webhook.test.ts`** (uji DULU, implementasi rute sesudahnya)
 
 Berkas BARU `/Users/arvinfairuz/Documents/padma/web/tests/pesanan-webhook.test.ts`:
@@ -5636,6 +5731,21 @@ describe("POST /api/pesanan/[id]/periksa-ulang", () => {
 
     const r = await periksaUlang(permintaan("periksa-ulang"), param(id));
     expect(r.status).toBe(502);
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
+
+  it("kunci Midtrans belum terpasang memulangkan 503, BUKAN 502 yang menyuruh coba lagi", async () => {
+    // Beda kode, beda kalimat, beda tindakan: 502 (uji di atas) menyuruh staf
+    // coba lagi karena Midtrans MUNGKIN sembuh sendiri; kunci yang belum
+    // dipasang tidak pernah sembuh dengan menekan tombol yang sama — hanya
+    // orang yang bisa memasang env yang menolong. Menyatukan keduanya berarti
+    // staf menekan tombol "Periksa ulang" selamanya untuk kegagalan yang
+    // menunggu manusia lain.
+    const id = idPesanan.get(K_TERBUKA_BARU)!;
+    midtrans.jawaban = { ok: false as const, kode: -1, pesan: "Kunci Midtrans belum dipasang." };
+
+    const r = await periksaUlang(permintaan("periksa-ulang"), param(id));
+    expect(r.status).toBe(503);
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
   });
 

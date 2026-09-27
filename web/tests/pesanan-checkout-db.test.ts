@@ -95,7 +95,8 @@ async function semaiProduk(
 }
 
 /**
- * Pembersihan BERURUTAN, dan urutannya bukan selera (peta §13.2):
+ * Pembersihan BERURUTAN, dan urutannya bukan selera — didikte foreign key yang
+ * dijelaskan di bawah, bukan dokumen lain:
  *
  *   digital_entitlements → jejak_pesanan & notifikasi_pesanan → orders
  *   → digital_products
@@ -132,7 +133,8 @@ async function bersihkan(): Promise<void> {
 afterEach(bersihkan);
 
 beforeAll(async () => {
-  // Sapu sisa run SEBELUMNYA, bukan hanya bersih-bersih sesudah (peta §13.2).
+  // Sapu sisa run SEBELUMNYA, bukan hanya bersih-bersih sesudah — urutan
+  // hapusnya mengikuti `bersihkan()` di atas, bukan mekanisme terpisah.
   // `pesanan_terbuka_satu_per_klien` adalah indeks unik GLOBAL: satu pesanan
   // `menunggu_bayar` yang tertinggal karena `testTimeout` memerahkan
   // penyemaian SETIAP berkas uji P1 pada run berikutnya, dengan 23505 yang
