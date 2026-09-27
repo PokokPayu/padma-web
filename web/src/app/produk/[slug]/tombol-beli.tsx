@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } from "@/lib/midtrans/snap-peramban";
 import { PESANAN_BERUANG, PESANAN_TERBUKA } from "@/lib/pesanan/status";
+import { picuPeriksaSekali } from "@/lib/pesanan/picu-periksa";
 import { BlokBuka, punyaProdukDiPeramban } from "./tombol-ambil";
+import { periksaPesananSaya } from "./periksa";
 
 /**
  * Keadaan tombol produk BERBAYAR, dari sudut pandang pengunjung. Urutan
@@ -421,6 +423,19 @@ export function TombolBeli({
   const [orderIdTerpakai, setOrderIdTerpakai] = useState(false);
   const [pending, mulai] = useTransition();
   const router = useRouter();
+
+  // LAPIS 1b DI HALAMAN PUBLIK (spec "Rekonsiliasi").
+  //
+  // Dipicu dari peramban, bukan dari render, karena halaman ini
+  // `export const revalidate = 300` dan dibaca anon — membaca cookie di server
+  // component akan membuat seluruh etalase dynamic demi satu tombol.
+  //
+  // Sekali per mount. Pagar lima menit yang sesungguhnya hidup di basis data
+  // (`orders.diperiksa_pada`), bukan di sini: apa pun yang dipasang di peramban
+  // bisa dilewati dengan satu tab baru.
+  useEffect(() => {
+    void picuPeriksaSekali(periksaPesananSaya, () => router.refresh());
+  }, [router]);
 
   /**
    * Keadaan dibaca DARI PERAMBAN, bukan dari server: `/produk/[slug]` sengaja

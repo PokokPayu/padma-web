@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { produkSaya } from "@/lib/passport/produk-saya";
 import { ambilKlien } from "@/lib/passport/data";
+import { periksaPesananMenggantung } from "@/lib/pesanan/periksa-menggantung";
 import { LABEL_JENIS } from "@/lib/produk/status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -13,6 +14,16 @@ export const metadata = { title: "Pembelian Saya" };
 export default async function HalamanProdukSaya() {
   const klien = await ambilKlien();
   if (!klien) return null; // layout sudah menangani; ini penjaga tipe
+
+  // LAPIS 1b (spec "Rekonsiliasi"). Urutannya MENGIKAT: pemeriksaan lebih dulu,
+  // baru pembacaan. Dibalik, akses yang baru saja terbit dalam permintaan yang
+  // sama tidak ikut terbaca — dan yang dilihat pembeli adalah halaman kosong
+  // tepat sesudah pembayarannya berhasil, yaitu kebohongan yang paling mahal.
+  //
+  // Halaman ini memang sudah dynamic (ada sesi, `ambilKlien()` membaca cookie),
+  // jadi tidak ada ongkos cache yang hilang — berbeda dengan `/produk/[slug]`
+  // yang karena itu dipicu dari peramban.
+  await periksaPesananMenggantung();
 
   const produk = await produkSaya(klien.id);
 
