@@ -35,9 +35,36 @@ declare global {
 
 const ID_SKRIP = "midtrans-snap";
 
+/**
+ * Kalimat yang SAMA dengan yang dipulangkan `terbitkanTokenSnap` ketika
+ * `MIDTRANS_SERVER_KEY` kosong. Satu keadaan — Midtrans belum dipasang — tidak
+ * boleh punya dua kalimat hanya karena yang mendeteksinya kebetulan server
+ * atau peramban.
+ */
+export const PESAN_PEMBAYARAN_BELUM_AKTIF = "Pembayaran belum aktif. Hubungi tim PADMA.";
+
 let pemuatan: Promise<void> | null = null;
 
 export async function muatSkripSnap(clientKey: string, produksi: boolean): Promise<void> {
+  /**
+   * FAIL CLOSED atas kunci kosong, dan DIPERIKSA SEBELUM pagar peramban.
+   *
+   * `page.tsx` mengoper `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY ?? ""` (dibaca DI
+   * SERVER — lihat dokblok berkas), jadi env yang belum dipasang tiba di sini
+   * sebagai string kosong. Tanpa
+   * baris ini skripnya tetap disisipkan dengan `data-client-key=""`, Snap
+   * memuat dirinya, popupnya terbuka, dan pembayarannya gagal tanpa menyebut
+   * sebabnya — satu-satunya env Midtrans di repo ini yang TIDAK fail-closed
+   * (bandingkan `serverKeyMidtrans()` kosong: adapter menolak menerbitkan
+   * token, dan webhook menjawab 503).
+   *
+   * Urutannya sengaja mendahului pemeriksaan `window`: salah konfigurasi
+   * punya jawaban yang sama di server maupun di peramban, dan mendahulukannya
+   * membuat pagar ini bisa diuji tanpa DOM.
+   */
+  if (clientKey.trim() === "") {
+    throw new Error(PESAN_PEMBAYARAN_BELUM_AKTIF);
+  }
   if (typeof window === "undefined" || typeof document === "undefined") {
     throw new Error("muatSkripSnap hanya hidup di peramban.");
   }

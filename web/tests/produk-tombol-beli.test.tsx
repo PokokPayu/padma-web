@@ -31,14 +31,50 @@ vi.mock("@/app/produk/[slug]/ambil", () => ({
   ambilProdukGratis: async () => ({ ok: true, punya: true }),
 }));
 
-const { PanelBeli, keadaanBeli } = await import("@/app/produk/[slug]/tombol-beli");
+const {
+  PanelBeli,
+  keadaanBeli,
+  mintaCheckout,
+  mintaBatal,
+  pesananYangBisaDibatalkan,
+} = await import("@/app/produk/[slug]/tombol-beli");
 const { urlSkripSnap } = await import("@/lib/midtrans/konfig");
-const { muatSkripSnap } = await import("@/lib/midtrans/snap-peramban");
+const { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } = await import(
+  "@/lib/midtrans/snap-peramban"
+);
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
-const kosong = { slug: "panduan-menyusui", pending: false, pesan: null, onBeli: () => {} };
+const kosong = {
+  slug: "panduan-menyusui",
+  pending: false,
+  pesan: null,
+  bisaDibatalkan: false,
+  onBeli: () => {},
+  onBatal: () => {},
+};
+
+/** `fetch` palsu yang mencatat apa yang dikirim kepadanya. */
+function fetchPalsu(
+  jawaban: { status: number; isi?: unknown } | "tolak",
+): typeof fetch & { panggilan: { url: string; badan: unknown }[] } {
+  const panggilan: { url: string; badan: unknown }[] = [];
+  const palsu = (async (masukan: unknown, opsi?: RequestInit) => {
+    panggilan.push({
+      url: String(masukan),
+      badan: opsi?.body === undefined ? null : JSON.parse(String(opsi.body)),
+    });
+    if (jawaban === "tolak") throw new TypeError("Failed to fetch (disengaja oleh uji)");
+    return {
+      ok: jawaban.status >= 200 && jawaban.status < 300,
+      status: jawaban.status,
+      json: async () => jawaban.isi,
+    } as Response;
+  }) as unknown as typeof fetch & { panggilan: { url: string; badan: unknown }[] };
+  palsu.panggilan = panggilan;
+  return palsu;
+}
 
 describe("PanelBeli — tiga keadaan", () => {
   it('belum punya: menawarkan "Beli sekarang"', () => {
@@ -77,6 +113,53 @@ describe("PanelBeli — tiga keadaan", () => {
       <PanelBeli {...kosong} keadaan="belum" pesan="Pembayaran belum bisa dimulai." />,
     );
     expect(m).toContain("Pembayaran belum bisa dimulai.");
+  });
+});
+
+describe("PanelBeli — jalan keluar untuk yang macet", () => {
+  it("menunggu + bisa dibatalkan: menawarkan tombol batal", () => {
+    // Tanpa tombol ini, orang yang pembayarannya gagal harus menunggu tenggat
+    // 24 jam sebelum bisa memesan apa pun lagi — `pesanan_terbuka_satu_per_klien`
+    // yang menahannya. Panelnya adalah satu-satunya layar tempat ia berdiri.
+    const m = renderToStaticMarkup(<PanelBeli {...kosong} keadaan="menunggu" bisaDibatalkan />);
+    expect(m).toContain("Batalkan pesanan ini");
+    expect(m).toContain("Sesudah itu Anda bisa memesan lagi.");
+  });
+
+  it("menunggu TANPA pesanan yang bisa dipastikan: nol tombol batal", () => {
+    // Pasangan negatifnya, dan ia menjaga hal yang mahal: membatalkan pesanan
+    // produk LAIN diam-diam.
+    const m = renderToStaticMarkup(<PanelBeli {...kosong} keadaan="menunggu" />);
+    expect(m).not.toContain("Batalkan pesanan ini");
+    // Kalimat penjelasnya tetap ada — yang hilang hanya aksinya.
+    expect(m).toContain("sedang diproses");
+  });
+
+  it("pesan galat IKUT TERBAWA ke panel menunggu", () => {
+    // `onError` menulis pesannya lalu membaca ulang keadaan, dan pembacaan itu
+    // memindahkan panel ke "menunggu". Kalau kalimatnya hanya hidup di cabang
+    // "belum", ia lenyap tepat pada kejadian yang paling butuh dijelaskan.
+    const m = renderToStaticMarkup(
+      <PanelBeli {...kosong} keadaan="menunggu" pesan="Pembayaran gagal. Silakan coba lagi." />,
+    );
+    expect(m).toContain("Pembayaran gagal. Silakan coba lagi.");
+  });
+
+  it("sedang membatalkan: tombol batal nonaktif", () => {
+    const m = renderToStaticMarkup(
+      <PanelBeli {...kosong} keadaan="menunggu" bisaDibatalkan pending />,
+    );
+    expect(m).toContain("disabled");
+    expect(m).toContain("Membatalkan...");
+  });
+
+  it("panel 'punya' dan 'belum' tidak pernah menawarkan pembatalan", () => {
+    for (const keadaan of ["punya", "belum"] as const) {
+      const m = renderToStaticMarkup(
+        <PanelBeli {...kosong} keadaan={keadaan} bisaDibatalkan />,
+      );
+      expect(m).not.toContain("Batalkan pesanan ini");
+    }
   });
 });
 
@@ -163,5 +246,209 @@ describe("muatSkripSnap", () => {
     // Pagar terhadap impor yang salah: dipanggil dari server component ia harus
     // gagal keras, bukan memulangkan promise yang tidak pernah selesai.
     await expect(muatSkripSnap("kunci", false)).rejects.toThrow();
+  });
+
+  it.each([[""], ["   "]])(
+    "kunci klien %p ditolak — fail closed, kalimat yang sama dengan adapter server",
+    async (kunci) => {
+      // `page.tsx` mengoper `?? ""`, jadi env yang belum dipasang tiba di sini
+      // sebagai string kosong. Tanpa pagar ini skripnya dimuat dengan
+      // `data-client-key=""` dan pembayarannya gagal tanpa menyebut sebabnya —
+      // satu-satunya env Midtrans di repo ini yang tidak fail-closed.
+      await expect(muatSkripSnap(kunci, false)).rejects.toThrow(
+        PESAN_PEMBAYARAN_BELUM_AKTIF,
+      );
+    },
+  );
+
+  it("kalimatnya PERSIS sama dengan yang dipakai terbitkanTokenSnap", () => {
+    // Satu keadaan, satu kalimat. Kalau yang satu diubah tanpa yang lain,
+    // pembeli mendapat dua penjelasan berbeda untuk sebab yang sama.
+    expect(PESAN_PEMBAYARAN_BELUM_AKTIF).toBe("Pembayaran belum aktif. Hubungi tim PADMA.");
+    expect(baca("src/lib/midtrans/adapter.ts")).toContain(PESAN_PEMBAYARAN_BELUM_AKTIF);
+  });
+});
+
+/**
+ * PEMULIHAN SESUDAH SNAP MENOLAK — inilah beda antara "coba lagi" dan
+ * "terkunci 24 jam".
+ *
+ * Midtrans menolak `order_id` kembar SELAMANYA. Percobaan kedua yang mengirim
+ * `ulang: false` membuat `buat_pesanan` memulangkan pesanan terbuka yang SAMA
+ * berikut `kode` dan `percobaan` yang sama; rute merakit `order_id` yang sama;
+ * Snap menolaknya lagi; 502 berulang selamanya. Pembeli terkunci sampai
+ * tenggat 24 jamnya lewat — dan layarnya berkata "Pembayaran Anda sedang
+ * diproses", kalimat yang tidak benar untuk orang yang tidak pernah membayar.
+ *
+ * Jalan keluarnya sudah dibangun mesin (`buat_pesanan(p_ulang := true)`
+ * menaikkan `percobaan` dan mengosongkan `snap_token`) dan sampai perbaikan
+ * ini NOL pemanggil di `src/` pernah mengirimnya.
+ */
+describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () => {
+  it("percobaan PERTAMA mengirim ulang: false", async () => {
+    const ambil = fetchPalsu({ status: 200, isi: { token: "tok" } });
+    await mintaCheckout("produk-1", false, ambil);
+
+    expect(ambil.panggilan).toHaveLength(1);
+    expect(ambil.panggilan[0].url).toBe("/api/pesanan/checkout");
+    expect(ambil.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: false });
+  });
+
+  it("502 menandai order_id TERBAKAR, dan percobaan berikutnya mengirim ulang: true", async () => {
+    // Inilah uji yang membedakan pulih dari terkunci. Ia dijalankan dua
+    // langkah, persis seperti pembeli mengalaminya.
+    const gagal = fetchPalsu({ status: 502, isi: { pesan: "Pembayaran belum bisa dimulai." } });
+    const pertama = await mintaCheckout("produk-1", false, gagal);
+
+    expect(pertama.hasil).toEqual({
+      jenis: "pesan",
+      pesan: "Pembayaran belum bisa dimulai.",
+    });
+    expect(pertama.orderIdTerbakar).toBe(true);
+
+    // Nilai itulah yang diumpankan balik oleh komponen sebagai `ulang`.
+    const lagi = fetchPalsu({ status: 200, isi: { token: "tok-2" } });
+    const kedua = await mintaCheckout("produk-1", pertama.orderIdTerbakar, lagi);
+
+    expect(lagi.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: true });
+    expect(kedua.hasil).toEqual({ jenis: "token", token: "tok-2" });
+  });
+
+  it("token terbit juga membakar order_id — Snap sudah memegangnya", async () => {
+    const ambil = fetchPalsu({ status: 200, isi: { token: "tok" } });
+    expect((await mintaCheckout("produk-1", false, ambil)).orderIdTerbakar).toBe(true);
+  });
+
+  it("jaringan mati membakar juga: tidak ada jawaban = tidak ada yang bisa disimpulkan", async () => {
+    const ambil = fetchPalsu("tolak");
+    const hasil = await mintaCheckout("produk-1", false, ambil);
+
+    // Dan ia MEMULANGKAN pesan, bukan melempar: `fetch` yang menolak tanpa
+    // try/catch menggagalkan transisi dan klik pembeli tidak melakukan
+    // apa-apa yang terlihat.
+    expect(hasil.hasil).toEqual({
+      jenis: "pesan",
+      pesan: "Pembayaran belum bisa dimulai. Coba lagi sebentar lagi.",
+    });
+    expect(hasil.orderIdTerbakar).toBe(true);
+  });
+
+  it.each([[400], [409]])(
+    "status %i TIDAK membakar: keduanya berhenti sebelum Snap disentuh",
+    async (status) => {
+      const ambil = fetchPalsu({ status, isi: { pesan: "Selesaikan dulu pesanan terbuka Anda." } });
+      const hasil = await mintaCheckout("produk-1", false, ambil);
+
+      expect(hasil.orderIdTerbakar).toBe(false);
+      expect(hasil.hasil).toEqual({
+        jenis: "pesan",
+        pesan: "Selesaikan dulu pesanan terbuka Anda.",
+      });
+    },
+  );
+
+  it("401 memulangkan 'masuk', dan tidak membakar apa pun", async () => {
+    const ambil = fetchPalsu({ status: 401, isi: { pesan: "Silakan masuk dulu." } });
+    const hasil = await mintaCheckout("produk-1", false, ambil);
+
+    expect(hasil.hasil).toEqual({ jenis: "masuk" });
+    expect(hasil.orderIdTerbakar).toBe(false);
+  });
+
+  it("200 tanpa token diperlakukan sebagai kegagalan berkalimat", async () => {
+    const ambil = fetchPalsu({ status: 200, isi: {} });
+    expect((await mintaCheckout("produk-1", false, ambil)).hasil).toEqual({
+      jenis: "pesan",
+      pesan: "Pembayaran belum bisa dimulai. Coba lagi sebentar lagi.",
+    });
+  });
+});
+
+describe("mintaBatal — jalan keluar pembeli yang macet", () => {
+  it("dibatalkan: true -> jenis 'dibatalkan'", async () => {
+    const ambil = fetchPalsu({ status: 200, isi: { dibatalkan: true } });
+    expect(await mintaBatal("pesanan-1", ambil)).toEqual({ jenis: "dibatalkan" });
+    expect(ambil.panggilan[0].url).toBe("/api/pesanan/pesanan-1/batal");
+  });
+
+  it("dibatalkan: false DIBERI KALIMAT — tombol yang diam terlihat rusak", async () => {
+    // Rutenya benar memulangkan 200: "tidak ada pesanan yang cocok milik Anda"
+    // bukan galat. Tapi bagi pembeli yang baru menekan tombolnya, tidak
+    // terjadi apa-apa adalah kejadian yang harus dijelaskan.
+    const ambil = fetchPalsu({ status: 200, isi: { dibatalkan: false } });
+    const hasil = await mintaBatal("pesanan-1", ambil);
+
+    expect(hasil.jenis).toBe("pesan");
+    expect((hasil as { jenis: "pesan"; pesan: string }).pesan.length).toBeGreaterThan(10);
+  });
+
+  it("401 -> 'masuk'", async () => {
+    expect(await mintaBatal("pesanan-1", fetchPalsu({ status: 401, isi: {} }))).toEqual({
+      jenis: "masuk",
+    });
+  });
+
+  it("409 memakai kalimat rutenya", async () => {
+    const ambil = fetchPalsu({ status: 409, isi: { pesan: "Pesanan ini tidak bisa dibatalkan." } });
+    expect(await mintaBatal("pesanan-1", ambil)).toEqual({
+      jenis: "pesan",
+      pesan: "Pesanan ini tidak bisa dibatalkan.",
+    });
+  });
+
+  it("jaringan mati memulangkan pesan, bukan melempar", async () => {
+    const hasil = await mintaBatal("pesanan-1", fetchPalsu("tolak"));
+    expect(hasil.jenis).toBe("pesan");
+  });
+});
+
+/**
+ * SIAPA yang boleh ditawari tombol batal — dan kenapa jawabannya kadang
+ * "tidak tahu".
+ *
+ * `order_items` lahir dengan nol grant dan nol policy bagi `authenticated`,
+ * jadi peramban tidak bisa menautkan pesanan ke produknya sama sekali. Yang
+ * bisa dibaca hanyalah `orders` (status + penanda tinjauan).
+ */
+describe("pesananYangBisaDibatalkan", () => {
+  it("satu pesanan terbuka, nol baris tinjauan -> id-nya boleh dipakai", () => {
+    // Unique parsial `pesanan_terbuka_satu_per_klien` menjamin pesanan terbuka
+    // itu SATU di seluruh basis data, jadi ia pasti pesanan produk ini.
+    expect(
+      pesananYangBisaDibatalkan([
+        { id: "a", status: "menunggu_bayar", sebab_tinjauan: null },
+        { id: "b", status: "dibatalkan", sebab_tinjauan: null },
+        { id: "c", status: "kedaluwarsa", sebab_tinjauan: null },
+      ]),
+    ).toBe("a");
+  });
+
+  it("nol pesanan terbuka -> null", () => {
+    expect(
+      pesananYangBisaDibatalkan([{ id: "a", status: "kedaluwarsa", sebab_tinjauan: null }]),
+    ).toBeNull();
+  });
+
+  it.each([
+    ["ditahan", null],
+    ["lunas", null],
+    ["kedaluwarsa", "lunas_setelah_tutup"],
+  ])(
+    "ada baris tinjauan (%s/%s) -> null, karena pesanan terbukanya mungkin milik produk LAIN",
+    (status, sebab) => {
+      // Ketiga keadaan itu TERTUTUP, jadi klien yang sama boleh sekaligus
+      // punya pesanan terbuka untuk produk lain — dan membatalkannya dari
+      // halaman ini akan mematikan pesanan yang salah, diam-diam.
+      expect(
+        pesananYangBisaDibatalkan([
+          { id: "terbuka-produk-lain", status: "menunggu_bayar", sebab_tinjauan: null },
+          { id: "tinjauan", status, sebab_tinjauan: sebab },
+        ]),
+      ).toBeNull();
+    },
+  );
+
+  it("daftar kosong -> null", () => {
+    expect(pesananYangBisaDibatalkan([])).toBeNull();
   });
 });

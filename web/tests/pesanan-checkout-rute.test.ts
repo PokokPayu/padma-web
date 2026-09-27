@@ -352,6 +352,25 @@ describe("POST /api/pesanan/[id]/batal", () => {
     expect((await checkout(mintaCheckout({ productId: produkB }))).status).toBe(200);
   });
 
+  it("sesudah dibatalkan, panel produk itu kembali ke 'belum' — bukan 'menunggu' selamanya", async () => {
+    // `punya_pesanan_menunggu` adalah SATU-SATUNYA sinyal yang dibaca
+    // `TombolBeli` untuk memutuskan antara "Pembayaran Anda sedang diproses"
+    // dan tombol beli. Uji di atas membuktikan barisnya berubah status; yang
+    // ini membuktikan LAYARNYA ikut berubah — kalau RPC itu tetap memulangkan
+    // true sesudah pembatalan, pembeli melihat "sedang diproses" selamanya dan
+    // tombol batalnya sendiri jadi satu-satunya isi layar yang tersisa.
+    const id = await buat();
+    expect(
+      (await ref.sesi!.rpc("punya_pesanan_menunggu", { p_product_id: produkA })).data,
+    ).toBe(true);
+
+    expect((await batal(mintaBatal(), { params: Promise.resolve({ id }) })).status).toBe(200);
+
+    expect(
+      (await ref.sesi!.rpc("punya_pesanan_menunggu", { p_product_id: produkA })).data,
+    ).toBe(false);
+  });
+
   it("KLIEN LAIN tidak bisa membatalkan pesanan orang: 200 { dibatalkan: false }, pesanan UTUH", async () => {
     // DUA SEBAB, DUA UJI — dan versi pertama rencana ini menggabungkannya jadi
     // satu yang justru akan GAGAL apa adanya. Dengan sesi admin,
