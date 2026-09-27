@@ -281,7 +281,7 @@ describe("pengikat: setiap penulis tabel pesanan ada di TEPAT SATU daftar", () =
       yatim,
       yatim.length === 0
         ? ""
-        : `Fungsi ini menulis orders/order_items/jejak_pesanan/digital_entitlements\n` +
+        : `Fungsi ini menulis salah satu tabel pesanan yang dipindai POLA_PENULIS\n` +
           `tetapi tidak ada di daftar mana pun: ${yatim.join(", ")}.\n` +
           `Pilih SATU, dan pilihlah sadar:\n` +
           `  MESIN_TERTUTUP — tidak boleh dipanggil pemegang sesi; revoke ... from\n` +
