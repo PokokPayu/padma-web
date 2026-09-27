@@ -111,7 +111,7 @@ urutannya sama apa pun urutan merge-nya. Keduanya (`pekan_sabtu_jumat`,
 `materi_jejak_buka`) tidak bersinggungan dengan mesin pembayaran, jadi tidak ada
 kebergantungan fungsional ke arah mana pun.
 
-| # | Berkas (di `/Users/arvinfairuz/Documents/padma/web/supabase/migrations/`) | Tugas |
+| # | Berkas (di `web/supabase/migrations/`) | Tugas |
 |---|---|---|
 | 1 | `20260926100000_pesanan_enum.sql` | 1 |
 | 2 | `20260926110000_pesanan_tabel.sql` | 2 |
@@ -220,7 +220,7 @@ yang `tests/fungsi-mesin-tertutup.test.ts` tutup).
 `79e1e3e`), sama seperti keenam migrasi §0.1. Barisnya di bawah karena itu bukan pekerjaan
 melainkan inventaris: buka isinya, jangan membuatnya lagi.
 
-| Path (di `/Users/arvinfairuz/Documents/padma/web/`) | Isi | Lahir |
+| Path (di `web/`) | Isi | Lahir |
 |---|---|---|
 | `src/lib/pesanan/status.ts` | tipe & himpunan status, konstanta waktu. **Tanpa `server-only`** — diimpor komponen klien. **SUDAH ADA di `main`** | T1 |
 | `src/lib/pesanan/order-id.ts` | bentuk `kode` & `order_id` Midtrans. Murni, tanpa `server-only`. **SUDAH ADA di `main`** | T4 |
@@ -608,33 +608,33 @@ berikutnya. Nomor baris boleh tetap ditulis sebagai ancar-ancar; ia tidak pernah
 
 ### Task 8: Adapter Midtrans + rute webhook
 
-Akar repo `/Users/arvinfairuz/Documents/padma`; aplikasi di `web/`. Semua perintah di
-bawah dijalankan dari `/Users/arvinfairuz/Documents/padma/web`.
+Akar repo adalah keluaran `git rev-parse --show-toplevel` — BUKAN path yang di-hardcode, karena pekerjaan ini berjalan di worktree; aplikasi di `web/`. Semua perintah di
+bawah dijalankan dari `web`.
 
 Ini **pintu masuk uang** ke PADMA. Mendarat sesudah Task 1–7.
 
 **BACA DULU sebagai pola yang ditiru** (path lengkap):
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/skrining/route.ts` baris 29–58 —
+- `web/src/app/api/skrining/route.ts` baris 29–58 —
   `bacaBodyTerbatas()`, pagar byte NYATA. Fungsi itu **tidak diekspor**; salin sebagai
   fungsi lokal ke rute baru. **Jangan menyunting rute skrining** — ia di luar cakupan.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/cron/tenggat/route.ts` — bentuk
+- `web/src/app/api/cron/tenggat/route.ts` — bentuk
   rute mesin: `createAdminSupabase()`, `NextResponse.json`, dokblok yang menjelaskan
   KENAPA rahasia dan bukan `requireRole`.
-- `/Users/arvinfairuz/Documents/padma/web/src/lib/skrining/skema.ts` — gaya Zod repo ini.
-- `/Users/arvinfairuz/Documents/padma/web/src/lib/r2.ts` baris 1–40 — `import "server-only"`
+- `web/src/lib/skrining/skema.ts` — gaya Zod repo ini.
+- `web/src/lib/r2.ts` baris 1–40 — `import "server-only"`
   dan helper `wajib()`/pembacaan env di satu tempat.
-- `/Users/arvinfairuz/Documents/padma/web/tests/cron-tenggat.test.ts` — bentuk uji rute:
+- `web/tests/cron-tenggat.test.ts` — bentuk uji rute:
   `const { POST } = await import(...)`, `new Request("http://localhost/...", {...})`.
-- `/Users/arvinfairuz/Documents/padma/web/tests/produk-ambil-gratis.test.ts` baris 1–22 —
+- `web/tests/produk-ambil-gratis.test.ts` baris 1–22 —
   cetakan `semai()` untuk produk digital (produk + berkas + harga) dan pembersihannya.
-- `/Users/arvinfairuz/Documents/padma/web/tests/jejak-yatim.test.ts` — **wajib dibaca**.
+- `web/tests/jejak-yatim.test.ts` — **wajib dibaca**.
   Tabel jejak sengaja tanpa FK, jadi berkas uji yang membuat lalu menghapus pesanan
   **WAJIB menyapu `jejak_pesanan` dan `notifikasi_pesanan` miliknya sendiri lewat
   service role**, atau saudaranya `tests/pesanan-jejak-yatim.test.ts` (Task 3) merah.
-- `/Users/arvinfairuz/Documents/padma/web/tests/setup-fetch-guard.ts` — **JANGAN
+- `web/tests/setup-fetch-guard.ts` — **JANGAN
   disunting.** Ia daftar izin; menambahkan `.sandbox.midtrans.com` berarti memberi izin
   suite menembak Midtrans sungguhan.
-- `/Users/arvinfairuz/Documents/padma/web/README.md` baris 152–163 — tabel rute
+- `web/README.md` baris 152–163 — tabel rute
   non-halaman; baris `/api/cron/tenggat` ada di baris 158.
 
 **Files:**
@@ -701,7 +701,7 @@ export async function bacaStatusTransaksi(orderId: string): Promise<{ ok: true; 
 
 - [ ] **Step 1: Tulis `src/lib/midtrans/konfig.ts`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/konfig.ts`:
+Berkas BARU `web/src/lib/midtrans/konfig.ts`:
 
 ```ts
 /**
@@ -766,7 +766,7 @@ export function urlSkripSnap(produksi: boolean): string {
 
 - [ ] **Step 2: Tulis `src/lib/midtrans/tanda-tangan.ts`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/tanda-tangan.ts`:
+Berkas BARU `web/src/lib/midtrans/tanda-tangan.ts`:
 
 ```ts
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -848,7 +848,7 @@ export function hitungSidik(b: {
 
 - [ ] **Step 3: Tulis `src/lib/midtrans/skema.ts` dan `src/lib/midtrans/kode-jawaban.ts`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/skema.ts`:
+Berkas BARU `web/src/lib/midtrans/skema.ts`:
 
 ```ts
 import { z } from "zod";
@@ -897,7 +897,7 @@ export const SkemaNotifikasiMidtrans = z.object({
 export type NotifikasiMidtrans = z.infer<typeof SkemaNotifikasiMidtrans>;
 ```
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/kode-jawaban.ts`:
+Berkas BARU `web/src/lib/midtrans/kode-jawaban.ts`:
 
 ```ts
 /**
@@ -965,7 +965,7 @@ export function hasilRpcSah(nilai: string): nilai is HasilWebhook {
 
 - [ ] **Step 3b: Tulis `tests/midtrans-konfig.test.ts` — env yang memutuskan ke mana uang pergi**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/tests/midtrans-konfig.test.ts`. Nol basis
+Berkas BARU `web/tests/midtrans-konfig.test.ts`. Nol basis
 data, nol jaringan, dan berkas tersendiri dengan sengaja: yang dijaganya murni pembacaan env,
 dan menyatukannya dengan uji rute membuat kegagalan konfigurasi terbaca sebagai kegagalan
 webhook.
@@ -1047,7 +1047,7 @@ melonggarkan ujinya.
 
 - [ ] **Step 4: Tulis `src/lib/midtrans/adapter.ts`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/adapter.ts`:
+Berkas BARU `web/src/lib/midtrans/adapter.ts`:
 
 ```ts
 import "server-only";
@@ -1281,7 +1281,7 @@ kode 0), tapi bersandar pada kebetulan itu berarti uji ini diam-diam berhenti me
 mati" begitu sandbox Midtrans suatu hari masuk `AKHIRAN_HOST_DIIZINKAN` pagar itu untuk alasan
 lain — dan pecahnya baru terlihat di situ, bukan di sini.
 
-Dua perubahan di `/Users/arvinfairuz/Documents/padma/web/tests/midtrans-konfig.test.ts`:
+Dua perubahan di `web/tests/midtrans-konfig.test.ts`:
 
 1. Baris impor (baris 1-2) — tambahkan `vi` ke impor `"vitest"` yang sudah ada, dan satu impor baru:
 
@@ -1352,7 +1352,7 @@ jangan menghapus asersi `not.toHaveBeenCalled()`.
 
 - [ ] **Step 5: Tulis `tests/pesanan-webhook.test.ts`** (uji DULU, implementasi rute sesudahnya)
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/tests/pesanan-webhook.test.ts`:
+Berkas BARU `web/tests/pesanan-webhook.test.ts`:
 
 ```ts
 /**
@@ -1975,7 +1975,7 @@ Kegagalan yang DIHARAPKAN: berkas gagal dimuat seluruhnya —
 
 - [ ] **Step 7: Tulis rute webhook**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/app/api/pembayaran/midtrans/route.ts`:
+Berkas BARU `web/src/app/api/pembayaran/midtrans/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -2185,7 +2185,7 @@ sana**, jangan mengakali di rute.
 
 `tests/inventaris-rute.test.ts` memeriksa DUA ARAH: berkas rute tanpa baris README dan
 baris README tanpa berkas sama-sama merah. Sisipkan **satu baris** tepat sesudah baris
-`` `/api/cron/tenggat` `` di `/Users/arvinfairuz/Documents/padma/web/README.md`
+`` `/api/cron/tenggat` `` di `web/README.md`
 (baris 158 pada `main` hari ini):
 
 ```
@@ -2275,32 +2275,32 @@ PESAN
 
 ### Task 9: Checkout — rute, Snap, tombol
 
-Akar repo `/Users/arvinfairuz/Documents/padma`; aplikasi di `web/`. Semua perintah di
-bawah dijalankan dari `/Users/arvinfairuz/Documents/padma/web`.
+Akar repo adalah keluaran `git rev-parse --show-toplevel` — BUKAN path yang di-hardcode, karena pekerjaan ini berjalan di worktree; aplikasi di `web/`. Semua perintah di
+bawah dijalankan dari `web`.
 
 Mendarat sesudah Task 8 (ia memakai `terbitkanTokenSnap` dan `urlSkripSnap`).
 
 **BACA DULU sebagai pola yang ditiru** (path lengkap):
-- `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-ambil.tsx` —
+- `web/src/app/produk/[slug]/tombol-ambil.tsx` —
   **berkas kembarnya**. `PanelAmbil` (murni tampilan, diuji dengan render sungguhan)
   terpisah dari `TombolAmbil` (efek + panggilan). `punyaProdukDiPeramban()` sudah
   diekspor dan dipakai ulang di sini. Dokblok "Membaca kepemilikan DARI PERAMBAN"
   menjelaskan kenapa `/produk/[slug]` tidak boleh membaca cookie.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/page.tsx` — cabang
+- `web/src/app/produk/[slug]/page.tsx` — cabang
   `HargaProduk` yang akan disunting; `export const revalidate = 300` di baris 9.
-- `/Users/arvinfairuz/Documents/padma/web/tests/produk-tombol-ambil.test.tsx` — cetakan
+- `web/tests/produk-tombol-ambil.test.tsx` — cetakan
   uji render (`renderToStaticMarkup`, `vi.mock` untuk server action).
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/bukti/route.ts` — rute POST
+- `web/src/app/api/bukti/route.ts` — rute POST
   bersesi: sesi dulu, kepemilikan dibaca DENGAN SESI (RLS yang memutuskan), baru menulis.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/produk/[id]/unduh/route.ts` baris
+- `web/src/app/api/produk/[id]/unduh/route.ts` baris
   37–44 — bentuk `{ params }: { params: Promise<{ id: string }> }` di Next 16.
-- `/Users/arvinfairuz/Documents/padma/web/tests/produk-rute-isi.test.ts` baris 26–37 —
+- `web/tests/produk-rute-isi.test.ts` baris 26–37 —
   cetakan `vi.hoisted` + `vi.mock("@/lib/supabase/server")` untuk menyuntikkan sesi
   sungguhan ke rute.
-- `/Users/arvinfairuz/Documents/padma/web/tests/pagar-batas-server-klien.test.ts` —
+- `web/tests/pagar-batas-server-klien.test.ts` —
   **`page.tsx` adalah berkas SERVER**: dilarang mengirim arrow function sebagai prop JSX
   dari sana. Prop yang ditambahkan di tugas ini hanya `string` dan `boolean`.
-- `/Users/arvinfairuz/Documents/padma/web/tests/jejak-yatim.test.ts` — alasan uji ini
+- `web/tests/jejak-yatim.test.ts` — alasan uji ini
   wajib menyapu `jejak_pesanan`/`notifikasi_pesanan` fixture-nya sendiri.
 
 **Files:**
@@ -2362,7 +2362,7 @@ menerbitkan apa pun — `onSuccess` hanya memicu pembacaan ulang entitlement.
 
 - [ ] **Step 1: Tulis `tests/pesanan-checkout-rute.test.ts`** (uji DULU)
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/tests/pesanan-checkout-rute.test.ts`:
+Berkas BARU `web/tests/pesanan-checkout-rute.test.ts`:
 
 ```ts
 /**
@@ -2692,7 +2692,7 @@ Kegagalan yang DIHARAPKAN: berkas gagal dimuat —
 
 - [ ] **Step 3: Tulis rute checkout**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/checkout/route.ts`:
+Berkas BARU `web/src/app/api/pesanan/checkout/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -2812,7 +2812,7 @@ export async function POST(request: Request) {
 }
 ```
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/batal/route.ts`:
+Berkas BARU `web/src/app/api/pesanan/[id]/batal/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -2877,7 +2877,7 @@ cd "$(git rev-parse --show-toplevel)/web" && npx vitest run tests/pesanan-checko
 
 - [ ] **Step 5: Tulis `tests/produk-tombol-beli.test.tsx`** (uji DULU untuk komponen)
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/tests/produk-tombol-beli.test.tsx`:
+Berkas BARU `web/tests/produk-tombol-beli.test.tsx`:
 
 ```tsx
 /**
@@ -3063,7 +3063,7 @@ Kegagalan yang DIHARAPKAN: `Cannot find module '@/app/produk/[slug]/tombol-beli'
 
 - [ ] **Step 7: Tulis `src/lib/midtrans/snap-peramban.ts`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/lib/midtrans/snap-peramban.ts`:
+Berkas BARU `web/src/lib/midtrans/snap-peramban.ts`:
 
 ```ts
 import { urlSkripSnap } from "./konfig";
@@ -3149,7 +3149,7 @@ Harapan: hanya `src/app/produk/[slug]/tombol-ambil.tsx` (definisi) dan
 `src/app/produk/[slug]/page.tsx` (impor + satu pemakaian). Bila ada pemakai lain,
 **berhenti** dan pakai `TombolBeli` di sana juga, atau biarkan `TautanBuka` hidup.
 
-Lalu di `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-ambil.tsx`:
+Lalu di `web/src/app/produk/[slug]/tombol-ambil.tsx`:
 
 1. Cari deklarasi `function BlokBuka({ slug }: { slug: string }) {` (baris 22 pada `main`
    hari ini — cari namanya, jangan percaya nomornya) dan ganti menjadi:
@@ -3181,7 +3181,7 @@ export function BlokBuka({ slug }: { slug: string }) {
 
 - [ ] **Step 9: Tulis `src/app/produk/[slug]/tombol-beli.tsx`**
 
-Berkas BARU `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-beli.tsx`:
+Berkas BARU `web/src/app/produk/[slug]/tombol-beli.tsx`:
 
 ```tsx
 "use client";
@@ -3415,7 +3415,7 @@ export function TombolBeli({
 
 - [ ] **Step 10: Sunting `src/app/produk/[slug]/page.tsx`**
 
-Tiga perubahan di `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/page.tsx`:
+Tiga perubahan di `web/src/app/produk/[slug]/page.tsx`:
 
 1. Baris impor (baris 5) — ganti impor `TautanBuka` dan tambahkan dua impor:
 
@@ -3519,7 +3519,7 @@ menerima dua prop.
 - [ ] **Step 12: Daftarkan kedua rute di README**
 
 Sisipkan **dua baris** tepat sesudah baris `` `/api/cron/tenggat` `` di
-`/Users/arvinfairuz/Documents/padma/web/README.md`. Segmen dinamis ditulis **harfiah
+`web/README.md`. Segmen dinamis ditulis **harfiah
 `[id]`** — `tests/inventaris-rute.test.ts` memungut rute dari sistem berkas, jadi `[id]`
 yang ditulis `:id` akan sekaligus menjadi "hantu" dan "tak terdaftar":
 
@@ -3601,21 +3601,21 @@ membayar lalu kembali mencari produknya — adalah orang yang sedang membuka hal
 
 **BACA DULU** (pola yang ditiru, path lengkap):
 
-- `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-ambil.tsx` — kenapa
+- `web/src/app/produk/[slug]/tombol-ambil.tsx` — kenapa
   kepemilikan di `/produk/[slug]` ditanyakan DARI PERAMBAN, bukan dari server (dokblok
   `punyaProdukDiPeramban`, baris 89-102). Alasan yang sama mengikat tugas ini.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/ambil.ts` — bentuk server
+- `web/src/app/produk/[slug]/ambil.ts` — bentuk server
   action `"use server"` di repo ini.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/passport/produk/page.tsx` — halaman yang
+- `web/src/app/passport/produk/page.tsx` — halaman yang
   disunting di Step 7.
-- `/Users/arvinfairuz/Documents/padma/web/src/lib/admin/tagihan-pengajuan.ts` baris 103-123 —
+- `web/src/lib/admin/tagihan-pengajuan.ts` baris 103-123 —
   doktrin rumah soal galat: **dibaca, tidak dibuang**. Tugas ini melanggarnya SATU arah dengan
   sadar (lihat dokblok `periksaPesananMenggantung`), jadi bacalah apa yang dilanggar.
-- `/Users/arvinfairuz/Documents/padma/web/tests/produk-reader-passport.test.tsx` baris 1-45 —
+- `web/tests/produk-reader-passport.test.tsx` baris 1-45 —
   pola merender halaman server sungguhan dengan sesi klien nyata.
-- `/Users/arvinfairuz/Documents/padma/web/tests/produk-ambil-gratis.test.ts` baris 1-25 — pola
+- `web/tests/produk-ambil-gratis.test.ts` baris 1-25 — pola
   menyemai `digital_products` + harga + berkas lewat service role.
-- `/Users/arvinfairuz/Documents/padma/web/tests/setup-fetch-guard.ts` — **jangan disunting.**
+- `web/tests/setup-fetch-guard.ts` — **jangan disunting.**
   Ia daftar izin host; menambah `.midtrans.com` berarti memberi izin uji menembak Midtrans
   sungguhan. Uji di bawah memalsukan adapternya, bukan jaringannya.
 
@@ -3702,7 +3702,7 @@ membayar lalu kembali mencari produknya — adalah orang yang sedang membuka hal
 
 - [ ] **Step 1: Tulis uji yang gagal**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/tests/pesanan-periksa-dibuka.test.ts`:
+Buat `web/tests/pesanan-periksa-dibuka.test.ts`:
 
 ```ts
 /**
@@ -4334,7 +4334,7 @@ seperti di atas selama mengerjakan; `npm test` penuh hanya dijalankan sesudah be
 
 - [ ] **Step 3: Tulis mesin pemeriksanya**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/lib/pesanan/periksa-menggantung.ts`:
+Buat `web/src/lib/pesanan/periksa-menggantung.ts`:
 
 ```ts
 import "server-only";
@@ -4771,7 +4771,7 @@ export async function periksaPesananMenggantung(): Promise<{ diperiksa: number }
 
 - [ ] **Step 4: Tulis pemicu sisi peramban**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/lib/pesanan/picu-periksa.ts`:
+Buat `web/src/lib/pesanan/picu-periksa.ts`:
 
 ```ts
 /**
@@ -4819,7 +4819,7 @@ export async function picuPeriksaSekali(
 
 - [ ] **Step 5: Tulis server action untuk halaman publik**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/periksa.ts`:
+Buat `web/src/app/produk/[slug]/periksa.ts`:
 
 ```ts
 "use server";
@@ -4861,7 +4861,7 @@ export async function periksaPesananSaya(): Promise<{ diperiksa: number }> {
 
 - [ ] **Step 6: Kabeli `/passport/produk`**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/src/app/passport/produk/page.tsx`.
+Sunting `web/src/app/passport/produk/page.tsx`.
 
 Tambahkan impor sesudah baris 3 (`import { ambilKlien } ...`):
 
@@ -4891,7 +4891,7 @@ dan `const produk = await produkSaya(...)`, sehingga badan fungsinya berbunyi:
 
 - [ ] **Step 7: Kabeli `/produk/[slug]` lewat `TombolBeli`**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/src/app/produk/[slug]/tombol-beli.tsx`
+Sunting `web/src/app/produk/[slug]/tombol-beli.tsx`
 (berkas milik Task 9). Tiga perubahan, tidak lebih:
 
 1. Pastikan `useEffect` ikut diimpor dari `react` (Task 9 sudah mengimpor `useState`/
@@ -4990,21 +4990,21 @@ menyembuhkan.
 
 **BACA DULU** (pola yang ditiru, path lengkap):
 
-- `/Users/arvinfairuz/Documents/padma/web/src/app/admin/bayar/page.tsx` — bentuk halaman panel
+- `web/src/app/admin/bayar/page.tsx` — bentuk halaman panel
   admin: `requireRole` di baris pertama, `<Bantuan>`, dua blok `<section aria-label=…>`.
-- `/Users/arvinfairuz/Documents/padma/web/src/app/admin/bayar/tabel-bayar.tsx` — bentuk tabel
+- `web/src/app/admin/bayar/tabel-bayar.tsx` — bentuk tabel
   panel, dan alasan tombol dirender BERSYARAT menurut status barisnya (dokblok baris 8-20).
-- `/Users/arvinfairuz/Documents/padma/web/src/app/passport/bayar/[id]/unggah-bukti.tsx`
+- `web/src/app/passport/bayar/[id]/unggah-bukti.tsx`
   baris 40-67 — satu-satunya pola `fetch` ke rute sendiri dari komponen klien di repo ini.
-- `/Users/arvinfairuz/Documents/padma/web/src/lib/admin/tagihan-pengajuan.ts` — pembaca layar
+- `web/src/lib/admin/tagihan-pengajuan.ts` — pembaca layar
   staf: sesi pemanggil, galat dilempar bukan disamarkan jadi daftar kosong (baris 103-123).
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/bukti/[permintaan]/route.ts` — rute staf
+- `web/src/app/api/bukti/[permintaan]/route.ts` — rute staf
   `requireRole(["admin","owner"])` di baris pertama.
-- `/Users/arvinfairuz/Documents/padma/web/tests/admin-bayar.test.ts` baris 82-110 dan 224-243 —
+- `web/tests/admin-bayar.test.ts` baris 82-110 dan 224-243 —
   pola mem-`vi.mock` `@/lib/supabase/server` dengan sesi nyata + merender halaman server.
-- `/Users/arvinfairuz/Documents/padma/web/tests/helpers/nominal.ts` — `nominalDalam()`, yang di
+- `web/tests/helpers/nominal.ts` — `nominalDalam()`, yang di
   sini dipakai dengan assertion KEBALIKAN.
-- `/Users/arvinfairuz/Documents/padma/web/tests/admin-shell.test.ts` baris 401-450 dan 604-651 —
+- `web/tests/admin-shell.test.ts` baris 401-450 dan 604-651 —
   empat suntingan Step 10 ada di sana, dan sapuan "nol service role di `src/app/admin/**`"
   (baris 643-651) adalah alasan keempat rute hidup di `src/app/api/**`.
 
@@ -5124,7 +5124,7 @@ menyembuhkan.
 
 - [ ] **Step 1: Tulis uji yang gagal**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/tests/admin-pesanan.test.tsx` — perhatikan
+Buat `web/tests/admin-pesanan.test.tsx` — perhatikan
 ekstensinya: berkas ini memakai sintaks JSX, jadi `.ts` akan gagal di-parse.
 
 ```ts
@@ -5813,7 +5813,7 @@ satu-satunya yang benar-benar MEMINDAHKAN pesanan, dan alasan keadaan barunya me
 alasan keadaan lamanya.
 
 **Uji DULU.** Tambahkan blok berikut di **akhir**
-`/Users/arvinfairuz/Documents/padma/web/tests/admin-pesanan.test.tsx` — ia memakai perkakas
+`web/tests/admin-pesanan.test.tsx` — ia memakai perkakas
 yang sudah ada di berkas itu (`semai`, `admin`, `AWALAN_KODE`, `KLIEN_RINA`):
 
 ```ts
@@ -5893,7 +5893,7 @@ Kasus pertama MERAH dengan `expected 'refund' to be 'lunas_setelah_tutup'` — m
 bermakna, bukan "modul belum ada". Kasus kedua sudah hijau, dan memang harus: ia kontrol
 positif, bukan perbaikan.
 
-Lalu buat `/Users/arvinfairuz/Documents/padma/web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql`.
+Lalu buat `web/supabase/migrations/20260927100000_sebab_tinjauan_lestari.sql`.
 Badan ketiga fungsinya **disalin dari `20260926140000_pesanan_webhook_rpc.sql` yang ada di
 `main`**, bukan ditulis ulang dari ingatan — `create or replace` menimpa SELURUH badan, jadi
 satu baris yang hilang saat menyalin adalah satu perilaku yang hilang dari mesin pembayaran:
@@ -6459,7 +6459,7 @@ Supabase lokal di mesin ini dipakai bersama sesi lain.
 
 - [ ] **Step 4: Tulis pembaca layar staf**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/lib/admin/pesanan.ts`:
+Buat `web/src/lib/admin/pesanan.ts`:
 
 ```ts
 import { createServerSupabase } from "@/lib/supabase/server";
@@ -6729,7 +6729,7 @@ export async function bacaPesananStaf(): Promise<{
 
 - [ ] **Step 5: Tulis tombolnya (komponen klien)**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/tombol-pesanan.tsx`:
+Buat `web/src/app/admin/pesanan/tombol-pesanan.tsx`:
 
 ```tsx
 "use client";
@@ -6880,7 +6880,7 @@ export function TombolPesanan({
 
 - [ ] **Step 6: Tulis tabelnya**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/tabel-pesanan.tsx`:
+Buat `web/src/app/admin/pesanan/tabel-pesanan.tsx`:
 
 ```tsx
 import { formatRupiah } from "@/lib/rupiah-publik";
@@ -7032,7 +7032,7 @@ export function TabelPesanan({ baris }: { baris: BarisPesanan[] }) {
 
 - [ ] **Step 7: Tulis halamannya**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/admin/pesanan/page.tsx`:
+Buat `web/src/app/admin/pesanan/page.tsx`:
 
 ```tsx
 import { requireRole } from "@/lib/auth/require-role";
@@ -7115,7 +7115,7 @@ export default async function PesananPage() {
 
 - [ ] **Step 8: Tulis rute "periksa ulang" dan "terbitkan akses"**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/periksa-ulang/route.ts`:
+Buat `web/src/app/api/pesanan/[id]/periksa-ulang/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -7214,7 +7214,7 @@ export async function POST(
 }
 ```
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/terbitkan-akses/route.ts`:
+Buat `web/src/app/api/pesanan/[id]/terbitkan-akses/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -7305,7 +7305,7 @@ export async function POST(
 
 - [ ] **Step 9: Tulis rute "putuskan" dan "tutup tinjauan"**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/putuskan/route.ts`:
+Buat `web/src/app/api/pesanan/[id]/putuskan/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -7366,7 +7366,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 }
 ```
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/pesanan/[id]/tutup-tinjauan/route.ts`:
+Buat `web/src/app/api/pesanan/[id]/tutup-tinjauan/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -7413,7 +7413,7 @@ export async function POST(
 
 - [ ] **Step 10: Daftarkan tujuan ke sidebar admin + perbaiki pagarnya**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/src/app/admin/_shell/nav-admin.tsx`. Sisipkan
+Sunting `web/src/app/admin/_shell/nav-admin.tsx`. Sisipkan
 tujuan ke-12 di `MENU`, tepat **sesudah** butir `/admin/produk` (baris 34) dan **sebelum**
 `/admin/pengaturan`:
 
@@ -7429,7 +7429,7 @@ tujuan ke-12 di `MENU`, tepat **sesudah** butir `/admin/produk` (baris 34) dan *
   { href: "/admin/pesanan", label: "Pesanan", ikon: "bayar" },
 ```
 
-Lalu sunting `/Users/arvinfairuz/Documents/padma/web/tests/admin-shell.test.ts` — **empat
+Lalu sunting `web/tests/admin-shell.test.ts` — **empat
 suntingan, semuanya wajib**:
 
 1. Baris 408 — judul uji: `"memuat sebelas tujuan berbahasa Indonesia di sidebar"` menjadi
@@ -7465,7 +7465,7 @@ satu commit yang seluruh isinya tentang uang. Tambahkan **`"/admin/pesanan"` saj
 
 - [ ] **Step 11: Daftarkan kelima rute ke README**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/README.md`. `tests/inventaris-rute.test.ts`
+Sunting `web/README.md`. `tests/inventaris-rute.test.ts`
 memeriksa **dua arah**, jadi berkas tanpa baris dan baris tanpa berkas sama-sama merah.
 
 Sisipkan satu baris tepat sesudah baris `/admin/bayar` (README.md:129 pada `main` hari ini —
@@ -7557,22 +7557,22 @@ membuka halamannya lagi.
 
 **BACA DULU** (pola yang ditiru PERSIS, path lengkap):
 
-- `/Users/arvinfairuz/Documents/padma/web/src/app/api/cron/tenggat/route.ts` — **satu-satunya
+- `web/src/app/api/cron/tenggat/route.ts` — **satu-satunya
   rute mesin di repo ini.** POST di baris 22, gerbang rahasia di baris 23-28, dokblok
   "KENAPA RAHASIA, BUKAN requireRole" di baris 13-21. Rute baru meniru bentuknya persis.
-- `/Users/arvinfairuz/Documents/padma/web/tests/cron-tenggat.test.ts` — lima kasus gerbang
+- `web/tests/cron-tenggat.test.ts` — lima kasus gerbang
   rahasia. Uji baru meniru kelimanya.
-- `/Users/arvinfairuz/Documents/padma/.github/workflows/backup-db.yml` — **di AKAR REPO, bukan
+- `.github/workflows/backup-db.yml` — **di AKAR REPO, bukan
   di `web/`** (`web/.github` tidak ada). Baris 12-18: blok `schedule` yang lahir DIKOMENTARI,
   beserta alasannya. Baris 20-28: `concurrency` + `permissions: contents: read`.
-- `/Users/arvinfairuz/Documents/padma/web/tests/geocode-route.test.ts` baris 36-52 — pola stub
+- `web/tests/geocode-route.test.ts` baris 36-52 — pola stub
   `fetch` selektif yang tetap meloloskan 127.0.0.1.
-- `/Users/arvinfairuz/Documents/padma/web/tests/setup-fetch-guard.ts` — **jangan disunting.**
+- `web/tests/setup-fetch-guard.ts` — **jangan disunting.**
 
 **Files:**
 
 - Create: `web/src/app/api/cron/pesanan/route.ts`
-- Create: `/Users/arvinfairuz/Documents/padma/.github/workflows/rekonsiliasi-pesanan.yml`
+- Create: `.github/workflows/rekonsiliasi-pesanan.yml`
   ← **AKAR REPO**
 - Modify: `web/README.md` — satu baris di AKHIR tabel rute non-halaman, tepat sesudah
   baris `` `/api/produk/[id]/unduh` `` (**cari barisnya, jangan percaya nomornya**, §0.12)
@@ -7608,7 +7608,7 @@ membuka halamannya lagi.
 
 - [ ] **Step 1: Tulis uji yang gagal**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/tests/pesanan-jadwal-actions.test.ts`:
+Buat `web/tests/pesanan-jadwal-actions.test.ts`:
 
 ```ts
 /**
@@ -8015,7 +8015,7 @@ yang membuktikan berkas jadwalnya benar-benar dituntut, bukan diasumsikan.
 
 - [ ] **Step 3: Tulis rute cronnya**
 
-Buat `/Users/arvinfairuz/Documents/padma/web/src/app/api/cron/pesanan/route.ts`:
+Buat `web/src/app/api/cron/pesanan/route.ts`:
 
 ```ts
 import { NextResponse } from "next/server";
@@ -8104,7 +8104,7 @@ export async function POST(request: Request) {
 
 - [ ] **Step 4: Tulis berkas workflow-nya**
 
-Buat `/Users/arvinfairuz/Documents/padma/.github/workflows/rekonsiliasi-pesanan.yml`
+Buat `.github/workflows/rekonsiliasi-pesanan.yml`
 — **di AKAR REPO**, bersebelahan dengan `backup-db.yml`, bukan di dalam `web/`:
 
 ```yaml
@@ -8190,7 +8190,7 @@ jobs:
 
 - [ ] **Step 5: Daftarkan rutenya ke README**
 
-Sunting `/Users/arvinfairuz/Documents/padma/web/README.md`. Sisipkan satu baris di **AKHIR
+Sunting `web/README.md`. Sisipkan satu baris di **AKHIR
 tabel rute non-halaman**, tepat sesudah baris `` `/api/produk/[id]/unduh` `` — bukan di
 sebelah `` `/api/cron/tenggat` ``. Kedua rute mesin memang bersaudara, tapi Tugas 11 sudah
 menempatkan kelima rute `/api/pesanan/*` sebagai satu blok berurutan, dan menyelipkan rute
