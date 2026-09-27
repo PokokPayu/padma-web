@@ -391,17 +391,37 @@ ia tidak ada di dalam repo: sampai ia dikerjakan, webhook tidak pernah menyala
 sekali pun dan setiap pembayaran hanya terbaca ketika kliennya kebetulan membuka
 halamannya lagi (Lapis 1b).
 
+0. **Ambil backup produksi, dan pastikan ia bisa dipulihkan.** Per 28 September
+   2026 **belum ada satu pun backup**: kodenya ter-merge tetapi jadwalnya mati
+   karena tiga secret belum dipasang. Langkah berikutnya menyentuh basis data
+   berisi pemesanan dan rekam data pasien sungguhan, dan mengambil salinan
+   setelahnya bukan backup melainkan kenang-kenangan. Yang membuktikan backup
+   berhasil adalah **memulihkannya ke tempat lain**, bukan melihat berkasnya
+   ada.
 1. **Putuskan urutan migrasi P1 terhadap cabang `umpan-balik-klien-gelombang-1`**
    — keputusan pemilik repo, dan diambil SEBELUM apa pun diterapkan. Cabang itu
    membawa `20260922100000` dan `20260924100000`, dan cap waktu keduanya lebih
    TUA daripada seluruh migrasi P1; menggabungkannya belakangan berarti Supabase
    menjalankan migrasi di luar urutan versinya.
-2. **Terapkan tujuh migrasi P1** ke produksi — enam dari P1-A
-   (`20260926100000` … `20260926150000`) dan satu dari P1-B
-   (`20260927100000_sebab_tinjauan_lestari.sql`) — **sengaja, satu per satu,
-   bukan `npx supabase db push`.** `db push` menjalankan apa pun yang kebetulan
-   belum tercatat, termasuk yang belum diputuskan di langkah 1, pada basis data
-   yang sudah memuat pesanan orang sungguhan.
+2. **Terapkan ENAM BELAS migrasi yang tertunda** — bukan tujuh. Diukur
+   `supabase migration list --linked` pada 28 Sep 2026: produksi berhenti tepat
+   di `20260915100000_sertifikat_sesi`, yaitu migrasi ke-75 dari 91. Yang
+   tertunda adalah **satu** skrining usia kehamilan (`20260920100000`),
+   **delapan** produk digital (`20260921100000` … `20260921170000`), dan
+   **tujuh** inti pembayaran P1 (`20260926100000` … `20260927100000`).
+   Kerjakan **sengaja, satu per satu, bukan `npx supabase db push`** — `db push`
+   menjalankan apa pun yang kebetulan belum tercatat, termasuk yang belum
+   diputuskan di langkah 1, pada basis data yang sudah memuat data orang
+   sungguhan.
+
+   Dua hal yang sudah diperiksa, supaya tidak diperiksa ulang dengan cemas:
+   keenam belasnya **sudah dijalankan berurutan di lingkungan dev dan lulus**;
+   dan pemindaian atas keenam belasnya untuk DDL yang bisa tersandung baris yang
+   sudah ada (`ADD COLUMN NOT NULL` tanpa default, `ADD CHECK`, `ALTER COLUMN
+   TYPE`, `SET NOT NULL`, `DROP`) menemukan **satu-satunya** kandidat: empat
+   `ADD CHECK` pada `screenings` di `20260920100000`. Keempatnya berbentuk
+   `<kolom> is null or …` terhadap kolom yang lahir nullable tanpa default,
+   jadi setiap baris lama lolos otomatis.
 3. **Pasang empat env pembayaran di Vercel:** `MIDTRANS_SERVER_KEY`,
    `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, `MIDTRANS_PRODUKSI`, `CRON_SECRET`.
    Bentuk dan jebakan masing-masing ada di `.env.example` — terutama bahwa
@@ -410,7 +430,11 @@ halamannya lagi (Lapis 1b).
    bukan kode: kalau mati, batas fungsi paket Hobby adalah 60 detik sementara
    `/api/cron/pesanan` menyatakan `maxDuration = 240` — dan akibatnya **build
    GAGAL**, bukan berjalan lebih lambat.
-5. **Deploy.**
+5. **Deploy — dan ketahui bahwa ini BUKAN "rilis P1".** Per 28 September 2026
+   `origin/main` ada di `defda92`, **10 September**. Deploy berikutnya membawa
+   tiga pekan pekerjaan sekaligus: skrining usia kehamilan, seluruh fitur produk
+   digital, dan pembayaran Midtrans. Rencanakan uji asapnya untuk ketiganya,
+   bukan untuk pembayaran saja.
 6. **Daftarkan Payment Notification URL di dasbor merchant Midtrans:**
    `https://padmawellnessid.com/api/pembayaran/midtrans`. Tidak ada satu pun
    langkah di repo ini yang bisa menggantikannya, dan tanpa ia pintu masuk uang
@@ -421,6 +445,19 @@ halamannya lagi (Lapis 1b).
    lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di
    `tests/pesanan-jadwal-actions.test.ts`. Uji itu memang ada untuk merah pada
    hari ini, dan membiarkannya berarti langkah ini tidak pernah selesai.
+
+**Membangun lingkungan lain (dev/staging): jalankan migrasinya, jangan restore
+dump skema.** Diukur 28 Sep 2026 saat menyiapkan dev: `supabase db dump` dari
+produksi lalu `psql -f` ke project Supabase baru menghasilkan basis data yang
+**lebih terbuka daripada sumbernya** — 40 tabel memegang GRANT ke `anon`
+(termasuk `clients`, `screenings`, `sessions`, `profiles`) sementara produksi
+hanya 5. Sebabnya: project Supabase membawa `alter default privileges … grant
+all on tables to anon, authenticated` yang menyala saat `CREATE TABLE`,
+pernyataan `GRANT` di dalam dump bersifat aditif, dan dump **tidak pernah
+memuat satu pun `REVOKE`**. Buktinya bersih — tabel P1 yang lahir dari migrasi
+yang benar-benar dijalankan punya nol grant anon; hanya yang tiba lewat restore
+yang terbuka. Pakai `supabase db reset --linked`. Restore dump hanya berguna
+untuk gladi bersih migrasi, dan hasilnya dibuang sesudah gladinya lulus.
 
 **Verifikasi rilis** adalah uji asap manual, bukan E2E: skrip E2E menulis lewat
 service role, dan mengarahkannya ke produksi berarti skrip uji memegang basis
