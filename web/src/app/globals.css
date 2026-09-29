@@ -35,6 +35,41 @@
   --color-panel-rail: #0a2b1f;
   --color-panel-rail-ink: #9db09e;
   --color-panel-rail-aktif: #f0e3c3;
+
+  /* ===== TOKEN SITUS PUBLIK (/, /layanan, /tentang, /digital-passport) =====
+     Handoff landing v2 (docs/landingpage-v2/README.md §Gaya). Terpisah dari
+     token PADMA di atas karena /skrining dan /passport belum ikut berganti
+     bahasa visual; font-nya dipasang oleh `_situs/font.ts`, hanya pada
+     pembungkus halaman situs. */
+
+  --color-situs-hutan: #0f4a3c;
+  --color-situs-hutan-gelap: #0b3a2f;
+  --color-situs-hutan-garis: #2e6a59;
+  --color-situs-judul: #123f35;
+  --color-situs-teks: #33413c;
+  --color-situs-teks-soft: #3d4a45;
+  --color-situs-redup: #4a5752;
+  --color-situs-abu: #5e5a52;
+  --color-situs-emas: #9a5f2a;
+  --color-situs-emas-tua: #7a4a1f;
+  --color-situs-emas-muda: #b8834d;
+  --color-situs-emas-pucat: #d9b27c;
+  --color-situs-krem: #fbf6ee;
+  --color-situs-kartu: #fffdf9;
+  --color-situs-pasir: #f4ede1;
+  --color-situs-garis: #eadfcd;
+  --color-situs-linen: #efe6d6;
+  --color-situs-pudar: #d9cfbf;
+}
+
+/* `inline`: utilitas font-garamond dst. menulis `var(--nf-…)` langsung di
+   elemennya. Tanpa itu nilainya dihitung di :root, tempat variabel next/font
+   belum ada (kelasnya dipasang di pembungkus situs, bukan di <html>), dan
+   seluruh situs jatuh ke font cadangan tanpa galat. */
+@theme inline {
+  --font-garamond: var(--nf-cormorant), Georgia, serif;
+  --font-jost: var(--nf-jost), ui-sans-serif, system-ui, sans-serif;
+  --font-parisienne: var(--nf-parisienne), cursive;
 }
 
 body {

@@ -94,9 +94,14 @@ export async function simpanSetelan(
     };
   }
 
-  // Empat kanal, empat baris. Landing & passport dirender ulang per permintaan,
-  // tetapi cache rutenya tetap memegang nilai lama sampai diberi tahu.
+  // Satu baris per halaman yang memajang setelan. Situs publik & passport
+  // dirender ulang per permintaan, tetapi cache rutenya tetap memegang nilai
+  // lama sampai diberi tahu. Keempat halaman situs publik (/, /layanan,
+  // /tentang, /digital-passport) memajang nomor WA & baris kontak footer.
   revalidatePath("/");
+  revalidatePath("/layanan");
+  revalidatePath("/tentang");
+  revalidatePath("/digital-passport");
   revalidatePath("/skrining"); // WAJIB — halaman statis penuh, nomornya dipanggang saat build
   revalidatePath("/passport/bayar");
   revalidatePath("/admin/pengaturan");

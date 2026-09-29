@@ -26,7 +26,7 @@ import { masihBisaDinilai } from "@/lib/passport/penilaian";
 
 // Judul mengandalkan template `%s · PADMA` di root layout — jangan mengulang
 // nama aplikasi di sini.
-export const metadata = { title: "Digital Care Passport" };
+export const metadata = { title: "Digital Passport Journey" };
 
 // Rute passport dilarang mengekspor pengaturan revalidasi Next.js (ditulis
 // tanpa mengeja bentuknya, karena tests/passport-shell.test.ts memindai sumber

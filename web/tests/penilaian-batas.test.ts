@@ -71,7 +71,11 @@ describe("rating tidak pernah terlihat klien lain", () => {
     // "bintang 4,8 dari 120 ulasan" adalah papan skor, dan spec menolaknya.
     const publik = [
       ...berkas(path.join(AKAR, "src/app/_landing")),
+      ...berkas(path.join(AKAR, "src/app/_situs")),
       path.join(AKAR, "src/app/page.tsx"),
+      path.join(AKAR, "src/app/layanan/page.tsx"),
+      path.join(AKAR, "src/app/tentang/page.tsx"),
+      path.join(AKAR, "src/app/digital-passport/page.tsx"),
       path.join(AKAR, "src/app/skrining/wizard.tsx"),
     ];
     for (const f of publik) {

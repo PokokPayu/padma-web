@@ -15,14 +15,11 @@
  * ongkosnya, supaya siapa pun yang menyalakan saklar ini tahu persis apa yang
  * masih harus dikerjakan tangan:
  *
- *   1. `src/app/_landing/passport-teaser.tsx` menulis ulang tiga string
- *      TANPA memeriksa `PAKET_TAMPIL` sama sekali (halaman publik — lihat
- *      komentar di berkas itu untuk alasannya: copy pemasaran yang berubah
- *      sendiri mengikuti feature flag lebih buruk daripada copy yang jujur
- *      hari ini). Menyalakan saklar TIDAK mengembalikan copy paket di teaser;
- *      itu perlu disunting manual, dan illustrasinya dirancang ulang dari
- *      awal (baris "Paket aktif" & "Progres · x dari y sesi" sengaja diganti
- *      "Sesi berikutnya" & "Sejak").
+ *   1. Situs publik (`src/app/page.tsx`, `src/app/digital-passport/page.tsx`)
+ *      tidak memeriksa `PAKET_TAMPIL` sama sekali — copy pemasaran yang berubah
+ *      sendiri mengikuti feature flag lebih buruk daripada copy yang jujur hari
+ *      ini. Menyalakan saklar TIDAK menambahkan copy paket di sana; itu perlu
+ *      disunting manual.
  *   2. Tujuh berkas test menulis assertion yang HANYA benar selagi saklar ini
  *      mati, dan akan merah begitu `PAKET_TAMPIL` bernilai true —
  *      `tests/paket-tersembunyi.test.tsx`, `tests/admin-klien.test.ts`,

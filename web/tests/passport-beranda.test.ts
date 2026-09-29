@@ -87,7 +87,7 @@ function hitung(markup: string, pola: RegExp): number {
 describe("beranda passport — sampul", () => {
   it("menampilkan identitas klien dan fase perjalanannya", async () => {
     const m = await markupBeranda();
-    expect(m).toContain("Digital Care Passport");
+    expect(m).toContain("Digital Passport Journey");
     expect(m).toContain("Ananda Putri");
     expect(m).toContain("PAD-2607-0012");
     expect(m).toContain("Sankalpa");
@@ -217,7 +217,7 @@ describe("beranda passport — pagar", () => {
 
   it("judul halaman mengandalkan template metadata, tidak mengulang nama aplikasi", async () => {
     const halaman = baca("src/app/passport/page.tsx");
-    expect(halaman).toMatch(/title:\s*"Digital Care Passport"/);
+    expect(halaman).toMatch(/title:\s*"Digital Passport Journey"/);
     expect(halaman).not.toMatch(/title:\s*"[^"]*PADMA[^"]*"/);
   });
 

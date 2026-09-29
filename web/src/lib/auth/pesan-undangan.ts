@@ -60,7 +60,7 @@ export function teksUndanganWhatsApp({
   const baris = [
     `Halo ${nama}, selamat datang di PADMA 🌸`,
     "",
-    "Digital Care Passport Anda sudah siap. Buka tautan berikut untuk mengaktifkan akun, lalu masuk dengan email " +
+    "Digital Passport Journey Anda sudah siap. Buka tautan berikut untuk mengaktifkan akun, lalu masuk dengan email " +
       `${email}:`,
     "",
     tautan,

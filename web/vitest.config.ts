@@ -60,6 +60,8 @@ export default defineConfig({
       // Lihat komentar di tests/stubs/server-only.ts: paket asli melempar
       // Error tanpa syarat di luar bundler Next.js, dan Vitest bukan itu.
       "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
+      // Lihat komentar di tests/stubs/next-font-google.ts.
+      "next/font/google": path.resolve(__dirname, "tests/stubs/next-font-google.ts"),
     },
   },
 });
