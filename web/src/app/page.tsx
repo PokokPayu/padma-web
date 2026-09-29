@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { bacaPengaturan } from "@/lib/settings";
-import { CtaHijau, JudulSeksi, Label, SitusShell, Wadah } from "./_situs/shell";
+import { CtaHijau, JudulSeksi, Label, SitusShell, Wadah, urutan } from "./_situs/shell";
 import { TombolGaris, TombolWa } from "./_situs/tombol";
 import { tautanWaSitus } from "./_situs/wa";
 import {
@@ -91,20 +91,20 @@ function Isi({ waHref }: { waHref: string }) {
       <section>
         <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 md:flex-row md:gap-12 md:pt-12 md:pb-11">
           <div className="flex flex-1 flex-col gap-[22px]">
-            <Label>Premium Women&apos;s Wellness</Label>
-            <h1 className="font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[64px]">
+            <Label className="situs-muncul">Premium Women&apos;s Wellness</Label>
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[64px]">
               Ilmu Nyata untuk Perempuan dan Keluarga{" "}
               <span className="text-situs-emas">yang Lebih Siap.</span>
             </h1>
-            <p className="max-w-[540px] text-lg leading-normal md:text-xl">
+            <p style={urutan(2)} className="situs-muncul max-w-[540px] text-lg leading-normal md:text-xl">
               Kelas &amp; pijat kehamilan hingga setelah melahirkan. Online se-Indonesia, kunjungan ke rumah di
               Malang Raya &amp; Batu.
             </p>
-            <div className="flex flex-wrap gap-3.5">
+            <div style={urutan(3)} className="situs-muncul flex flex-wrap gap-3.5">
               <TombolWa href={waHref} />
               <TombolGaris href="/layanan">Lihat Layanan</TombolGaris>
             </div>
-            <ul className="flex flex-wrap items-center gap-x-[22px] gap-y-2 text-sm text-situs-teks-soft">
+            <ul style={urutan(4)} className="situs-muncul flex flex-wrap items-center gap-x-[22px] gap-y-2 text-sm text-situs-teks-soft">
               <li className="inline-flex items-center gap-2">
                 <IkonTunas className="size-5 text-situs-emas" />
                 Non-klinis
@@ -126,7 +126,7 @@ function Isi({ waHref }: { waHref: string }) {
             height={446}
             loading="eager"
             fetchPriority="high"
-            className="aspect-[520/446] w-full max-w-[520px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover md:w-[440px] lg:w-[520px]"
+            className="situs-lengkung aspect-[520/446] w-full max-w-[520px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover md:w-[440px] lg:w-[520px]"
           />
         </Wadah>
       </section>
@@ -169,9 +169,9 @@ function Isi({ waHref }: { waHref: string }) {
               PADMA hadir dalam perjalanan perempuan dari preconception hingga menopause.
             </p>
           </div>
-          <div className="relative grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-5">
-            <div aria-hidden="true" className="absolute top-16 right-[10%] left-[10%] hidden h-0.5 bg-[#D8B98F] md:block" />
-            {FASE.map((f) => {
+          <div className="situs-perjalanan relative grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-5">
+            <div aria-hidden="true" className="situs-garis-perjalanan absolute top-16 right-[10%] left-[10%] hidden h-0.5 bg-[#D8B98F] md:block" />
+            {FASE.map((f, i) => {
               const isi = (
                 <>
                   <Image
@@ -179,7 +179,7 @@ function Isi({ waHref }: { waHref: string }) {
                     alt=""
                     width={150}
                     height={128}
-                    className="h-[128px] w-[150px] bg-situs-krem object-contain"
+                    className="h-[128px] w-[150px] bg-situs-krem object-contain transition-transform duration-300 group-hover:-translate-y-1"
                   />
                   <h3
                     className={`font-garamond text-[25px] font-bold ${f.isi ? "text-situs-judul" : "text-situs-redup"}`}
@@ -195,13 +195,13 @@ function Isi({ waHref }: { waHref: string }) {
                   )}
                 </>
               );
-              const kelas = "relative flex flex-col items-center gap-2.5 text-center";
+              const kelas = "situs-fase relative flex flex-col items-center gap-2.5 text-center";
               return f.isi ? (
-                <Link key={f.judul} href="/layanan" className={`${kelas} rounded-xl hover:bg-situs-kartu/60`}>
+                <Link key={f.judul} href="/layanan" style={urutan(i)} className={`${kelas} group rounded-xl`}>
                   {isi}
                 </Link>
               ) : (
-                <div key={f.judul} className={`${kelas} opacity-60`}>
+                <div key={f.judul} style={urutan(i)} className={`${kelas} opacity-60`}>
                   {isi}
                 </div>
               );
@@ -227,7 +227,7 @@ function Isi({ waHref }: { waHref: string }) {
                 <div className="flex flex-col gap-2">
                   <h3 className="font-garamond text-[26px] leading-tight font-bold text-situs-judul">{f.judul}</h3>
                   <p className="text-[15px] text-situs-teks-soft">{f.isi}</p>
-                  <Link href="/layanan#format" className="text-sm font-medium text-situs-emas hover:text-situs-emas-tua">
+                  <Link href="/layanan#format" className="text-sm font-medium text-situs-emas underline-offset-4 hover:text-situs-emas-tua hover:underline">
                     Lihat {f.judul} →
                   </Link>
                 </div>
@@ -277,7 +277,7 @@ function Isi({ waHref }: { waHref: string }) {
       </section>
 
       {/* LOKASI + FAQ */}
-      <section id="faq" className="scroll-mt-4">
+      <section id="faq" className="scroll-mt-24">
         <Wadah className="grid gap-12 py-12 md:grid-cols-2 md:gap-14 md:py-14">
           <div className="flex flex-col gap-[22px]">
             <h2 className="font-garamond text-[32px] font-semibold text-situs-judul md:text-4xl">Lokasi Layanan PADMA</h2>
@@ -322,7 +322,7 @@ function KartuLokasi({ ikon, judul, isi }: { ikon: ReactNode; judul: string; isi
 
 function KartuPassportContoh() {
   return (
-    <figure className="flex w-full max-w-[440px] shrink-0 flex-col gap-2.5">
+    <figure className="situs-paspor flex w-full max-w-[440px] shrink-0 flex-col gap-2.5">
       <div className="flex flex-col gap-[18px] rounded-[18px] border border-situs-emas-pucat bg-situs-krem p-7">
         <div className="flex items-center justify-between">
           <span className="font-garamond text-2xl font-bold tracking-[3px] text-situs-judul">PADMA</span>
@@ -344,10 +344,11 @@ function KartuPassportContoh() {
           </div>
         </div>
         <div className="flex gap-2.5" aria-hidden="true">
-          {["01", "02", "03"].map((n) => (
+          {["01", "02", "03"].map((n, i) => (
             <span
               key={n}
-              className="flex size-11 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-xs font-semibold text-situs-emas"
+              style={urutan(i)}
+              className="situs-stempel flex size-11 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-xs font-semibold text-situs-emas"
             >
               {n}
             </span>

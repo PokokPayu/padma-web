@@ -1,7 +1,7 @@
 import Image from "next/image";
 import type { ComponentType, ReactNode } from "react";
 import { bacaPengaturan } from "@/lib/settings";
-import { CtaKrem, JudulSeksi, Label, SitusShell, Wadah } from "../_situs/shell";
+import { CtaKrem, JudulSeksi, Label, SitusShell, Wadah, urutan } from "../_situs/shell";
 import { TombolGaris, TombolWa } from "../_situs/tombol";
 import { tautanWaSitus } from "../_situs/wa";
 import {
@@ -42,17 +42,17 @@ export default async function DigitalPassportPage() {
       <section>
         <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 lg:flex-row lg:gap-12 lg:pt-12">
           <div className="flex flex-1 flex-col gap-4">
-            <Label>Pembeda PADMA</Label>
-            <h1 className="font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
+            <Label className="situs-muncul">Pembeda PADMA</Label>
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
               Digital Passport Journey
             </h1>
-            <p className="font-garamond text-2xl leading-[1.15] font-semibold text-situs-emas md:text-[30px]">
+            <p style={urutan(2)} className="situs-muncul font-garamond text-2xl leading-[1.15] font-semibold text-situs-emas md:text-[30px]">
               Materi dan Perjalanan Belajar dalam Satu Tempat
             </p>
-            <p className="max-w-[520px] text-lg leading-normal">
+            <p style={urutan(3)} className="situs-muncul max-w-[520px] text-lg leading-normal">
               Setiap sesi PADMA dilengkapi materi yang relevan. Semuanya tersimpan rapi dan bisa dibuka lagi di rumah.
             </p>
-            <div className="grid gap-5 py-2 sm:grid-cols-3">
+            <div style={urutan(4)} className="situs-muncul grid gap-5 py-2 sm:grid-cols-3">
               {KEUNGGULAN.map((k) => (
                 <div key={k.judul} className="flex flex-col gap-1">
                   <k.ikon className="mb-1 size-7 text-situs-emas" />
@@ -61,7 +61,7 @@ export default async function DigitalPassportPage() {
                 </div>
               ))}
             </div>
-            <div className="flex flex-wrap gap-3.5">
+            <div style={urutan(5)} className="situs-muncul flex flex-wrap gap-3.5">
               <TombolWa href={waHref} />
               <TombolGaris href="/masuk">Masuk ke Passport</TombolGaris>
             </div>
@@ -170,7 +170,7 @@ function IlustrasiAplikasi() {
     { ikon: IkonVideo, label: "Video" },
   ];
   return (
-    <figure className="flex w-full max-w-[560px] shrink-0 flex-col gap-2.5">
+    <figure className="situs-paspor flex w-full max-w-[560px] shrink-0 flex-col gap-2.5">
       <Image
         src="/situs/passport-hero.png"
         alt="Perempuan membuka materi di tablet"
@@ -178,7 +178,7 @@ function IlustrasiAplikasi() {
         height={260}
         loading="eager"
         fetchPriority="high"
-        className="aspect-[560/260] w-full rounded-t-[200px] object-cover"
+        className="situs-lengkung aspect-[560/260] w-full rounded-t-[200px] object-cover"
       />
       <div aria-hidden="true" className="-mt-2.5 flex overflow-hidden rounded-b-[14px] border border-situs-garis bg-situs-kartu">
         <div className="hidden w-40 shrink-0 flex-col gap-3.5 bg-situs-hutan p-4 sm:flex">
@@ -211,10 +211,11 @@ function IlustrasiAplikasi() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-situs-teks-soft">Sesi tercatat</span>
-            {["01", "02"].map((n) => (
+            {["01", "02"].map((n, i) => (
               <span
                 key={n}
-                className="flex size-8 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-[11px] font-semibold text-situs-emas"
+                style={urutan(i)}
+                className="situs-stempel flex size-8 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-[11px] font-semibold text-situs-emas"
               >
                 {n}
               </span>

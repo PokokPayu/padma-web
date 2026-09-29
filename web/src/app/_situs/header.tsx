@@ -41,7 +41,7 @@ export function Merek({ gelap = false }: { gelap?: boolean }) {
 
 export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: string }) {
   return (
-    <header className="relative border-b border-situs-garis bg-situs-kartu">
+    <header className="situs-header sticky top-0 z-40 border-b border-situs-garis bg-situs-kartu">
       <div className="mx-auto flex h-20 max-w-[1280px] items-center justify-between gap-6 px-5 md:px-12">
         <Link href="/" aria-label="PADMA — Beranda">
           <Merek />
@@ -74,14 +74,14 @@ export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: st
         {/* Menu HP tanpa JavaScript klien. `key` membuatnya tertutup lagi
             setiap pindah halaman — <details> menyimpan status `open` di DOM,
             dan navigasi klien Next memakai ulang node yang sama. */}
-        <details key={aktif} className="group lg:hidden">
+        <details key={aktif} className="situs-menu group lg:hidden">
           <summary
-            aria-label="Buka menu"
-            className="flex size-11 cursor-pointer list-none items-center justify-center rounded-[10px] border border-situs-garis text-situs-judul [&::-webkit-details-marker]:hidden"
+            aria-label="Menu"
+            className="flex size-11 cursor-pointer list-none items-center justify-center rounded-[10px] border border-situs-garis text-situs-judul transition-colors hover:bg-situs-pasir group-open:bg-situs-pasir [&::-webkit-details-marker]:hidden"
           >
             <IkonMenu className="size-6" />
           </summary>
-          <div className="absolute inset-x-0 top-20 z-30 border-b border-situs-garis bg-situs-kartu px-5 pt-2 pb-6 shadow-[0_12px_24px_-12px_rgba(18,63,53,0.25)]">
+          <div className="situs-menu-panel absolute inset-x-0 top-20 z-30 border-b border-situs-garis bg-situs-kartu px-5 pt-2 pb-6 shadow-[0_12px_24px_-12px_rgba(18,63,53,0.25)]">
             <nav aria-label="Navigasi utama" className="flex flex-col">
               {NAV_SITUS.map((n) => (
                 <Link

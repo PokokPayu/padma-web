@@ -1,5 +1,5 @@
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { bacaPengaturan } from "@/lib/settings";
 import { kelasFontSitus } from "./font";
 import { FooterSitus } from "./footer";
@@ -29,7 +29,7 @@ export function SitusShell({
   const waHref = tautanWaSitus(pengaturan.nomorWaLink);
   return (
     <div
-      className={`${kelasFontSitus} flex min-h-full flex-1 flex-col overflow-x-clip bg-situs-krem font-jost text-situs-teks`}
+      className={`situs ${kelasFontSitus} flex min-h-full flex-1 flex-col overflow-x-clip bg-situs-krem font-jost text-situs-teks`}
     >
       <HeaderSitus aktif={aktif} waHref={waHref} />
       <main className="relative flex-1">{children}</main>
@@ -40,6 +40,11 @@ export function SitusShell({
       />
     </div>
   );
+}
+
+/** Posisi dalam urutan pembuka hero (`.situs-muncul`, lihat globals.css). */
+export function urutan(n: number): CSSProperties {
+  return { "--urutan": n } as CSSProperties;
 }
 
 /** Lebar isi seragam: 1280px, gutter 20px di HP dan 64px di desktop. */

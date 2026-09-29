@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { bacaPengaturan } from "@/lib/settings";
-import { CtaKrem, JudulSeksi, Label, SitusShell, Wadah } from "../_situs/shell";
+import { CtaKrem, JudulSeksi, Label, SitusShell, Wadah, urutan } from "../_situs/shell";
 import { TombolGaris } from "../_situs/tombol";
 import { tautanWaSitus } from "../_situs/wa";
 import {
@@ -46,14 +46,14 @@ export default async function TentangPage() {
       <section>
         <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 md:flex-row md:gap-12 md:pt-12">
           <div className="flex flex-1 flex-col gap-4">
-            <Label>Tentang PADMA</Label>
-            <h1 className="font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[56px]">
+            <Label className="situs-muncul">Tentang PADMA</Label>
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[56px]">
               Kenapa PADMA Ada
             </h1>
-            <p className="font-garamond text-2xl font-semibold text-situs-emas md:text-[30px]">
+            <p style={urutan(2)} className="situs-muncul font-garamond text-2xl font-semibold text-situs-emas md:text-[30px]">
               Nurturing in Every Stage of Life
             </p>
-            <div className="flex flex-col gap-4 text-[17px] leading-relaxed">
+            <div style={urutan(3)} className="situs-muncul flex flex-col gap-4 text-[17px] leading-relaxed">
               <p>
                 Selama 13 tahun sebagai dokter spesialis kebidanan dan kandungan, saya melihat banyak ibu pulang
                 dari ruang praktik dengan pertanyaan yang belum sempat terjawab.
@@ -67,11 +67,11 @@ export default async function TentangPage() {
                 dari persiapan kehamilan hingga menopause.
               </p>
             </div>
-            <div className="mt-1 flex flex-col gap-0.5 border-t border-situs-garis pt-4">
+            <div style={urutan(4)} className="situs-muncul mt-1 flex flex-col gap-0.5 border-t border-situs-garis pt-4">
               <span className="font-garamond text-2xl font-bold text-situs-judul">dr. Fatmasari Perdana Menur, SpOG</span>
               <span className="text-sm font-medium text-situs-emas">Founder PADMA · Ibu dari dua anak</span>
             </div>
-            <div className="mt-2">
+            <div style={urutan(5)} className="situs-muncul mt-2">
               <TombolGaris href="#cara-kerja" ikon={<IkonPanahBawah className="size-[18px]" />}>
                 Kenali Cara Kerja PADMA
               </TombolGaris>
@@ -84,7 +84,7 @@ export default async function TentangPage() {
             height={600}
             loading="eager"
             fetchPriority="high"
-            className="aspect-[4/5] w-full max-w-[480px] shrink-0 rounded-3xl object-cover md:w-[380px] lg:w-[480px]"
+            className="situs-lengkung aspect-[4/5] w-full max-w-[480px] shrink-0 rounded-3xl object-cover md:w-[380px] lg:w-[480px]"
           />
         </Wadah>
       </section>
@@ -162,7 +162,7 @@ export default async function TentangPage() {
       </section>
 
       {/* CARA KERJA */}
-      <section id="cara-kerja" className="scroll-mt-4 border-t border-situs-garis bg-situs-kartu">
+      <section id="cara-kerja" className="scroll-mt-20 border-t border-situs-garis bg-situs-kartu">
         <Wadah className="flex flex-col gap-6 py-12">
           <Label>Cara Kerja PADMA</Label>
           <ol className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
@@ -170,7 +170,7 @@ export default async function TentangPage() {
             <LangkahKerja ikon={<IkonKalender className="size-5" />}>02 · Konfirmasi Jadwal</LangkahKerja>
             <LangkahKerja ikon={<IkonKeluarga className="size-5" />}>03 · Ikuti Sesi</LangkahKerja>
             <LangkahKerja ikon={<IkonDokumen className="size-5" />}>
-              <Link href="/digital-passport" className="underline hover:text-situs-emas">
+              <Link href="/digital-passport" className="underline underline-offset-4 transition-colors hover:text-situs-emas">
                 04 · Bawa Pulang Materi
               </Link>
             </LangkahKerja>

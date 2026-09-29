@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { bacaPengaturan } from "@/lib/settings";
-import { CtaHijau, JudulSeksi, Label, SitusShell, Wadah } from "../_situs/shell";
+import { CtaHijau, JudulSeksi, Label, SitusShell, Wadah, urutan } from "../_situs/shell";
 import { TombolGaris, TombolWa } from "../_situs/tombol";
 import { tautanWaSitus } from "../_situs/wa";
 import {
@@ -93,18 +93,18 @@ export default async function LayananPage() {
       <section>
         <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 md:flex-row md:gap-12 md:pt-11 md:pb-10">
           <div className="flex flex-1 flex-col gap-5">
-            <Label>Layanan PADMA</Label>
-            <h1 className="font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
+            <Label className="situs-muncul">Layanan PADMA</Label>
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
               Layanan yang Jelas. <span className="text-situs-emas">Format yang Fleksibel.</span>
             </h1>
-            <p className="max-w-[520px] text-lg leading-normal md:text-xl">
+            <p style={urutan(2)} className="situs-muncul max-w-[520px] text-lg leading-normal md:text-xl">
               Pilih sesi sesuai fase, cara belajar, dan kebutuhan keluarga Anda.
             </p>
-            <div className="flex flex-wrap gap-3.5">
+            <div style={urutan(3)} className="situs-muncul flex flex-wrap gap-3.5">
               <Cakupan ikon={<IkonGlobe className="size-6 text-situs-emas" />} judul="PADMA Learn & Live" isi="Seluruh Indonesia" />
               <Cakupan ikon={<IkonRumah className="size-6 text-situs-emas" />} judul="PADMA Home" isi="Malang Raya & Batu" />
             </div>
-            <div className="flex flex-wrap gap-3.5">
+            <div style={urutan(4)} className="situs-muncul flex flex-wrap gap-3.5">
               <TombolGaris href="#daftar" ikon={<IkonPanahBawah className="size-[18px]" />}>
                 Lihat Layanan
               </TombolGaris>
@@ -118,13 +118,13 @@ export default async function LayananPage() {
             height={400}
             loading="eager"
             fetchPriority="high"
-            className="aspect-[480/400] w-full max-w-[480px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover md:w-[400px] lg:w-[480px]"
+            className="situs-lengkung aspect-[480/400] w-full max-w-[480px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover md:w-[400px] lg:w-[480px]"
           />
         </Wadah>
       </section>
 
       {/* DAFTAR LAYANAN & FORMAT */}
-      <section id="daftar" className="scroll-mt-4 border-t border-situs-garis bg-situs-kartu">
+      <section id="daftar" className="scroll-mt-20 border-t border-situs-garis bg-situs-kartu">
         <Wadah className="flex flex-col items-center gap-[22px] py-12 md:py-[52px]">
           <div className="flex flex-col items-center gap-1.5 text-center">
             <Label>Daftar Layanan &amp; Format</Label>
@@ -153,7 +153,7 @@ export default async function LayananPage() {
                     </th>
                   </tr>
                   {k.baris.map((b) => (
-                    <tr key={b.nama} className="border-t border-situs-linen">
+                    <tr key={b.nama} className="border-t border-situs-linen transition-colors hover:bg-situs-krem">
                       <th scope="row" className="px-4 py-3 text-left font-normal md:px-6">
                         <span className="block font-garamond text-xl leading-tight font-bold text-situs-judul md:text-[23px]">
                           {b.nama}
@@ -185,7 +185,7 @@ export default async function LayananPage() {
       </section>
 
       {/* TENTANG FORMAT */}
-      <section id="format" className="scroll-mt-4">
+      <section id="format" className="scroll-mt-20">
         <Wadah className="flex flex-col gap-6 py-12 md:py-[52px]">
           <JudulSeksi className="md:text-[38px]">Tentang Format Layanan</JudulSeksi>
           <div className="grid gap-6 md:grid-cols-3">
@@ -227,9 +227,9 @@ export default async function LayananPage() {
                 <li>
                   <Link
                     href="/skrining"
-                    className="flex flex-col items-center gap-2 text-center"
+                    className="group flex flex-col items-center gap-2 text-center"
                   >
-                    <span className="flex size-[52px] items-center justify-center rounded-full bg-situs-emas text-white">
+                    <span className="flex size-[52px] items-center justify-center rounded-full bg-situs-emas text-white transition-transform duration-200 group-hover:scale-105">
                       <IkonPapanCentang className="size-6" />
                     </span>
                     <span className="text-[15px] font-semibold text-situs-judul underline">1. Cek Kesiapan Sesi</span>
