@@ -49,7 +49,7 @@ export function urutan(n: number): CSSProperties {
 
 /** Lebar isi seragam: 1280px, gutter 20px di HP dan 64px di desktop. */
 export function Wadah({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`mx-auto w-full max-w-[1280px] px-5 md:px-16 ${className}`}>{children}</div>;
+  return <div className={`mx-auto w-full max-w-[1280px] px-5 md:px-10 lg:px-16 ${className}`}>{children}</div>;
 }
 
 export function Label({ children, gelap = false, className = "" }: { children: ReactNode; gelap?: boolean; className?: string }) {
@@ -96,19 +96,19 @@ export function CtaHijau({
 }) {
   return (
     <section className="bg-situs-hutan">
-      <div className="mx-auto flex max-w-[1280px] items-center gap-8 overflow-hidden md:h-[260px] md:pr-16">
+      <div className="mx-auto flex max-w-[1280px] items-center gap-8 overflow-hidden lg:h-[260px] lg:pr-16">
         <Image
           src="/situs/cta-ibu-anak.png"
           alt=""
           width={330}
           height={260}
-          className="hidden h-[260px] w-[330px] shrink-0 object-cover md:block"
+          className="hidden h-[260px] w-[330px] shrink-0 object-cover lg:block"
         />
-        <div className="flex flex-1 flex-col items-center gap-[22px] px-5 py-12 text-center md:px-0 md:py-0">
+        <div className="flex flex-1 flex-col items-center gap-[22px] px-5 py-12 text-center md:px-10 lg:px-0 lg:py-0">
           <h2 className="font-garamond text-[32px] leading-[1.1] font-semibold text-situs-krem md:text-[44px]">
             {judul}
           </h2>
-          <div className="flex flex-wrap justify-center gap-3.5">
+          <div className="flex w-full flex-wrap justify-center gap-3 sm:w-auto">
             <TombolWa href={waHref} gelap />
             {denganLayanan && (
               <TombolGaris href="/layanan" gelap>
@@ -131,7 +131,7 @@ export function CtaKrem({ waHref }: { waHref: string }) {
     <section className="border-t border-situs-garis bg-situs-krem">
       <Wadah className="flex flex-col items-center gap-6 py-14 text-center">
         <JudulSeksi className="md:text-[46px]">Ilmu Nyata, Keluarga Berdaya.</JudulSeksi>
-        <div className="flex flex-wrap justify-center gap-3.5">
+        <div className="flex w-full flex-wrap justify-center gap-3 sm:w-auto">
           <TombolWa href={waHref} />
           <TombolGaris href="/layanan">Lihat Layanan</TombolGaris>
         </div>

@@ -27,33 +27,33 @@ export function FooterSitus({
 }) {
   return (
     <footer className="border-t border-[#1E5646] bg-situs-hutan-gelap text-situs-linen">
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-8 px-5 py-9 md:flex-row md:items-start md:justify-between md:px-16">
+      <div className="mx-auto flex max-w-[1280px] flex-col gap-8 px-5 py-9 md:px-10 lg:flex-row lg:items-start lg:justify-between lg:px-16">
         <Merek gelap />
-        <nav aria-label="Tautan footer" className="flex max-w-[560px] flex-wrap gap-x-[22px] gap-y-2.5 text-sm">
+        <nav aria-label="Tautan footer" className="grid max-w-[560px] grid-cols-2 gap-x-6 text-[15px] sm:flex sm:flex-wrap sm:gap-x-[22px] sm:gap-y-2.5 sm:text-sm">
           {TAUTAN_FOOTER.map((t) => (
-            <Link key={t.href} href={t.href} className="text-situs-linen hover:text-situs-emas-pucat">
+            <Link key={t.href} href={t.href} className="py-2 text-situs-linen hover:text-situs-emas-pucat sm:py-0">
               {t.label}
             </Link>
           ))}
         </nav>
         <div className="flex flex-col gap-2.5 text-[15px]">
           <span className="text-[13px] font-semibold text-situs-emas-pucat">Follow PADMA</span>
-          <a href={INSTAGRAM} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 text-situs-linen hover:text-situs-emas-pucat">
+          <a href={INSTAGRAM} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 py-1.5 text-situs-linen hover:text-situs-emas-pucat">
             <IkonInstagram className="size-6" />
             Instagram @padmawellness.id
           </a>
-          <a href={TIKTOK} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 text-situs-linen hover:text-situs-emas-pucat">
+          <a href={TIKTOK} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2.5 py-1.5 text-situs-linen hover:text-situs-emas-pucat">
             <IkonTiktok className="size-6" />
             TikTok @padmawellness.id
           </a>
         </div>
       </div>
       <div className="border-t border-[#1E5646]">
-        <p className="mx-auto flex max-w-[1280px] flex-wrap gap-x-4 gap-y-1 px-5 py-4 text-[13px] text-situs-pudar md:px-16">
+        <p className="mx-auto flex max-w-[1280px] flex-col gap-1 px-5 py-4 text-[13px] text-situs-pudar sm:flex-row sm:flex-wrap sm:gap-x-4 md:px-10 lg:px-16">
           <span>WhatsApp {waTampilan}</span>
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
           <span>{alamat}</span>
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
           <span>{jam}</span>
         </p>
       </div>

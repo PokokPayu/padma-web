@@ -129,6 +129,20 @@ body {
       animation-timeline: --perjalanan;
       animation-range: entry calc(25% + var(--urutan, 0) * 12%) cover calc(28% + var(--urutan, 0) * 4%);
     }
+    /* HP: garis waktu vertikal — garisnya tertarik ke bawah dan tiap fase
+       muncul saat ia sendiri masuk layar (barisnya bertumpuk, bukan sejajar). */
+    .situs-garis-perjalanan-v {
+      transform-origin: center top;
+      animation: situs-tarik-v linear both;
+      animation-timeline: --perjalanan;
+      animation-range: entry 10% cover 70%;
+    }
+    @media (width < 48rem) {
+      .situs-fase {
+        animation-timeline: view();
+        animation-range: entry 0% entry 90%;
+      }
+    }
 
     .situs-paspor {
       view-timeline-name: --paspor;
@@ -169,6 +183,12 @@ body {
 @keyframes situs-bayang {
   to {
     box-shadow: 0 10px 24px -18px rgb(18 63 53 / 0.45);
+  }
+}
+
+@keyframes situs-tarik-v {
+  from {
+    transform: scaleY(0);
   }
 }
 

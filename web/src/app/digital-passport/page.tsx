@@ -40,10 +40,10 @@ export default async function DigitalPassportPage() {
     <SitusShell aktif="digital-passport" pengaturan={pengaturan}>
       {/* HERO */}
       <section>
-        <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 lg:flex-row lg:gap-12 lg:pt-12">
+        <Wadah className="flex flex-col gap-10 lg:items-center pt-8 pb-12 lg:flex-row lg:gap-12 lg:pt-12">
           <div className="flex flex-1 flex-col gap-4">
             <Label className="situs-muncul">Pembeda PADMA</Label>
-            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[40px] leading-[1.04] font-bold text-situs-judul sm:text-[52px] lg:text-[62px]">
               Digital Passport Journey
             </h1>
             <p style={urutan(2)} className="situs-muncul font-garamond text-2xl leading-[1.15] font-semibold text-situs-emas md:text-[30px]">
@@ -52,12 +52,14 @@ export default async function DigitalPassportPage() {
             <p style={urutan(3)} className="situs-muncul max-w-[520px] text-lg leading-normal">
               Setiap sesi PADMA dilengkapi materi yang relevan. Semuanya tersimpan rapi dan bisa dibuka lagi di rumah.
             </p>
-            <div style={urutan(4)} className="situs-muncul grid gap-5 py-2 sm:grid-cols-3">
+            <div style={urutan(4)} className="situs-muncul grid gap-4 py-2 sm:grid-cols-3 sm:gap-5">
               {KEUNGGULAN.map((k) => (
-                <div key={k.judul} className="flex flex-col gap-1">
-                  <k.ikon className="mb-1 size-7 text-situs-emas" />
-                  <span className="font-garamond text-[22px] font-bold text-situs-judul">{k.judul}</span>
-                  <span className="text-sm text-situs-teks-soft">{k.isi}</span>
+                <div key={k.judul} className="flex items-center gap-3.5 sm:flex-col sm:items-start sm:gap-1">
+                  <k.ikon className="size-7 shrink-0 text-situs-emas sm:mb-1" />
+                  <div className="flex flex-col">
+                    <span className="font-garamond text-[22px] leading-tight font-bold text-situs-judul">{k.judul}</span>
+                    <span className="text-sm text-situs-teks-soft">{k.isi}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -79,8 +81,8 @@ export default async function DigitalPassportPage() {
           </div>
           <div className="grid gap-5 md:grid-cols-2">
             {ISI.map((i) => (
-              <div key={i.judul} className="flex items-center gap-4 rounded-[14px] border border-situs-garis bg-situs-krem px-5 py-6">
-                <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-situs-pasir text-situs-emas">
+              <div key={i.judul} className="flex items-center gap-4 rounded-[14px] border border-situs-garis bg-situs-krem p-4 sm:px-5 sm:py-6">
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-situs-pasir text-situs-emas sm:size-14">
                   <i.ikon className="size-6" />
                 </span>
                 <div className="flex flex-col gap-1">
@@ -105,19 +107,19 @@ export default async function DigitalPassportPage() {
               ruang konsultasi, atau grup pendampingan.
             </p>
           </div>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
             <Banding
               gambar="/situs/passport-tanpa.png"
               judul="Tanpa Passport"
               butir={["Materi tersebar dan mudah hilang", "Belajar berhenti setelah sesi"]}
-              ikon={<IkonSilang className="size-5 shrink-0 text-situs-abu" />}
+              ikon={<IkonSilang className="mt-px size-5 shrink-0 text-situs-abu" />}
               kelas="bg-situs-kartu"
             />
             <Banding
               gambar="/situs/passport-dengan.png"
               judul="Dengan Passport"
               butir={["Materi rapi, sesuai sesi yang diikuti", "Mudah dibuka lagi untuk latihan mandiri"]}
-              ikon={<IkonCentang className="size-5 shrink-0 text-[#B07A45]" />}
+              ikon={<IkonCentang className="mt-px size-5 shrink-0 text-[#B07A45]" />}
               kelas="bg-situs-krem ring-2 ring-situs-emas-pucat"
             />
           </div>
@@ -144,12 +146,12 @@ function Banding({
 }) {
   return (
     <div className={`flex overflow-hidden rounded-[14px] ${kelas}`}>
-      <Image src={gambar} alt="" width={200} height={150} className="hidden w-[200px] shrink-0 object-cover sm:block" />
-      <div className="flex flex-col justify-center gap-3 p-6">
-        <h3 className="font-garamond text-[26px] font-bold text-situs-judul">{judul}</h3>
+      <Image src={gambar} alt="" width={200} height={150} className="w-24 shrink-0 object-cover sm:w-40 xl:w-[200px]" />
+      <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
+        <h3 className="font-garamond text-[23px] leading-tight font-bold text-situs-judul sm:text-[26px]">{judul}</h3>
         <ul className="flex flex-col gap-2">
           {butir.map((b) => (
-            <li key={b} className="flex items-center gap-2.5 text-[15px] text-situs-teks">
+            <li key={b} className="flex items-start gap-2.5 text-[15px] leading-snug text-situs-teks">
               {ikon}
               {b}
             </li>
@@ -170,7 +172,7 @@ function IlustrasiAplikasi() {
     { ikon: IkonVideo, label: "Video" },
   ];
   return (
-    <figure className="situs-paspor flex w-full max-w-[560px] shrink-0 flex-col gap-2.5">
+    <figure className="situs-paspor flex w-full self-center max-w-[560px] shrink-0 flex-col gap-2.5">
       <Image
         src="/situs/passport-hero.png"
         alt="Perempuan membuka materi di tablet"

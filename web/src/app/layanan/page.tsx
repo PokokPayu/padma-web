@@ -91,16 +91,16 @@ export default async function LayananPage() {
     <SitusShell aktif="layanan" pengaturan={pengaturan}>
       {/* HERO */}
       <section>
-        <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 md:flex-row md:gap-12 md:pt-11 md:pb-10">
+        <Wadah className="flex flex-col gap-10 lg:items-center pt-8 pb-12 lg:flex-row lg:gap-12 lg:pt-11 lg:pb-10">
           <div className="flex flex-1 flex-col gap-5">
             <Label className="situs-muncul">Layanan PADMA</Label>
-            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[62px]">
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[40px] leading-[1.04] font-bold text-situs-judul sm:text-[52px] lg:text-[56px] xl:text-[62px]">
               Layanan yang Jelas. <span className="text-situs-emas">Format yang Fleksibel.</span>
             </h1>
             <p style={urutan(2)} className="situs-muncul max-w-[520px] text-lg leading-normal md:text-xl">
               Pilih sesi sesuai fase, cara belajar, dan kebutuhan keluarga Anda.
             </p>
-            <div style={urutan(3)} className="situs-muncul flex flex-wrap gap-3.5">
+            <div style={urutan(3)} className="situs-muncul flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-3.5">
               <Cakupan ikon={<IkonGlobe className="size-6 text-situs-emas" />} judul="PADMA Learn & Live" isi="Seluruh Indonesia" />
               <Cakupan ikon={<IkonRumah className="size-6 text-situs-emas" />} judul="PADMA Home" isi="Malang Raya & Batu" />
             </div>
@@ -118,7 +118,7 @@ export default async function LayananPage() {
             height={400}
             loading="eager"
             fetchPriority="high"
-            className="situs-lengkung aspect-[480/400] w-full max-w-[480px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover md:w-[400px] lg:w-[480px]"
+            className="situs-lengkung self-center aspect-[480/400] w-full max-w-[400px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover sm:max-w-[460px] lg:w-[400px] lg:max-w-[480px] xl:w-[480px]"
           />
         </Wadah>
       </section>
@@ -188,18 +188,18 @@ export default async function LayananPage() {
       <section id="format" className="scroll-mt-20">
         <Wadah className="flex flex-col gap-6 py-12 md:py-[52px]">
           <JudulSeksi className="md:text-[38px]">Tentang Format Layanan</JudulSeksi>
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 xl:gap-6">
             {FORMAT.map((f) => (
-              <div key={f.judul} className="flex items-center gap-4 rounded-[14px] border border-situs-garis bg-situs-kartu p-5">
+              <div key={f.judul} className="flex items-center gap-4 rounded-[14px] border border-situs-garis bg-situs-kartu p-4 lg:p-5">
                 <Image
                   src={f.gambar}
                   alt=""
                   width={100}
                   height={112}
-                  className="h-[112px] w-[100px] shrink-0 rounded-[10px] object-cover"
+                  className="h-[100px] w-[88px] shrink-0 rounded-[10px] object-cover lg:h-[112px] lg:w-[100px]"
                 />
                 <div className="flex flex-col gap-1.5">
-                  <h3 className="font-garamond text-[26px] leading-tight font-bold text-situs-judul">{f.judul}</h3>
+                  <h3 className="font-garamond text-2xl leading-tight font-bold text-situs-judul lg:text-[26px]">{f.judul}</h3>
                   <p className="text-[15px] text-situs-teks-soft">{f.isi}</p>
                 </div>
               </div>
@@ -215,7 +215,7 @@ export default async function LayananPage() {
           <div className="grid gap-10 lg:grid-cols-2">
             <div className="flex flex-col gap-[18px]">
               <h3 className="font-garamond text-[28px] font-bold text-situs-judul">PADMA Learn &amp; Live</h3>
-              <ol className="grid grid-cols-2 gap-y-5 sm:grid-cols-4">
+              <ol className="flex flex-col sm:grid sm:grid-cols-4 sm:gap-y-5">
                 {ALUR_ONLINE.map((l) => (
                   <Langkah key={l.label} ikon={<l.ikon className="size-6" />} label={l.label} />
                 ))}
@@ -223,13 +223,13 @@ export default async function LayananPage() {
             </div>
             <div className="flex flex-col gap-[18px]">
               <h3 className="font-garamond text-[28px] font-bold text-situs-judul">PADMA Home</h3>
-              <ol className="grid grid-cols-2 gap-y-5 sm:grid-cols-5">
-                <li>
+              <ol className="flex flex-col sm:grid sm:grid-cols-5 sm:gap-y-5">
+                <li className={LANGKAH_LI}>
                   <Link
                     href="/skrining"
-                    className="group flex flex-col items-center gap-2 text-center"
+                    className="group flex items-center gap-4 sm:flex-col sm:gap-2 sm:text-center"
                   >
-                    <span className="flex size-[52px] items-center justify-center rounded-full bg-situs-emas text-white transition-transform duration-200 group-hover:scale-105">
+                    <span className="relative z-10 flex size-[52px] shrink-0 items-center justify-center rounded-full bg-situs-emas text-white transition-transform duration-200 group-hover:scale-105">
                       <IkonPapanCentang className="size-6" />
                     </span>
                     <span className="text-[15px] font-semibold text-situs-judul underline">1. Cek Kesiapan Sesi</span>
@@ -251,7 +251,7 @@ export default async function LayananPage() {
 
 function Cakupan({ ikon, judul, isi }: { ikon: ReactNode; judul: string; isi: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-situs-pasir px-[18px] py-3">
+    <div className="flex items-center gap-3 rounded-xl bg-situs-pasir px-4 py-3 sm:px-[18px]">
       {ikon}
       <div className="flex flex-col">
         <span className="font-semibold text-situs-judul">{judul}</span>
@@ -279,10 +279,17 @@ function Sel({ ada }: { ada: boolean }) {
   );
 }
 
+// HP: langkah bertumpuk vertikal, disambung garis tipis dari lingkaran ke
+// lingkaran berikutnya supaya tetap terbaca sebagai urutan.
+const LANGKAH_LI =
+  "relative pb-4 last:pb-0 after:absolute after:top-[52px] after:bottom-0 after:left-[25px] after:w-0.5 after:bg-situs-garis last:after:hidden sm:pb-0 sm:after:hidden";
+
 function Langkah({ ikon, label }: { ikon: ReactNode; label: string }) {
   return (
-    <li className="flex flex-col items-center gap-2 px-1 text-center">
-      <span className="flex size-[52px] items-center justify-center rounded-full bg-situs-pasir text-situs-emas">{ikon}</span>
+    <li className={`${LANGKAH_LI} flex items-center gap-4 sm:flex-col sm:gap-2 sm:px-1 sm:text-center`}>
+      <span className="relative z-10 flex size-[52px] shrink-0 items-center justify-center rounded-full bg-situs-pasir text-situs-emas">
+        {ikon}
+      </span>
       <span className="text-[15px] text-situs-judul">{label}</span>
     </li>
   );

@@ -7,7 +7,7 @@ import { IkonPanah, IkonWa } from "./ikon";
 // `gelap` menukar tombol emas ke varian muda yang terbaca di atas hijau.
 
 const dasar =
-  "group inline-flex items-center justify-center gap-2.5 rounded-[10px] font-medium transition-[background-color,color,transform] duration-200 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-situs-emas";
+  "group inline-flex w-full items-center justify-center gap-2.5 sm:w-auto rounded-[10px] font-medium transition-[background-color,color,transform] duration-200 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-situs-emas";
 
 export function TombolWa({
   href,

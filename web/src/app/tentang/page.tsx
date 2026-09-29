@@ -44,16 +44,18 @@ export default async function TentangPage() {
     <SitusShell aktif="tentang" pengaturan={pengaturan}>
       {/* HERO FOUNDER */}
       <section>
-        <Wadah className="flex flex-col items-center gap-10 pt-10 pb-12 md:flex-row md:gap-12 md:pt-12">
-          <div className="flex flex-1 flex-col gap-4">
+        {/* HP: foto founder naik ke bawah judul (lewat `contents` + `order`),
+            supaya wajah di balik cerita terlihat sebelum tiga paragrafnya. */}
+        <Wadah className="flex flex-col gap-4 pt-8 pb-12 lg:flex-row lg:items-center lg:gap-12 lg:pt-12">
+          <div className="contents lg:flex lg:flex-1 lg:flex-col lg:gap-4">
             <Label className="situs-muncul">Tentang PADMA</Label>
-            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[42px] leading-[1.02] font-bold text-situs-judul md:text-[56px]">
+            <h1 style={urutan(1)} className="situs-muncul font-garamond text-[40px] leading-[1.04] font-bold text-situs-judul sm:text-[52px] lg:text-[56px]">
               Kenapa PADMA Ada
             </h1>
             <p style={urutan(2)} className="situs-muncul font-garamond text-2xl font-semibold text-situs-emas md:text-[30px]">
               Nurturing in Every Stage of Life
             </p>
-            <div style={urutan(3)} className="situs-muncul flex flex-col gap-4 text-[17px] leading-relaxed">
+            <div style={urutan(3)} className="situs-muncul order-2 flex flex-col gap-4 text-[17px] leading-relaxed lg:order-none">
               <p>
                 Selama 13 tahun sebagai dokter spesialis kebidanan dan kandungan, saya melihat banyak ibu pulang
                 dari ruang praktik dengan pertanyaan yang belum sempat terjawab.
@@ -67,11 +69,11 @@ export default async function TentangPage() {
                 dari persiapan kehamilan hingga menopause.
               </p>
             </div>
-            <div style={urutan(4)} className="situs-muncul mt-1 flex flex-col gap-0.5 border-t border-situs-garis pt-4">
+            <div style={urutan(4)} className="situs-muncul order-2 mt-1 flex flex-col gap-0.5 border-t lg:order-none border-situs-garis pt-4">
               <span className="font-garamond text-2xl font-bold text-situs-judul">dr. Fatmasari Perdana Menur, SpOG</span>
               <span className="text-sm font-medium text-situs-emas">Founder PADMA · Ibu dari dua anak</span>
             </div>
-            <div style={urutan(5)} className="situs-muncul mt-2">
+            <div style={urutan(5)} className="situs-muncul order-2 mt-2 lg:order-none">
               <TombolGaris href="#cara-kerja" ikon={<IkonPanahBawah className="size-[18px]" />}>
                 Kenali Cara Kerja PADMA
               </TombolGaris>
@@ -84,7 +86,7 @@ export default async function TentangPage() {
             height={600}
             loading="eager"
             fetchPriority="high"
-            className="situs-lengkung aspect-[4/5] w-full max-w-[480px] shrink-0 rounded-3xl object-cover md:w-[380px] lg:w-[480px]"
+            className="situs-lengkung order-1 my-2 aspect-[4/3] w-full shrink-0 rounded-3xl object-cover object-[50%_22%] sm:aspect-[16/10] lg:order-none lg:my-0 lg:aspect-[4/5] lg:w-[400px] lg:object-center xl:w-[480px]"
           />
         </Wadah>
       </section>
@@ -122,7 +124,7 @@ export default async function TentangPage() {
             <Label gelap>Batas Layanan Kami</Label>
             <JudulSeksi gelap>Batas Layanan yang Jelas</JudulSeksi>
           </div>
-          <div className="flex flex-col items-stretch gap-6 md:flex-row md:items-center">
+          <div className="flex flex-col items-stretch gap-5 lg:flex-row lg:items-center lg:gap-6">
             <div className="flex-1 rounded-[14px] bg-situs-kartu p-6 md:p-7">
               <h3 className="mb-4 font-garamond text-[26px] font-bold text-situs-judul">PADMA Wellness</h3>
               <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -134,7 +136,7 @@ export default async function TentangPage() {
                 ))}
               </ul>
             </div>
-            <IkonPanahPanjang className="hidden size-12 shrink-0 text-situs-emas-muda md:block" />
+            <IkonPanahPanjang className="hidden size-12 shrink-0 text-situs-emas-muda lg:block" />
             <div className="flex flex-1 gap-4 rounded-[14px] border border-dashed border-situs-emas-pucat bg-situs-pasir p-6 md:p-7">
               <IkonInfo className="size-7 shrink-0 text-situs-emas" />
               <div className="flex flex-col gap-2">
@@ -165,12 +167,12 @@ export default async function TentangPage() {
       <section id="cara-kerja" className="scroll-mt-20 border-t border-situs-garis bg-situs-kartu">
         <Wadah className="flex flex-col gap-6 py-12">
           <Label>Cara Kerja PADMA</Label>
-          <ol className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <ol className="grid gap-4 sm:grid-cols-2 sm:gap-8 lg:grid-cols-4">
             <LangkahKerja ikon={<IkonPapanKlip className="size-5" />}>01 · Pilih Layanan &amp; Format</LangkahKerja>
             <LangkahKerja ikon={<IkonKalender className="size-5" />}>02 · Konfirmasi Jadwal</LangkahKerja>
             <LangkahKerja ikon={<IkonKeluarga className="size-5" />}>03 · Ikuti Sesi</LangkahKerja>
             <LangkahKerja ikon={<IkonDokumen className="size-5" />}>
-              <Link href="/digital-passport" className="underline underline-offset-4 transition-colors hover:text-situs-emas">
+              <Link href="/digital-passport" className="-my-2 inline-block py-2 underline underline-offset-4 transition-colors hover:text-situs-emas">
                 04 · Bawa Pulang Materi
               </Link>
             </LangkahKerja>
@@ -193,9 +195,9 @@ function Lingkaran({ children }: { children: ReactNode }) {
 
 function LangkahKerja({ ikon, children }: { ikon: ReactNode; children: ReactNode }) {
   return (
-    <li className="flex flex-col gap-3">
+    <li className="flex items-center gap-4 sm:flex-col sm:items-start sm:gap-3">
       <Lingkaran>{ikon}</Lingkaran>
-      <span className="font-garamond text-2xl font-bold text-situs-judul">{children}</span>
+      <span className="font-garamond text-[22px] leading-tight font-bold text-situs-judul sm:text-2xl">{children}</span>
     </li>
   );
 }
