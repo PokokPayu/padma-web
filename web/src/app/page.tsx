@@ -5,6 +5,7 @@ import { bacaPengaturan } from "@/lib/settings";
 import { CtaHijau, JudulSeksi, Label, SitusShell, Wadah, urutan } from "./_situs/shell";
 import { TombolGaris, TombolWa } from "./_situs/tombol";
 import { tautanWaSitus } from "./_situs/wa";
+import { LayarPassportContoh } from "./_situs/contoh-passport";
 import {
   IkonCentang,
   IkonGlobe,
@@ -282,7 +283,7 @@ function Isi({ waHref }: { waHref: string }) {
               </Link>
             </div>
           </div>
-          <KartuPassportContoh />
+          <LayarPassportContoh />
         </Wadah>
       </section>
 
@@ -327,46 +328,5 @@ function KartuLokasi({ ikon, judul, isi }: { ikon: ReactNode; judul: string; isi
         <span className="text-[15px] text-situs-teks-soft">{isi}</span>
       </div>
     </div>
-  );
-}
-
-function KartuPassportContoh() {
-  return (
-    <figure className="situs-paspor flex w-full self-center max-w-[440px] shrink-0 flex-col gap-2.5">
-      <div className="flex flex-col gap-[18px] rounded-[18px] border border-situs-emas-pucat bg-situs-krem p-5 sm:p-7">
-        <div className="flex items-center justify-between">
-          <span className="font-garamond text-2xl font-bold tracking-[3px] text-situs-judul">PADMA</span>
-          <span className="text-xs font-semibold tracking-[2px] text-situs-emas">DIGITAL PASSPORT</span>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[13px] text-situs-abu">Nama</span>
-          <span className="font-garamond text-[28px] font-bold text-situs-judul">[Nama Klien]</span>
-          <span className="text-[13px] text-situs-abu">PAD-XXXX-XXXX</span>
-        </div>
-        <div className="grid grid-cols-2 gap-3.5">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] text-situs-abu">Fase</span>
-            <span className="font-semibold text-situs-judul">Kehamilan</span>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[13px] text-situs-abu">Sesi berikutnya</span>
-            <span className="font-semibold text-situs-judul">Garbha Flow</span>
-          </div>
-        </div>
-        <div className="flex gap-2.5" aria-hidden="true">
-          {["01", "02", "03"].map((n, i) => (
-            <span
-              key={n}
-              style={urutan(i)}
-              className="situs-stempel flex size-11 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-xs font-semibold text-situs-emas"
-            >
-              {n}
-            </span>
-          ))}
-          <span className="size-11 rounded-full border-[1.5px] border-dashed border-[#C9B89E]" />
-        </div>
-      </div>
-      <figcaption className="text-center text-[13px] text-situs-pudar">Ilustrasi tampilan — data contoh</figcaption>
-    </figure>
   );
 }

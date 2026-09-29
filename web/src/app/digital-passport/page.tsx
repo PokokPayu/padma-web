@@ -4,6 +4,7 @@ import { bacaPengaturan } from "@/lib/settings";
 import { CtaKrem, JudulSeksi, Label, SitusShell, Wadah, urutan } from "../_situs/shell";
 import { TombolGaris, TombolWa } from "../_situs/tombol";
 import { tautanWaSitus } from "../_situs/wa";
+import { LayarMateriContoh } from "../_situs/contoh-passport";
 import {
   IkonBuku,
   IkonCentang,
@@ -162,17 +163,10 @@ function Banding({
   );
 }
 
-// Tiruan layar Passport di mockup — berlabel "data contoh", bukan tangkapan
-// layar aplikasi sungguhan.
+// Ilustrasi pembuka: gambar klien di atas tiruan halaman Materi aplikasi.
 function IlustrasiAplikasi() {
-  const menu = ["Beranda", "Materi Saya", "eBook & Panduan", "Video", "Printable Sheet", "Jadwal Sesi"];
-  const kartu = [
-    { ikon: IkonBuku, label: "eBook & Panduan" },
-    { ikon: IkonDokumen, label: "Printable Sheet" },
-    { ikon: IkonVideo, label: "Video" },
-  ];
   return (
-    <figure className="situs-paspor flex w-full self-center max-w-[560px] shrink-0 flex-col gap-2.5">
+    <figure className="flex w-full max-w-[560px] shrink-0 flex-col gap-2.5 self-center">
       <Image
         src="/situs/passport-hero.png"
         alt="Perempuan membuka materi di tablet"
@@ -182,51 +176,8 @@ function IlustrasiAplikasi() {
         fetchPriority="high"
         className="situs-lengkung aspect-[560/260] w-full rounded-t-[200px] object-cover"
       />
-      <div aria-hidden="true" className="-mt-2.5 flex overflow-hidden rounded-b-[14px] border border-situs-garis bg-situs-kartu">
-        <div className="hidden w-40 shrink-0 flex-col gap-3.5 bg-situs-hutan p-4 sm:flex">
-          <span className="font-garamond text-xl font-bold tracking-[3px] text-situs-krem">PADMA</span>
-          {menu.map((m) => (
-            <span
-              key={m}
-              className={
-                m === "Materi Saya"
-                  ? "rounded-md bg-situs-emas-muda px-2 py-1 text-xs font-semibold text-[#1D1A14]"
-                  : "text-xs text-situs-krem"
-              }
-            >
-              {m}
-            </span>
-          ))}
-        </div>
-        <div className="flex flex-1 flex-col gap-3 p-5">
-          <div className="flex flex-col">
-            <span className="text-xs text-situs-teks-soft">Selamat datang,</span>
-            <span className="font-garamond text-2xl font-bold text-situs-judul">[Nama Klien]</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2.5">
-            {kartu.map((k) => (
-              <div key={k.label} className="flex flex-col gap-2 rounded-lg border border-situs-garis bg-situs-krem p-3">
-                <k.ikon className="size-4 text-situs-emas" />
-                <span className="text-xs font-semibold text-situs-judul">{k.label}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-situs-teks-soft">Sesi tercatat</span>
-            {["01", "02"].map((n, i) => (
-              <span
-                key={n}
-                style={urutan(i)}
-                className="situs-stempel flex size-8 items-center justify-center rounded-full border-[1.5px] border-situs-emas text-[11px] font-semibold text-situs-emas"
-              >
-                {n}
-              </span>
-            ))}
-            <span className="size-8 rounded-full border-[1.5px] border-dashed border-[#C9B89E]" />
-          </div>
-        </div>
-      </div>
-      <figcaption className="text-center text-[13px] text-situs-teks-soft">Ilustrasi tampilan — data contoh</figcaption>
+      <LayarMateriContoh />
+      <figcaption className="text-center text-[13px] text-situs-teks-soft">Tampilan aplikasi Passport — data contoh</figcaption>
     </figure>
   );
 }
