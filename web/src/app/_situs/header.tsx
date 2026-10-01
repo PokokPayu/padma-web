@@ -2,17 +2,19 @@ import Link from "next/link";
 import { IkonMenu, IkonWa, LogoTeratai } from "./ikon";
 import { TombolWa } from "./tombol";
 
-export type HalamanSitus = "beranda" | "layanan" | "digital-passport" | "tentang";
+export type HalamanSitus = "beranda" | "layanan" | "digital-passport" | "tentang" | "artikel" | "testimoni";
 
-// Mockup juga menautkan PADMA Learn, PADMA Live, PADMA Home, dan Artikel,
-// tetapi halamannya belum ada (README "Halaman belum ada"). Tautan `#` di
-// situs yang sudah live hanya membuat pengunjung mengeklik lalu tidak ke
-// mana-mana, jadi keempatnya menunggu halamannya lahir.
+// Mockup juga menautkan PADMA Learn, PADMA Live, dan PADMA Home, tetapi
+// halamannya belum ada (README "Halaman belum ada"). Tautan `#` di situs yang
+// sudah live hanya membuat pengunjung mengeklik lalu tidak ke mana-mana, jadi
+// ketiganya menunggu halamannya lahir.
 export const NAV_SITUS: { id: HalamanSitus; label: string; href: string }[] = [
   { id: "beranda", label: "Beranda", href: "/" },
   { id: "layanan", label: "Layanan", href: "/layanan" },
   { id: "digital-passport", label: "Digital Passport", href: "/digital-passport" },
   { id: "tentang", label: "Tentang PADMA", href: "/tentang" },
+  { id: "artikel", label: "Artikel", href: "/artikel" },
+  { id: "testimoni", label: "Testimoni", href: "/testimoni" },
 ];
 
 export function Merek({ gelap = false }: { gelap?: boolean }) {
@@ -47,7 +49,7 @@ export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: st
           <Merek />
         </Link>
 
-        <nav aria-label="Navigasi utama" className="hidden items-center gap-6 text-[15px] lg:flex">
+        <nav aria-label="Navigasi utama" className="hidden items-center gap-6 text-[15px] xl:flex">
           {NAV_SITUS.map((n) => (
             <Link
               key={n.id}
@@ -64,7 +66,7 @@ export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: st
           ))}
         </nav>
 
-        <div className="hidden items-center gap-5 lg:flex">
+        <div className="hidden items-center gap-5 xl:flex">
           <Link href="/masuk" className="text-[15px] font-semibold text-situs-judul hover:text-situs-emas">
             Masuk
           </Link>
@@ -73,7 +75,7 @@ export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: st
 
         {/* Di HP CTA utama tetap satu ketukan jauhnya: menu menyembunyikan
             navigasi, bukan jalan menuju WhatsApp. */}
-        <div className="flex items-center gap-2 lg:hidden">
+        <div className="flex items-center gap-2 xl:hidden">
           <a
             href={waHref}
             target="_blank"
@@ -86,7 +88,7 @@ export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: st
           {/* Menu HP tanpa JavaScript klien. `key` membuatnya tertutup lagi
               setiap pindah halaman — <details> menyimpan status `open` di DOM,
               dan navigasi klien Next memakai ulang node yang sama. */}
-          <details key={aktif} className="situs-menu group lg:hidden">
+          <details key={aktif} className="situs-menu group xl:hidden">
             <summary
               className="flex h-11 cursor-pointer gap-1.5 px-3 text-sm font-medium list-none items-center justify-center rounded-[10px] border border-situs-garis text-situs-judul transition-colors hover:bg-situs-pasir group-open:bg-situs-pasir [&::-webkit-details-marker]:hidden"
             >

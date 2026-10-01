@@ -88,7 +88,7 @@ baris klien mana pun berakhir di `/akun-belum-terhubung`.
 
 ## Rute
 
-PADMA v1 lengkap: **41 rute** (32 halaman + 9 route handler), tanpa satu pun
+PADMA v1 lengkap: **64 rute** (50 halaman + 14 route handler), tanpa satu pun
 halaman placeholder. Tabel di bawah dijaga `tests/inventaris-rute.test.ts` —
 rute baru yang lupa didaftarkan, dan baris yang menyebut rute yang sudah dihapus,
 sama-sama membuat `npm test` MERAH.
@@ -98,6 +98,12 @@ sama-sama membuat `npm test` MERAH.
 | `/` | Publik | Landing: hero, 5 lini layanan (dari DB), cara kerja, teaser passport, pembanding |
 | `/skrining` | Publik | Wizard skrining keselamatan; hasil dinilai server, disimpan via `POST /api/skrining` |
 | `/masuk` | Publik | Login email+password & Google |
+| `/layanan` | Publik | Situs publik: layanan per fase & format (Learn/Live/Home), tanpa harga |
+| `/tentang` | Publik | Situs publik: cerita founder, filosofi, batas layanan non-klinis |
+| `/digital-passport` | Publik | Situs publik: penjelasan Digital Passport Journey |
+| `/artikel` | Publik | Daftar artikel edukasi yang terbit (dikelola di `/admin/artikel`) |
+| `/artikel/[slug]` | Publik | Satu artikel; markdown diurai `lib/artikel/urai.ts` menjadi elemen React, tanpa HTML mentah |
+| `/testimoni` | Publik | Video testimoni keluarga yang terbit — hanya yang berizin (CHECK `testimonials_terbit_berizin`) |
 | `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |
 | `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
 | `/atur-sandi` | Publik (via tautan pemulihan) | Atur kata sandi baru sesudah `/auth/callback`; panjang minimum `PANJANG_SANDI_MIN` |
@@ -127,6 +133,10 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
 | `/admin/materi` | Admin, Owner | Daftar materi datar: cari, saring aktif/tipe/kelengkapan isi, paginasi; baris menaut ke detail |
 | `/admin/materi/[id]` | Admin, Owner | Detail materi: metadata, isi (e-book/video), layanan tertaut, penugasan per klien |
+| `/admin/artikel` | Admin, Owner | Daftar artikel + buat draf baru |
+| `/admin/artikel/[id]` | Admin, Owner | Editor markdown dengan pratinjau langsung; simpan, terbitkan, tarik, hapus |
+| `/admin/testimoni` | Admin, Owner | Daftar testimoni + buat draf baru |
+| `/admin/testimoni/[id]` | Admin, Owner | Data testimoni, unggah video ke R2, konfirmasi izin keluarga, terbit/tarik, hapus |
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
@@ -152,6 +162,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
 | `/api/geocode` | Admin/Owner | POST alamat → koordinat untuk pemilih lokasi di peta panel staf. Ada supaya geocoding tetap di SERVER: `lib/transport/geocode.ts` memasang `server-only`, browser tidak bisa menyetel `User-Agent` yang dituntut Nominatim, dan cache serta jeda 1 permintaan/detik hidup di sisi server. Hasilnya hanya menggeser peta — tidak ada apa pun yang tersimpan dari rute ini |
 | `/api/materi/[id]/halaman/[n]` | Klien | GET satu halaman e-book sebagai `image/webp` berwatermark identitas pembaca; hak diputuskan RLS lewat sesi klien SEBELUM service role menyentuh bucket privat `materi-halaman`; tidak berhak → 404 (bukan 401/403) |
+| `/api/testimoni/[id]/video` | Publik | GET mengalihkan (302) ke presigned GET R2 yang segar untuk video testimoni; hak diputuskan query ber-RLS (anon: hanya yang terbit, staf: juga draf). URL tidak dirender ke HTML karena /testimoni di-cache dan presigned URL bisa kedaluwarsa lebih dulu |
 | `/api/materi/[id]/video` | Klien | GET presigned URL berumur pendek untuk satu video di bucket privat R2; hak diputuskan query ber-RLS memakai sesi klien SEBELUM presigned URL diterbitkan, urutan yang mengikat karena membaliknya berarti menerbitkan tautan unduhan sebelum tahu siapa yang meminta; tidak berhak → 403. URL-nya tidak pernah dirender ke HTML — komponen `<video>` di halaman lahir tanpa `src`, lalu klien mengambilnya sesudah hidup |
 | `/api/sertifikat/[sesi]` | Klien | GET berkas sertifikat; kepemilikan sesi diputuskan RLS lewat sesi klien SEBELUM bucket privat `sertifikat` (tanpa policy storage.objects) disentuh service role |
 

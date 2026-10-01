@@ -8,6 +8,8 @@ const TAUTAN_FOOTER = [
   { label: "Layanan", href: "/layanan" },
   { label: "Tentang PADMA", href: "/tentang" },
   { label: "Digital Passport", href: "/digital-passport" },
+  { label: "Artikel", href: "/artikel" },
+  { label: "Testimoni", href: "/testimoni" },
   { label: "FAQ", href: "/#faq" },
   { label: "Masuk", href: "/masuk" },
 ];

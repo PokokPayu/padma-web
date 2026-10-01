@@ -28,6 +28,8 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   { href: "/admin/layanan", label: "Layanan", ikon: "katalog" },
   // Judul halamannya "Materi Panduan".
   { href: "/admin/materi", label: "Materi", ikon: "materi" },
+  { href: "/admin/artikel", label: "Artikel", ikon: "artikel" },
+  { href: "/admin/testimoni", label: "Testimoni", ikon: "video" },
   // Judul halamannya "Pengaturan".
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
 ];
