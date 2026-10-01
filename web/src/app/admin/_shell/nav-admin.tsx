@@ -41,6 +41,8 @@ const MENU: Array<Omit<ItemMenu, "jumlah"> & { badge?: keyof Antrean }> = [
   // pesanan digital bukan salah satunya, dan bar bawah yang tumbuh jadi lima
   // memotong label justru di tujuan yang paling perlu dikenali.
   { href: "/admin/pesanan", label: "Pesanan", ikon: "bayar" },
+  { href: "/admin/artikel", label: "Artikel", ikon: "artikel" },
+  { href: "/admin/testimoni", label: "Testimoni", ikon: "video" },
   // Judul halamannya "Pengaturan".
   { href: "/admin/pengaturan", label: "Setelan", ikon: "setelan" },
 ];

@@ -21,6 +21,8 @@ export const NAMA_IKON = [
   "mitra",
   "katalog",
   "materi",
+  "artikel",
+  "video",
   "setelan",
   "rekap",
   "tarif",
@@ -85,6 +87,20 @@ const PATH: Record<Exclude<NamaIkon, "lotus">, ReactElement> = {
         strokeLinejoin="round"
       />
       <path d="M12 6.4v13.2" strokeLinecap="round" />
+    </>
+  ),
+  // Lembar berbaris: tulisan untuk situs publik.
+  artikel: (
+    <>
+      <rect x="5" y="3.5" width="14" height="17" rx="2" />
+      <path d="M8.5 8h7M8.5 11.5h7M8.5 15h4.5" strokeLinecap="round" />
+    </>
+  ),
+  // Layar dengan tombol putar: testimoni berupa video.
+  video: (
+    <>
+      <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+      <path d="M10.3 9.2v5.6l4.6-2.8z" strokeLinejoin="round" />
     </>
   ),
   // Sekrup penyetel, bukan roda gigi: modul ini menyetel teks & nomor yang

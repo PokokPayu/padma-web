@@ -51,10 +51,11 @@ export const NOMOR_WA_BAWAAN = "6287778400200";
  * menyimpan `""`. Tanpa jaring ini footer terbit dengan baris hilang —
  * kegagalan senyap yang persis sama bentuknya dengan `https://wa.me/`.
  *
- * `ALAMAT_BAWAAN` adalah kalimat yang SELAMA INI ditulis keras di
- * `src/app/_landing/footer.tsx`; ia dipindahkan ke sini, bukan dikarang.
+ * `ALAMAT_BAWAAN` semula kalimat yang ditulis keras di footer landing lama
+ * ("Melayani area Jabodetabek"). Handoff landing v2 menetapkan wilayah PADMA
+ * Home di Malang Raya & Batu, jadi cadangannya ikut kalimat situs itu.
  */
-export const ALAMAT_BAWAAN = "Melayani area Jabodetabek";
+export const ALAMAT_BAWAAN = "Melayani Malang Raya dan Batu";
 
 /**
  * QRIS cadangan (spec J12). Sama seperti nomor WA: BUKAN "nilai default yang

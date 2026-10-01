@@ -1,288 +1,199 @@
 /**
- * Penjagaan landing publik (`/`).
+ * Penjagaan situs publik: `/`, `/layanan`, `/tentang`, `/digital-passport`
+ * (handoff landing v2, docs/landingpage-v2/README.md).
  *
- * Kenapa test ini ada: kegagalan paling mahal di halaman ini BUKAN error, tapi
- * halaman yang tampil KOSONG. `phases`/`services` punya GRANT SELECT untuk anon
- * tetapi policy lamanya `using (auth.uid() is not null)` — pengunjung tanpa
- * login menerima `[]`, bukan 42501. Landing tetap 200, tetap tampak "jalan",
- * dan katalog layanan senyap menghilang. Karena itu test ini merender halaman
- * sungguhan (server component, tanpa sesi apa pun) lalu menuntut isi katalog
- * benar-benar sampai ke markup.
- *
- * Dua lapis, seperti `skrining-wizard.test.ts`:
- *  1. Render sungguhan (`react-dom/server`) — bukti halaman berisi tanpa login.
- *  2. Pembacaan sumber apa adanya — untuk pagar yang tidak terlihat di markup
- *     (nomor WA tidak ditulis keras, katalog tidak di-hardcode, dekorasi yang
- *     meluber wajib terkurung agar tidak lahir scroll horizontal di 390px).
+ * Aturan konten di README handoff berbunyi "jangan diubah tanpa persetujuan"
+ * — tanpa harga, satu CTA utama, PADMA non-klinis, kata terlarang dari situs
+ * lama wajib hilang. Semuanya kegagalan DIAM: halaman tetap 200 dan tampak
+ * rapi walau satu kalimat terlarang menyelinap kembali. Karena itu berkas ini
+ * merender keempat halaman sungguhan (server component, tanpa sesi) lalu
+ * memeriksa markupnya, ditambah pembacaan sumber untuk pagar yang tidak
+ * terlihat di markup (nomor WA tidak ditulis keras, tanpa service role).
  */
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
+import type React from "react";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import Home from "@/app/page";
-import { bacaKatalog } from "@/lib/katalog";
+import * as modBeranda from "@/app/page";
+import * as modLayanan from "@/app/layanan/page";
+import * as modTentang from "@/app/tentang/page";
+import * as modPassport from "@/app/digital-passport/page";
 import { bacaPengaturan } from "@/lib/settings";
-import { createAdminSupabase } from "@/lib/supabase/admin";
+import { PESAN_WA_SITUS } from "@/app/_situs/wa";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
-const sumberHalaman = baca("src/app/page.tsx");
-const berkasLanding = readdirSync(path.join(AKAR, "src/app/_landing"));
-const sumberLanding = Object.fromEntries(
-  berkasLanding.map((f) => [f, baca(path.join("src/app/_landing", f))]),
+const BERKAS_HALAMAN = {
+  "/": "src/app/page.tsx",
+  "/layanan": "src/app/layanan/page.tsx",
+  "/tentang": "src/app/tentang/page.tsx",
+  "/digital-passport": "src/app/digital-passport/page.tsx",
+} as const;
+type Rute = keyof typeof BERKAS_HALAMAN;
+
+const sumberSitus = Object.fromEntries(
+  readdirSync(path.join(AKAR, "src/app/_situs")).map((f) => [f, baca(path.join("src/app/_situs", f))]),
 );
-const semuaSumberLanding = sumberHalaman + Object.values(sumberLanding).join("\n");
+const semuaSumber = [
+  ...Object.values(BERKAS_HALAMAN).map(baca),
+  ...Object.values(sumberSitus),
+].join("\n");
 
-// --- Fixture: badge "Soft Launch" -------------------------------------------
-// Seed dummy TIDAK punya satu pun baris `harga_coret` non-NULL, jadi tanpa
-// fixture ini jalur render `<s>` + badge "Soft Launch" (`lini-layanan.tsx`)
-// tidak pernah disentuh markup yang diuji di berkas ini — ia lulus bukan
-// karena benar, melainkan karena tidak pernah dicoba. ID sengaja berbeda
-// dari fixture `tests/landing-katalog.test.ts` (famili `…9e1`, bukan
-// `…8e1`) supaya dua berkas tidak pernah berebut baris yang sama.
-const LAYANAN_SOFT_LAUNCH = "11111111-1111-1111-1111-1111111119e1";
-const VARIAN_SOFT_LAUNCH = "11111111-1111-1111-1111-2111111119e1";
-const HARGA_SOFT_LAUNCH = 275_000;
-const CORET_SOFT_LAUNCH = 325_000;
+const MODUL: Record<Rute, { default: () => Promise<React.ReactElement>; revalidate?: number }> = {
+  "/": modBeranda,
+  "/layanan": modLayanan,
+  "/tentang": modTentang,
+  "/digital-passport": modPassport,
+};
 
-const adminFixture = createAdminSupabase();
-
-async function bersihkanFixtureSoftLaunch() {
-  await adminFixture.from("variant_rates").delete().eq("variant_id", VARIAN_SOFT_LAUNCH);
-  await adminFixture.from("service_variants").delete().eq("service_id", LAYANAN_SOFT_LAUNCH);
-  await adminFixture.from("services").delete().eq("id", LAYANAN_SOFT_LAUNCH);
-}
-
-await bersihkanFixtureSoftLaunch();
-{
-  const { error: errLayanan } = await adminFixture.from("services").insert({
-    id: LAYANAN_SOFT_LAUNCH,
-    phase_id: "menopause",
-    nama: "PAD-UJI Landing Soft Launch",
-    aktif: true,
-  });
-  if (errLayanan) throw errLayanan;
-  const { error: errVarian } = await adminFixture.from("service_variants").insert({
-    id: VARIAN_SOFT_LAUNCH,
-    service_id: LAYANAN_SOFT_LAUNCH,
-    label: "",
-    urutan: 0,
-    aktif: true,
-  });
-  if (errVarian) throw errVarian;
-  const { error: errTarif } = await adminFixture.from("variant_rates").insert({
-    variant_id: VARIAN_SOFT_LAUNCH,
-    harga_klien: HARGA_SOFT_LAUNCH,
-    harga_coret: CORET_SOFT_LAUNCH,
-    honor_mitra: 100_000,
-  });
-  if (errTarif) throw errTarif;
-}
-
-afterAll(async () => {
-  await bersihkanFixtureSoftLaunch();
-});
-
-const katalog = await bacaKatalog();
 const pengaturan = await bacaPengaturan();
-const markup = renderToStaticMarkup(await Home());
+const markup: Record<Rute, string> = {
+  "/": renderToStaticMarkup(await MODUL["/"].default()),
+  "/layanan": renderToStaticMarkup(await MODUL["/layanan"].default()),
+  "/tentang": renderToStaticMarkup(await MODUL["/tentang"].default()),
+  "/digital-passport": renderToStaticMarkup(await MODUL["/digital-passport"].default()),
+};
+const semuaRute = Object.keys(markup) as Rute[];
 
-// React meng-escape teks (`&` -> `&amp;`), jadi teks DB harus di-escape juga
-// sebelum dicari di markup — kalau tidak, "Nifas & Menyusui" tidak akan pernah
-// ketemu dan test ini "hijau karena longgar" di kemudian hari.
-const esc = (teks: string) =>
-  teks.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+describe("situs publik — berisi tanpa login", () => {
+  it("tidak ada halaman yang dilindungi peran", () => {
+    expect(semuaSumber).not.toMatch(/requireRole\s*\(/);
+    expect(semuaSumber).not.toContain("@/lib/auth/require-role");
+    expect(semuaSumber).not.toContain("redirect(");
+  });
 
-describe("landing publik — berisi tanpa login", () => {
-  it("halaman tidak dilindungi peran (rute publik)", () => {
-    // Dicek sebagai PEMANGGILAN dan sebagai IMPOR — menyebut namanya di
-    // komentar tidak menjadikan halaman terkunci, tapi keduanya di bawah ini
-    // memang mengunci.
-    for (const sumber of [sumberHalaman, semuaSumberLanding]) {
-      expect(sumber).not.toMatch(/requireRole\s*\(/);
-      expect(sumber).not.toContain("@/lib/auth/require-role");
-      expect(sumber).not.toContain("redirect(");
+  it.each(semuaRute)("%s tidak dibekukan permanen di waktu build (ada revalidate)", (rute) => {
+    // Nomor WA diganti admin; tanpa revalidate `next build` memanggang nomor
+    // lama sampai deploy berikutnya.
+    expect(MODUL[rute].revalidate).toBeGreaterThan(0);
+  });
+
+  it.each(semuaRute)("%s berisi header, footer, dan satu h1", (rute) => {
+    const m = markup[rute];
+    expect(m).toContain("<header");
+    expect(m).toContain("<footer");
+    expect(m.match(/<h1[\s>]/g) ?? []).toHaveLength(1);
+  });
+});
+
+describe("situs publik — jalur konversi", () => {
+  const tautanWa = `https://wa.me/${pengaturan.nomorWaLink}?text=${encodeURIComponent(PESAN_WA_SITUS)}`;
+
+  it("pesan WA membawa kode sumber WEBSITE", () => {
+    expect(PESAN_WA_SITUS).toContain("WEBSITE");
+  });
+
+  it.each(semuaRute)("%s punya CTA utama WA dari nomor app_settings", (rute) => {
+    expect(markup[rute]).toContain(`href="${tautanWa}"`);
+    expect(markup[rute]).toContain("Tanya Kelas &amp; Pricelist");
+  });
+
+  it("tidak ada tautan WA lain selain CTA utama (satu CTA, satu pesan)", () => {
+    for (const rute of semuaRute) {
+      const semuaWa = [...markup[rute].matchAll(/href="(https:\/\/wa\.me\/[^"]*)"/g)].map((x) => x[1]);
+      expect(semuaWa.length, rute).toBeGreaterThan(0);
+      for (const h of semuaWa) expect(h, rute).toBe(tautanWa);
     }
   });
 
-  it("kelima fase katalog tampil beserta nama Sanskerta & label Indonesianya", () => {
-    expect(katalog).toHaveLength(5);
-    for (const fase of katalog) {
-      expect(markup).toContain(esc(fase.namaSanskrit));
-      expect(markup).toContain(esc(fase.nama));
-    }
-    // Shishu/Newborn dibatasi hanya di skrining; di landing ia tetap tampil.
-    expect(markup).toContain("Shishu");
+  it("nomor WA tidak ditulis keras di sumber situs", () => {
+    expect(semuaSumber).toContain("bacaPengaturan");
+    expect(semuaSumber).not.toMatch(/\b62\d{8,}\b/);
+    expect(semuaSumber).not.toMatch(/\b0\d{3}-\d{4}-\d{4}\b/);
   });
 
-  it("setiap layanan aktif dari DB benar-benar sampai ke markup (landing tidak kosong)", () => {
-    // Task 8 mengubah `f.layanan` dari `string[]` menjadi objek — yang
-    // dijaga di sini TIDAK berubah: setiap NAMA layanan aktif harus benar-
-    // benar sampai ke markup, bukan cuma ke `katalog`.
-    const semuaLayanan = katalog.flatMap((f) => f.layanan);
-    expect(semuaLayanan.length).toBeGreaterThanOrEqual(10);
-    for (const layanan of semuaLayanan) {
-      expect(markup).toContain(esc(layanan.nama));
-    }
+  it.each(semuaRute)("%s menautkan /masuk untuk klien lama", (rute) => {
+    expect(markup[rute]).toContain('href="/masuk"');
   });
 
-  it("katalog tidak dibekukan permanen di waktu build (ada revalidate)", async () => {
-    // Tanpa ini `next build` memprerender `/` sebagai statis penuh: katalog
-    // yang diubah admin tidak pernah muncul sampai deploy berikutnya, dan
-    // katalog kosong saat build ikut terbekukan.
-    const modul = (await import("@/app/page")) as { revalidate?: number };
-    expect(typeof modul.revalidate).toBe("number");
-    expect(modul.revalidate).toBeGreaterThan(0);
+  it("alur PADMA Home di /layanan dibuka lewat /skrining", () => {
+    expect(markup["/layanan"]).toContain('href="/skrining"');
+    expect(markup["/layanan"]).toContain("Cek Kesiapan Sesi");
   });
 
-  it("kartu katalog dirender dari DB, bukan ditulis keras di komponennya", () => {
-    expect(sumberHalaman).toContain("bacaKatalog");
-    // Perender kartu fase tidak boleh memuat satu pun nama fase atau nama
-    // layanan sebagai literal: kalau ia menyalinnya, panel admin klien tidak
-    // lagi mengubah landing dan katalog kosong pun tetap terlihat "penuh".
-    const perenderKartu = sumberLanding["lini-layanan.tsx"];
-    expect(perenderKartu).toBeTruthy();
-    // Dulu asersi ini berbunyi `toContain("katalog.map")`. Komponen kini
-    // menyaring fase kosong lebih dulu (`katalog.filter(...)` lalu
-    // `tampil.map(...)`), sehingga bentuk lama jatuh tanpa ada yang rusak —
-    // ia mengunci NAMA VARIABEL ANTARA, bukan sifat yang hendak dijaga.
-    // Yang dijaga adalah ASAL kartunya: lahir dari prop `katalog`, bukan
-    // ditulis satu per satu. Pagar sesungguhnya tetap perulangan di bawah.
-    expect(perenderKartu).toMatch(/katalog\.(map|filter)\(/);
-    for (const fase of katalog) {
-      expect(perenderKartu, "menulis keras nama fase").not.toContain(
-        fase.namaSanskrit,
-      );
-      expect(perenderKartu, "menulis keras label fase").not.toContain(
-        fase.nama,
-      );
-      for (const layanan of fase.layanan) {
-        expect(perenderKartu, "menulis keras nama layanan").not.toContain(
-          layanan.nama,
-        );
-      }
+  it("tidak ada tautan mati `#` (halaman Learn/Live/Home/Artikel belum ada)", () => {
+    for (const rute of semuaRute) expect(markup[rute], rute).not.toContain('href="#"');
+  });
+
+  it("footer memajang kontak dari app_settings", () => {
+    for (const rute of semuaRute) {
+      expect(markup[rute]).toContain(pengaturan.nomorWaTampilan);
     }
   });
 });
 
-describe("landing publik — jalur konversi", () => {
-  it("mengarahkan ke skrining, bukan ke halaman lain", () => {
-    expect(markup).toContain('href="/skrining"');
-    expect(markup).toContain("Mulai Skrining");
+describe("situs publik — aturan konten handoff", () => {
+  it.each(semuaRute)("%s tanpa harga atau nominal rupiah", (rute) => {
+    // "Tidak ada harga, durasi, promo, QR, atau link PDF di website."
+    expect(markup[rute]).not.toMatch(/Rp\s?\d/);
+    expect(markup[rute]).not.toMatch(/Soft Launch|<s[\s>]/);
+    expect(markup[rute]).not.toMatch(/\.pdf"/i);
   });
 
-  // Sebelum ini satu-satunya tautan ke /masuk terkubur di tengah halaman, di
-  // dalam bagian teaser passport. Klien LAMA yang datang untuk membuka
-  // passport-nya harus menggulir dulu untuk menemukannya — padahal ia justru
-  // pengunjung yang paling tahu apa yang ia cari. Jalan masuk itu kini juga ada
-  // di nav hero, tanpa menggeser "Mulai Skrining" sebagai aksi utama.
-  it("klien lama punya jalan masuk tanpa menggulir", () => {
-    const hero = sumberLanding["hero.tsx"];
-    expect(hero, "nav hero tidak menautkan /masuk").toContain('href="/masuk"');
-    expect(markup).toContain('href="/masuk"');
-    expect(markup).toContain("Masuk");
-    // Aksi utama tidak boleh ikut bergeser: skrining tetap satu-satunya tombol
-    // berlatar penuh di nav hero.
-    expect(hero).toContain("Mulai Skrining");
+  it.each(semuaRute)("%s bebas teks lama yang wajib dibuang", (rute) => {
+    for (const kata of [
+      /Homecare Promil/i,
+      /perawatan kesehatan perempuan/i,
+      /ACOG/,
+      /CDC/,
+      /Skrining Gratis/i,
+      /evaluasi (&amp;|dan) rekomendasi bidan/i,
+      /Digital Care Passport/,
+    ]) {
+      expect(markup[rute], `${rute}: ${kata}`).not.toMatch(kata);
+    }
   });
 
-  it("nomor WA dibaca server dari app_settings, tidak ditulis keras", () => {
-    expect(sumberHalaman).toContain("bacaPengaturan");
-    expect(semuaSumberLanding).not.toMatch(/\b62\d{8,}\b/);
-    expect(semuaSumberLanding).not.toMatch(/\b0\d{3}-\d{4}-\d{4}\b/);
+  it.each(semuaRute)("%s tidak memakai istilah klinis untuk layanan PADMA", (rute) => {
+    expect(markup[rute]).not.toMatch(/screening|pemeriksaan|menyembuhkan|pengobatan/i);
   });
 
-  it("satu sumber nomor, dua bentuk: tautan wa.me & tampilan lokal", () => {
-    expect(markup).toContain(`https://wa.me/${pengaturan.nomorWaLink}`);
-    expect(markup).toContain(pengaturan.nomorWaTampilan);
+  it("kata 'diagnosis' hanya muncul untuk menyebut apa yang DI LUAR layanan PADMA", () => {
+    for (const rute of semuaRute) {
+      if (rute === "/tentang") continue;
+      expect(markup[rute], rute).not.toMatch(/diagnosis/i);
+    }
+    const t = markup["/tentang"];
+    expect(t.match(/diagnosis/gi) ?? []).toHaveLength(1);
+    const blokLuar = t.slice(t.indexOf("Di luar layanan PADMA"));
+    expect(blokLuar).toMatch(/asesmen individual, diagnosis, terapi medis/);
   });
 
-  it("menyediakan pintu masuk Digital Care Passport", () => {
-    expect(markup).toContain('href="/masuk"');
-    expect(markup).toContain("Digital Care Passport");
+  it("nama Passport satu di mana-mana: Digital Passport Journey", () => {
+    expect(markup["/"]).toContain("Digital Passport Journey");
+    expect(markup["/digital-passport"]).toContain("Digital Passport Journey");
+  });
+
+  it("testimoni placeholder tidak tayang sebelum ada kutipan asli berizin", () => {
+    for (const rute of semuaRute) {
+      expect(markup[rute]).not.toContain("[Kutipan");
+      expect(markup[rute]).not.toContain("[Inisial");
+    }
+  });
+
+  it("profil mitra tidak ditampilkan — hanya janji dikirim setelah booking", () => {
+    expect(markup["/tentang"]).toContain("dikirim setelah booking terkonfirmasi");
   });
 });
 
-describe("landing publik — pagar konten & tata letak", () => {
-  it("klaim kepatuhan tetap hanya ACOG & CDC", () => {
-    expect(markup).toContain("ACOG");
-    expect(markup).toContain("CDC");
-    for (const sumberLain of ["NHS", "WHO", "POGI", "Kemenkes"]) {
-      expect(semuaSumberLanding).not.toContain(sumberLain);
-    }
-  });
-
-  it("tidak menjanjikan diagnosis/pengobatan (landing bukan klaim medis)", () => {
-    expect(markup).not.toMatch(/diagnosis/i);
-    expect(markup).not.toMatch(/menyembuhkan|pengobatan/i);
-  });
-
-  // Sampai Task 8, TIDAK SATU PUN nominal uang boleh tampil ke pengunjung
-  // anonim — pagar itu sengaja dilonggarkan spec V4 §4.4: pengunjung harus
-  // bisa melihat pricelist sebelum mendaftar (lihat tests/harga-publik.test.ts
-  // & pengecualian di tests/money-firewall-struktural.test.ts). Yang tetap
-  // dijaga di sini BUKAN "tidak ada Rp" — melainkan "setiap Rp yang tampil
-  // adalah harga varian YANG SAH dari `harga_publik`", supaya nominal lain
-  // yang tidak seharusnya publik (mis. honor mitra, atau angka pemasaran yang
-  // menyelinap dari komponen lain) tetap tertangkap merah.
-  it("nominal rupiah di landing hanya harga varian yang disengaja (spec V4), bukan kebocoran lain", () => {
-    const nominalSah = new Set<number>();
-    for (const layanan of katalog.flatMap((f) => f.layanan)) {
-      for (const v of layanan.varian) {
-        nominalSah.add(v.hargaKlien);
-        if (v.hargaCoret !== null) nominalSah.add(v.hargaCoret);
-      }
-    }
-    // Prasyarat: fixture memang membawa harga, kalau tidak assertion di bawah
-    // lolos secara kosong (vacuously true) dan tidak menjaga apa pun.
-    expect(nominalSah.size).toBeGreaterThan(0);
-
-    const ditemukan = [...markup.matchAll(/Rp\s?([\d.,]+)/g)].map((m) =>
-      Number(m[1].replace(/[.,]/g, "")),
-    );
-    expect(ditemukan.length).toBeGreaterThan(0);
-    for (const nominal of ditemukan) {
-      expect(nominalSah, `Rp ${nominal} bukan harga varian yang dikenal`).toContain(nominal);
-    }
-  });
-
-  // Deliverable UTAMA task ini: `harga_coret` non-NULL harus benar-benar
-  // mencoret harga lama (elemen `<s>` sungguhan, bukan cuma teks bergaris)
-  // dan menempelkan badge "Soft Launch" — tanpanya, jalur ini bisa rusak
-  // tanpa satu pun uji berubah merah.
-  it("harga_coret non-NULL merender <s> beserta badge Soft Launch", () => {
-    const hargaLama = `Rp ${CORET_SOFT_LAUNCH.toLocaleString("id-ID")}`;
-    const hargaBaru = `Rp ${HARGA_SOFT_LAUNCH.toLocaleString("id-ID")}`;
-    const escRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    expect(markup).toContain("Soft Launch");
-    expect(markup).toContain(hargaBaru);
-    // Regex, bukan sekadar `toContain(hargaLama)`: yang wajib dicoret adalah
-    // elemen `<s>` sungguhan, bukan teks polos yang kebetulan sama.
-    expect(markup).toMatch(new RegExp(`<s[^>]*>${escRegex(hargaLama)}</s>`));
-  });
-
-  it("dekorasi yang meluber terkurung overflow-hidden (anti scroll horizontal 390px)", () => {
-    // Lotus hero diposisikan absolut di luar kotak (-right-14, w-[420px]).
-    // Tanpa pengurung, ia menambah lebar dokumen dan melahirkan scroll
-    // horizontal di layar sempit.
-    const hero = sumberLanding["hero.tsx"];
-    expect(hero).toBeTruthy();
-    expect(hero).toMatch(/overflow-hidden/);
-    const posisiOverflow = hero.indexOf("overflow-hidden");
-    const posisiLotusAbsolut = hero.indexOf("absolute");
-    expect(posisiOverflow).toBeLessThan(posisiLotusAbsolut);
-  });
-
+describe("situs publik — tata letak & batas", () => {
   it("tidak memakai lebar viewport penuh yang mengabaikan scrollbar", () => {
-    expect(semuaSumberLanding).not.toMatch(/w-screen|100vw/);
+    expect(semuaSumber).not.toMatch(/w-screen|100vw/);
   });
 
-  it("tidak menyentuh service role di komponen landing", () => {
-    for (const [berkas, sumber] of Object.entries(sumberLanding)) {
+  it("tanpa service role dan tanpa komponen klien", () => {
+    for (const [berkas, sumber] of Object.entries(sumberSitus)) {
       expect(sumber, berkas).not.toContain("createAdminSupabase");
       expect(sumber, berkas).not.toContain("SERVICE_ROLE");
       expect(sumber, berkas).not.toContain("use client");
+    }
+  });
+
+  it("gambar situs dilayani lewat next/image dari /situs", () => {
+    for (const rute of semuaRute) {
+      expect(markup[rute]).not.toMatch(/<img[^>]*src="\/situs\//);
     }
   });
 });

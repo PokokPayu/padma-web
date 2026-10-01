@@ -45,7 +45,7 @@ export function SampulPassport({
 
       <Lotus className="mx-auto mb-3.5 block w-[52px] text-gold-bright" />
       <p className="text-center text-[10.5px] font-bold uppercase tracking-[0.4em] text-gold-bright">
-        Digital Care Passport
+        Digital Passport Journey
       </p>
       <h1 className="mt-2.5 text-center font-serif text-[32px] leading-tight text-[#F8F1DE]">
         {nama}

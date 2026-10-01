@@ -74,7 +74,7 @@ type Berhasil = { ok: true };
 function segarkanKatalog() {
   revalidatePath("/admin/layanan");
   revalidatePath("/admin/sesi"); // daftar pilihan saat menjadwalkan
-  revalidatePath("/"); // katalog landing publik
+  revalidatePath("/"); // beranda publik (murah; katalog tak lagi dipajang di sana)
   revalidatePath("/passport/ajukan"); // wizard pengajuan jadwal klien
   revalidatePath("/passport"); // nama layanan di riwayat sesi
 }

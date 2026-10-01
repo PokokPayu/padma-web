@@ -37,7 +37,7 @@ export function HeaderMobile({ nama }: { nama: string }) {
                 nama merek. Di ponsel inilah satu-satunya keterangan bahwa layar
                 ini milik passport klien, bukan halaman publik. */}
             <span className="mt-1 block text-[9.5px] font-semibold uppercase tracking-[0.18em] text-ink-soft">
-              Digital Care Passport
+              Digital Passport Journey
             </span>
           </span>
         </Link>

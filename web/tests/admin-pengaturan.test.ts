@@ -410,7 +410,7 @@ describe("setiap kunci terdaftar BENAR-BENAR dibaca halaman publik", () => {
   });
 
   it("footer tidak lagi menulis keras alamat & jam", () => {
-    const footer = baca("src/app/_landing/footer.tsx");
+    const footer = baca("src/app/_situs/footer.tsx");
     expect(footer, "alamat masih ditulis keras di komponen").not.toContain(
       "Jabodetabek",
     );

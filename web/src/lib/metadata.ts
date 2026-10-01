@@ -6,10 +6,10 @@ export const HTML_LANG = "id";
 
 export const metadata: Metadata = {
   title: {
-    default: `${APP_NAME} · Homecare Promil & Perawatan Perempuan`,
+    default: `${APP_NAME} · Premium Women's Wellness`,
     template: `%s · ${APP_NAME}`,
   },
   description:
-    "PADMA adalah layanan homecare pendampingan program hamil (promil) dan perawatan kesehatan perempuan, dijalankan tenaga profesional langsung di rumah Anda.",
+    "Kelas & pijat kehamilan hingga setelah melahirkan. Online se-Indonesia, kunjungan ke rumah di Malang Raya & Batu.",
   applicationName: APP_NAME,
 };

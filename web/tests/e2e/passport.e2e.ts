@@ -1,5 +1,5 @@
 /**
- * E2E Digital Care Passport (Plan 4 Task 10).
+ * E2E Digital Passport Journey (Plan 4 Task 10).
  *
  * Membuktikan lewat browser sungguhan — bukan unit test dengan mock — bahwa:
  *   1. Beranda menampilkan sampul dan bagian pencapaian; grid stempel &

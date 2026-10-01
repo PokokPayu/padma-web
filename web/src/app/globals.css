@@ -35,9 +35,181 @@
   --color-panel-rail: #0a2b1f;
   --color-panel-rail-ink: #9db09e;
   --color-panel-rail-aktif: #f0e3c3;
+
+  /* ===== TOKEN SITUS PUBLIK (/, /layanan, /tentang, /digital-passport) =====
+     Handoff landing v2 (docs/landingpage-v2/README.md §Gaya). Terpisah dari
+     token PADMA di atas karena /skrining dan /passport belum ikut berganti
+     bahasa visual; font-nya dipasang oleh `_situs/font.ts`, hanya pada
+     pembungkus halaman situs. */
+
+  --color-situs-hutan: #0f4a3c;
+  --color-situs-hutan-gelap: #0b3a2f;
+  --color-situs-hutan-garis: #2e6a59;
+  --color-situs-judul: #123f35;
+  --color-situs-teks: #33413c;
+  --color-situs-teks-soft: #3d4a45;
+  --color-situs-redup: #4a5752;
+  --color-situs-abu: #5e5a52;
+  --color-situs-emas: #9a5f2a;
+  --color-situs-emas-tua: #7a4a1f;
+  --color-situs-emas-muda: #b8834d;
+  --color-situs-emas-pucat: #d9b27c;
+  --color-situs-krem: #fbf6ee;
+  --color-situs-kartu: #fffdf9;
+  --color-situs-pasir: #f4ede1;
+  --color-situs-garis: #eadfcd;
+  --color-situs-linen: #efe6d6;
+  --color-situs-pudar: #d9cfbf;
+}
+
+/* `inline`: utilitas font-garamond dst. menulis `var(--nf-…)` langsung di
+   elemennya. Tanpa itu nilainya dihitung di :root, tempat variabel next/font
+   belum ada (kelasnya dipasang di pembungkus situs, bukan di <html>), dan
+   seluruh situs jatuh ke font cadangan tanpa galat. */
+@theme inline {
+  --font-garamond: var(--nf-cormorant), Georgia, serif;
+  --font-jost: var(--nf-jost), ui-sans-serif, system-ui, sans-serif;
+  --font-parisienne: var(--nf-parisienne), cursive;
 }
 
 body {
   background: var(--color-paper);
   color: var(--color-ink);
+}
+
+/* ===== GERAK SITUS PUBLIK =====
+   Sengaja sedikit: satu urutan pembuka di hero tiap halaman, satu momen
+   saat digulir yang memakai metafora produknya sendiri (garis perjalanan,
+   stempel paspor), dan respons atas aksi pengunjung. Tidak ada fade-up di
+   setiap seksi dan tidak ada loop. Semua di balik `prefers-reduced-motion:
+   no-preference`; animasi berbasis scroll di balik `@supports` sehingga
+   browser yang belum mengenalnya menampilkan halaman statis apa adanya. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.situs) {
+    scroll-behavior: smooth;
+  }
+
+  /* Pembuka hero: anak-anaknya muncul berurutan menurut --urutan. */
+  .situs-muncul {
+    animation: situs-muncul 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--urutan, 0) * 90ms + 60ms);
+  }
+
+  /* Ilustrasi berbingkai lengkung terangkat dari bawah, seperti tirai. */
+  .situs-lengkung {
+    animation: situs-lengkung 1100ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms both;
+  }
+
+  /* Panel menu HP turun saat <details> dibuka. */
+  .situs-menu[open] > .situs-menu-panel {
+    animation: situs-turun 220ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    /* Header yang menempel baru berbayang setelah halaman digulir. */
+    .situs-header {
+      animation: situs-bayang linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 96px;
+    }
+  }
+
+  @supports (animation-timeline: view()) {
+    .situs-perjalanan {
+      view-timeline-name: --perjalanan;
+    }
+    .situs-garis-perjalanan {
+      transform-origin: left center;
+      animation: situs-tarik linear both;
+      animation-timeline: --perjalanan;
+      animation-range: entry 35% cover 45%;
+    }
+    .situs-fase {
+      animation: situs-muncul linear both;
+      animation-timeline: --perjalanan;
+      animation-range: entry calc(25% + var(--urutan, 0) * 12%) cover calc(28% + var(--urutan, 0) * 4%);
+    }
+    /* HP: garis waktu vertikal — garisnya tertarik ke bawah dan tiap fase
+       muncul saat ia sendiri masuk layar (barisnya bertumpuk, bukan sejajar). */
+    .situs-garis-perjalanan-v {
+      transform-origin: center top;
+      animation: situs-tarik-v linear both;
+      animation-timeline: --perjalanan;
+      animation-range: entry 10% cover 70%;
+    }
+    @media (width < 48rem) {
+      .situs-fase {
+        animation-timeline: view();
+        animation-range: entry 0% entry 90%;
+      }
+    }
+
+    .situs-paspor {
+      view-timeline-name: --paspor;
+    }
+    .situs-stempel {
+      animation: situs-stempel linear both;
+      animation-timeline: --paspor;
+      animation-range: entry calc(60% + var(--urutan, 0) * 12%) cover calc(40% + var(--urutan, 0) * 6%);
+    }
+  }
+}
+
+@keyframes situs-muncul {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes situs-lengkung {
+  from {
+    clip-path: inset(100% 0 0 0);
+    transform: scale(1.04);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+
+@keyframes situs-turun {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes situs-bayang {
+  to {
+    box-shadow: 0 10px 24px -18px rgb(18 63 53 / 0.45);
+  }
+}
+
+@keyframes situs-tarik-v {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes situs-tarik {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* Stempel jatuh sedikit miring lalu menetap — tidak memantul berulang. */
+@keyframes situs-stempel {
+  0% {
+    opacity: 0;
+    transform: scale(1.7) rotate(-14deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.94) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
 }

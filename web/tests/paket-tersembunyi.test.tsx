@@ -169,9 +169,9 @@ describe("saklar paket: tidak ada kata 'paket' di layar", () => {
     ref.klien = await signInAs("admin@padma.test");
   });
 
-  it("teaser Passport di landing tidak menyebut paket", async () => {
-    const { PassportTeaser } = await import("@/app/_landing/passport-teaser");
-    expect(renderToStaticMarkup(<PassportTeaser />)).not.toMatch(/paket/i);
+  it("halaman publik /digital-passport tidak menyebut paket", async () => {
+    const { default: HalamanPassportPublik } = await import("@/app/digital-passport/page");
+    expect(await render(HalamanPassportPublik)).not.toMatch(/paket/i);
   });
 
   it("halaman /admin/klien tidak menyebut paket, dan saringan 'punya paket' tidak lagi bisa dicapai dari layar", async () => {
