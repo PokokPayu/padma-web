@@ -58,6 +58,12 @@ function klien(): S3Client {
         process.env.R2_SECRET_ACCESS_KEY,
       ),
     },
+    // SDK v3 sejak 3.729 menandatangani checksum CRC32 secara bawaan. Untuk
+    // presigned PUT, checksum itu dihitung dari badan KOSONG (`AAAAAA==`) lalu
+    // ikut masuk URL, dan berkas sungguhan yang diunggah peramban tidak cocok
+    // dengannya. Checksum hanya bila operasinya memang mewajibkan.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 }
 
