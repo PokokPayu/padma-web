@@ -28,6 +28,9 @@ type Baris = { nama: string; isi: string; learn: boolean; live: boolean; home: b
 // Learn/Live/Home tidak dicatat di tabel `services`, dan halaman ini sengaja
 // tanpa harga (README handoff: harga hanya lewat WhatsApp/Highlight IG).
 // Menambah atau menonaktifkan layanan di /admin/layanan TIDAK mengubah tabel ini.
+// Lactation Hero & Shishu Nurturing Academy sengaja tampil di dua kelompok
+// (Sedang Hamil dan Setelah Melahirkan) atas permintaan klien, menyimpang dari
+// mockup: keduanya bisa diikuti sejak masa kehamilan.
 const DAFTAR: { kelompok: string; baris: Baris[] }[] = [
   {
     kelompok: "Sedang Hamil",
@@ -35,6 +38,8 @@ const DAFTAR: { kelompok: string; baris: Baris[] }[] = [
       { nama: "Garbha Relief", isi: "Pijat relaksasi selama hamil", learn: false, live: false, home: true },
       { nama: "Garbha Flow", isi: "Yoga & gerak untuk ibu hamil", learn: false, live: true, home: true },
       { nama: "Garbha Partner Lab", isi: "Kelas pijat oleh pasangan", learn: false, live: true, home: true },
+      { nama: "Lactation Hero", isi: "Persiapan & praktik menyusui", learn: true, live: true, home: true },
+      { nama: "Shishu Nurturing Academy", isi: "Belajar merawat bayi baru lahir", learn: true, live: true, home: true },
     ],
   },
   {
