@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
+import { InputSandi } from "@/app/_auth/input-sandi";
 import { periksaPendaftaran } from "@/lib/auth/daftar";
 
 export function FormDaftar() {
@@ -84,14 +85,7 @@ export function FormDaftar() {
           className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
         />
       </label>
-      <label className="block text-sm">
-        <span className="font-semibold text-ink-soft">Kata sandi</span>
-        <input
-          type="password" required value={sandi}
-          onChange={(e) => setSandi(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
-        />
-      </label>
+      <InputSandi label="Kata sandi" value={sandi} onChange={setSandi} />
       {pesan && <p className="text-sm text-clay">{pesan}</p>}
       <button
         type="submit" disabled={sibuk}
