@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
+import { InputSandi } from "@/app/_auth/input-sandi";
 
 export function FormMasuk() {
   const [email, setEmail] = useState("");
@@ -40,14 +41,7 @@ export function FormMasuk() {
           className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
         />
       </label>
-      <label className="block text-sm">
-        <span className="font-semibold text-ink-soft">Kata sandi</span>
-        <input
-          type="password" required value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
-        />
-      </label>
+      <InputSandi label="Kata sandi" value={password} onChange={setPassword} />
       <div className="text-right -mt-2">
         <a href="/lupa-sandi" className="text-[12.5px] font-semibold text-leaf underline">
           Lupa kata sandi?

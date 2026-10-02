@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { PANJANG_SANDI_MIN } from "@/lib/auth/daftar";
+import { InputSandi } from "@/app/_auth/input-sandi";
 
 export function FormAturSandi() {
   const [sandi, setSandi] = useState("");
@@ -41,26 +42,8 @@ export function FormAturSandi() {
 
   return (
     <form onSubmit={simpanSandi} className="space-y-4">
-      <label className="block text-sm">
-        <span className="font-semibold text-ink-soft">Kata sandi baru</span>
-        <input
-          type="password"
-          required
-          value={sandi}
-          onChange={(e) => setSandi(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
-        />
-      </label>
-      <label className="block text-sm">
-        <span className="font-semibold text-ink-soft">Ulangi kata sandi baru</span>
-        <input
-          type="password"
-          required
-          value={ulangi}
-          onChange={(e) => setUlangi(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-black/15 px-3 py-2.5"
-        />
-      </label>
+      <InputSandi label="Kata sandi baru" value={sandi} onChange={setSandi} />
+      <InputSandi label="Ulangi kata sandi baru" value={ulangi} onChange={setUlangi} />
       {pesan && <p className="text-sm text-clay">{pesan}</p>}
       <button
         type="submit"
