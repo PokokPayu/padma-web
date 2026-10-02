@@ -11,6 +11,7 @@ import { picuPeriksaSekali } from "@/lib/pesanan/picu-periksa";
 import { BlokBuka, punyaProdukDiPeramban } from "./tombol-ambil";
 import { periksaPesananSaya } from "./periksa";
 import { titipTujuanDiPeramban } from "@/lib/auth/tujuan-produk";
+import { TombolKeranjang } from "./tombol-keranjang";
 
 /**
  * Keadaan tombol produk BERBAYAR, dari sudut pandang pengunjung. Urutan
@@ -680,14 +681,18 @@ export function TombolBeli({
   }
 
   return (
-    <PanelBeli
-      slug={slug}
-      keadaan={keadaan}
-      pending={pending}
-      pesan={pesan}
-      bisaDibatalkan={idBatal !== null}
-      onBeli={klik}
-      onBatal={batal}
-    />
+    <>
+      <PanelBeli
+        slug={slug}
+        keadaan={keadaan}
+        pending={pending}
+        pesan={pesan}
+        bisaDibatalkan={idBatal !== null}
+        onBeli={klik}
+        onBatal={batal}
+      />
+      {/* Di LUAR PanelBeli supaya uji render PanelBeli tidak berubah. */}
+      {keadaan === "belum" && <TombolKeranjang slug={slug} productId={productId} />}
+    </>
   );
 }
