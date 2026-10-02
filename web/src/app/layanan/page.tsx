@@ -106,7 +106,7 @@ export default async function LayananPage() {
               Pilih sesi sesuai fase, cara belajar, dan kebutuhan keluarga Anda.
             </p>
             <div style={urutan(3)} className="situs-muncul flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-3.5">
-              <Cakupan ikon={<IkonGlobe className="size-6 text-situs-emas" />} judul="PADMA Learn & Live" isi="Seluruh Indonesia" />
+              <Cakupan ikon={<IkonGlobe className="size-6 text-situs-emas" />} judul="PADMA Learn & Live" isi="Seluruh Indonesia" href="/masuk" />
               <Cakupan ikon={<IkonRumah className="size-6 text-situs-emas" />} judul="PADMA Home" isi="Malang Raya & Batu" />
             </div>
             <div style={urutan(4)} className="situs-muncul flex flex-wrap gap-3.5">
@@ -254,15 +254,27 @@ export default async function LayananPage() {
   );
 }
 
-function Cakupan({ ikon, judul, isi }: { ikon: ReactNode; judul: string; isi: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl bg-situs-pasir px-4 py-3 sm:px-[18px]">
+// Learn & Live dipesan dari dalam aplikasi, jadi kartunya menuju /masuk.
+// PADMA Home sengaja tetap kartu diam: jalurnya lewat cek kesiapan di ALUR_HOME.
+function Cakupan({ ikon, judul, isi, href }: { ikon: ReactNode; judul: string; isi: string; href?: string }) {
+  const badan = (
+    <>
       {ikon}
       <div className="flex flex-col">
         <span className="font-semibold text-situs-judul">{judul}</span>
         <span className="text-sm text-situs-teks-soft">{isi}</span>
       </div>
-    </div>
+    </>
+  );
+  const kelas = "flex items-center gap-3 rounded-xl bg-situs-pasir px-4 py-3 sm:px-[18px]";
+  if (!href) return <div className={kelas}>{badan}</div>;
+  return (
+    <Link
+      href={href}
+      className={`${kelas} ring-1 ring-transparent transition-shadow hover:ring-situs-emas focus-visible:outline-2 focus-visible:outline-situs-emas`}
+    >
+      {badan}
+    </Link>
   );
 }
 
