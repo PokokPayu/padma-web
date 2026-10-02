@@ -76,6 +76,7 @@ const TERBUKA_SADAR = {
   baca_keranjang: "auth.uid",
   batalkan_pesanan_saya: "auth.uid",
   buat_pesanan: "auth.uid",
+  buat_pesanan_keranjang: "auth.uid",
   catat_token_snap: "auth.uid",
   hapus_dari_keranjang: "auth.uid",
   tambah_ke_keranjang: "auth.uid",
