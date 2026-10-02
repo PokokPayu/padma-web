@@ -10,7 +10,7 @@ import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
  * CHECKOUT — rute TIPIS. Satu kalimat arsitektur, supaya tiga penyebutan tidak
  * berarti tiga mekanisme:
  *
- *   Rute ini memanggil RPC `buat_pesanan` DENGAN SESI PEMANGGIL — bukan server
+ *   Rute ini memanggil RPC `buat_pesanan_keranjang` DENGAN SESI PEMANGGIL — bukan server
  *   action, dan TIDAK PERNAH service role. RPC-lah yang memilih `client_id` dari
  *   `auth.uid()`, membekukan harga, menerbitkan `kode`, dan menolak pesanan
  *   terbuka kedua lewat unique parsial.
@@ -33,6 +33,7 @@ type BarisPesanan = {
   percobaan: number;
   nominal_tagih: number;
   judul: string;
+  jumlah_item: number;
 };
 
 export async function POST(request: Request) {
@@ -45,9 +46,19 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ pesan: "Format tidak valid." }, { status: 400 });
   }
-  const isi = (badan ?? {}) as { productId?: unknown; ulang?: unknown };
-  const productId = typeof isi.productId === "string" ? isi.productId : "";
-  if (!POLA_UUID.test(productId)) {
+  const isi = (badan ?? {}) as { productId?: unknown; productIds?: unknown; ulang?: unknown };
+  // Dua bentuk badan: `productId` (tombol "Beli sekarang") dan `productIds`
+  // (keranjang, P2). Keduanya mendarat di RPC yang sama.
+  const productIds: unknown[] = Array.isArray(isi.productIds)
+    ? isi.productIds
+    : typeof isi.productId === "string"
+      ? [isi.productId]
+      : [];
+  if (
+    productIds.length === 0 ||
+    productIds.length > 20 ||
+    !productIds.every((id) => typeof id === "string" && POLA_UUID.test(id))
+  ) {
     return NextResponse.json({ pesan: "Produk tidak dikenali." }, { status: 400 });
   }
   // `ulang` dinaikkan HANYA ketika Snap menolak menerbitkan token dan
@@ -55,8 +66,8 @@ export async function POST(request: Request) {
   const ulang = isi.ulang === true;
 
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase.rpc("buat_pesanan", {
-    p_product_id: productId,
+  const { data, error } = await supabase.rpc("buat_pesanan_keranjang", {
+    p_product_ids: productIds,
     p_ulang: ulang,
   });
 
@@ -83,7 +94,13 @@ export async function POST(request: Request) {
   const snap = await terbitkanTokenSnap({
     orderId,
     nominal: baris.nominal_tagih,
-    judul: baris.judul,
+    // Snap menerima SATU baris item seharga total. Merinci per produk adalah
+    // satu tempat lagi untuk selisih jumlah, dan Midtrans menolak transaksi
+    // yang rinciannya tidak berjumlah `gross_amount`.
+    judul:
+      baris.jumlah_item > 1
+        ? `${baris.judul} + ${baris.jumlah_item - 1} produk lain`
+        : baris.judul,
     // Satu konstanta untuk kolom `kedaluwarsa_pada` DAN `expiry` Snap.
     kedaluwarsaJam: JAM_TENGGAT_PESANAN,
   });

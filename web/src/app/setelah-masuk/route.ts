@@ -4,6 +4,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { COOKIE_UNDANGAN } from "@/lib/auth/link-client";
 import { pastikanKlien } from "@/lib/auth/pastikan-klien";
 import { COOKIE_KLAIM, klaimSkrining } from "@/lib/skrining/klaim";
+import { COOKIE_LANJUT, tujuanProdukAman } from "@/lib/auth/tujuan-produk";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -59,12 +60,24 @@ export async function GET(request: Request) {
   // data pribadi dan URL bocor ke riwayat peramban, header Referer, dan log
   // proxy; id tidak berarti apa-apa bagi yang tidak bisa membacanya — dan
   // hanya pemiliknya yang bisa (policy "screenings: klien baca miliknya").
-  const alamatTujuan = new URL(tujuan, url.origin);
+  // Kembali ke produk (spec P2) HANYA untuk klien biasa yang tujuannya memang
+  // `/passport`, dan HANYA bila tidak ada klaim skrining yang tersambung —
+  // klaim itu membawa parameter yang dibaca beranda passport, dan ia menang.
+  // Owner/admin sudah pulang lebih dulu di atas; alur undangan memulangkan
+  // tujuan lain dari `pastikanKlien`.
+  const lanjut = tujuanProdukAman(jar.get(COOKIE_LANJUT)?.value);
+  const alamatTujuan = new URL(
+    tujuan === "/passport" && !skriningTersambung && lanjut !== null ? lanjut : tujuan,
+    url.origin,
+  );
   if (skriningTersambung) alamatTujuan.searchParams.set("skrining", skriningTersambung);
 
   const response = NextResponse.redirect(alamatTujuan);
   // Token dibuang apa pun hasilnya — sekali pakai berarti juga sekali coba.
   if (token) response.cookies.delete(COOKIE_UNDANGAN);
   if (tokenKlaim) response.cookies.delete(COOKIE_KLAIM);
+  // Dihapus apa pun hasilnya: tujuan yang tidak dipakai sekarang tidak boleh
+  // membajak login berikutnya satu jam kemudian.
+  if (jar.get(COOKIE_LANJUT)) response.cookies.delete(COOKIE_LANJUT);
   return response;
 }

@@ -1,5 +1,6 @@
 import { bacaProdukPublik } from "@/lib/produk/katalog";
 import { KartuProduk } from "./kartu-produk";
+import { TautanKeranjang } from "./tautan-keranjang";
 
 // Katalog produk datang dari DB dan diubah staf lewat panel, jadi halaman ini
 // tidak boleh dibekukan selamanya di waktu build — alasan yang sama persis
@@ -14,7 +15,10 @@ export default async function ProdukPage() {
   return (
     <main className="bg-paper">
       <section className="mx-auto max-w-6xl px-5 py-14">
-        <h1 className="text-[28px] font-bold text-ink">Produk Digital</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[28px] font-bold text-ink">Produk Digital</h1>
+          <TautanKeranjang />
+        </div>
         <p className="mt-2 max-w-2xl text-[15px] text-ink-soft">
           Panduan video dan e-book PADMA yang bisa dimiliki kapan saja — tanpa
           jadwal, tanpa kunjungan.

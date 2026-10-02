@@ -5,6 +5,7 @@ import { formatRupiah } from "@/lib/rupiah-publik";
 import { midtransProduksi } from "@/lib/midtrans/konfig";
 import { TombolAmbil } from "./tombol-ambil";
 import { TombolBeli } from "./tombol-beli";
+import { TautanKeranjang } from "../tautan-keranjang";
 
 // Sama seperti etalase: katalog berubah lewat panel staf, jadi halaman satu
 // produk tidak boleh dibekukan selamanya di waktu build.
@@ -83,9 +84,12 @@ export default async function ProdukDetailPage({
   return (
     <main className="bg-paper">
       <section className="mx-auto max-w-3xl px-5 py-14">
-        <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-gold">
-          {LABEL_JENIS[produk.jenis]}
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="rounded-full bg-gold/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-gold">
+            {LABEL_JENIS[produk.jenis]}
+          </span>
+          <TautanKeranjang />
+        </div>
         <h1 className="mt-3 text-[28px] font-bold text-ink">{produk.judul}</h1>
         {produk.deskripsi !== "" && (
           <p className="mt-3 whitespace-pre-line text-[15px] text-ink-soft">

@@ -123,6 +123,7 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
 | `/passport/produk` | Klien | Pembelian saya: produk digital yang dimiliki, pintu ke pemutar/pembaca/unduhan |
 | `/passport/produk/[slug]` | Klien | Pembaca/pemutar produk digital yang dimiliki, plus tombol unduh bila diizinkan |
+| `/passport/keranjang` | Klien | Keranjang produk digital (P2): daftar, total, bayar sekali lewat Snap, batal pesanan terbuka |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
 | `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |

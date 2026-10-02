@@ -109,6 +109,8 @@ const TABEL_TERTUTUP_ANON = [
   // pesanan, dan judul item ke internet, dan NOL uji merah:
   // `money-firewall-struktural` justru sudah membebaskan kolomnya lewat
   // `KOLOM_UANG_VIEW_DIIZINKAN`, dan `struktur-rls` tidak melihat view.
+  // Keranjang P2: SELECT bagi `authenticated` saja, lewat policy milik sendiri.
+  "cart_items",
   "pesanan_item_staf",
 ] as const;
 
