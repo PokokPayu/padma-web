@@ -3,6 +3,7 @@ import { produkSaya } from "@/lib/passport/produk-saya";
 import { ambilKlien } from "@/lib/passport/data";
 import { periksaPesananMenggantung } from "@/lib/pesanan/periksa-menggantung";
 import { LABEL_JENIS } from "@/lib/produk/status";
+import { hitungKeranjang } from "@/lib/keranjang/baca";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembelian Saya" };
@@ -25,7 +26,7 @@ export default async function HalamanProdukSaya() {
   // yang karena itu dipicu dari peramban.
   await periksaPesananMenggantung();
 
-  const produk = await produkSaya(klien.id);
+  const [produk, isiKeranjang] = await Promise.all([produkSaya(klien.id), hitungKeranjang()]);
 
   return (
     <section className="rounded-2xl border border-black/10 bg-white p-6">
@@ -35,6 +36,14 @@ export default async function HalamanProdukSaya() {
           produk digital yang Anda miliki
         </span>
       </h1>
+      {isiKeranjang > 0 && (
+        <Link
+          href="/passport/keranjang"
+          className="mb-4 inline-flex min-h-[44px] items-center rounded-lg border border-night/20 px-4 text-[13.5px] font-bold text-night"
+        >
+          Keranjang ({isiKeranjang})
+        </Link>
+      )}
 
       {produk.length === 0 ? (
         <p className="rounded-xl border border-dashed border-black/10 bg-paper p-4 text-[13px] text-ink-soft">
