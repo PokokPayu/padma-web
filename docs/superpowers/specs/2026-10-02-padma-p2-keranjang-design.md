@@ -202,8 +202,9 @@ Isi, dari `baca_keranjang()`:
   muncul di Pembelian Saya", lalu baca ulang. Keranjang TIDAK dikosongkan oleh
   peramban; trigger yang mengosongkannya saat akses benar-benar terbit, dan
   sampai itu item tampil `diproses`.
-- Lapis 1b (`picuPeriksaSekali(periksaPesananSaya, ...)`) dipicu sekali saat
-  halaman dibuka, seperti halaman produk.
+- Lapis 1b: `await periksaPesananMenggantung()` di server component, sama
+  persis dengan `/passport/produk` — halaman passport dynamic, jadi tidak perlu
+  dipicu dari peramban.
 
 ## Yang tidak berubah
 
