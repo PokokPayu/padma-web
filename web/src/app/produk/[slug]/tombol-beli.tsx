@@ -10,6 +10,7 @@ import { PESANAN_BERUANG, PESANAN_TERBUKA } from "@/lib/pesanan/status";
 import { picuPeriksaSekali } from "@/lib/pesanan/picu-periksa";
 import { BlokBuka, punyaProdukDiPeramban } from "./tombol-ambil";
 import { periksaPesananSaya } from "./periksa";
+import { titipTujuanDiPeramban } from "@/lib/auth/tujuan-produk";
 
 /**
  * Keadaan tombol produk BERBAYAR, dari sudut pandang pengunjung. Urutan
@@ -261,16 +262,19 @@ export type HasilCheckout =
  * `400`/`401`/`409` TIDAK membakar: ketiganya berhenti sebelum Snap disentuh.
  */
 export async function mintaCheckout(
-  productId: string,
+  produk: string | readonly string[],
   ulang: boolean,
   ambil: typeof fetch = (...argumen) => fetch(...argumen),
 ): Promise<{ hasil: HasilCheckout; orderIdTerbakar: boolean }> {
+  // Satu id = "Beli sekarang"; larik = keranjang (P2). Rutenya menerima keduanya.
+  const badan =
+    typeof produk === "string" ? { productId: produk, ulang } : { productIds: produk, ulang };
   let jawab: Response;
   try {
     jawab = await ambil("/api/pesanan/checkout", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ productId, ulang }),
+      body: JSON.stringify(badan),
     });
   } catch {
     // Sambungan putus. Pesanannya MUNGKIN sudah lahir di server — diam di sini
@@ -586,8 +590,10 @@ export function TombolBeli({
       }
 
       if (hasil.jenis === "masuk") {
-        // `/masuk` tidak membaca parameter lanjutan apa pun di repo ini, jadi
-        // tidak ada janji "kembali ke sini" yang dibuat lalu dilanggar.
+        // Tujuan dititipkan di cookie dan dibaca `/setelah-masuk` (spec P2).
+        // Pembeli mendarat lagi di produk ini dan menekan tombolnya sekali
+        // lagi — tidak ada pembelian yang dimulai otomatis.
+        titipTujuanDiPeramban(`/produk/${slug}`);
         router.push("/masuk");
         return;
       }
