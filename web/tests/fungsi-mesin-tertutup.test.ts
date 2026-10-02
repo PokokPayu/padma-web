@@ -73,9 +73,12 @@ const MESIN_TERTUTUP = [
 const TERBUKA_SADAR = {
   // Memilih `client_id`-nya sendiri dari sesi, alih-alih memercayai payload.
   ambil_produk_gratis: "auth.uid",
+  baca_keranjang: "auth.uid",
   batalkan_pesanan_saya: "auth.uid",
   buat_pesanan: "auth.uid",
   catat_token_snap: "auth.uid",
+  hapus_dari_keranjang: "auth.uid",
+  tambah_ke_keranjang: "auth.uid",
   // Gerbang PERAN. `auth.uid()` juga muncul di badan keduanya, tapi hanya
   // untuk mengambil nama pemutus/penutup — dan itulah sebabnya kolom ini
   // menyebut gerbang yang diharapkan, bukan menerima salah satu dari dua.
