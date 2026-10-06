@@ -1,6 +1,11 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import { PESANAN_BERUANG, PESANAN_MATI, type StatusPesanan } from "@/lib/pesanan/status";
-import type { BarisPenjualan, ItemPenjualan } from "./hitung";
+import {
+  PESANAN_BERUANG,
+  PESANAN_MATI,
+  type KejadianPesanan,
+  type StatusPesanan,
+} from "@/lib/pesanan/status";
+import { tanggalUang, type BarisPenjualan, type ItemPenjualan } from "./hitung";
 
 // ============================================================================
 // PEMBACA PENJUALAN — nol service role
@@ -35,6 +40,44 @@ const STATUS_DIBACA: StatusPesanan[] = [...PESANAN_BERUANG, ...PESANAN_MATI];
 
 /** Nilai `status_midtrans` yang berarti uang KELUAR lagi. */
 const STATUS_KEMBALI = ["refund", "partial_refund", "chargeback", "partial_chargeback"];
+
+/** Kejadian yang menandai uang mendarat sesudah pesanan ditutup. Bertipe, bukan literal: rename enum jadi galat kompilasi. */
+const KEJADIAN_SETELAH_TUTUP: KejadianPesanan[] = ["lunas_setelah_tutup"];
+
+/**
+ * Id per kueri putaran 2. 100 x 9 item = 900, di bawah `max_rows` 1000
+ * (`supabase/config.toml:18`). Menaikkan `.limit()` TIDAK menolong: max_rows
+ * adalah batas server, bukan batas klien.
+ */
+const UKURAN_BONGKAH = 100;
+const BATAS_BONGKAH = 900;
+
+type HasilBongkah<T> = { data: T[] | null; error: { message: string } | null };
+
+/**
+ * Menjalankan satu kueri per bongkah id (bersamaan), menyatukan barisnya, dan
+ * melaporkan apakah ada bongkah yang menyentuh batasnya — artinya terpotong.
+ * Galat dilempar, tidak dibuang.
+ */
+async function bacaBerbongkah<T>(
+  ids: string[],
+  kueri: (bongkah: string[], batas: number) => PromiseLike<HasilBongkah<T>>,
+): Promise<{ data: T[]; terpotong: boolean }> {
+  const bongkah: string[][] = [];
+  for (let i = 0; i < ids.length; i += UKURAN_BONGKAH) {
+    bongkah.push(ids.slice(i, i + UKURAN_BONGKAH));
+  }
+  const hasil = await Promise.all(bongkah.map((b) => kueri(b, BATAS_BONGKAH)));
+  const data: T[] = [];
+  let terpotong = false;
+  for (const h of hasil) {
+    if (h.error) throw h.error;
+    const baris = h.data ?? [];
+    if (baris.length >= BATAS_BONGKAH) terpotong = true;
+    data.push(...baris);
+  }
+  return { data, terpotong };
+}
 
 type BarisOrders = {
   id: string;
@@ -133,35 +176,46 @@ export async function bacaPenjualan(opsi: {
   const [susulan, item, notif, jejak] = await Promise.all([
     idTambahan.length === 0
       ? Promise.resolve({ data: [] as BarisOrders[], error: null })
-      : sb
-          .from("orders")
-          .select(KOLOM_ORDERS)
-          .in("id", idTambahan)
-          .in("status", STATUS_DIBACA)
-          .returns<BarisOrders[]>(),
-    sb
-      .from("pesanan_item_staf")
-      .select("pesanan_id, judul_beku, harga_beku, urutan, product_id")
-      .in("pesanan_id", semuaId)
-      .order("urutan", { ascending: true }),
-    sb
-      .from("notifikasi_pesanan")
-      .select("pesanan_id, status_midtrans, diterima_pada")
-      .in("pesanan_id", semuaId)
-      .order("diterima_pada", { ascending: false })
-      // PEMECAH SERI, tugasnya STABILITAS. `diterima_pada` hanyalah
-      // `default now()`; dua baris BOLEH memikul cap yang sama persis.
-      .order("id", { ascending: false }),
-    sb
-      .from("jejak_pesanan")
-      .select("pesanan_id, kejadian")
-      .in("pesanan_id", semuaId)
-      .eq("kejadian", "lunas_setelah_tutup"),
+      : (() => {
+          let q = sb
+            .from("orders")
+            .select(KOLOM_ORDERS)
+            .in("id", idTambahan)
+            .in("status", STATUS_DIBACA);
+          // Putaran 1(b) tidak bisa menyaring klien (notifikasi tak punya
+          // client_id), jadi saringan ini WAJIB dipasang lagi di sini.
+          if (opsi.clientId) q = q.eq("client_id", opsi.clientId);
+          return q.returns<BarisOrders[]>();
+        })(),
+    bacaBerbongkah(semuaId, (ids, batas) =>
+      sb
+        .from("pesanan_item_staf")
+        .select("pesanan_id, judul_beku, harga_beku, urutan, product_id")
+        .in("pesanan_id", ids)
+        .order("urutan", { ascending: true })
+        .limit(batas),
+    ),
+    bacaBerbongkah(semuaId, (ids, batas) =>
+      sb
+        .from("notifikasi_pesanan")
+        .select("pesanan_id, status_midtrans, nominal_diterima, diterima_pada")
+        .in("pesanan_id", ids)
+        .order("diterima_pada", { ascending: false })
+        // PEMECAH SERI, tugasnya STABILITAS. `diterima_pada` hanyalah
+        // `default now()`; dua baris BOLEH memikul cap yang sama persis.
+        .order("id", { ascending: false })
+        .limit(batas),
+    ),
+    bacaBerbongkah(semuaId, (ids, batas) =>
+      sb
+        .from("jejak_pesanan")
+        .select("pesanan_id, kejadian")
+        .in("pesanan_id", ids)
+        .in("kejadian", KEJADIAN_SETELAH_TUTUP)
+        .limit(batas),
+    ),
   ]);
   if (susulan.error) throw susulan.error;
-  if (item.error) throw item.error;
-  if (notif.error) throw notif.error;
-  if (jejak.error) throw jejak.error;
 
   for (const b of susulan.data ?? []) perId.set(b.id, b);
 
@@ -184,13 +238,15 @@ export async function bacaPenjualan(opsi: {
     const kunci = r.pesanan_id as string;
     const status = (r.status_midtrans as string | null) ?? "";
     if (STATUS_KEMBALI.includes(status)) dikembalikan.add(kunci);
-    // Notifikasi TERBARU yang menang — daftarnya sudah terurut turun.
-    if (!uangPer.has(kunci)) uangPer.set(kunci, r.diterima_pada as string);
+    // Hanya notifikasi yang MEMBAWA uang (`nominal_diterima` terisi) yang
+    // menentukan tanggal uang: expire/deny/refund susulan tidak boleh
+    // memindahkan uangnya ke bulan lain. Terbaru menang — sudah terurut turun.
+    if (r.nominal_diterima != null && !uangPer.has(kunci)) uangPer.set(kunci, r.diterima_pada as string);
   }
 
   const setelahTutup = new Set((jejak.data ?? []).map((r) => r.pesanan_id as string));
 
-  const baris: BarisPenjualan[] = [...perId.values()].map((b) => ({
+  const semua: BarisPenjualan[] = [...perId.values()].map((b) => ({
     pesananId: b.id,
     kode: b.kode,
     status: b.status,
@@ -207,10 +263,28 @@ export async function bacaPenjualan(opsi: {
     item: itemPer.get(b.id) ?? null,
   }));
 
+  // Fungsi ini menjanjikan baris untuk SEBUAH rentang, maka harus
+  // menyerahkan baris untuk rentang itu. Notifikasi yang mendarat di rentang
+  // pada pesanan yang uangnya bulan tetangga menyeret pesanan itu masuk;
+  // bucket parsial dari bulan tetangga lebih buruk daripada tidak ada, sebab
+  // tampak seperti total sungguhan.
+  const baris =
+    opsi.mulai && opsi.sampai
+      ? semua.filter((b) => {
+          const t = tanggalUang(b);
+          if (t === null) return true;
+          const ms = Date.parse(t);
+          return ms >= Date.parse(opsi.mulai!) && ms < Date.parse(opsi.sampai!);
+        })
+      : semua;
+
   return {
     baris,
     terpotong:
       (tutup.data ?? []).length >= BATAS_BARIS_PENJUALAN ||
-      (notifRentang.data ?? []).length >= BATAS_BARIS_PENJUALAN,
+      (notifRentang.data ?? []).length >= BATAS_BARIS_PENJUALAN ||
+      item.terpotong ||
+      notif.terpotong ||
+      jejak.terpotong,
   };
 }

@@ -17,14 +17,21 @@ import { randomUUID } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 
-const KLIEN_EMAIL = "klien@padma.test";
+// `klien@padma.test` tidak ada di seed (`scripts/seed-users.ts`);
+// `ananda@padma.test` adalah klien sungguhan di sana.
+const KLIEN_EMAIL = "ananda@padma.test";
 const bersihkan: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
   for (const f of bersihkan.splice(0)) await f();
 });
 
-async function semaiProdukLunas(slug: string, harga: number, judul: string) {
+async function semaiProdukLunas(
+  slug: string,
+  harga: number,
+  judul: string,
+  clientId?: string,
+) {
   const sb = createAdminSupabase();
 
   const { data: produk, error: eProduk } = await sb
@@ -34,19 +41,23 @@ async function semaiProdukLunas(slug: string, harga: number, judul: string) {
     .single();
   if (eProduk) throw eProduk;
 
-  const { data: klien, error: eKlien } = await sb
-    .from("clients")
-    .select("id")
-    .limit(1)
-    .single();
-  if (eKlien) throw eKlien;
+  let idKlien = clientId;
+  if (!idKlien) {
+    const { data: klien, error: eKlien } = await sb
+      .from("clients")
+      .select("id")
+      .limit(1)
+      .single();
+    if (eKlien) throw eKlien;
+    idKlien = klien.id as string;
+  }
 
   const kode = `PSN-261006-${randomUUID().slice(0, 6).toUpperCase()}`;
   const { data: pesanan, error: ePesanan } = await sb
     .from("orders")
     .insert({
       kode,
-      client_id: klien.id,
+      client_id: idKlien,
       status: "lunas",
       jumlah_item: 1,
       ditutup_pada: "2026-10-15T05:00:00Z",
@@ -125,10 +136,24 @@ describe("bacaPenjualan", () => {
     // `user_role()` DI DALAM badan view-nya, jadi sesi klien memperoleh NOL
     // BARIS, bukan 42501. Uji yang hanya memastikan "tidak melempar" akan
     // hijau sekalipun seluruh harga bocor.
-    await semaiProdukLunas(`p4-klien-${randomUUID().slice(0, 8)}`, 150_000, "Kelas Menyusui");
+    const sb = await signInAs(KLIEN_EMAIL);
+    const { data: auth } = await sb.auth.getUser();
+    // Pesanan dipasang pada klien YANG LOGIN, supaya `baris` tidak kosong
+    // dan uji ini tidak hijau karena menemukan apa-apa.
+    const { data: milikku, error: eMilik } = await createAdminSupabase()
+      .from("clients")
+      .select("id")
+      .eq("user_id", auth.user!.id)
+      .single();
+    if (eMilik) throw eMilik;
+    await semaiProdukLunas(
+      `p4-klien-${randomUUID().slice(0, 8)}`,
+      150_000,
+      "Kelas Menyusui",
+      milikku.id as string,
+    );
 
     const { bacaPenjualan } = await import("@/lib/penjualan/baca");
-    const sb = await signInAs(KLIEN_EMAIL);
 
     const { baris } = await bacaPenjualan({
       mulai: "2026-10-01T00:00:00+07:00",
@@ -138,6 +163,7 @@ describe("bacaPenjualan", () => {
 
     // Klien boleh melihat pesanannya SENDIRI lewat policy `orders`, tetapi
     // tidak satu pun nominal: view item-nya memulangkan nol baris.
+    expect(baris.length).toBeGreaterThan(0);
     for (const b of baris) expect(b.item).toBeNull();
   });
 });
