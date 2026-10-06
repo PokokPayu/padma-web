@@ -67,7 +67,7 @@ export function KartuBulan({ bulan }: { bulan: PenjualanBulan }) {
       )}
 
       {bulan.pengecualian.length > 0 && (
-        <div className="mt-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3">
+        <div data-pengecualian="1" className="mt-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3">
           <b className="block text-[12px] text-clay">
             Perlu ditinjau — nilainya TIDAK ikut dihitung di omzet di atas.
           </b>

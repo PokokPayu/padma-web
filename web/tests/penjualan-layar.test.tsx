@@ -7,6 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { KartuBulan } from "@/app/owner/penjualan/kartu-bulan";
+import { PeringatanData } from "@/app/owner/penjualan/peringatan-data";
 import type { PenjualanBulan } from "@/lib/penjualan/hitung";
 
 const BULAN_DASAR: PenjualanBulan = {
@@ -45,7 +46,7 @@ describe("KartuBulan", () => {
 
   it("TANPA pengecualian, kotak pengecualian tidak dirender sama sekali", () => {
     const m = renderToStaticMarkup(<KartuBulan bulan={BULAN_DASAR} />);
-    expect(m).not.toContain("perlu ditinjau");
+    expect(m).not.toContain("data-pengecualian");
   });
 
   it("nilai pengecualian dirender TERPISAH, tidak terjumlah ke omzet", () => {
@@ -65,7 +66,7 @@ describe("KartuBulan", () => {
     );
     // Omzetnya TIDAK berubah oleh kehadiran pengecualian.
     expect(m).toContain("450.000");
-    expect(m).toContain("perlu ditinjau");
+    expect(m).toContain("data-pengecualian");
     expect(m).toContain("150.000");
     expect(m).toContain("220.000");
     // Dan tidak ada satu pun angka gabungan yang muncul.
@@ -105,5 +106,26 @@ describe("KartuBulan", () => {
     expect(m).toContain('data-bulan="2026-08"');
     expect(m).toContain("Agustus 2026");
     expect(m).toContain("0 pembelian");
+  });
+});
+
+describe("PeringatanData", () => {
+  it("tanpaNilai > 0 merender banner data tak terbaca", () => {
+    // Bulan kosong + tanpaNilai > 0 berarti data tidak terbaca, bukan "tidak
+    // ada penjualan". Banner inilah satu-satunya pembeda keduanya di layar.
+    const m = renderToStaticMarkup(
+      <PeringatanData terpotong={false} tanpaTanggal={0} tanpaNilai={3} />,
+    );
+    expect(m).toContain('data-peringatan="tanpa-nilai"');
+    expect(m).toContain("3 pesanan tidak terbaca rincian itemnya");
+    expect(m).not.toContain('data-peringatan="tanpa-tanggal"');
+    expect(m).not.toContain('data-peringatan="terpotong"');
+  });
+
+  it("ketiganya bersih: tidak merender apa pun", () => {
+    const m = renderToStaticMarkup(
+      <PeringatanData terpotong={false} tanpaTanggal={0} tanpaNilai={0} />,
+    );
+    expect(m).toBe("");
   });
 });

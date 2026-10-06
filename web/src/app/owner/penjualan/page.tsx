@@ -14,6 +14,7 @@ import {
   rentangBulanJakarta,
 } from "@/lib/penjualan/bulan";
 import { KartuBulan } from "./kartu-bulan";
+import { PeringatanData } from "./peringatan-data";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Penjualan" };
@@ -87,6 +88,9 @@ export default async function PenjualanOwnerPage({
         </Bantuan>
       </header>
 
+      {/* Peringatan SEBELUM angka: pembaca harus bertemu catatannya dulu. */}
+      <PeringatanData terpotong={terpotong} tanpaTanggal={tanpaTanggal} tanpaNilai={tanpaNilai} />
+
       <div className="mb-4 rounded-lg border border-panel-border bg-panel-surface px-5 py-4">
         <p className="text-[11.5px] text-panel-muted">{`Omzet ${BULAN_GRAFIK} bulan terakhir`}</p>
         <p className="font-mono text-[20px] text-leaf">{formatRupiah(omzetSetahun)}</p>
@@ -99,26 +103,6 @@ export default async function PenjualanOwnerPage({
         labelKolomLabel="Bulan"
         labelKolomNilai="Omzet"
       />
-
-      {terpotong && (
-        <p className="mb-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3 text-[11.5px] text-clay">
-          Sebagian baris terpotong oleh batas kueri — angka di halaman ini belum lengkap.
-        </p>
-      )}
-
-      {tanpaTanggal > 0 && (
-        <p className="mb-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3 text-[11.5px] text-clay">
-          {`${tanpaTanggal} pesanan tidak punya tanggal uang masuk dan tidak masuk bulan mana pun. Periksa di /admin/pesanan.`}
-        </p>
-      )}
-
-      {/* Bulan kosong + tanpaNilai > 0 berarti DATA TIDAK TERBACA, bukan "tidak
-          ada penjualan". Tanpa banner ini keduanya tampak identik di layar. */}
-      {tanpaNilai > 0 && (
-        <p className="mb-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3 text-[11.5px] text-clay">
-          {`${tanpaNilai} pesanan tidak terbaca rincian itemnya, sehingga nilainya tidak ada di angka mana pun di halaman ini. Biasanya ini masalah hak akses, bukan penjualan yang hilang.`}
-        </p>
-      )}
 
       {halaman.map((b) => (
         <KartuBulan key={b.bulan} bulan={b} />
