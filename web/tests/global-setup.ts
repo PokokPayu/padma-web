@@ -94,7 +94,27 @@ export default async function setup() {
   config({ path: [".env.local", ".env"] });
 
   const mulai = Date.now();
-  await seedUsers();
-  await semaikanVideoDemoUntukTest();
-  console.log(`[globalSetup] seed pengguna & data demo siap (${Date.now() - mulai}ms)`);
+  try {
+    // Cek cepat apakah Supabase tersedia sebelum mencoba seed.
+    // Jika tidak, lewati — test murni seperti penjualan-bulan tidak memerlukan DB.
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+    await Promise.race([
+      admin.from("auth.users").select("id").limit(1),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Supabase connection timeout")), 2000)
+      ),
+    ]);
+
+    await seedUsers();
+    await semaikanVideoDemoUntukTest();
+    console.log(`[globalSetup] seed pengguna & data demo siap (${Date.now() - mulai}ms)`);
+  } catch (err) {
+    // Test murni seperti penjualan-bulan tidak memerlukan database.
+    // Jika Supabase tidak tersedia, lewati seeding dan biarkan test murni jalan.
+    console.warn(`[globalSetup] lewati seeding (Supabase tidak tersedia): ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
