@@ -7,9 +7,11 @@ const GAYA =
  * Pengumuman batas baris — DIPISAH dari halamannya supaya bisa dirender di uji
  * tanpa Supabase, pola yang sama dengan `PeringatanData` di /owner/penjualan.
  *
- * Batas yang tidak diumumkan adalah batas yang berbohong: 500 baris yang
- * terpotong terlihat persis seperti 500 baris yang memang hanya segitu. Karena
- * itu angkanya WAJIB "dicetak di layar apa adanya".
+ * Batas yang tidak diumumkan adalah batas yang berbohong: daftar yang
+ * terpotong tepat di batasnya terlihat persis seperti daftar yang memang hanya
+ * sepanjang itu. Karena itu angkanya WAJIB "dicetak di layar apa adanya" —
+ * dari `BATAS_BARIS_PENJUALAN`, dan tidak pernah sebagai angka yang diketik
+ * ulang di berkas ini (termasuk di komentar ini; uji sumbernya mengunci itu).
  *
  * Dua keadaan, dua kalimat:
  *
