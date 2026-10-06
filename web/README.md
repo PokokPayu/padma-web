@@ -135,6 +135,7 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
 | `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan Midtrans: blok "Butuh perhatian" (bertanda tinjauan, atau uang sudah masuk tapi akses belum tercatat terbit) dan "Terbuka"; satu-satunya layar admin yang menampilkan nominal PESANAN (yang ditagih vs yang diterima) — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
+| `/admin/penjualan` | Admin, Owner | Daftar nota penjualan produk digital, satu baris per produk; cari (kode, PADMA ID, nama klien, judul produk), saring periode, total hanya dari nota lunas yang tidak dikembalikan; BACA SAJA |
 | `/admin/layanan` | Admin, Owner | Daftar layanan datar: cari, saring ketersediaan, paginasi; baris menaut ke detail |
 | `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
 | `/admin/materi` | Admin, Owner | Daftar materi datar: cari, saring aktif/tipe/kelengkapan isi, paginasi; baris menaut ke detail |

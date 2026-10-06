@@ -8,7 +8,9 @@ import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { KartuBulan } from "@/app/owner/penjualan/kartu-bulan";
 import { PeringatanData } from "@/app/owner/penjualan/peringatan-data";
-import type { PenjualanBulan } from "@/lib/penjualan/hitung";
+import { TabelPenjualan } from "@/app/admin/penjualan/tabel-penjualan";
+import { ringkasNota } from "@/app/admin/penjualan/ringkas";
+import type { BarisPenjualan, PenjualanBulan } from "@/lib/penjualan/hitung";
 
 const BULAN_DASAR: PenjualanBulan = {
   bulan: "2026-10",
@@ -127,5 +129,110 @@ describe("PeringatanData", () => {
       <PeringatanData terpotong={false} tanpaTanggal={0} tanpaNilai={0} />,
     );
     expect(m).toBe("");
+  });
+});
+
+function notaDasar(ubah: Partial<BarisPenjualan> = {}): BarisPenjualan {
+  return {
+    pesananId: "p-1",
+    kode: "PSN-261015-AAAAAA",
+    status: "lunas",
+    lunasPada: "2026-10-15T05:00:00Z",
+    uangPada: "2026-10-15T05:00:00Z",
+    padmaId: "PDM-0001",
+    namaKlien: "Ibu A",
+    pernahDikembalikan: false,
+    lunasSetelahTutup: false,
+    item: [{ productId: "a", judulBeku: "Kelas Menyusui", hargaBeku: 150_000, urutan: 1 }],
+    ...ubah,
+  };
+}
+
+describe("TabelPenjualan", () => {
+  it("satu baris per ITEM, bukan per pesanan", () => {
+    // Keranjang P2 membuat satu pesanan bisa memuat beberapa produk. Satu
+    // baris per pesanan akan menyembunyikan produk kedua dan ketiga.
+    const m = renderToStaticMarkup(
+      <TabelPenjualan
+        baris={[
+          notaDasar({
+            item: [
+              { productId: "a", judulBeku: "Kelas Menyusui", hargaBeku: 100_000, urutan: 1 },
+              { productId: "b", judulBeku: "Panduan MPASI", hargaBeku: 75_000, urutan: 2 },
+            ],
+          }),
+        ]}
+      />,
+    );
+    expect(m).toContain("Kelas Menyusui");
+    expect(m).toContain("Panduan MPASI");
+    expect(m).toContain("100.000");
+    expect(m).toContain("75.000");
+  });
+
+  it("embed klien yang TIDAK TERBACA dirender sebagai kegagalan yang terlihat", () => {
+    // Pembacaan yang ditahan RLS memulangkan NULL, bukan galat. Sel kosong
+    // terbaca sebagai "klien tanpa nama" — pernyataan yang salah tentang data.
+    const m = renderToStaticMarkup(
+      <TabelPenjualan baris={[notaDasar({ padmaId: "", namaKlien: "" })]} />,
+    );
+    expect(m).toContain("tidak terbaca");
+  });
+
+  it("item yang TIDAK TERBACA tidak dirender sebagai Rp 0", () => {
+    const m = renderToStaticMarkup(<TabelPenjualan baris={[notaDasar({ item: null })]} />);
+    expect(m).toContain("tidak terbaca");
+    expect(m).not.toContain("Rp 0");
+  });
+
+  it("produk GRATIS dirender sebagai Rp 0, bukan disembunyikan", () => {
+    const m = renderToStaticMarkup(
+      <TabelPenjualan
+        baris={[
+          notaDasar({
+            item: [{ productId: "g", judulBeku: "Panduan gratis", hargaBeku: 0, urutan: 1 }],
+          }),
+        ]}
+      />,
+    );
+    expect(m).toContain("Panduan gratis");
+    expect(m).toContain("Rp 0");
+  });
+
+  it("nota yang dikembalikan diberi catatan, tidak diam-diam terlihat normal", () => {
+    const m = renderToStaticMarkup(
+      <TabelPenjualan baris={[notaDasar({ pernahDikembalikan: true })]} />,
+    );
+    expect(m).toContain("dikembalikan");
+  });
+
+  it("daftar kosong memberi kalimat, bukan tabel kosong tanpa penjelasan", () => {
+    const m = renderToStaticMarkup(<TabelPenjualan baris={[]} />);
+    expect(m).toContain("Belum ada");
+  });
+});
+
+describe("ringkasNota", () => {
+  it("baris yang itemnya tak terbaca dihitung di tanpaNilai, bukan sebagai nol diam-diam", () => {
+    const r = ringkasNota([
+      notaDasar({ pesananId: "p-1" }),
+      notaDasar({ pesananId: "p-2", item: null }),
+    ]);
+    expect(r.total).toBe(150_000);
+    expect(r.tanpaNilai).toBe(1);
+  });
+
+  it("produk yang memang gratis menyumbang 0 TANPA menaikkan tanpaNilai", () => {
+    const r = ringkasNota([
+      notaDasar({
+        item: [{ productId: "g", judulBeku: "Panduan gratis", hargaBeku: 0, urutan: 1 }],
+      }),
+    ]);
+    expect(r.total).toBe(0);
+    expect(r.tanpaNilai).toBe(0);
+  });
+
+  it("daftar kosong menghasilkan nol dan nol", () => {
+    expect(ringkasNota([])).toEqual({ total: 0, tanpaNilai: 0 });
   });
 });
