@@ -1,6 +1,7 @@
 import { bacaPenjualan } from "@/lib/penjualan/baca";
 import { urutkanBaris, type BarisPenjualan } from "@/lib/penjualan/hitung";
 import { TabelPenjualan } from "@/app/admin/penjualan/tabel-penjualan";
+import { notaTampil } from "@/app/admin/penjualan/ringkas";
 
 /**
  * Bagian MURNI — dipisah dari pengambilan datanya supaya bisa dirender di
@@ -34,5 +35,10 @@ export function BagianPembelian({ baris }: { baris: readonly BarisPenjualan[] })
  */
 export async function KartuPembelian({ clientId }: { clientId: string }) {
   const { baris } = await bacaPenjualan({ clientId });
-  return <BagianPembelian baris={urutkanBaris(baris)} />;
+  // `notaTampil` DULU, sebelum pengurutan dan sebelum perenderan. Judul
+  // bagian ini adalah "Riwayat pembelian"; checkout yang ditinggalkan klien
+  // lalu kedaluwarsa bukan pembelian, dan di bawah judul itu ia terbaca
+  // sebagai pembelian yang sudah dibayar. Alasan lengkapnya ada di
+  // `notaTampil` (`@/app/admin/penjualan/ringkas`).
+  return <BagianPembelian baris={urutkanBaris(notaTampil(baris))} />;
 }

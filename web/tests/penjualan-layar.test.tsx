@@ -4,14 +4,31 @@
  * Suite ini berjalan `environment: "node"` tanpa jsdom, jadi perkakasnya
  * `renderToStaticMarkup` — sama dengan seluruh uji panel lain.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
+
 import { KartuBulan } from "@/app/owner/penjualan/kartu-bulan";
 import { PeringatanData } from "@/app/owner/penjualan/peringatan-data";
 import { TabelPenjualan } from "@/app/admin/penjualan/tabel-penjualan";
-import { ringkasNota } from "@/app/admin/penjualan/ringkas";
+import { CatatanBatas } from "@/app/admin/penjualan/catatan-batas";
+import { ringkasNota, notaTampil } from "@/app/admin/penjualan/ringkas";
 import { BagianPembelian } from "@/app/admin/klien/[id]/kartu-pembelian";
+import { BATAS_BARIS_PENJUALAN } from "@/lib/penjualan/baca";
 import type { BarisPenjualan, PenjualanBulan } from "@/lib/penjualan/hitung";
+
+// `CatatanBatas` mengimpor `BATAS_BARIS_PENJUALAN` dari `@/lib/penjualan/baca`,
+// yang menyeret `@/lib/supabase/server` -> `next/headers` — modul yang hanya
+// bermakna di dalam request scope. Suite ini TANPA DB dan tanpa request, jadi
+// modulnya diganti; `createServerSupabase` tidak pernah dipanggil di sini.
+// (`vi.mock` diangkat ke atas seluruh impor oleh vitest, jadi letaknya di
+// bawah impor justru konvensi berkas uji lain di repo ini.)
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabase: async () => {
+    throw new Error("uji ini tidak boleh menyentuh Supabase");
+  },
+}));
 
 const BULAN_DASAR: PenjualanBulan = {
   bulan: "2026-10",
@@ -169,6 +186,12 @@ describe("TabelPenjualan", () => {
     expect(m).toContain("Panduan MPASI");
     expect(m).toContain("100.000");
     expect(m).toContain("75.000");
+    // JUMLAH BARISNYA yang dikunci, bukan sekadar kehadiran kedua judulnya.
+    // Implementasi yang merender SATU <tr> per pesanan dengan judul-judulnya
+    // disambung ", " memenuhi seluruh `toContain` di atas tanpa satu pun
+    // assertion memerah — dan itu persis kegagalan yang blok ini ada untuk
+    // mencegahnya. `data-pesanan` menempel di setiap <tr>.
+    expect([...m.matchAll(/data-pesanan=/g)]).toHaveLength(2);
   });
 
   it("embed klien yang TIDAK TERBACA dirender sebagai kegagalan yang terlihat", () => {
@@ -236,6 +259,128 @@ describe("ringkasNota", () => {
   it("daftar kosong menghasilkan nol dan nol", () => {
     expect(ringkasNota([])).toEqual({ total: 0, tanpaNilai: 0 });
   });
+
+  it("baris BUKAN omzet tidak menyentuh total MAUPUN tanpaNilai", () => {
+    // Blok ini menjaga satu baris di `ringkas.ts`:
+    // `if (golongkan(b) !== "omzet") continue;`. Dengan fixture yang
+    // seluruhnya `lunas`, baris itu bisa dihapus tanpa satu pun uji memerah —
+    // penjaga yang tidak menjaga apa pun. Dua baris di bawah membuat
+    // penghapusannya BERBEDA: yang dikembalikan akan menaikkan `total`, dan
+    // yang ditahan tanpa item terbaca akan menaikkan `tanpaNilai`.
+    const r = ringkasNota([
+      notaDasar({ pesananId: "p-1" }),
+      notaDasar({ pesananId: "p-2", pernahDikembalikan: true }),
+      notaDasar({ pesananId: "p-3", status: "ditahan", lunasPada: null, item: null }),
+    ]);
+    expect(r.total).toBe(150_000);
+    expect(r.tanpaNilai).toBe(0);
+  });
+});
+
+describe("notaTampil", () => {
+  it("nota lunas tetap tampil", () => {
+    const hasil = notaTampil([notaDasar({ pesananId: "p-1" })]);
+    expect(hasil).toHaveLength(1);
+    expect(hasil[0].pesananId).toBe("p-1");
+  });
+
+  it("checkout terlantar (kedaluwarsa, tak pernah dibayar) DIBUANG", () => {
+    // `order_items` dibekukan saat pesanan DIBUAT, jadi checkout yang
+    // ditinggalkan sudah memikul `harga_beku` penuh dan `ditutup_pada` terisi
+    // saat tenggatnya lewat. Tanpa saringan ini ia tercetak di tabel
+    // byte-per-byte sama dengan nota yang sungguh dibayar — termasuk
+    // nominalnya, dengan kolom catatan KOSONG.
+    const hasil = notaTampil([
+      notaDasar({
+        pesananId: "p-mati",
+        status: "kedaluwarsa",
+        lunasPada: null,
+        uangPada: "2026-10-04T05:00:00Z",
+        lunasSetelahTutup: false,
+      }),
+    ]);
+    expect(hasil).toHaveLength(0);
+  });
+
+  it("kedaluwarsa yang DIBAYAR LEWAT TENGGAT tetap tampil", () => {
+    // Golongan `lewat_tenggat` adalah pengecualian sungguhan: uangnya
+    // mendarat sesudah pesanannya ditutup, dan justru baris inilah yang harus
+    // dilihat staf. Membuangnya bersama checkout terlantar akan
+    // menyembunyikan uang yang benar-benar masuk.
+    const hasil = notaTampil([
+      notaDasar({
+        pesananId: "p-tenggat",
+        status: "kedaluwarsa",
+        lunasPada: null,
+        uangPada: "2026-10-04T05:00:00Z",
+        lunasSetelahTutup: true,
+      }),
+    ]);
+    expect(hasil).toHaveLength(1);
+    expect(hasil[0].pesananId).toBe("p-tenggat");
+  });
+
+  it("ketiganya sekaligus: hanya yang terlantar yang hilang", () => {
+    const hasil = notaTampil([
+      notaDasar({ pesananId: "p-lunas" }),
+      notaDasar({
+        pesananId: "p-mati",
+        status: "kedaluwarsa",
+        lunasPada: null,
+        lunasSetelahTutup: false,
+      }),
+      notaDasar({
+        pesananId: "p-tenggat",
+        status: "dibatalkan",
+        lunasPada: null,
+        lunasSetelahTutup: true,
+      }),
+      notaDasar({ pesananId: "p-ditahan", status: "ditahan", lunasPada: null }),
+    ]);
+    expect(hasil.map((b) => b.pesananId)).toEqual(["p-lunas", "p-tenggat", "p-ditahan"]);
+  });
+});
+
+describe("CatatanBatas", () => {
+  it('periode "semua" MENGUMUMKAN batasnya walau tidak terpotong', () => {
+    // Batas yang tidak diumumkan adalah batas yang berbohong: instansi yang
+    // barisnya masih di bawah 500 tidak pernah menyebut angkanya sama sekali,
+    // lalu suatu hari melewatinya tanpa ada yang pernah membaca angka itu.
+    const m = renderToStaticMarkup(<CatatanBatas periode="semua" terpotong={false} />);
+    expect(m).toContain('data-batas="semua"');
+    expect(m).toContain(String(BATAS_BARIS_PENJUALAN));
+  });
+
+  it('periode "semua" yang TERPOTONG memakai peringatan, bukan catatan biasa', () => {
+    const m = renderToStaticMarkup(<CatatanBatas periode="semua" terpotong />);
+    expect(m).toContain('data-batas="terpotong"');
+    expect(m).not.toContain('data-batas="semua"');
+    expect(m).toContain(String(BATAS_BARIS_PENJUALAN));
+  });
+
+  it("periode berjangka yang tidak terpotong tidak merender apa pun", () => {
+    const m = renderToStaticMarkup(<CatatanBatas periode="bulan-ini" terpotong={false} />);
+    expect(m).toBe("");
+  });
+
+  it("periode berjangka yang terpotong tetap memperingatkan", () => {
+    const m = renderToStaticMarkup(<CatatanBatas periode="bulan-ini" terpotong />);
+    expect(m).toContain('data-batas="terpotong"');
+    expect(m).toContain(String(BATAS_BARIS_PENJUALAN));
+  });
+
+  it("angkanya datang dari BATAS_BARIS_PENJUALAN, bukan literal di berkasnya", () => {
+    // Dua angka yang boleh berbeda adalah layar yang suatu hari mengumumkan
+    // batas yang bukan batasnya.
+    const sumber = readFileSync(
+      path.join(__dirname, "..", "src/app/admin/penjualan/catatan-batas.tsx"),
+      "utf8",
+    );
+    expect(sumber).toContain("BATAS_BARIS_PENJUALAN");
+    // Lookaround, bukan `\b`: skala Tailwind seperti `text-clay-500` bukan
+    // literal batas dan tidak boleh memerahkan uji ini.
+    expect(sumber).not.toMatch(/(?<![\w-])500(?![\w-])/);
+  });
 });
 
 describe("BagianPembelian", () => {
@@ -254,6 +399,10 @@ describe("BagianPembelian", () => {
   it("klien dengan pembelian tidak menampilkan penanda kosong", () => {
     const m = renderToStaticMarkup(<BagianPembelian baris={[notaDasar()]} />);
     expect(m).not.toContain("data-kosong");
+    // Sisi POSITIFNYA dikunci juga: tanpa ini, `not.toContain("<table")` pada
+    // kasus kosong di atas bisa hijau hanya karena tabelnya tidak pernah
+    // dirender dalam keadaan apa pun.
+    expect(m).toContain("<table");
   });
 
   it("merender nota klien beserta nominalnya", () => {

@@ -4,7 +4,7 @@ import { uraikanParamDaftar, type ParamMentah, type SaringSah } from "@/app/_she
 import { BilahDaftar } from "@/app/_shell/panel/bilah-daftar";
 import { Paginasi } from "@/app/_shell/panel/paginasi";
 import { Bantuan } from "@/app/_shell/panel/bantuan";
-import { bacaPenjualan, BATAS_BARIS_PENJUALAN } from "@/lib/penjualan/baca";
+import { bacaPenjualan } from "@/lib/penjualan/baca";
 import { urutkanBaris, type BarisPenjualan } from "@/lib/penjualan/hitung";
 import {
   bulanSekarangJakarta,
@@ -13,7 +13,8 @@ import {
   rentangBulanJakarta,
 } from "@/lib/penjualan/bulan";
 import { TabelPenjualan } from "./tabel-penjualan";
-import { ringkasNota } from "./ringkas";
+import { CatatanBatas } from "./catatan-batas";
+import { ringkasNota, notaTampil } from "./ringkas";
 
 export const metadata = { title: "Penjualan" };
 
@@ -77,7 +78,12 @@ export default async function PenjualanAdminPage({
 
   const { baris, terpotong } = await bacaPenjualan(rentangPeriode(periode));
 
-  const cocokan = urutkanBaris(baris).filter((b) => cocok(b, param.cari));
+  // SARINGAN PERTAMA, sebelum pencarian, total, dan paginasi. Tanpa ini
+  // checkout yang ditinggalkan (lalu `kedaluwarsa`) tercetak byte-per-byte
+  // sama dengan nota yang dibayar — lihat `notaTampil` di ./ringkas.
+  const tampil = notaTampil(baris);
+
+  const cocokan = urutkanBaris(tampil).filter((b) => cocok(b, param.cari));
   const awal = (param.hal - 1) * PER_HAL_PENJUALAN;
   const halaman = cocokan.slice(awal, awal + PER_HAL_PENJUALAN);
 
@@ -121,8 +127,15 @@ export default async function PenjualanAdminPage({
         aksi={null}
       />
 
+      {/* Labelnya menyebut BARIS YANG TAMPIL, bukan "periode ini", karena
+          angkanya memang dijumlahkan dari `cocokan` — hasil periode SETELAH
+          pencarian. Admin yang mengetik "MPASI" melihat totalnya turun; label
+          yang tetap mengaku "periode ini" membuat angka itu disalin ke buku
+          sebagai omzet sebulan. Yang diperbaiki kalimatnya, bukan
+          hitungannya: total yang mengabaikan pencarian akan membuat layar
+          memuat daftar dan angka yang tidak saling menjelaskan. */}
       <p className="mb-3 text-[12.5px] text-panel-muted">
-        {"Total lunas pada periode ini: "}
+        {"Total lunas dari baris yang tampil (seluruh halaman, mengikuti periode dan pencarian di atas): "}
         <b className="font-mono text-panel-ink">{formatRupiah(total)}</b>
       </p>
 
@@ -135,11 +148,7 @@ export default async function PenjualanAdminPage({
         </p>
       )}
 
-      {terpotong && (
-        <p className="mb-3 rounded-lg border border-clay/35 bg-panel-bg px-3.5 py-3 text-[11.5px] text-clay">
-          {`Hanya ${BATAS_BARIS_PENJUALAN} baris pertama yang dibaca — daftar dan total di halaman ini belum lengkap. Persempit periodenya.`}
-        </p>
-      )}
+      <CatatanBatas periode={periode} terpotong={terpotong} />
 
       <TabelPenjualan baris={halaman} />
 

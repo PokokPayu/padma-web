@@ -326,13 +326,17 @@ describe("navigasi owner", () => {
     expect(sumberNav.trimStart().startsWith('"use client"')).toBe(true);
   });
 
-  it("memuat empat tujuan berbahasa Indonesia", () => {
+  it("memuat enam tujuan berbahasa Indonesia", () => {
     const m = markupNav("/owner");
     for (const [href, label] of [
       ["/owner", "Beranda"],
       ["/owner/rekap", "Rekap"],
+      // Penjualan (P4 rekap penjualan): omzet produk digital per bulan.
+      ["/owner/penjualan", "Penjualan"],
       ["/owner/tarif", "Tarif"],
       ["/owner/transport", "Transport"],
+      // Produk (rencana produk-digital-tahap1, Task 7): harga produk digital.
+      ["/owner/produk", "Produk"],
     ]) {
       expect(m).toContain(`href="${href}"`);
       expect(m).toContain(label);
@@ -345,8 +349,8 @@ describe("navigasi owner", () => {
     expect([...m.matchAll(/aria-label="[^"]+"/g)].length).toBeGreaterThanOrEqual(2);
     expect(m).toContain("lg:hidden");
     expect(m).toContain("lg:translate-x-0");
-    // Panel owner hanya punya tiga tujuan, jadi bar bawah memuat KETIGANYA —
-    // tidak ada yang perlu diringkas.
+    // Bar bawah panel owner memuat SELURUH tujuan — tidak ada yang perlu
+    // diringkas seperti di panel admin.
     expect([...m.matchAll(/href="\/owner\/rekap"/g)]).toHaveLength(2);
   });
 
@@ -360,8 +364,9 @@ describe("navigasi owner", () => {
 
   it("jumlah tautan dikunci persis (tujuan baru tidak boleh lolos diam-diam)", () => {
     const m = markupNav("/owner");
-    // Lima tujuan (Task 7 menambah "Produk") × dua nav + dua tautan jalan pulang.
-    expect([...m.matchAll(/<a\b/g)]).toHaveLength(5 * 2 + 2);
+    // Enam tujuan (Task 7 menambah "Produk", P4 menambah "Penjualan") × dua
+    // nav + dua tautan jalan pulang.
+    expect([...m.matchAll(/<a\b/g)]).toHaveLength(6 * 2 + 2);
   });
 
   it("hanya SATU tujuan yang aktif per nav di beranda", () => {
