@@ -10,6 +10,7 @@ import { KartuBulan } from "@/app/owner/penjualan/kartu-bulan";
 import { PeringatanData } from "@/app/owner/penjualan/peringatan-data";
 import { TabelPenjualan } from "@/app/admin/penjualan/tabel-penjualan";
 import { ringkasNota } from "@/app/admin/penjualan/ringkas";
+import { BagianPembelian } from "@/app/admin/klien/[id]/kartu-pembelian";
 import type { BarisPenjualan, PenjualanBulan } from "@/lib/penjualan/hitung";
 
 const BULAN_DASAR: PenjualanBulan = {
@@ -234,5 +235,30 @@ describe("ringkasNota", () => {
 
   it("daftar kosong menghasilkan nol dan nol", () => {
     expect(ringkasNota([])).toEqual({ total: 0, tanpaNilai: 0 });
+  });
+});
+
+describe("BagianPembelian", () => {
+  it("memakai judul sejajar dengan Riwayat sesi", () => {
+    const m = renderToStaticMarkup(<BagianPembelian baris={[notaDasar()]} />);
+    expect(m).toContain("Riwayat pembelian");
+    expect(m).toContain('data-bagian="riwayat-pembelian"');
+  });
+
+  it("klien tanpa pembelian memberi kalimat, bukan bagian kosong", () => {
+    const m = renderToStaticMarkup(<BagianPembelian baris={[]} />);
+    expect(m).toContain("data-kosong");
+    expect(m).not.toContain("<table");
+  });
+
+  it("klien dengan pembelian tidak menampilkan penanda kosong", () => {
+    const m = renderToStaticMarkup(<BagianPembelian baris={[notaDasar()]} />);
+    expect(m).not.toContain("data-kosong");
+  });
+
+  it("merender nota klien beserta nominalnya", () => {
+    const m = renderToStaticMarkup(<BagianPembelian baris={[notaDasar()]} />);
+    expect(m).toContain("Kelas Menyusui");
+    expect(m).toContain("150.000");
   });
 });

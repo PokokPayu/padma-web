@@ -10,6 +10,7 @@ import { bacaPengaturan } from "@/lib/settings";
 import { FormEditKlien } from "../form-klien";
 import { KartuAktivasi } from "./kartu-aktivasi";
 import { KartuHak } from "./kartu-hak";
+import { KartuPembelian } from "./kartu-pembelian";
 
 export const metadata = { title: "Detail Klien" };
 
@@ -239,6 +240,8 @@ export default async function DetailKlienPage({
             </>
           )}
         </section>
+
+        <KartuPembelian clientId={klien.id} />
       </div>
     </main>
   );
