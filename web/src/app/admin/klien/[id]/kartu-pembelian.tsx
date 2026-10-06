@@ -10,7 +10,7 @@ export function BagianPembelian({ baris }: { baris: readonly BarisPenjualan[] })
   return (
     <section
       data-bagian="riwayat-pembelian"
-      className="rounded-lg border border-panel-border bg-panel-surface p-5"
+      className="rounded-lg border border-panel-border bg-panel-surface p-5 lg:col-span-2"
     >
       <h2 className="mb-3 font-serif text-lg text-panel-ink">Riwayat pembelian</h2>
       {baris.length === 0 ? (
