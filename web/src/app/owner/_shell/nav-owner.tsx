@@ -10,6 +10,7 @@ const MENU: ItemMenu[] = [
   // dipendekkan agar sidebar tidak memaksa satu tujuan menjadi dua baris.
   // Judul halamannya tetap panjang.
   { href: "/owner/rekap", label: "Rekap", ikon: "rekap" },
+  { href: "/owner/penjualan", label: "Penjualan", ikon: "rekap" },
   { href: "/owner/tarif", label: "Tarif", ikon: "tarif" },
   { href: "/owner/transport", label: "Transport", ikon: "transport" },
   // Tidak ada ikon "produk" tersendiri (sama alasannya dengan

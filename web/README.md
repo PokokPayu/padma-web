@@ -149,6 +149,7 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/pengaturan` | Admin, Owner | Nomor WhatsApp & teks publik; kunci terbatas registri `app_setting_keys` |
 | `/owner` | Owner | Beranda pemilik: sesi selesai, honor yang jatuh tempo Sabtu, margin pekan berjalan |
 | `/owner/rekap` | Owner | Rekap honor per mitra per pekan Senin–Minggu (tarif pada tanggal sesi) + tanda bayar |
+| `/owner/penjualan` | Owner | Rekap penjualan produk digital per bulan kalender Jakarta: omzet, rincian per produk, grafik 12 bulan; pesanan ditahan/bayar-lewat-tenggat/dikembalikan dicatat terpisah dan tidak ikut dijumlahkan |
 | `/owner/tarif` | Owner | Rate card berriwayat: tarif baru = BARIS BARU, tarif lama tidak pernah berubah |
 | `/owner/tarif/[variantId]` | Owner | Detail satu varian layanan: tarif ditetapkan di sini + seluruh riwayat tarifnya terbaca |
 | `/owner/produk` | Owner | Harga produk digital berriwayat: harga baru = BARIS BARU; harga coret opsional; harga 0 = gratis |
