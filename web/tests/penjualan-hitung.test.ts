@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
+import { PESANAN_BERUANG } from "@/lib/pesanan/status";
 import {
   golongkan,
   hitungPenjualan,
@@ -39,6 +40,15 @@ describe("golongkan", () => {
     expect(golongkan(barisDasar())).toBe("omzet");
   });
 
+  it("setiap status pembawa uang masuk golongan penjualan, tidak ada yang lenyap", () => {
+    // Nilai enum pembawa uang yang lahir kelak jatuh ke `bukan_penjualan` dan
+    // lenyap tanpa terhitung kalau `golongkan` tidak ikut disunting. Uji ini
+    // memerah saat itu terjadi.
+    for (const status of PESANAN_BERUANG) {
+      expect(golongkan(barisDasar({ status }))).not.toBe("bukan_penjualan");
+    }
+  });
+
   it("ditahan BUKAN omzet — uangnya ada di Midtrans, belum di PADMA", () => {
     expect(golongkan(barisDasar({ status: "ditahan", lunasPada: null }))).toBe("ditahan");
   });
@@ -58,23 +68,13 @@ describe("golongkan", () => {
   });
 
   it("lunas yang pernah dikembalikan keluar dari omzet", () => {
-    expect(golongkan(barisDasar({ pernahDikembalikan: true }))).toBe("dikembalikan");
-  });
-
-  it("JEBAKAN coalesce: sebab_tinjauan BUKAN sumber kebenaran refund", () => {
     // `sebab_tinjauan` ditulis `coalesce(o.sebab_tinjauan, v_sebab)`, jadi
     // alasan PERTAMA yang menang. Pesanan yang lebih dulu bertanda
     // `selisih_nominal` lalu kena chargeback tetap terbaca `selisih_nominal`
     // selamanya — dan saringan yang bersandar pada kolom itu akan
-    // menghitungnya sebagai pendapatan.
-    //
-    // Fixture ini MENIRU keadaan itu: barisnya datang dari notifikasi
-    // (`pernahDikembalikan: true`) meski kolom sebabnya menyebut hal lain.
-    // Uji ini akan MERAH persis saat seseorang "menyederhanakan"
-    // penggolongannya kembali ke `sebab_tinjauan`.
-    const b = barisDasar({ pernahDikembalikan: true });
-    expect(golongkan(b)).toBe("dikembalikan");
-    expect(golongkan(b)).not.toBe("omzet");
+    // menghitungnya sebagai pendapatan. Karena itu `pernahDikembalikan`
+    // datang dari notifikasi, bukan dari kolom sebab.
+    expect(golongkan(barisDasar({ pernahDikembalikan: true }))).toBe("dikembalikan");
   });
 });
 
@@ -243,12 +243,47 @@ describe("hitungPenjualan", () => {
     const hasil = hitungPenjualan([]);
     expect(hasil.bulan).toEqual([]);
     expect(hasil.tanpaTanggal).toBe(0);
+    expect(hasil.tanpaNilai).toBe(0);
   });
 
-  it("baris yang itemnya TIDAK TERBACA tidak merusak omzet jadi NaN", () => {
+  it("baris yang itemnya TIDAK TERBACA dihitung terpisah, bukan sebagai Rp 0", () => {
     const hasil = hitungPenjualan([barisDasar(), barisDasar({ pesananId: "x", item: null })]);
     expect(Number.isNaN(hasil.bulan[0].omzet)).toBe(false);
     expect(hasil.bulan[0].omzet).toBe(150_000);
+    expect(hasil.bulan[0].jumlahPembelian).toBe(1);
+    expect(hasil.tanpaNilai).toBe(1);
+  });
+
+  it("pengecualian keluar berurutan ditahan, lewat_tenggat, dikembalikan", () => {
+    // Urutannya sengaja dibalik pada masukan.
+    const hasil = hitungPenjualan([
+      barisDasar({ pesananId: "p-balik", pernahDikembalikan: true }),
+      barisDasar({
+        pesananId: "p-tenggat",
+        status: "kedaluwarsa",
+        lunasPada: null,
+        lunasSetelahTutup: true,
+      }),
+      barisDasar({ pesananId: "p-tahan", status: "ditahan", lunasPada: null }),
+    ]);
+    expect(hasil.bulan[0].pengecualian.map((p) => p.golongan)).toEqual([
+      "ditahan",
+      "lewat_tenggat",
+      "dikembalikan",
+    ]);
+  });
+
+  it("perProduk terurut menurut nilai MENURUN", () => {
+    const hasil = hitungPenjualan([
+      barisDasar({
+        item: [
+          { productId: "kecil", judulBeku: "Kecil", hargaBeku: 50_000, urutan: 1 },
+          { productId: "besar", judulBeku: "Besar", hargaBeku: 300_000, urutan: 2 },
+          { productId: "tengah", judulBeku: "Tengah", hargaBeku: 120_000, urutan: 3 },
+        ],
+      }),
+    ]);
+    expect(hasil.bulan[0].perProduk.map((p) => p.judul)).toEqual(["Besar", "Tengah", "Kecil"]);
   });
 });
 

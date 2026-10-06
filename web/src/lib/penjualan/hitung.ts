@@ -119,11 +119,14 @@ export type PenjualanBulan = {
   pengecualian: Pengecualian[];
 };
 
-const URUT_PENGECUALIAN: Pengecualian["golongan"][] = [
-  "ditahan",
-  "lewat_tenggat",
-  "dikembalikan",
-];
+// `Record` berkunci pada union, BUKAN larik: ia mewajibkan setiap kunci, jadi
+// golongan pengecualian baru menjadi galat kompilasi alih-alih lenyap diam-diam
+// dari keluaran.
+const URUT_PENGECUALIAN: Record<Pengecualian["golongan"], number> = {
+  ditahan: 1,
+  lewat_tenggat: 2,
+  dikembalikan: 3,
+};
 
 /**
  * Terbaru lebih dulu, dengan `kode` sebagai PEMECAH SERI.
@@ -148,6 +151,8 @@ export function urutkanBaris(baris: readonly BarisPenjualan[]): BarisPenjualan[]
 export function hitungPenjualan(baris: readonly BarisPenjualan[]): {
   bulan: PenjualanBulan[];
   tanpaTanggal: number;
+  /** Baris yang itemnya TIDAK TERBACA. Dikeluarkan dari seluruh angka. */
+  tanpaNilai: number;
 } {
   type Ember = {
     omzet: number;
@@ -158,6 +163,7 @@ export function hitungPenjualan(baris: readonly BarisPenjualan[]): {
 
   const ember = new Map<string, Ember>();
   let tanpaTanggal = 0;
+  let tanpaNilai = 0;
 
   // DIURUTKAN LEBIH DULU, dan itu bukan kerapian: judul produk yang
   // ditampilkan adalah judul dari nota TERBARU, dan "terbaru" hanya punya
@@ -176,13 +182,21 @@ export function hitungPenjualan(baris: readonly BarisPenjualan[]): {
       continue;
     }
 
+    const nilaiTerbaca = nilaiBaris(b);
+    if (nilaiTerbaca === null) {
+      // "Rp 0" yang diucapkan dengan yakin terbaca sebagai selisih; "tidak
+      // terbaca" terbaca sebagai data hilang. Baris ini tidak menyumbang apa
+      // pun ke omzet, pembelian, produk, maupun pengecualian.
+      tanpaNilai += 1;
+      continue;
+    }
+    const nilai = nilaiTerbaca;
+
     let e = ember.get(kunciBulan);
     if (e === undefined) {
       e = { omzet: 0, jumlahPembelian: 0, produk: new Map(), pengecualian: new Map() };
       ember.set(kunciBulan, e);
     }
-
-    const nilai = nilaiBaris(b) ?? 0;
 
     if (golongan === "omzet") {
       e.omzet += nilai;
@@ -218,12 +232,12 @@ export function hitungPenjualan(baris: readonly BarisPenjualan[]): {
       perProduk: [...e.produk.values()].sort(
         (a, b) => b.nilai - a.nilai || a.judul.localeCompare(b.judul),
       ),
-      pengecualian: URUT_PENGECUALIAN.map((g) => e.pengecualian.get(g)).filter(
-        (p): p is Pengecualian => p !== undefined,
+      pengecualian: [...e.pengecualian.values()].sort(
+        (a, b) => URUT_PENGECUALIAN[a.golongan] - URUT_PENGECUALIAN[b.golongan],
       ),
     }))
     // Terbaru lebih dulu. Kunci `YYYY-MM` berurut secara leksikografis.
     .sort((a, b) => b.bulan.localeCompare(a.bulan));
 
-  return { bulan, tanpaTanggal };
+  return { bulan, tanpaTanggal, tanpaNilai };
 }
