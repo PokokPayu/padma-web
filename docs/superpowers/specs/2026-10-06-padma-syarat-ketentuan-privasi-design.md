@@ -83,6 +83,8 @@ mengirim nomor versi yang dipercaya.
 - `/syarat-ketentuan` dan `/kebijakan-privasi`, masing-masing `page.tsx` dengan
   `SitusShell` + `Wadah`, seperti `/tentang`. `revalidate = 300` karena nomor
   WhatsApp di bagian kontak dibaca dari pengaturan.
+  Tautannya `wa.me/<nomor>` **polos**, bukan `tautanWaSitus`, yang mengisi pesan "saya dari
+  WEBSITE… tanya kelas serta pricelist" — salah untuk permintaan data pribadi.
 - Prosa yang nyaman dibaca: lebar teks ~70 karakter, judul bagian bernomor.
 - Kepala halaman: judul, "Berlaku sejak <tanggal>", daftar isi bertaut jangkar.
 - Setiap bagian punya `id` stabil (misalnya `#data-kesehatan`, `#pembatalan`,
@@ -312,7 +314,7 @@ kebijakan ada. Penegakan untuk baris baru: lihat revisi 1 di atas.
 | `versi.ts` | `VERSI_DOKUMEN`, format tanggal tampilan |
 | `bagian.ts` | Daftar `id` jangkar kedua dokumen, dipakai halaman, `/persetujuan`, dan uji |
 | `catat.ts` | `catatPersetujuan(supabase, userId, jalur)`: SATU-SATUNYA penulis `persetujuan_akun`. Selalu mencap `VERSI_DOKUMEN` |
-| `periksa.ts` | `sudahSetuju(userId)`, dibungkus `cache()`. Dipakai layout passport DAN checkout |
+| `status.ts` | `statusPersetujuan(userId)` → `{ sudahSetuju, pernahSetuju }`, dibungkus `cache()`. SATU pembaca untuk layout passport, `/persetujuan`, DAN checkout. **Gagal-terbuka**: galat baca dicatat lalu dianggap sudah setuju, supaya migrasi yang terlambat diterapkan tidak mengunci seluruh Passport |
 | `skrining.ts` | `capPersetujuanSkrining()` mengembalikan `{ persetujuan_versi, persetujuan_pada }` |
 | `cookie.ts` | `COOKIE_SETUJU = "padma_setuju"`, umur 1 hari |
 | `tujuan.ts` | `tujuanPersetujuanAman(lanjut)`: whitelist `lanjut`, membungkus `tujuanProdukAman` |
@@ -325,7 +327,7 @@ kebijakan ada. Penegakan untuk baris baru: lihat revisi 1 di atas.
 | `/api/skrining` dan `/api/skrining/akun` | `...capPersetujuanSkrining()` di insert. Tanpa centang, skema menolak dengan 400 |
 | `src/app/daftar/form-daftar.tsx` | Centang wajib. Tombol email dan Google nonaktif sampai dicentang. Tepat sebelum `signUp` / `signInWithOAuth`, JS memasang cookie `padma_setuju=<VERSI_DOKUMEN>` |
 | `src/app/setelah-masuk/route.ts` | Sesudah cabang owner/admin, bila cookie = `VERSI_DOKUMEN` → `catatPersetujuan(..., "daftar")`. Cookie selalu dihapus. **Gagal mencatat tidak pernah menggagalkan login** (pola klaim skrining). Bila cookie hilang (misalnya email dikonfirmasi di perangkat lain), gerbang yang menangkap |
-| `src/app/passport/layout.tsx` | Sesudah `ambilKlien()`: `if (!(await sudahSetuju(user.id))) redirect("/persetujuan")`. `requireRole` tetap dipanggil tepat sekali (`tests/access-matrix-layouts.test.ts`) |
+| `src/app/passport/layout.tsx` | Sesudah `ambilKlien()`: `if (!(await statusPersetujuan(userId)).sudahSetuju) redirect("/persetujuan")`. `requireRole` tetap dipanggil tepat sekali (`tests/access-matrix-layouts.test.ts`) |
 | `src/app/api/pesanan/checkout/route.ts` | Sesudah cek login: belum setuju → `403 { kode: "perlu_persetujuan" }` |
 | `src/app/produk/[slug]/tombol-beli.tsx` | `403` + `perlu_persetujuan` → `/persetujuan?lanjut=/produk/<slug>`, sejajar dengan penanganan `401` → masuk yang sudah ada |
 | `src/proxy.ts` | `/persetujuan` ditambahkan ke `PROTECTED_PREFIXES` |
@@ -397,7 +399,8 @@ Tautan dibuka di tab baru.
   - pihak ketiga dan transfer ke luar negeri;
   - hak Anda.
 - Satu centang, tombol "Setuju & lanjutkan", dan **jalan keluar** lewat
-  `tombol-keluar`, supaya klien yang tidak setuju tidak terkunci.
+  form `POST /auth/keluar`, supaya klien yang tidak setuju tidak terkunci. `TombolKeluar` tidak dipakai
+  karena ia `sm:hidden` (dirancang untuk Profil Passport).
 - Server action: `catatPersetujuan(..., "gerbang")`, lalu redirect ke
   `tujuanPersetujuanAman(lanjut)`.
 - Klien yang sudah setuju lalu membuka `/persetujuan` langsung diteruskan ke tujuan.
