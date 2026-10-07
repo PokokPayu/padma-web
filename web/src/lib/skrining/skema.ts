@@ -42,6 +42,13 @@ const Bentuk = z.object({
   // hijau/merah — lihat dokblok usia-kehamilan.ts.
   usia_kehamilan_minggu: z.number().int().min(0).max(MINGGU_MAKS).nullish(),
   trimester: z.union([z.literal(1), z.literal(2), z.literal(3)]).nullish(),
+
+  // ===== PERSETUJUAN (spec 2026-10-06) =====
+  // Persetujuan EKSPLISIT atas pemrosesan data kesehatan — data pribadi
+  // spesifik menurut UU PDP. `literal(true)`, bukan boolean: `false` dan
+  // ketiadaan sama-sama ditolak. Versinya TIDAK dikirim peramban; rute mencap
+  // VERSI_DOKUMEN lewat capPersetujuanSkrining().
+  setuju_privasi: z.literal(true),
 });
 
 export const SkemaSkriningPublik = Bentuk

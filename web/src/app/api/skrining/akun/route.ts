@@ -6,6 +6,7 @@ import { saringJawaban } from "@/lib/skrining/bank-soal";
 import { buatKodeSkrining } from "@/lib/skrining/kode";
 import { SkemaSkriningPublik } from "@/lib/skrining/skema";
 import { terlaluSeringKlien } from "@/lib/skrining/pembatas";
+import { capPersetujuanSkrining } from "@/lib/persetujuan/skrining";
 
 /**
  * SKRINING DARI DALAM PASSPORT (spec C1 J6).
@@ -97,6 +98,9 @@ export async function POST(request: Request) {
       // Terisi SEJAK AWAL — tidak ada token klaim di jalur ini, karena tidak
       // ada yang perlu disambungkan belakangan.
       client_id: klien.id,
+      // Persetujuan eksplisit atas data kesehatan dicap PER SKRINING — juga
+      // untuk klien yang sudah setuju di gerbang akun (spec 2026-10-06).
+      ...capPersetujuanSkrining(),
     });
     if (!error) {
       return NextResponse.json({ kode, hasil: penilaian.hasil }, { status: 201 });

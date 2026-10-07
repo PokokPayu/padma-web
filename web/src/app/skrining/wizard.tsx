@@ -11,6 +11,7 @@ import {
 import { nilaiSkrining } from "@/lib/skrining/evaluasi";
 import { MedanUsiaKehamilan } from "./medan-usia-kehamilan";
 import { USIA_KOSONG, type IsianUsiaKehamilan } from "@/lib/skrining/usia-kehamilan";
+import { JANGKAR_PERSETUJUAN } from "@/app/_dokumen/bagian";
 
 type Layar = "intro" | "soal" | "hasil";
 
@@ -60,6 +61,7 @@ export function Wizard({
   const [nama, setNama] = useState(namaAwal);
   const [hp, setHp] = useState(hpAwal);
   const [jujur, setJujur] = useState(false);
+  const [setujuPrivasi, setSetujuPrivasi] = useState(false);
   const [fase, setFase] = useState<FaseSkrining | null>(null);
   const [usia, setUsia] = useState<IsianUsiaKehamilan>(USIA_KOSONG);
   const [indeks, setIndeks] = useState(0);
@@ -81,7 +83,7 @@ export function Wizard({
     setFase(f);
     setUsia(USIA_KOSONG);
   }
-  const bolehMulai = Boolean(fase && nama.trim() && hp.trim() && jujur);
+  const bolehMulai = Boolean(fase && nama.trim() && hp.trim() && jujur && setujuPrivasi);
 
   async function selesai(jawabanFinal: Record<string, boolean>) {
     if (!fase) return;
@@ -96,6 +98,7 @@ export function Wizard({
         body: JSON.stringify({
           nama, no_hp: hp, fase, jawaban: jawabanFinal,
           usia_kehamilan_minggu: usia.minggu, trimester: usia.trimester,
+          setuju_privasi: setujuPrivasi,
         }),
       });
       if (res.ok) kode = (await res.json()).kode;
@@ -190,6 +193,25 @@ export function Wizard({
           <span>
             Saya menyatakan jawaban akan diisi sesuai kondisi saya <b>saat ini</b>,
             dan memahami bahwa tim PADMA tetap memverifikasi kondisi sebelum layanan.
+          </span>
+        </label>
+
+        {/* PERSETUJUAN DATA KESEHATAN (spec 2026-10-06). TERPISAH dari centang
+            "jujur": persetujuan atas data pribadi spesifik tidak boleh
+            digabung dengan pernyataan lain. Ia ada di layar PEMBUKA karena
+            wizard mengirim otomatis begitu pertanyaan terakhir (atau jawaban
+            "ya" yang mendesak) dijawab — tidak ada tombol kirim di akhir. */}
+        <label className="mt-3 flex gap-3 rounded-xl border border-black/10 bg-paper-warm p-3.5 text-[13px]">
+          <input type="checkbox" checked={setujuPrivasi} onChange={(e) => setSetujuPrivasi(e.target.checked)}
+            className="mt-0.5 h-[18px] w-[18px]" />
+          <span>
+            Saya menyetujui PADMA memproses data kesehatan yang saya isi di skrining ini untuk menilai
+            kelayakan layanan, sesuai{" "}
+            <a href={JANGKAR_PERSETUJUAN.dataKesehatan} target="_blank" rel="noopener noreferrer"
+              className="font-semibold text-leaf underline">
+              Kebijakan Privasi
+            </a>
+            .
           </span>
         </label>
 

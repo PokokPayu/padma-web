@@ -7,7 +7,8 @@ import { VERSI_DOKUMEN } from "./versi";
  * baris baru adalah (a) `SkemaSkriningPublik` yang mewajibkan
  * `setuju_privasi: true`, (b) fungsi ini — dipakai KEDUA rute skrining — dan
  * (c) `tests/skrining-persetujuan.test.ts` yang menuntut setiap
- * `.from("screenings").insert(` di `src/` memanggilnya.
+ * insert ke tabel `screenings` di `src/` memanggilnya. (Pola harfiahnya sengaja
+ * tidak ditulis di sini — uji itu memindai komentar juga.)
  */
 export function capPersetujuanSkrining(sekarang: Date = new Date()): {
   persetujuan_versi: string;

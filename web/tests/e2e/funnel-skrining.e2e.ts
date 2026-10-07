@@ -145,7 +145,8 @@ async function main() {
   await landing.getByLabel("Nama panggilan").fill(NAMA_UJI);
   await landing.getByLabel("No. WhatsApp").fill("0812-0000-1234");
   await landing.getByRole("button", { name: "Kehamilan", exact: true }).click();
-  await landing.getByRole("checkbox").check();
+  await landing.getByRole("checkbox", { name: /sesuai kondisi saya/ }).check();
+  await landing.getByRole("checkbox", { name: /data kesehatan/ }).check();
   const tombolMulai = landing.getByRole("button", { name: "Mulai Skrining" });
   catat("2b. tombol mulai aktif setelah syarat lengkap", await tombolMulai.isEnabled(), "enabled");
   await tombolMulai.click();
@@ -229,7 +230,8 @@ async function main() {
   await gagalPage.getByLabel("Nama panggilan").fill("Uji Gagal Simpan");
   await gagalPage.getByLabel("No. WhatsApp").fill("0812-0000-4321");
   await gagalPage.getByRole("button", { name: "Menopause", exact: true }).click();
-  await gagalPage.getByRole("checkbox").check();
+  await gagalPage.getByRole("checkbox", { name: /sesuai kondisi saya/ }).check();
+  await gagalPage.getByRole("checkbox", { name: /data kesehatan/ }).check();
   await gagalPage.getByRole("button", { name: "Mulai Skrining" }).click();
 
   // Menopause: 7 soal umum + 4 soal fase, semuanya dijawab "Tidak" -> hijau.
@@ -293,7 +295,8 @@ async function main() {
   await hijauPage.getByLabel("Nama panggilan").fill(NAMA_HIJAU);
   await hijauPage.getByLabel("No. WhatsApp").fill("0812-0000-7788");
   await hijauPage.getByRole("button", { name: "Menopause", exact: true }).click();
-  await hijauPage.getByRole("checkbox").check();
+  await hijauPage.getByRole("checkbox", { name: /sesuai kondisi saya/ }).check();
+  await hijauPage.getByRole("checkbox", { name: /data kesehatan/ }).check();
   await hijauPage.getByRole("button", { name: "Mulai Skrining" }).click();
 
   // Menopause: 7 soal umum + 4 soal fase, semuanya "Tidak" -> hijau.
