@@ -38,6 +38,7 @@ import { chromium, type Browser, type BrowserContext } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buatPadmaId } from "../../src/lib/admin/padma-id";
 import { tungguIsi } from "./_tunggu";
+import { VERSI_DOKUMEN } from "../../src/lib/persetujuan/versi";
 
 config({ path: [".env.local", ".env"] });
 
@@ -134,6 +135,7 @@ async function isiFormulirDaftar(
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("No. WhatsApp").fill(noHp);
   await page.getByLabel("Kata sandi").fill(SANDI);
+  await page.getByRole("checkbox", { name: /Saya menyetujui/ }).check();
   if ((await page.getByLabel("Email").inputValue()) !== email) {
     throw new Error("Isian email terhapus — halaman /daftar belum ter-hydrate.");
   }
@@ -215,7 +217,11 @@ async function hapusJejak() {
     await admin.from("clients").delete().eq("email", email);
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of data.users) {
-      if (u.email?.toLowerCase() === email) await admin.auth.admin.deleteUser(u.id);
+      if (u.email?.toLowerCase() === email) {
+        // Tanpa FK (sengaja, spec 2026-10-06) — dibersihkan manual.
+        await admin.from("persetujuan_akun").delete().eq("user_id", u.id);
+        await admin.auth.admin.deleteUser(u.id);
+      }
     }
   }
 }
@@ -279,6 +285,17 @@ async function ujiOrangBaru(browser: Browser) {
     !pendaratanKonfirmasi.startsWith("/masuk") &&
       !pendaratanKonfirmasi.startsWith("/periksa-email"),
     `mendarat di ${pendaratanKonfirmasi}`,
+  );
+  const { data: akun } = await svc().auth.admin.listUsers({ perPage: 1000 });
+  const uidBaru = akun.users.find((u) => u.email?.toLowerCase() === EMAIL_BARU)?.id ?? "";
+  const { data: setuju } = await svc()
+    .from("persetujuan_akun")
+    .select("versi, jalur")
+    .eq("user_id", uidBaru);
+  catat(
+    "1f'. centang di /daftar tercatat saat konfirmasi (jalur daftar, versi berlaku)",
+    setuju?.length === 1 && setuju[0].jalur === "daftar" && setuju[0].versi === VERSI_DOKUMEN,
+    JSON.stringify(setuju),
   );
   await daftar.context.close();
 
