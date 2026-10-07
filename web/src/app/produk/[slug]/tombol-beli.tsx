@@ -228,6 +228,8 @@ export type HasilCheckout =
    */
   | { jenis: "token"; token: string; pesananId: string | null }
   | { jenis: "masuk" }
+  /** Belum menyetujui S&K versi berlaku (spec 2026-10-06) → layar /persetujuan. */
+  | { jenis: "persetujuan" }
   | { jenis: "pesan"; pesan: string };
 
 /**
@@ -260,7 +262,7 @@ export type HasilCheckout =
  * jalan keluarnya sendiri di RPC). Tidak menaikkannya pada yang SUDAH terbakar
  * mengunci pembeli. Dari dua arah salah, hanya satu yang murah.
  *
- * `400`/`401`/`409` TIDAK membakar: ketiganya berhenti sebelum Snap disentuh.
+ * `400`/`401`/`403`/`409` TIDAK membakar: keempatnya berhenti sebelum Snap disentuh.
  */
 export async function mintaCheckout(
   produk: string | readonly string[],
@@ -288,8 +290,14 @@ export async function mintaCheckout(
   }
 
   const isi = (await jawab.json().catch(() => null)) as
-    | { token?: string; pesan?: string; pesananId?: string }
+    | { token?: string; pesan?: string; pesananId?: string; kode?: string }
     | null;
+
+  // 403 berhenti sebelum Snap disentuh (rute memeriksa persetujuan sebelum
+  // RPC), jadi TIDAK membakar. Hanya `kode` yang membedakannya dari 403 lain.
+  if (jawab.status === 403 && isi?.kode === "perlu_persetujuan") {
+    return { hasil: { jenis: "persetujuan" }, orderIdTerbakar: false };
+  }
 
   if (!jawab.ok || !isi?.token) {
     return {
@@ -596,6 +604,13 @@ export function TombolBeli({
         // lagi — tidak ada pembelian yang dimulai otomatis.
         titipTujuanDiPeramban(`/produk/${slug}`);
         router.push("/masuk");
+        return;
+      }
+
+      if (hasil.jenis === "persetujuan") {
+        // Kembali ke produk ini sesudah setuju; pembeli menekan tombolnya
+        // sekali lagi — tidak ada pembelian yang dimulai otomatis.
+        router.push(`/persetujuan?lanjut=${encodeURIComponent(`/produk/${slug}`)}`);
         return;
       }
 
