@@ -18,10 +18,16 @@ export async function GET(request: Request) {
     .from("profiles").select("role").eq("id", user.id).single();
   const role = profile?.role ?? "klien";
 
-  if (role === "owner") return NextResponse.redirect(new URL("/owner", url.origin));
-  if (role === "admin") return NextResponse.redirect(new URL("/admin", url.origin));
-
   const jar = await cookies();
+
+  if (role === "owner" || role === "admin") {
+    const staf = NextResponse.redirect(new URL(role === "owner" ? "/owner" : "/admin", url.origin));
+    // Staf tidak menyetujui dokumen klien, tetapi sisa cookie pendaftaran di
+    // peramban bersama tetap dibuang — jangan biarkan ia menunggu klien
+    // berikutnya (temuan review akhir #1).
+    if (jar.get(COOKIE_SETUJU)) staf.cookies.delete(COOKIE_SETUJU);
+    return staf;
+  }
 
   // PERSETUJUAN DARI FORM /daftar (spec 2026-10-06 S&K).
   //
@@ -30,7 +36,7 @@ export async function GET(request: Request) {
   // dan menolak cookie berversi lama — gagal mencatat TIDAK menggagalkan login;
   // gerbang di layout /passport menangkap klien yang tidak tercatat di sini.
   const nilaiSetuju = jar.get(COOKIE_SETUJU)?.value;
-  if (nilaiSetuju) await catatPersetujuanDariCookie(supabase, user.id, nilaiSetuju);
+  if (nilaiSetuju) await catatPersetujuanDariCookie(supabase, user, nilaiSetuju);
 
   // Klien. Seluruh keputusan penautan — termasuk urutannya, yang justru
   // merupakan keamanannya — hidup di SATU tempat: `pastikanKlien`. Rute ini

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { VERSI_DOKUMEN } from "./versi";
+import { UMUR_COOKIE_SETUJU_DETIK } from "./cookie";
 
 export type JalurPersetujuan = "daftar" | "gerbang";
 
@@ -41,12 +42,25 @@ export async function catatPersetujuan(
  * Cookie berversi LAMA tidak dicatat: pemiliknya mencentang teks yang sudah
  * diganti sejak itu, dan mencatatnya sebagai persetujuan versi baru adalah
  * memalsukan persetujuan. Gerbang akan memintanya membaca versi yang baru.
+ *
+ * ===== HANYA UNTUK AKUN YANG BARU LAHIR =====
+ * Cookie ini tidak terikat identitas. Ia bisa tertinggal di peramban bersama —
+ * signUp yang gagal, Google yang dibatalkan, konfirmasi email di perangkat
+ * lain — lalu terbawa ke login orang LAIN dalam 24 jam. Karena cookie ini hanya
+ * pernah dititipkan oleh form pendaftaran, akun yang lebih tua dari umur
+ * cookie pasti bukan pemiliknya: persetujuannya tidak dicatat, dan gerbang
+ * `/persetujuan` yang memintanya sendiri (temuan review akhir #1).
  */
 export async function catatPersetujuanDariCookie(
   supabase: SupabaseClient,
-  userId: string,
+  akun: { id: string; created_at?: string },
   nilaiCookie: string | undefined,
+  sekarang: Date = new Date(),
 ): Promise<boolean> {
   if (nilaiCookie !== VERSI_DOKUMEN) return false;
-  return catatPersetujuan(supabase, userId, "daftar");
+  const lahir = akun.created_at ? Date.parse(akun.created_at) : Number.NaN;
+  if (!Number.isFinite(lahir) || sekarang.getTime() - lahir > UMUR_COOKIE_SETUJU_DETIK * 1000) {
+    return false;
+  }
+  return catatPersetujuan(supabase, akun.id, "daftar");
 }

@@ -17,3 +17,11 @@ export const UMUR_COOKIE_SETUJU_DETIK = 86_400;
 export function titipPersetujuanDiPeramban(): void {
   document.cookie = `${COOKIE_SETUJU}=${VERSI_DOKUMEN}; Path=/; Max-Age=${UMUR_COOKIE_SETUJU_DETIK}; SameSite=Lax`;
 }
+
+/**
+ * Membuang cookie seketika — dipanggil saat `signUp` GAGAL, supaya cookie
+ * tidak menunggu akun berikutnya di peramban yang sama.
+ */
+export function buangPersetujuanDiPeramban(): void {
+  document.cookie = `${COOKIE_SETUJU}=; Path=/; Max-Age=0; SameSite=Lax`;
+}

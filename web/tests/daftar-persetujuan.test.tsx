@@ -36,4 +36,14 @@ describe("/daftar — centang persetujuan", () => {
     expect(titip[1]).toBeLessThan(sumber.indexOf("supabase.auth.signInWithOAuth("));
     expect(titip[1]).toBeGreaterThan(sumber.indexOf("supabase.auth.signUp("));
   });
+
+  it("signUp GAGAL membuang cookie — sisa cookie tidak boleh menunggu akun berikutnya", () => {
+    const signUp = sumber.indexOf("supabase.auth.signUp(");
+    const cabangGalat = sumber.indexOf("if (error) {", signUp);
+    const akhirCabang = sumber.indexOf("return;", cabangGalat);
+    const buang = sumber.indexOf("buangPersetujuanDiPeramban()", cabangGalat);
+    expect(cabangGalat).toBeGreaterThan(signUp);
+    expect(buang, "buangPersetujuanDiPeramban() tidak ada di cabang galat signUp").toBeGreaterThan(cabangGalat);
+    expect(buang).toBeLessThan(akhirCabang);
+  });
 });

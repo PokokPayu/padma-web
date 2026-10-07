@@ -29,8 +29,9 @@ export function IsiSyaratKetentuan({
         <p>
           Syarat & Ketentuan ini mengatur pemakaian situs, Digital Passport, skrining, layanan
           kunjungan, dan produk digital PADMA Wellness (&ldquo;PADMA&rdquo;, &ldquo;kami&rdquo;). Anda
-          menyatakan setuju dengan mencentang kotak persetujuan di formulir pendaftaran, skrining, atau
-          layar persetujuan. Bila Anda tidak setuju, mohon tidak memakai layanan kami.
+          menyatakan setuju dengan mencentang kotak persetujuan di formulir pendaftaran atau layar
+          persetujuan. Centang di skrining adalah persetujuan terpisah atas pemrosesan data kesehatan
+          Anda, sebagaimana diatur Kebijakan Privasi. Bila Anda tidak setuju, mohon tidak memakai layanan kami.
         </p>
         <p>
           Ketentuan ini dibaca bersama{" "}
@@ -171,6 +172,11 @@ export function IsiSyaratKetentuan({
           <li>
             Kredit layanan berupa hak satu sesi untuk layanan yang sama, tidak dapat dipindahkan ke
             layanan lain, dan berlaku sampai 30 hari setelah tanggal sesi yang dibatalkan.
+          </li>
+          <li>
+            Sesi yang dipesan dengan kredit layanan, bila dibatalkan lagi pada jendela 2–24 jam, tidak
+            menerbitkan kredit kedua. Satu pemesanan asli menghasilkan paling banyak satu kredit, berlaku
+            30 hari, sesudah itu hangus.
           </li>
           <li>
             Seluruh batas waktu dihitung dari tanggal dan jam mulai sesi dalam Waktu Indonesia Barat

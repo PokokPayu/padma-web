@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { InputSandi } from "@/app/_auth/input-sandi";
 import { periksaPendaftaran } from "@/lib/auth/daftar";
-import { titipPersetujuanDiPeramban } from "@/lib/persetujuan/cookie";
+import { buangPersetujuanDiPeramban, titipPersetujuanDiPeramban } from "@/lib/persetujuan/cookie";
 
 export function FormDaftar() {
   const [nama, setNama] = useState("");
@@ -55,6 +55,9 @@ export function FormDaftar() {
       // menebak siapa saja yang sudah jadi klien PADMA. JANGAN "perbaiki"
       // ini jadi pesan spesifik meski terasa lebih ramah pengguna.
       setPesan("Pendaftaran belum berhasil. Periksa kembali data Anda, atau coba masuk bila sudah punya akun.");
+      // Tidak ada akun yang lahir — cookie persetujuan tidak boleh tertinggal
+      // untuk login berikutnya di peramban ini (temuan review akhir #1).
+      buangPersetujuanDiPeramban();
       setSibuk(false);
       return;
     }

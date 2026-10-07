@@ -99,8 +99,10 @@ mengirim nomor versi yang dipercaya.
 Setiap butir di bawah adalah fakta yang HARUS tertulis. Prosa penghubungnya bebas,
 faktanya tidak.
 
-1. **Penerimaan.** Persetujuan diberikan dengan mencentang kotak di formulir daftar,
-   skrining, atau layar persetujuan. Versi dan tanggal berlaku tercantum.
+1. **Penerimaan.** Persetujuan diberikan dengan mencentang kotak di formulir daftar
+   atau layar persetujuan. Centang di skrining adalah persetujuan **terpisah** atas
+   pemrosesan data kesehatan (Kebijakan Privasi), **bukan** penerimaan S&K (review
+   akhir #11). Versi dan tanggal berlaku tercantum.
 2. **Tentang layanan.** PADMA adalah layanan wellness dan edukasi, **bukan layanan
    medis, diagnosis, atau terapi**. Bila diperlukan asesmen individual, diagnosis,
    atau terapi medis, PADMA mengarahkan klien ke tenaga medis yang sesuai (kalimat
@@ -147,7 +149,11 @@ faktanya tidak.
      - kredit berupa **hak satu sesi untuk layanan yang sama**, tidak bisa dipindah ke
        layanan lain;
      - kredit **berlaku sampai tanggal sesi yang batal + 30 hari**;
-     - waktu dihitung dalam **WIB**.
+     - waktu dihitung dalam **WIB**;
+     - **rantai kredit berhenti setelah satu putaran** (keputusan pemilik 9 Sep, spec C3
+       §P4; review akhir #4): sesi yang lahir dari penukaran kredit, bila dibatalkan lagi
+       di jendela 2–24 jam, tidak menerbitkan kredit kedua — satu pemesanan asli
+       menghasilkan paling banyak satu kredit.
    - Refund dikirim lewat **transfer manual oleh admin**. **Tidak ada janji lama
      proses** (lihat Pertanyaan terbuka).
 8. **Produk digital.**
@@ -181,7 +187,9 @@ Sumber fakta: inventaris data 6 Oktober 2026 (berkas dan baris dirujuk di bawah)
    - Alamat kunjungan dan titik koordinatnya.
    - **Data kesehatan dari skrining. Disebut terang sebagai data pribadi spesifik:**
      jawaban ya/tidak atas pertanyaan keselamatan, termasuk **kesehatan mental**; fase
-     (hamil, nifas, dan seterusnya); usia kehamilan; hasil hijau/merah.
+     (hamil, nifas, dan seterusnya); usia kehamilan; hasil hijau/merah. Skrining
+     **baru** disimpan dengan persetujuan eksplisit; skrining **sebelum** kebijakan ini
+     tersimpan tanpa cap persetujuan dan teks wajib mengakuinya (review akhir #12).
    - Catatan dan rekomendasi sesi yang ditulis tim PADMA.
    - Penilaian dan komentar klien atas sesi.
    - **Bukti pembayaran: gambar yang bisa memuat nama pemilik rekening, nomor
@@ -191,8 +199,9 @@ Sumber fakta: inventaris data 6 Oktober 2026 (berkas dan baris dirujuk di bawah)
      Midtrans.
    - Pembelian produk digital: nama dan email tercetak di berkas.
    - Testimoni: nama, keterangan, kutipan, video; hanya dengan izin.
-   - Data teknis: cookie sesi; alamat IP diproses sesaat untuk membatasi percobaan
-     berulang dan **tidak disimpan** oleh aplikasi.
+   - Data teknis: cookie sesi; alamat IP dipakai sesaat oleh aplikasi untuk membatasi
+     percobaan berulang, **tetapi dicatat di log keamanan** Supabase Auth dan Vercel —
+     jangan menulis "tidak disimpan" (review akhir #5).
    - **Data bayi tidak dikumpulkan.** Tidak ada nama atau tanggal lahir bayi.
 3. **Tujuan dan dasar pemrosesan:**
    - Menilai kelayakan dan keselamatan layanan (persetujuan eksplisit).
@@ -326,7 +335,7 @@ kebijakan ada. Penegakan untuk baris baru: lihat revisi 1 di atas.
 | `SkemaSkriningPublik` | Bidang baru `setuju_privasi: z.literal(true)` |
 | `/api/skrining` dan `/api/skrining/akun` | `...capPersetujuanSkrining()` di insert. Tanpa centang, skema menolak dengan 400 |
 | `src/app/daftar/form-daftar.tsx` | Centang wajib. Tombol email dan Google nonaktif sampai dicentang. Tepat sebelum `signUp` / `signInWithOAuth`, JS memasang cookie `padma_setuju=<VERSI_DOKUMEN>` |
-| `src/app/setelah-masuk/route.ts` | Sesudah cabang owner/admin, bila cookie = `VERSI_DOKUMEN` → `catatPersetujuan(..., "daftar")`. Cookie selalu dihapus. **Gagal mencatat tidak pernah menggagalkan login** (pola klaim skrining). Bila cookie hilang (misalnya email dikonfirmasi di perangkat lain), gerbang yang menangkap |
+| `src/app/setelah-masuk/route.ts` | Sesudah cabang owner/admin, bila cookie = `VERSI_DOKUMEN` → `catatPersetujuan(..., "daftar")`. Cookie selalu dihapus. **Gagal mencatat tidak pernah menggagalkan login** (pola klaim skrining). Bila cookie hilang (misalnya email dikonfirmasi di perangkat lain), gerbang yang menangkap Cookie hanya dihormati untuk akun yang `created_at`-nya lebih muda dari umur cookie (1 hari), dan dibuang juga di cabang owner/admin serta saat `signUp` gagal — cookie tak terikat identitas dan bisa tertinggal di peramban bersama (review akhir #1) |
 | `src/app/passport/layout.tsx` | Sesudah `ambilKlien()`: `if (!(await statusPersetujuan(userId)).sudahSetuju) redirect("/persetujuan")`. `requireRole` tetap dipanggil tepat sekali (`tests/access-matrix-layouts.test.ts`) |
 | `src/app/api/pesanan/checkout/route.ts` | Sesudah cek login: belum setuju → `403 { kode: "perlu_persetujuan" }` |
 | `src/app/produk/[slug]/tombol-beli.tsx` | `403` + `perlu_persetujuan` → `/persetujuan?lanjut=/produk/<slug>`, sejajar dengan penanganan `401` → masuk yang sudah ada |
@@ -470,9 +479,17 @@ tujuan.
    Privasi mengikuti region yang sebenarnya.
 3. Migrasi `20261006120000_persetujuan_dokumen.sql` diterapkan **secara sengaja**
    bersama migrasi `development` lain yang belum ada di produksi. **Bukan `db push`.**
-4. **Beri tahu klien PADMA sebelum deploy.** Semua klien produksi akan bertemu gerbang
+   **Migrasi WAJIB diterapkan SEBELUM kode di-deploy** (review akhir #2): kedua rute
+   skrining menulis `persetujuan_versi`/`persetujuan_pada`, dan tanpa kolom itu setiap
+   skrining gagal 500 — data kesehatan hilang dan tidak ada yang bisa memesan.
+   Gagal-terbuka di `statusPersetujuan` hanya melindungi Passport, BUKAN skrining.
+4. **Uji asap produksi** sesaat sesudah migrasi: satu insert `persetujuan_akun` sebagai
+   klien uji (sesi klien, bukan service role), lalu hapus barisnya lewat service role.
+   Penulisan di gerbang gagal-TERTUTUP; grant/policy yang salah berarti setiap klien
+   tanpa catatan tertahan di `/persetujuan` dengan hanya tombol Keluar.
+5. **Beri tahu klien PADMA sebelum deploy.** Semua klien produksi akan bertemu gerbang
    sekali, dan admin perlu siap menjawab pertanyaannya di WhatsApp.
-5. Sesudah tayang, kedua URL didaftarkan di:
+6. Sesudah tayang, kedua URL didaftarkan di:
    - verifikasi merchant Midtrans;
    - layar persetujuan OAuth Google (salah satu penghalang login Google, lihat
      `padma-google-oauth-hosted`).

@@ -22,7 +22,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createServerSupabase: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: "user-uji" } } }) },
+    auth: { getUser: async () => ({ data: { user: { id: "user-uji", created_at: "2026-10-07T02:00:00Z" } } }) },
     from: () => ({
       select: () => ({
         eq: () => ({
@@ -61,7 +61,7 @@ describe("/setelah-masuk — persetujuan dari /daftar", () => {
     ref.cookie.set(COOKIE_SETUJU, VERSI_DOKUMEN);
     const res = await panggil();
     expect(ref.catat).toHaveBeenCalledTimes(1);
-    expect(ref.catat.mock.calls[0][1]).toBe("user-uji");
+    expect((ref.catat.mock.calls[0][1] as { id: string }).id).toBe("user-uji");
     expect(ref.catat.mock.calls[0][2]).toBe(VERSI_DOKUMEN);
     expect(new URL(res.headers.get("location")!).pathname).toBe("/passport");
     expect(res.headers.get("set-cookie") ?? "").toContain(`${COOKIE_SETUJU}=;`);
@@ -88,5 +88,16 @@ describe("/setelah-masuk — persetujuan dari /daftar", () => {
     const res = await panggil();
     expect(ref.catat).not.toHaveBeenCalled();
     expect(new URL(res.headers.get("location")!).pathname).toBe("/admin");
+    // Temuan review akhir #1: staf yang masuk di peramban bersama tetap
+    // membuang sisa cookie — jangan biarkan ia menunggu klien berikutnya.
+    expect(res.headers.get("set-cookie") ?? "").toContain(`${COOKIE_SETUJU}=;`);
+  });
+
+  it("owner juga membuang sisa cookie", async () => {
+    ref.peran = "owner";
+    ref.cookie.set(COOKIE_SETUJU, VERSI_DOKUMEN);
+    const res = await panggil();
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/owner");
+    expect(res.headers.get("set-cookie") ?? "").toContain(`${COOKIE_SETUJU}=;`);
   });
 });

@@ -11,7 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { VERSI_DOKUMEN } from "@/lib/persetujuan/versi";
 import { bacaStatusPersetujuan } from "@/lib/persetujuan/status";
 import { catatPersetujuan, catatPersetujuanDariCookie } from "@/lib/persetujuan/catat";
-import { COOKIE_SETUJU, titipPersetujuanDiPeramban } from "@/lib/persetujuan/cookie";
+import { COOKIE_SETUJU, buangPersetujuanDiPeramban, titipPersetujuanDiPeramban } from "@/lib/persetujuan/cookie";
 import { tujuanPersetujuanAman } from "@/lib/persetujuan/tujuan";
 import { capPersetujuanSkrining } from "@/lib/persetujuan/skrining";
 
@@ -104,22 +104,43 @@ describe("catatPersetujuan", () => {
 });
 
 describe("catatPersetujuanDariCookie", () => {
+  const SEKARANG = new Date("2026-10-07T03:00:00Z");
+  // Akun yang lahir satu jam lalu — pendaftar baru yang cookienya memang miliknya.
+  const BARU = { id: "u-1", created_at: "2026-10-07T02:00:00Z" };
+
   it("tanpa cookie: tidak mencatat apa pun", async () => {
     const { klien, log } = tiruan();
-    expect(await catatPersetujuanDariCookie(klien, "u-1", undefined)).toBe(false);
+    expect(await catatPersetujuanDariCookie(klien, BARU, undefined, SEKARANG)).toBe(false);
     expect(log.insert).toEqual([]);
   });
 
   it("cookie berversi LAMA tidak dicatat — klien itu menyetujui teks yang sudah diganti", async () => {
     const { klien, log } = tiruan();
-    expect(await catatPersetujuanDariCookie(klien, "u-1", "2000-01-01")).toBe(false);
+    expect(await catatPersetujuanDariCookie(klien, BARU, "2000-01-01", SEKARANG)).toBe(false);
     expect(log.insert).toEqual([]);
   });
 
   it("cookie berversi berlaku dicatat sebagai jalur daftar", async () => {
     const { klien, log } = tiruan();
-    expect(await catatPersetujuanDariCookie(klien, "u-1", VERSI_DOKUMEN)).toBe(true);
+    expect(await catatPersetujuanDariCookie(klien, BARU, VERSI_DOKUMEN, SEKARANG)).toBe(true);
     expect(log.insert).toEqual([{ user_id: "u-1", versi: VERSI_DOKUMEN, jalur: "daftar" }]);
+  });
+
+  // Temuan review akhir #1: cookie tidak terikat identitas. Sisa cookie dari
+  // pendaftaran orang LAIN di peramban bersama (signUp gagal, Google batal,
+  // konfirmasi di perangkat lain) tidak boleh menjadi persetujuan akun lama
+  // yang kebetulan masuk sesudahnya.
+  it("akun LAMA tidak dicatat dari cookie — cookie itu milik pendaftar lain", async () => {
+    const { klien, log } = tiruan();
+    const lama = { id: "u-2", created_at: "2026-09-01T00:00:00Z" };
+    expect(await catatPersetujuanDariCookie(klien, lama, VERSI_DOKUMEN, SEKARANG)).toBe(false);
+    expect(log.insert).toEqual([]);
+  });
+
+  it("akun tanpa created_at tidak dicatat (tidak bisa dibuktikan baru)", async () => {
+    const { klien, log } = tiruan();
+    expect(await catatPersetujuanDariCookie(klien, { id: "u-3" }, VERSI_DOKUMEN, SEKARANG)).toBe(false);
+    expect(log.insert).toEqual([]);
   });
 });
 
@@ -137,6 +158,15 @@ describe("titipPersetujuanDiPeramban", () => {
     expect(dok.cookie).toContain("Max-Age=86400");
     expect(dok.cookie).toContain("Path=/");
     expect(dok.cookie).toContain("SameSite=Lax");
+  });
+
+  it("buangPersetujuanDiPeramban mengosongkan cookie seketika", () => {
+    const dok = { cookie: "" };
+    (globalThis as { document?: unknown }).document = dok;
+    buangPersetujuanDiPeramban();
+    expect(dok.cookie).toContain(`${COOKIE_SETUJU}=;`);
+    expect(dok.cookie).toContain("Max-Age=0");
+    expect(dok.cookie).toContain("Path=/");
   });
 });
 

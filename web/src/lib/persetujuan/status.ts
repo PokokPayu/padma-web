@@ -21,6 +21,11 @@ export type StatusPersetujuan = {
  * SELURUH klien terkunci di layar `/persetujuan`, yang penulisannya gagal
  * karena sebab yang sama. Klien yang lolos gerbang hari ini akan ditahan lagi
  * pada kunjungan berikutnya begitu tabelnya terbaca.
+ *
+ * Yang dilindungi hanya PASSPORT. Kedua rute skrining menulis kolom
+ * `screenings.persetujuan_*`, dan tanpa migrasinya setiap skrining gagal —
+ * jadi migrasi tetap WAJIB diterapkan sebelum deploy (spec, "Prasyarat rilis"
+ * #3). Gagal-terbuka ini jaring pengaman, bukan izin untuk menunda migrasi.
  */
 export async function bacaStatusPersetujuan(
   supabase: SupabaseClient,

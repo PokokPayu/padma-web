@@ -331,6 +331,10 @@ async function main() {
   await hijauPage.getByLabel("Email").fill(emailHijau);
   await hijauPage.getByLabel("No. WhatsApp").fill("0812-0000-7788");
   await hijauPage.getByLabel("Kata sandi").fill(PASSWORD);
+  // Tombol Daftar mati sampai dicentang (spec 2026-10-06). Konfirmasi dibuka
+  // di konteks yang sama di bawah, jadi persetujuannya tercatat jalur daftar
+  // dan 6c tetap mendarat di /passport, bukan di gerbang.
+  await hijauPage.getByRole("checkbox", { name: /Saya menyetujui/ }).check();
   await Promise.all([
     hijauPage.waitForURL((u) => !u.pathname.startsWith("/daftar"), { timeout: 20_000 }),
     hijauPage.getByRole("button", { name: "Daftar", exact: true }).click(),

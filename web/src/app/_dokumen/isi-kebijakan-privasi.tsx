@@ -50,8 +50,9 @@ export function IsiKebijakanPrivasi({ waHref, waTampilan }: { waHref: string; wa
             <strong>Data kesehatan (data pribadi spesifik):</strong> jawaban skrining atas pertanyaan
             keselamatan, termasuk tentang perdarahan, nyeri, infeksi, kehamilan, dan kesehatan mental;
             fase Anda (program kehamilan, hamil, nifas, atau menopause); usia kehamilan bila Anda
-            mengisinya; serta hasil skrining. Data ini hanya kami proses dengan persetujuan eksplisit
-            Anda.
+            mengisinya; serta hasil skrining. Setiap skrining baru hanya kami simpan dengan persetujuan
+            eksplisit Anda; skrining yang dikirim sebelum kebijakan ini berlaku tetap kami simpan sebagai
+            riwayat layanan.
           </li>
           <li>
             <strong>Catatan dan rekomendasi sesi</strong> yang ditulis tim PADMA, yang dapat Anda baca
@@ -76,8 +77,9 @@ export function IsiKebijakanPrivasi({ waHref, waTampilan }: { waHref: string; wa
             mengizinkannya.
           </li>
           <li>
-            <strong>Data teknis:</strong> cookie yang diperlukan untuk sesi masuk. Alamat IP diproses
-            sesaat untuk membatasi percobaan berulang dan tidak disimpan oleh aplikasi kami.
+            <strong>Data teknis:</strong> cookie yang diperlukan untuk sesi masuk. Aplikasi kami
+            memakai alamat IP sesaat untuk membatasi percobaan berulang; penyedia autentikasi dan
+            hosting kami mencatatnya di log keamanan mereka. Kami tidak memakainya untuk pelacakan.
           </li>
         </Butir>
         <p>Kami tidak mengumpulkan data bayi, seperti nama atau tanggal lahir bayi.</p>

@@ -143,6 +143,20 @@ describe("Syarat & Ketentuan — fakta wajib", () => {
     }
   });
 
+  // Temuan review akhir #4 — keputusan pemilik 9 Sep (spec C3 §P4) yang
+  // membatasi hak klien; tanpa kalimat ini teks menjanjikan kredit tanpa batas.
+  it("rantai kredit berhenti setelah satu putaran", () => {
+    expect(teksSK).toContain("tidak menerbitkan kredit kedua");
+    expect(teksSK).toContain("paling banyak satu kredit");
+  });
+
+  // Temuan review akhir #11 — centang skrining hanya persetujuan pemrosesan
+  // data kesehatan (Kebijakan Privasi), BUKAN penerimaan S&K.
+  it("penerimaan S&K tidak diklaim lewat centang skrining", () => {
+    expect(teksSK).not.toMatch(/formulir pendaftaran, skrining, atau layar persetujuan/);
+    expect(teksSK).toContain("formulir pendaftaran atau layar persetujuan");
+  });
+
   it("tidak menjanjikan lama proses refund (belum diputuskan klien)", () => {
     expect(teksSK).not.toMatch(/refund[^.]*\b\d+\s*(hari|jam)\s*kerja/i);
   });
@@ -178,6 +192,20 @@ describe("Kebijakan Privasi — fakta wajib", () => {
     ]) {
       expect(teksPrivasi, `hilang: ${penggal}`).toContain(penggal);
     }
+  });
+
+  // Temuan review akhir #5 — Supabase Auth dan Vercel mencatat IP di log
+  // mereka; "tidak disimpan" adalah janji yang tidak ditepati tumpukannya.
+  it("tidak mengklaim alamat IP tidak disimpan sama sekali", () => {
+    expect(teksPrivasi).not.toMatch(/IP[^.]*tidak disimpan/);
+    expect(teksPrivasi).toContain("log keamanan");
+  });
+
+  // Temuan review akhir #12 — skrining lama (sebelum dokumen ini) tersimpan
+  // TANPA cap persetujuan; teks tidak boleh mengaku sebaliknya.
+  it("jujur soal skrining yang terkumpul sebelum kebijakan ini berlaku", () => {
+    expect(teksPrivasi).not.toContain("Data ini hanya kami proses dengan persetujuan eksplisit Anda.");
+    expect(teksPrivasi).toContain("sebelum kebijakan ini berlaku");
   });
 
   it("TIDAK menjanjikan backup — jadwal backup otomatis masih mati", () => {
