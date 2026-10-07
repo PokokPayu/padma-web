@@ -41,7 +41,7 @@ export function Merek({ gelap = false }: { gelap?: boolean }) {
   );
 }
 
-export function HeaderSitus({ aktif, waHref }: { aktif: HalamanSitus; waHref: string }) {
+export function HeaderSitus({ aktif, waHref }: { aktif?: HalamanSitus; waHref: string }) {
   return (
     <header className="situs-header sticky top-0 z-40 border-b border-situs-garis bg-situs-kartu">
       <div className="mx-auto flex h-[72px] max-w-[1280px] items-center justify-between gap-3 px-5 md:px-10 lg:h-20 lg:gap-6 lg:px-12">

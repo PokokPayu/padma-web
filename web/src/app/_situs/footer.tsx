@@ -57,6 +57,16 @@ export function FooterSitus({
           <span>{alamat}</span>
           <span aria-hidden="true" className="hidden sm:inline">·</span>
           <span>{jam}</span>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
+          {/* Tautan hukum di baris bawah, bukan di grid TAUTAN_FOOTER — letak
+              lazimnya, dan grid navigasi tidak jadi sesak (spec 2026-10-06). */}
+          <Link href="/syarat-ketentuan" className="py-1 hover:text-situs-emas-pucat sm:py-0">
+            Syarat & Ketentuan
+          </Link>
+          <span aria-hidden="true" className="hidden sm:inline">·</span>
+          <Link href="/kebijakan-privasi" className="py-1 hover:text-situs-emas-pucat sm:py-0">
+            Kebijakan Privasi
+          </Link>
         </p>
       </div>
     </footer>
