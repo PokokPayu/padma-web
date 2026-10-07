@@ -506,6 +506,10 @@ hukum dan klien:
 3. **Batas tanggap 3×24 jam** untuk permintaan data dan pemberitahuan kebocoran.
    Diambil dari UU PDP. Pastikan admin sanggup memenuhinya.
 
+4. **Skrining yang diisikan untuk orang lain** (mis. keluarga di ruang tunggu). Centang
+   persetujuan data kesehatan dicentang oleh orang yang mengisi, bukan pemilik datanya.
+   Persetujuan siapa yang sah? (review akhir, "declined to judge")
+
 ## Di luar cakupan
 
 - Fitur hapus akun, anonimisasi, atau unduh data mandiri.
