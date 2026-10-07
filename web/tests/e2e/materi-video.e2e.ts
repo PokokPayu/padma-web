@@ -89,6 +89,7 @@ import {
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 import { tungguIsi } from "./_tunggu";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
 
 config({ path: [".env.local", ".env"] });
 
@@ -303,6 +304,7 @@ async function pastikanRinaBisaLogin(): Promise<void> {
     .update({ user_id: user!.id, linked_at: new Date().toISOString() })
     .eq("id", RINA_CLIENT_ID);
   if (error) throw error;
+  await setujuiDokumenUntukUji(svc, user!.id);
 }
 
 async function pulihkanRina(semula: KeadaanRina): Promise<void> {

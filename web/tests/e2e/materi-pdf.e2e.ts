@@ -62,6 +62,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
 import { buatPdfUji } from "../bantu/pdf";
 
 config({ path: [".env.local", ".env"] });
@@ -226,6 +227,7 @@ async function pastikanRinaBisaLogin(): Promise<void> {
     .update({ user_id: user!.id, linked_at: new Date().toISOString() })
     .eq("id", RINA_CLIENT_ID);
   if (error) throw error;
+  await setujuiDokumenUntukUji(admin, user!.id);
 }
 
 async function pulihkanRina(semula: KeadaanRina): Promise<void> {

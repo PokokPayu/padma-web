@@ -37,6 +37,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { createClientInvite, inviteLink } from "../../src/lib/auth/link-client";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
 import { RINA_CLIENT_ID, TOKEN_UNDANGAN_RINA } from "../../scripts/seed-users";
 import { tungguIsi } from "./_tunggu";
 
@@ -188,12 +189,14 @@ async function hapusUser(email: string) {
 }
 
 async function buatUser(email: string) {
-  const { error } = await svc().auth.admin.createUser({
+  const { data, error } = await svc().auth.admin.createUser({
     email,
     password: PASSWORD,
     email_confirm: true,
   });
   if (error) throw error;
+  // Matriks akses menguji PERAN, bukan gerbang persetujuan (spec 2026-10-06).
+  await setujuiDokumenUntukUji(svc(), data.user!.id);
 }
 
 async function keadaanAwalRina() {

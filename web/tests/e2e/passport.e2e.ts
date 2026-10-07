@@ -33,6 +33,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { VERSI_DOKUMEN } from "../../src/lib/persetujuan/versi";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
 config({ path: [".env.local", ".env"] });
@@ -169,7 +170,43 @@ async function main() {
 
   const browser = await chromium.launch();
   try {
+    // ---- 0. Gerbang persetujuan S&K (spec 2026-10-06) ----
+    // Baris persetujuan Ananda DIHAPUS dulu supaya gerbangnya benar-benar
+    // menyala. `seedUsers` menyemainya lagi pada seed berikutnya, jadi run
+    // yang mati di tengah tidak meninggalkan Ananda tanpa persetujuan lama-lama.
+    const { data: barisAnanda } = await admin
+      .from("clients")
+      .select("user_id")
+      .eq("padma_id", PADMA_ID)
+      .single();
+    const uidAnanda = barisAnanda!.user_id as string;
+    await admin.from("persetujuan_akun").delete().eq("user_id", uidAnanda).eq("versi", VERSI_DOKUMEN);
+
     const ctx = await login(browser, "ananda@padma.test");
+    const gerbang = await ctx.newPage();
+    await gerbang.goto(`${BASE}/passport`, { waitUntil: "networkidle" });
+    catat(
+      "0a. klien tanpa persetujuan versi berlaku dibelokkan ke /persetujuan",
+      new URL(gerbang.url()).pathname === "/persetujuan",
+      `URL ${gerbang.url()}`,
+    );
+    await gerbang.getByRole("checkbox").check();
+    await Promise.all([
+      gerbang.waitForURL((u) => u.pathname === "/passport", { timeout: 20_000 }),
+      gerbang.getByRole("button", { name: "Setuju & lanjutkan" }).click(),
+    ]);
+    const { data: catatan } = await admin
+      .from("persetujuan_akun")
+      .select("jalur")
+      .eq("user_id", uidAnanda)
+      .eq("versi", VERSI_DOKUMEN);
+    catat(
+      "0b. setuju di gerbang tercatat (jalur gerbang) lalu kembali ke /passport",
+      new URL(gerbang.url()).pathname === "/passport" && catatan?.[0]?.jalur === "gerbang",
+      `URL ${gerbang.url()} | baris ${JSON.stringify(catatan)}`,
+    );
+    await gerbang.close();
+
     const page = await ctx.newPage();
 
     // ---- 1. Beranda ----
