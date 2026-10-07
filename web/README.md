@@ -104,6 +104,8 @@ sama-sama membuat `npm test` MERAH.
 | `/artikel` | Publik | Daftar artikel edukasi yang terbit (dikelola di `/admin/artikel`) |
 | `/artikel/[slug]` | Publik | Satu artikel; markdown diurai `lib/artikel/urai.ts` menjadi elemen React, tanpa HTML mentah |
 | `/testimoni` | Publik | Video testimoni keluarga yang terbit — hanya yang berizin (CHECK `testimonials_terbit_berizin`) |
+| `/syarat-ketentuan` | Publik | Syarat & Ketentuan — DRAF teknis, wajib review hukum sebelum rilis (spec 2026-10-06); tabel pembatalan disalin utuh dari kebijakan klien. Tidak di menu header, ditautkan footer |
+| `/kebijakan-privasi` | Publik | Kebijakan Privasi (UU PDP) — data yang dikumpulkan, pemroses pihak ketiga, hak klien; WA kontak dari pengaturan. Tidak menyebut backup |
 | `/daftar` | Publik | Pendaftaran mandiri: nama, email, WhatsApp, sandi & Google — fase TIDAK ditanyakan, datang dari skrining |
 | `/lupa-sandi` | Publik | Kirim tautan pemulihan sandi; balasan SELALU sama entah emailnya terdaftar atau tidak (K6) |
 | `/produk` | Publik | Etalase produk digital: kartu bersampul, badge jenis & unduhan, harga dengan coret |
@@ -154,6 +156,7 @@ sama-sama membuat `npm test` MERAH.
 | `/owner/produk` | Owner | Harga produk digital berriwayat: harga baru = BARIS BARU; harga coret opsional; harga 0 = gratis |
 | `/owner/transport` | Owner | Rate card transport per jenjang jarak (berriwayat) + tarif khusus per sesi >20 km |
 | `/akun-belum-terhubung` | Publik | Jalan buntu jujur: akun sah yang rekam kliennya tidak bisa ditentukan tanpa tim PADMA (alamat email sudah dimiliki akun lain, atau token undangan gagal dan tak ada baris beremail sama) — sebabnya sengaja tidak dibedakan di layar |
+| `/persetujuan` | Klien | Gerbang persetujuan S&K + Kebijakan Privasi versi berlaku (`VERSI_DOKUMEN`). Dituju layout `/passport` dan checkout (403 `perlu_persetujuan`); dicatat ke `persetujuan_akun` jalur `gerbang`; selalu ada tombol Keluar |
 | `/periksa-email` | Publik | Menunggu konfirmasi email + kirim ulang tautan; konfirmasi inilah satu-satunya alasan penautan lewat email menjadi sah (K1) |
 
 Rute non-halaman (route handler) — bagian permukaan serang yang sama, jadi
