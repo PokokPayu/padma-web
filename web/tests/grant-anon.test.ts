@@ -112,6 +112,9 @@ const TABEL_TERTUTUP_ANON = [
   // Keranjang P2: SELECT bagi `authenticated` saja, lewat policy milik sendiri.
   "cart_items",
   "pesanan_item_staf",
+  // Persetujuan S&K (spec 2026-10-06): bukti hukum milik pemegang akun. Anon
+  // tidak punya urusan dengannya — tidak membaca, tidak mencatat.
+  "persetujuan_akun",
 ] as const;
 
 /** Katalog publik: anon boleh BACA (bahan landing Plan 2), tidak boleh tulis. */
