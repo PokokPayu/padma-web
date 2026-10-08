@@ -200,8 +200,8 @@ export default async function LayananPage() {
                   src={f.gambar}
                   alt=""
                   width={100}
-                  height={112}
-                  className="h-[100px] w-[88px] shrink-0 rounded-[10px] object-cover lg:h-[112px] lg:w-[100px]"
+                  height={100}
+                  className="size-[88px] shrink-0 lg:size-[100px]"
                 />
                 <div className="flex flex-col gap-1.5">
                   <h3 className="font-garamond text-2xl leading-tight font-bold text-situs-judul lg:text-[26px]">{f.judul}</h3>
