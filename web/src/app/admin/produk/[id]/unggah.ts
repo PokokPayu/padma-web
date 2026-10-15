@@ -10,7 +10,7 @@ import { MAKS_HALAMAN, MAKS_BYTE_PDF } from "@/lib/materi/rasterisasi";
 import {
   namaObjekVideoMateri, namaObjekHalamanMateri, namaObjekPdfMateri,
 } from "@/lib/produk/objek";
-import { prefiksPdfPembeli } from "@/lib/produk/cap-pdf";
+import { hapusSalinanPembeli } from "@/lib/produk/salinan-pembeli";
 
 const BUCKET_HALAMAN = "produk-halaman";
 const BUCKET_BERKAS = "produk-berkas";
@@ -18,9 +18,6 @@ const MIME_PDF = "application/pdf";
 
 type Gagal = { ok: false; pesan: string };
 export type UnggahanHalaman = { halaman: number; objek: string; token: string };
-
-/** Sebanyak yang dipulangkan satu halaman `.list()` — lihat komentar di bawah. */
-const BATAS_LIST = 1000;
 
 type Materi = {
   id: string;
@@ -54,50 +51,6 @@ function gagal(x: Materi | Gagal): x is Gagal {
 
 function segarkan(productId: string) {
   revalidatePath(`/admin/produk/${productId}`);
-}
-
-/**
- * Mengosongkan SELURUH salinan PDF tercap milik para pembeli satu materi.
- *
- * Salinan tercap (`<produk>/<materi>/pembeli/<klien>.pdf`) adalah TURUNAN dari
- * PDF sumber, dan rute unduh memakainya ulang begitu ia ada — tanpa pernah
- * membandingkannya dengan sumbernya. Karena itu siapa pun yang MENGGANTI atau
- * MELEPAS sumbernya wajib menghapus folder ini; kalau tidak, admin yang
- * mengunggah PDF perbaikan tidak akan PERNAH bisa mengirimkannya kepada orang
- * yang sudah pernah mengunduh — permanen, tanpa satu pun galat di layar — dan
- * "Lepas isi" meninggalkan objek yatim, kelas kebocoran yang sama yang sudah
- * ditutup untuk objek halaman.
- *
- * `.list()` DIPAGINASI, tidak dipanggil sekali: tanpa opsi, Supabase memulangkan
- * 100 objek pertama saja — pemotongan diam yang dulu membuat unggah ulang
- * e-book >100 halaman gagal permanen di modul materi. Materi laris punya lebih
- * dari 100 pembeli, dan sisa yang tidak terhapus adalah sisa yang tetap
- * disajikan rute unduh.
- *
- * Memulangkan `true` bila ADA yang tidak terhapus — mode gagal LUNAK yang
- * dilaporkan ke pemanggil, bukan ditelan diam.
- */
-async function hapusSalinanPembeli(
-  admin: ReturnType<typeof createAdminSupabase>,
-  productId: string,
-  materiId: string,
-): Promise<boolean> {
-  const prefiks = prefiksPdfPembeli(productId, materiId);
-  for (;;) {
-    const { data, error } = await admin.storage
-      .from(BUCKET_BERKAS)
-      .list(prefiks, { limit: BATAS_LIST });
-    if (error) return true;
-    if (!data || data.length === 0) return false;
-
-    const { error: hapus } = await admin.storage
-      .from(BUCKET_BERKAS)
-      .remove(data.map((o) => `${prefiks}/${o.name}`));
-    if (hapus) return true;
-    // Halaman terakhir: berhenti di sini, bukan memanggil `.list()` sekali lagi
-    // hanya untuk mendapat jawaban kosong.
-    if (data.length < BATAS_LIST) return false;
-  }
 }
 
 // ===========================================================================
@@ -244,6 +197,44 @@ export async function terbitkanUrlUnggahHalamanMateri(
     }
   }
 
+  // Materi yang TIDAK (lagi) boleh diunduh tidak boleh menyimpan PDF utuh.
+  // Unggah ulang halaman dengan `boleh_unduh` mati tidak mengunggah PDF utuh
+  // (`terbitkanUrlUnggahPdfMateri` menolaknya), jadi baris `digital_product_files`,
+  // `isi.pdf`, dan salinan tercap pembeli dari unggahan SEBELUMNYA tetap hidup —
+  // dan begitu admin menyalakan unduhan lagi, pembeli menerima PDF versi lama
+  // tanpa satu pun galat. Dibuang di sini, dengan urutan yang sama: baris dulu
+  // (kegagalannya inert), objek sesudahnya. Gagal membersihkan = unggahan
+  // dibatalkan, persis cabang `boleh_unduh` di `terbitkanUrlUnggahPdfMateri`.
+  if (!m.boleh_unduh) {
+    const { data: berkasLama, error: lepas } = await supabase.rpc("lepas_berkas_materi", {
+      p_material_id: materiId,
+    });
+    if (lepas) {
+      return {
+        ok: false,
+        pesan: "Gagal membersihkan PDF utuh yang lama. Unggahan dibatalkan — coba lagi.",
+      };
+    }
+    const objekPdf = berkasLama?.[0]?.objek;
+    if (objekPdf) {
+      const { error: hapusPdf } = await admin.storage.from(BUCKET_BERKAS).remove([objekPdf]);
+      if (hapusPdf) {
+        return {
+          ok: false,
+          pesan:
+            "PDF utuh yang lama gagal dihapus. Unggahan dibatalkan supaya pembeli tidak menerima berkas versi lama — coba lagi.",
+        };
+      }
+    }
+    if (await hapusSalinanPembeli(admin, m.product_id, m.id)) {
+      return {
+        ok: false,
+        pesan:
+          "Gagal membersihkan salinan unduhan pembeli yang lama. Unggahan dibatalkan supaya pembeli tidak menerima berkas versi lama — coba lagi.",
+      };
+    }
+  }
+
   const unggahan: UnggahanHalaman[] = [];
   for (let halaman = 1; halaman <= jumlahHalaman; halaman++) {
     const objek = namaObjekHalamanMateri(m.product_id, m.id, halaman);
@@ -383,6 +374,7 @@ export async function catatPdfMateri(
 
   const m = await bacaMateri(materiId);
   if (gagal(m)) return m;
+  if (m.jenis !== "pdf") return { ok: false, pesan: "Materi ini bukan materi PDF." };
   if (!m.boleh_unduh) return { ok: false, pesan: "Materi ini tidak mengizinkan unduhan PDF utuh." };
 
   // Objek yang dicatat selalu objek yang KITA namai — tidak ada parameter

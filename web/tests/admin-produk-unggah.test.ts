@@ -4,6 +4,8 @@ import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
+import { namaObjekPdfMateri } from "@/lib/produk/objek";
+import { prefiksPdfPembeli } from "@/lib/produk/cap-pdf";
 
 const AKAR = path.resolve(__dirname, "..");
 const UNGGAH = readFileSync(path.join(AKAR, "src/app/admin/produk/[id]/unggah.ts"), "utf8");
@@ -23,7 +25,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const { lepasIsiMateri } = await import("@/app/admin/produk/[id]/unggah");
+const { lepasIsiMateri, terbitkanUrlUnggahHalamanMateri } = await import("@/app/admin/produk/[id]/unggah");
 
 /**
  * Unggahan adalah satu-satunya titik di modul ini yang boleh memegang service
@@ -220,5 +222,62 @@ describe("lepasIsiMateri — pembersihan objek halaman TIDAK disandera baris dig
     const { data: berkasSisa } = await svc
       .from("digital_product_files").select("id").eq("material_id", materiId);
     expect((berkasSisa ?? []).length).toBe(1);
+  });
+});
+
+const BUCKET_BERKAS = "produk-berkas";
+
+/**
+ * Review akhir, Important #2: unduhan dimatikan, lalu admin mengunggah ulang
+ * versi 2 (hanya halaman yang diganti — PDF utuh tidak diunggah lagi karena
+ * `boleh_unduh` mati), lalu unduhan dinyalakan kembali. Tanpa pembersihan di
+ * langkah unggah ulang, baris `digital_product_files` + `isi.pdf` + salinan
+ * tercap versi 1 masih ada, dan pembeli menerima v1 — basi, tanpa galat.
+ */
+describe("terbitkanUrlUnggahHalamanMateri — boleh_unduh mati membuang PDF utuh yang basi", () => {
+  it("baris files, isi.pdf, dan salinan tercap pembeli ikut hilang", async () => {
+    const svc = createAdminSupabase();
+    const { data: produk } = await svc
+      .from("digital_products")
+      .insert({ judul: "Uji Berkas Basi", slug: "uji-berkas-basi" })
+      .select("id")
+      .single();
+    const id = produk!.id;
+    bersihkan.push(id);
+    const { data: bab } = await svc.from("digital_product_sections")
+      .insert({ product_id: id, judul: "Bab" }).select("id").single();
+    const { data: materi } = await svc.from("digital_product_materials")
+      .insert({ section_id: bab!.id, product_id: id, judul: "Materi", jenis: "pdf", boleh_unduh: false })
+      .select("id").single();
+    const materiId = materi!.id;
+
+    const objekUtuh = namaObjekPdfMateri(id, materiId);
+    const objekSalinan = `${prefiksPdfPembeli(id, materiId)}/uji-klien.pdf`;
+    try {
+      for (const objek of [objekUtuh, objekSalinan]) {
+        const { error } = await svc.storage
+          .from(BUCKET_BERKAS)
+          .upload(objek, Buffer.from("%PDF-uji"), { contentType: "application/pdf" });
+        expect(error).toBeNull();
+      }
+      await svc.from("digital_product_files").insert({
+        material_id: materiId, objek: objekUtuh, mime: "application/pdf", byte: 8,
+      });
+
+      ref.sesi = await signInAs("admin@padma.test");
+      const hasil = await terbitkanUrlUnggahHalamanMateri(materiId, 1);
+      expect(hasil.ok).toBe(true);
+
+      const { data: baris } = await svc
+        .from("digital_product_files").select("id").eq("material_id", materiId);
+      expect(baris ?? []).toEqual([]);
+
+      const { data: utuh } = await svc.storage.from(BUCKET_BERKAS).list(`${id}/${materiId}`);
+      expect((utuh ?? []).map((o) => o.name)).not.toContain("isi.pdf");
+      const { data: salinan } = await svc.storage.from(BUCKET_BERKAS).list(prefiksPdfPembeli(id, materiId));
+      expect(salinan ?? []).toEqual([]);
+    } finally {
+      await svc.storage.from(BUCKET_BERKAS).remove([objekUtuh, objekSalinan]);
+    }
   });
 });

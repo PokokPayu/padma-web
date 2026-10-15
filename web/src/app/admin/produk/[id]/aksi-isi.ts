@@ -10,7 +10,7 @@ import {
   periksaJudul, periksaJudulBab, periksaKeteranganMateri, periksaJenisMateri,
 } from "@/lib/produk/status";
 import { periksaBerkasSampul, namaObjekSampul, objekSampulSah } from "@/lib/produk/objek";
-import { prefiksPdfPembeli } from "@/lib/produk/cap-pdf";
+import { hapusSalinanPembeli } from "@/lib/produk/salinan-pembeli";
 
 type Gagal = { ok: false; pesan: string };
 type Berhasil = { ok: true };
@@ -217,25 +217,6 @@ export async function geserMateri(materiId: string, arah: Arah): Promise<Berhasi
   const r = await geser(supabase, "digital_product_materials", "section_id", m.section_id, materiId, arah);
   if (r.ok) segarkan(m.product_id);
   return r;
-}
-
-/** Menghapus salinan PDF bercap milik pembeli untuk satu materi. true = ada yang gagal. */
-async function hapusSalinanPembeli(
-  admin: ReturnType<typeof createAdminSupabase>,
-  productId: string,
-  materiId: string,
-): Promise<boolean> {
-  const prefiks = prefiksPdfPembeli(productId, materiId);
-  for (;;) {
-    const { data, error } = await admin.storage.from(BUCKET_BERKAS).list(prefiks, { limit: 1000 });
-    if (error) return true;
-    if (!data || data.length === 0) return false;
-    const { error: hapus } = await admin.storage
-      .from(BUCKET_BERKAS)
-      .remove(data.map((o) => `${prefiks}/${o.name}`));
-    if (hapus) return true;
-    if (data.length < 1000) return false;
-  }
 }
 
 export async function hapusMateri(
