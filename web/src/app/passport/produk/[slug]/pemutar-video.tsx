@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
  * Pemutar video produk.
  *
  * Berbeda dari `passport/materi/[id]/pemutar-video.tsx`: rute video produk
- * (`/api/produk/[id]/video`) menjawab dengan REDIRECT 302 ke presigned URL
+ * (`/api/produk/materi/[id]/video`) menjawab dengan REDIRECT 302 ke presigned URL
  * R2, bukan JSON `{url}` — lihat komentar urutan di route-nya. `<video>`
  * mengikuti redirect HTTP secara natif seperti elemen media lain, jadi tidak
  * perlu `fetch` + `r.json()` di sini sama sekali.
@@ -18,12 +18,12 @@ import { useEffect, useRef } from "react";
  * R2 yang sesungguhnya, dan rute itu sendiri menolak siapa pun tanpa sesi
  * pembeli yang sah.
  */
-export function PemutarVideo({ productId }: { productId: string }) {
+export function PemutarVideo({ materiId }: { materiId: string }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (ref.current) ref.current.src = `/api/produk/${productId}/video`;
-  }, [productId]);
+    if (ref.current) ref.current.src = `/api/produk/materi/${materiId}/video`;
+  }, [materiId]);
 
   return (
     <video

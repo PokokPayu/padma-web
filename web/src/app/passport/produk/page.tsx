@@ -2,7 +2,8 @@ import Link from "next/link";
 import { produkSaya } from "@/lib/passport/produk-saya";
 import { ambilKlien } from "@/lib/passport/data";
 import { periksaPesananMenggantung } from "@/lib/pesanan/periksa-menggantung";
-import { LABEL_JENIS } from "@/lib/produk/status";
+import { ringkasJumlahMateri, statusAkses, formatTanggalAkses } from "@/lib/produk/status";
+import { urlSampulPublik } from "@/lib/produk/objek";
 import { hitungKeranjang } from "@/lib/keranjang/baca";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
@@ -55,25 +56,32 @@ export default async function HalamanProdukSaya() {
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {produk.map((p) => (
-            <Link
-              key={p.id}
-              href={`/passport/produk/${p.slug}`}
-              data-produk-id={p.id}
-              className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-[#FFFEFA] p-4 transition hover:-translate-y-0.5 hover:border-gold"
-            >
-              <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-leaf-soft text-[17px] text-leaf">
-                {p.jenis === "pdf" ? "📖" : "▶"}
-              </span>
-              <span className="min-w-0">
-                <b className="block text-[13.5px] leading-tight">{p.judul}</b>
-                <span className="text-[11.5px] text-ink-soft">
-                  {LABEL_JENIS[p.jenis]}
-                  {p.bolehUnduh ? " · Bisa diunduh" : ""}
+          {produk.map((p) => {
+            const s = statusAkses(p.berlakuSampai);
+            const habis = s.keadaan === "habis";
+            const sampul = urlSampulPublik(p.sampulObjek);
+            return (
+              <Link
+                key={p.id}
+                href={habis ? `/produk/${p.slug}` : `/passport/produk/${p.slug}`}
+                data-produk-id={p.id}
+                className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-[#FFFEFA] p-4 transition hover:-translate-y-0.5 hover:border-gold"
+              >
+                <span className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-xl bg-leaf-soft text-[17px] text-leaf">
+                  {sampul ? <img src={sampul} alt="" className="h-full w-full object-cover" /> : "▶"}
                 </span>
-              </span>
-            </Link>
-          ))}
+                <span className="min-w-0">
+                  <b className="block text-[13.5px] leading-tight">{p.judul}</b>
+                  <span className="block text-[11.5px] text-ink-soft">{ringkasJumlahMateri(p.jenisMateri)}</span>
+                  <span className={`mt-0.5 block text-[11.5px] font-semibold ${habis ? "text-clay" : "text-leaf"}`}>
+                    {s.keadaan === "selamanya" && "Akses selamanya"}
+                    {s.keadaan === "aktif" && `Aktif sampai ${formatTanggalAkses(s.sampai)}`}
+                    {habis && "Masa berlaku habis · Beli lagi"}
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
         </div>
       )}
     </section>
