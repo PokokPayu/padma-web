@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ProdukPublik } from "@/lib/produk/katalog";
-import { LABEL_JENIS } from "@/lib/produk/status";
+import { ringkasJumlahMateri } from "@/lib/produk/status";
+import { urlSampulPublik } from "@/lib/produk/objek";
 import { formatRupiah } from "@/lib/rupiah-publik";
 
 // `formatRupiah` DIIMPOR DARI `@/lib/rupiah-publik`, BUKAN `@/lib/owner/rupiah`
@@ -50,9 +51,7 @@ function HargaKartu({ harga, hargaCoret }: { harga: number | null; hargaCoret: n
 }
 
 export function KartuProduk({ produk }: { produk: ProdukPublik }) {
-  const sampulUrl = produk.sampulObjek
-    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/produk-sampul/${produk.sampulObjek}`
-    : null;
+  const sampulUrl = urlSampulPublik(produk.sampulObjek);
 
   return (
     <Link
@@ -65,22 +64,20 @@ export function KartuProduk({ produk }: { produk: ProdukPublik }) {
           <img src={sampulUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[13px] text-ink-soft">
-            {LABEL_JENIS[produk.jenis]}
+            {produk.judul}
           </div>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold">
-            {LABEL_JENIS[produk.jenis]}
-          </span>
-          {produk.bolehUnduh && (
-            <span className="rounded-full bg-leaf-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-leaf">
-              Bisa diunduh
-            </span>
-          )}
-        </div>
         <h3 className="font-serif text-lg text-night">{produk.judul}</h3>
+        {produk.deskripsi !== "" && (
+          <p className="line-clamp-2 text-[13px] text-ink-soft">{produk.deskripsi}</p>
+        )}
+        {produk.jenisMateri.length > 0 && (
+          <p className="text-[12.5px] font-semibold text-ink-soft">
+            {ringkasJumlahMateri(produk.jenisMateri)}
+          </p>
+        )}
         <HargaKartu harga={produk.harga} hargaCoret={produk.hargaCoret} />
       </div>
     </Link>
