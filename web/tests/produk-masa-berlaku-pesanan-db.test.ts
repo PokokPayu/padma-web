@@ -50,6 +50,14 @@ async function entitlement(produkId: string) {
   return data;
 }
 
+/** Majukan waktu: akses habis semenit lalu. */
+async function kedaluwarsakan(produkId: string): Promise<void> {
+  const { error } = await svc.from("digital_entitlements")
+    .update({ berlaku_sampai: new Date(Date.now() - 60_000).toISOString() })
+    .eq("client_id", ANANDA_CLIENT_ID).eq("product_id", produkId);
+  if (error) throw error;
+}
+
 /**
  * Pola pembersihan yang SAMA dengan tests/pesanan-checkout-db.test.ts:
  * `pesanan_terbuka_satu_per_klien` adalah indeks unik GLOBAL, jadi sisa
@@ -96,7 +104,7 @@ describe("terbitkan_akses_item", () => {
   it("(2b) kedaluwarsa → diperbarui; notifikasi kembar jatuh ke (2a)", async () => {
     const p = await semaiProduk(10_000, 1);
     await svc.from("digital_entitlements").insert({
-      client_id: ANANDA_CLIENT_ID, product_id: p, sumber: "beli",
+      client_id: ANANDA_CLIENT_ID, product_id: p, sumber: "gratis",
       berlaku_sampai: new Date(Date.now() - 60_000).toISOString(),
     });
     const { pesananId, itemId } = await semaiPesananLunas(p, 1);
@@ -106,11 +114,46 @@ describe("terbitkan_akses_item", () => {
     const e1 = await entitlement(p);
     expect(new Date(e1!.berlaku_sampai!).getTime()).toBeGreaterThan(Date.now() + 25 * 86_400_000);
     expect(e1!.pesanan_id).toBe(pesananId);
+    // Diperbarui oleh PEMBELIAN: sumbernya kini 'beli', walau semula gratis.
+    expect(e1!.sumber).toBe("beli");
 
     const { data: kedua } = await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
     expect(kedua).toBe("akses_sudah_ada");
     const e2 = await entitlement(p);
     expect(e2!.berlaku_sampai).toBe(e1!.berlaku_sampai);
+  });
+
+  it("satu pesanan, satu durasi: item yang terbit lewat (1) tidak memperbarui lagi sesudah habis", async () => {
+    const p = await semaiProduk(10_000, 1);
+    const { itemId } = await semaiPesananLunas(p, 1);
+    const { data: pertama } = await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
+    expect(pertama).toBe("akses_terbit");
+    await kedaluwarsakan(p);
+    const sebelum = (await entitlement(p))!.berlaku_sampai;
+
+    // Tombol admin "Terbitkan akses" tampil untuk setiap pesanan lunas.
+    const { data: ulang, error } = await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
+    expect(error).toBeNull();
+    expect(ulang).toBe("akses_sudah_ada");
+    expect((await entitlement(p))!.berlaku_sampai).toBe(sebelum);
+  });
+
+  it("satu pesanan, satu durasi: item yang memperbarui lewat (2b) tidak memperbarui lagi sesudah habis", async () => {
+    const p = await semaiProduk(10_000, 1);
+    await svc.from("digital_entitlements").insert({
+      client_id: ANANDA_CLIENT_ID, product_id: p, sumber: "beli",
+      berlaku_sampai: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const { itemId } = await semaiPesananLunas(p, 1);
+    const { data: pertama } = await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
+    expect(pertama).toBe("akses_terbit");
+    await kedaluwarsakan(p);
+    const sebelum = (await entitlement(p))!.berlaku_sampai;
+
+    const { data: ulang, error } = await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
+    expect(error).toBeNull();
+    expect(ulang).toBe("akses_sudah_ada");
+    expect((await entitlement(p))!.berlaku_sampai).toBe(sebelum);
   });
 
   it("(3) dicabut tetap mati walau dibeli ulang", async () => {
@@ -157,6 +200,23 @@ describe("gerbang beli", () => {
     expect((isi ?? []).find((r: { product_id: string }) => r.product_id === p)?.keadaan).toBe("siap");
   });
 
+  it("siklus kedua: beli → habis → beli ulang (pesanan BARU) → habis → bisa dibeli lagi", async () => {
+    const p = await semaiProduk(10_000, 1);
+    const a = await semaiPesananLunas(p, 1);
+    expect((await svc.rpc("terbitkan_akses_item", { p_item_id: a.itemId })).data).toBe("akses_terbit");
+    await kedaluwarsakan(p);
+
+    const b = await semaiPesananLunas(p, 1);
+    expect((await svc.rpc("terbitkan_akses_item", { p_item_id: b.itemId })).data).toBe("akses_terbit");
+    await kedaluwarsakan(p);
+
+    const klien = await signInAs(KLIEN);
+    const { data: menunggu } = await klien.rpc("punya_pesanan_menunggu", { p_product_id: p });
+    expect(menunggu).toBe(false);
+    const { error } = await klien.rpc("tambah_ke_keranjang", { p_product_id: p });
+    expect(error).toBeNull();
+  });
+
   it("pesanan lunas yang aksesnya TERTAHAN tetap menggantung", async () => {
     const p = await semaiProduk(10_000, 1);
     await svc.from("digital_entitlements").insert({
@@ -164,6 +224,13 @@ describe("gerbang beli", () => {
     });
     const { itemId } = await semaiPesananLunas(p, 1);
     await svc.rpc("terbitkan_akses_item", { p_item_id: itemId });
+    // diberikan_pada SESUDAH pesanan dibuat: tanpa ini uji tetap hijau walau
+    // syarat `dicabut_pada is null` dihapus, karena baris yang dicabut sudah
+    // gugur oleh syarat waktu.
+    const { error: eUbah } = await svc.from("digital_entitlements")
+      .update({ diberikan_pada: new Date(Date.now() + 60_000).toISOString() })
+      .eq("client_id", ANANDA_CLIENT_ID).eq("product_id", p);
+    expect(eUbah).toBeNull();
     const klien = await signInAs(KLIEN);
     const { data } = await klien.rpc("punya_pesanan_menunggu", { p_product_id: p });
     expect(data).toBe(true);
@@ -189,14 +256,29 @@ describe("ambil_produk_gratis", () => {
       berlaku_sampai: new Date(Date.now() - 60_000).toISOString(),
     });
     const klien = await signInAs(KLIEN);
-    await klien.rpc("ambil_produk_gratis", { p_product_id: p });
+    const { error: e1 } = await klien.rpc("ambil_produk_gratis", { p_product_id: p });
+    expect(e1).toBeNull();
     const e = await entitlement(p);
     expect(new Date(e!.berlaku_sampai!).getTime()).toBeGreaterThan(Date.now() + 50 * 86_400_000);
 
     await svc.from("digital_entitlements")
       .update({ berlaku_sampai: new Date(Date.now() - 60_000).toISOString(), dicabut_pada: new Date().toISOString() })
       .eq("client_id", ANANDA_CLIENT_ID).eq("product_id", p);
-    await klien.rpc("ambil_produk_gratis", { p_product_id: p });
+    const { error: e2 } = await klien.rpc("ambil_produk_gratis", { p_product_id: p });
+    expect(e2).toBeNull();
     expect(new Date((await entitlement(p))!.berlaku_sampai!).getTime()).toBeLessThan(Date.now());
+  });
+
+  it("akses yang masih berjalan tidak diperpanjang", async () => {
+    const p = await semaiProduk(0, 2);
+    const besok = new Date(Date.now() + 86_400_000).toISOString();
+    await svc.from("digital_entitlements").insert({
+      client_id: ANANDA_CLIENT_ID, product_id: p, sumber: "gratis", berlaku_sampai: besok,
+    });
+    const sebelum = (await entitlement(p))!.berlaku_sampai;
+    const klien = await signInAs(KLIEN);
+    const { error } = await klien.rpc("ambil_produk_gratis", { p_product_id: p });
+    expect(error).toBeNull();
+    expect((await entitlement(p))!.berlaku_sampai).toBe(sebelum);
   });
 });

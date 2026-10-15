@@ -245,6 +245,15 @@ begin
 end;
 $$;
 
+comment on function public.ambil_produk_gratis(uuid) is
+  'Satu-satunya pintu klien menerbitkan entitlement untuk dirinya sendiri. '
+  'client_id diambil dari auth.uid(), TIDAK dari payload. Gratisnya diperiksa '
+  'di SQL karena PostgREST mengekspos RPC ini ke semua user login. '
+  'berlaku_sampai = sekarang + durasi produk SAAT INI (NULL = selamanya). '
+  'Pengambilan ulang HANYA memperbarui entitlement yang kedaluwarsa dan belum '
+  'dicabut; entitlement yang dicabut tidak pernah hidup lagi, dan akses yang '
+  'masih berjalan tidak diperpanjang.';
+
 revoke all on function public.ambil_produk_gratis(uuid) from public, anon;
 grant execute on function public.ambil_produk_gratis(uuid) to authenticated;
 
@@ -340,8 +349,6 @@ begin
       end using errcode = 'P0001';
     end if;
 
-    -- Set WAJIB cermin `punya_pesanan_menunggu` (minus `menunggu_bayar`,
-    -- yang ditangani blok pesanan terbuka di bawah).
     -- Satu definisi bersama punya_pesanan_menunggu (lihat atas).
     if public.pembayaran_produk_menggantung(v_client_id, v_id) then
       raise exception '%', case when v_n = 1
@@ -571,6 +578,26 @@ begin
   -- Notifikasi kembar untuk pesanan yang sama jatuh ke (2a) di bawah, karena
   -- aksesnya baru saja menjadi aktif — tidak ada perpanjangan ganda.
   if v_dicabut is null and v_sampai is not null and v_sampai <= now() then
+    -- Satu pesanan menyerahkan durasinya PALING BANYAK SEKALI. Tombol admin
+    -- "Terbitkan akses" tampil untuk setiap pesanan `lunas`; tanpa pagar ini
+    -- pesanan yang sama, dijalankan ulang sesudah aksesnya habis lagi,
+    -- memperbarui tanpa batas — satu bayar, durasi tak terhingga. Ukurannya
+    -- jejak `akses_terbit` milik PESANAN INI, bukan `e.pesanan_id` (ditimpa
+    -- oleh pembaruan pesanan berikutnya, sehingga pesanan lama bisa
+    -- memperbarui lagi) dan bukan diberikan_pada vs dibuat_pada.
+    if exists (
+      select 1
+        from public.jejak_pesanan j
+       where j.pesanan_id = v_pesanan_id
+         and j.kejadian = 'akses_terbit'
+         and j.keterangan in (format('produk %s', v_product_id),
+                              format('diperbarui, produk %s', v_product_id))
+    ) then
+      insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+      values (v_pesanan_id, v_padma_id, 'akses_sudah_ada', format('produk %s', v_product_id));
+      return 'akses_sudah_ada';
+    end if;
+
     update public.digital_entitlements e
        set berlaku_sampai = v_sampai_baru,
            pesanan_id = v_pesanan_id,
