@@ -54,6 +54,8 @@ let idPdfUnduh = ""; // boleh_unduh = true
 let idPratinjau = ""; // pratinjau = true, boleh_unduh = true
 let clientId = "";
 const produkDari: Record<string, string> = {};
+/** Materi yang disemai di dalam `describe` tertentu; ikut dibersihkan `afterAll`. */
+const idTambahan: string[] = [];
 
 const permintaan = () => new Request("http://uji.local/");
 
@@ -142,7 +144,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   const svc = createAdminSupabase();
-  for (const id of [idVideo, idPdfTerkunci, idPdfUnduh, idPratinjau]) {
+  for (const id of [idVideo, idPdfTerkunci, idPdfUnduh, idPratinjau, ...idTambahan]) {
     if (!id) continue;
     for (const bucket of [BUCKET_HALAMAN, BUCKET_BERKAS]) {
       for (const prefiks of [`${produkDari[id]}/${id}`, `${produkDari[id]}/${id}/pembeli`]) {
@@ -388,16 +390,60 @@ describe("pratinjau & kedaluwarsa (spec 2026-10-16)", () => {
     expect(unduh.status).toBe(404);
   });
 
-  it("pemilik KEDALUWARSA ditolak ketiga rute", async () => {
-    ref.sesi = await signInAs(KLIEN);
-    await createAdminSupabase().from("digital_entitlements").insert({
-      client_id: clientId, product_id: produkDari[idPdfUnduh], sumber: "gratis",
-      berlaku_sampai: new Date(Date.now() - 60_000).toISOString(),
+  /**
+   * Materi SEGAR khusus uji ini, BUKAN `idPdfUnduh`: uji "melepas isi" di
+   * atasnya sudah mengosongkan halaman dan berkasnya, sehingga 404 dari
+   * materi itu datang dari BARIS YANG HILANG, bukan dari kedaluwarsa. Kontrol
+   * positif (entitlement hidup => 200/302/302) membuktikan ketiga materi ini
+   * memang bisa dibuka; baru sesudah itu masa berlakunya dilewatkan.
+   */
+  it("pemilik KEDALUWARSA ditolak ketiga rute (dengan kontrol positif)", async () => {
+    const svc = createAdminSupabase();
+    const halamanWebp = await sharp({
+      create: { width: 200, height: 200, channels: 3, background: { r: 250, g: 250, b: 245 } },
+    }).webp().toBuffer();
+    const dok = await PDFDocument.create();
+    dok.addPage();
+    const pdfAsli = Buffer.from(await dok.save());
+
+    const idPdf = await semaiProdukBermateri({
+      slug: "rute-uji-kedaluwarsa-pdf", jenis: "pdf", bolehUnduh: true,
     });
-    const halaman = await getHalaman(permintaan(), { params: Promise.resolve({ id: idPdfUnduh, n: "1" }) });
-    const unduh = await getUnduh(permintaan(), { params: Promise.resolve({ id: idPdfUnduh }) });
-    expect(halaman.status).toBe(404);
-    expect(unduh.status).toBe(404);
-    await cabutEntitlement(idPdfUnduh);
+    const idVid = await semaiProdukBermateri({ slug: "rute-uji-kedaluwarsa-video", jenis: "video" });
+    idTambahan.push(idPdf, idVid);
+    const pPdf = produkDari[idPdf];
+
+    await svc.storage.from(BUCKET_HALAMAN)
+      .upload(`${pPdf}/${idPdf}/1.webp`, halamanWebp, { contentType: "image/webp", upsert: true });
+    await svc.rpc("ganti_halaman_materi_produk", {
+      p_material_id: idPdf, p_halaman: [{ halaman: 1, objek: `${pPdf}/${idPdf}/1.webp` }],
+    });
+    await svc.storage.from(BUCKET_BERKAS)
+      .upload(`${pPdf}/${idPdf}/isi.pdf`, pdfAsli, { contentType: "application/pdf", upsert: true });
+    await svc.from("digital_product_files").insert([
+      { material_id: idPdf, objek: `${pPdf}/${idPdf}/isi.pdf`, mime: "application/pdf", byte: pdfAsli.length },
+      { material_id: idVid, objek: `produk/${produkDari[idVid]}/${idVid}/isi.mp4`, mime: "video/mp4", byte: 1024 },
+    ]);
+
+    ref.sesi = await signInAs(KLIEN);
+    const rute = async () => ({
+      halaman: (await getHalaman(permintaan(), { params: Promise.resolve({ id: idPdf, n: "1" }) })).status,
+      unduh: (await getUnduh(permintaan(), { params: Promise.resolve({ id: idPdf }) })).status,
+      video: (await getVideo(permintaan(), { params: Promise.resolve({ id: idVid }) })).status,
+    });
+
+    // KONTROL POSITIF: akses hidup membuka ketiganya.
+    await beriEntitlement(idPdf);
+    await beriEntitlement(idVid);
+    expect(await rute()).toEqual({ halaman: 200, unduh: 302, video: 302 });
+
+    // Satu-satunya yang berubah: masa berlakunya lewat.
+    await svc.from("digital_entitlements")
+      .update({ berlaku_sampai: new Date(Date.now() - 60_000).toISOString() })
+      .eq("client_id", clientId).in("product_id", [produkDari[idPdf], produkDari[idVid]]);
+    expect(await rute()).toEqual({ halaman: 404, unduh: 404, video: 404 });
+
+    await cabutEntitlement(idPdf);
+    await cabutEntitlement(idVid);
   });
 });

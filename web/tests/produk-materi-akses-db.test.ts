@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs, anonClient } from "./helpers/as-user";
+import { siapkanKlienKedua, bongkarKlienKedua } from "./helpers/klien-kedua";
 
 /**
  * Enam keadaan akses, diuji dengan SESI KLIEN SUNGGUHAN. Kegagalan RLS pulang
@@ -133,5 +134,65 @@ describe("punya_produk & pernah_punya_produk", () => {
     const klien = await signInAs(KLIEN);
     const { error } = await klien.rpc("akses_aktif", { p_client_id: ANANDA_CLIENT_ID, p_product_id: produkId });
     expect(error?.code).toBe("42501");
+  });
+});
+
+/**
+ * Tiga invarian `digital_entitlements` yang dulu dijaga produk-entitlement-db
+ * .test.ts (dihapus bersama bentuk produk lama). Tabel ini TIDAK berubah di
+ * migrasi bab & materi, jadi pagarnya sama: unik per (klien, produk), klien
+ * tak bisa menerbitkan untuk dirinya, dan tak bisa melihat milik klien lain.
+ */
+describe("digital_entitlements: invarian tabel", () => {
+  let klienKedua: string;
+
+  beforeAll(async () => {
+    klienKedua = await siapkanKlienKedua();
+  });
+
+  afterAll(async () => {
+    await svc.from("digital_entitlements").delete().eq("product_id", produkId);
+    await bongkarKlienKedua();
+  });
+
+  it("satu klien tidak bisa punya dua entitlement untuk produk yang sama", async () => {
+    await svc.from("digital_entitlements").delete().eq("product_id", produkId);
+    const { error: e1 } = await svc.from("digital_entitlements")
+      .insert({ client_id: ANANDA_CLIENT_ID, product_id: produkId, sumber: "gratis" });
+    expect(e1).toBeNull();
+    const { error } = await svc.from("digital_entitlements")
+      .insert({ client_id: ANANDA_CLIENT_ID, product_id: produkId, sumber: "beli" }).select("id");
+    expect(error?.code).toBe("23505");
+    await svc.from("digital_entitlements").delete().eq("product_id", produkId);
+  });
+
+  it("klien tidak bisa menerbitkan entitlement untuk dirinya sendiri", async () => {
+    await svc.from("digital_entitlements").delete().eq("product_id", produkId);
+    const klien = await signInAs(KLIEN);
+    const { data, error } = await klien.from("digital_entitlements")
+      .insert({ client_id: ANANDA_CLIENT_ID, product_id: produkId, sumber: "beli" }).select("id");
+    expect(error !== null || (data ?? []).length === 0).toBe(true);
+    // Dan barisnya sungguh tidak ada — bukan sekadar tak terbaca balik.
+    const { data: ada } = await svc.from("digital_entitlements")
+      .select("id").eq("client_id", ANANDA_CLIENT_ID).eq("product_id", produkId);
+    expect(ada).toEqual([]);
+  });
+
+  it("klien tidak melihat entitlement milik klien lain", async () => {
+    await svc.from("digital_entitlements").delete().eq("product_id", produkId);
+    const { error: eIns } = await svc.from("digital_entitlements")
+      .insert({ client_id: klienKedua, product_id: produkId, sumber: "gratis" });
+    expect(eIns).toBeNull();
+
+    const klien = await signInAs(KLIEN);
+    const { data, error } = await klien.from("digital_entitlements")
+      .select("id").eq("product_id", produkId);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
+
+    // Kontrol positif: barisnya ada, hanya tersembunyi dari Ananda.
+    const { data: ada } = await svc.from("digital_entitlements")
+      .select("id").eq("client_id", klienKedua).eq("product_id", produkId);
+    expect(ada).toHaveLength(1);
   });
 });

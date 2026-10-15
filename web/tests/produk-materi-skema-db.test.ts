@@ -92,6 +92,50 @@ describe("konsistensi bab-materi dijaga basis data", () => {
   });
 });
 
+/**
+ * Dua RPC tulis-isi per materi adalah SECURITY DEFINER dan dipanggil dari
+ * server action ber-sesi staf. Guard `user_role() in ('admin','owner')` di
+ * dalamnya adalah SATU-SATUNYA pagar bila klien memanggil PostgREST langsung:
+ * grant `authenticated` tidak membedakan peran. Dulu teruji di
+ * produk-rpc-hapus-isi.test.ts; ikut terhapus bersama RPC lamanya.
+ */
+describe("klien tidak bisa memanggil RPC tulis-isi materi", () => {
+  let materiIsi: string;
+  let babIsi: string;
+
+  beforeAll(async () => {
+    const { data: bab } = await svc.from("digital_product_sections")
+      .insert({ product_id: produkAktif, judul: "Bab RPC klien" }).select("id").single();
+    babIsi = bab!.id;
+    const { data: m } = await svc.from("digital_product_materials")
+      .insert({ section_id: babIsi, product_id: produkAktif, judul: "Materi RPC klien", jenis: "pdf" })
+      .select("id").single();
+    materiIsi = m!.id;
+    await svc.from("digital_product_pages")
+      .insert({ material_id: materiIsi, halaman: 1, objek: "rpc-klien/1.webp" });
+    await svc.from("digital_product_files")
+      .insert({ material_id: materiIsi, objek: "rpc-klien/isi.pdf", mime: "application/pdf", byte: 1 });
+  });
+
+  it("ganti_halaman_materi_produk ditolak dan halaman TETAP ada", async () => {
+    const klien = await signInAs("ananda@padma.test");
+    const { error } = await klien.rpc("ganti_halaman_materi_produk", {
+      p_material_id: materiIsi, p_halaman: [],
+    });
+    expect(error?.message).toMatch(/hanya admin\/owner/);
+    const { data } = await svc.from("digital_product_pages").select("objek").eq("material_id", materiIsi);
+    expect(data).toEqual([{ objek: "rpc-klien/1.webp" }]);
+  });
+
+  it("lepas_berkas_materi ditolak dan berkas TETAP ada", async () => {
+    const klien = await signInAs("ananda@padma.test");
+    const { error } = await klien.rpc("lepas_berkas_materi", { p_material_id: materiIsi });
+    expect(error?.message).toMatch(/hanya admin\/owner/);
+    const { data } = await svc.from("digital_product_files").select("objek").eq("material_id", materiIsi);
+    expect(data).toEqual([{ objek: "rpc-klien/isi.pdf" }]);
+  });
+});
+
 describe("masa berlaku hanya ditulis owner", () => {
   it("admin ditolak", async () => {
     const admin = await signInAs("admin@padma.test");
