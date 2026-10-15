@@ -16,8 +16,15 @@ let materiPratinjau: string;
 
 async function bacaHalaman(email: string | null, materiId: string) {
   const sb = email ? await signInAs(email) : anonClient();
-  const { data } = await sb.from("digital_product_pages").select("objek").eq("material_id", materiId);
-  return data ?? [];
+  const { data, error } = await sb.from("digital_product_pages").select("objek").eq("material_id", materiId);
+  return { data: data ?? [], error };
+}
+
+/** Pembacaan sesi klien: RLS menyaring baris, TIDAK boleh menolak permintaan. */
+async function barisHalaman(email: string, materiId: string) {
+  const { data, error } = await bacaHalaman(email, materiId);
+  expect(error).toBeNull();
+  return data;
 }
 
 async function pasangEntitlement(opsi: { berlakuSampai: string | null; dicabut?: boolean }) {
@@ -61,37 +68,40 @@ afterAll(async () => {
 describe("boleh_buka_materi lewat RLS halaman", () => {
   it("1. pemilik aktif (selamanya) membuka materi terkunci", async () => {
     await pasangEntitlement({ berlakuSampai: null });
-    expect(await bacaHalaman(KLIEN, materiTerkunci)).toHaveLength(1);
+    expect(await barisHalaman(KLIEN, materiTerkunci)).toHaveLength(1);
   });
 
   it("2. pemilik yang masa berlakunya masih jalan membuka materi terkunci", async () => {
     await pasangEntitlement({ berlakuSampai: new Date(Date.now() + 86_400_000).toISOString() });
-    expect(await bacaHalaman(KLIEN, materiTerkunci)).toHaveLength(1);
+    expect(await barisHalaman(KLIEN, materiTerkunci)).toHaveLength(1);
   });
 
   it("3. pemilik KEDALUWARSA tidak membuka materi terkunci", async () => {
     await pasangEntitlement({ berlakuSampai: new Date(Date.now() - 60_000).toISOString() });
-    expect(await bacaHalaman(KLIEN, materiTerkunci)).toEqual([]);
+    expect(await barisHalaman(KLIEN, materiTerkunci)).toEqual([]);
   });
 
   it("4. pemilik DICABUT tidak membuka materi terkunci", async () => {
     await pasangEntitlement({ berlakuSampai: null, dicabut: true });
-    expect(await bacaHalaman(KLIEN, materiTerkunci)).toEqual([]);
+    expect(await barisHalaman(KLIEN, materiTerkunci)).toEqual([]);
   });
 
   it("5. non-pembeli yang login membuka materi PRATINJAU tapi tidak yang terkunci", async () => {
     await svc.from("digital_entitlements").delete().eq("product_id", produkId);
-    expect(await bacaHalaman(KLIEN, materiPratinjau)).toHaveLength(1);
-    expect(await bacaHalaman(KLIEN, materiTerkunci)).toEqual([]);
+    expect(await barisHalaman(KLIEN, materiPratinjau)).toHaveLength(1);
+    expect(await barisHalaman(KLIEN, materiTerkunci)).toEqual([]);
   });
 
   it("6. anon tidak membuka apa pun, termasuk pratinjau", async () => {
-    expect(await bacaHalaman(null, materiPratinjau)).toEqual([]);
+    // anon tidak punya hak SELECT atas tabel ini: ditolak, bukan sekadar disaring.
+    const { data, error } = await bacaHalaman(null, materiPratinjau);
+    expect(error?.code).toBe("42501");
+    expect(data).toEqual([]);
   });
 
   it("pratinjau produk NONAKTIF tertutup bagi non-pembeli", async () => {
     await svc.from("digital_products").update({ aktif: false }).eq("id", produkId);
-    expect(await bacaHalaman(KLIEN, materiPratinjau)).toEqual([]);
+    expect(await barisHalaman(KLIEN, materiPratinjau)).toEqual([]);
     await svc.from("digital_products").update({ aktif: true }).eq("id", produkId);
   });
 });
@@ -107,19 +117,21 @@ describe("punya_produk & pernah_punya_produk", () => {
   });
 
   it("pemilik kedaluwarsa tetap membaca baris produk NONAKTIF lewat embed", async () => {
+    await pasangEntitlement({ berlakuSampai: new Date(Date.now() - 60_000).toISOString() });
     await svc.from("digital_products").update({ aktif: false }).eq("id", produkId);
     const klien = await signInAs(KLIEN);
-    const { data } = await klien.from("digital_entitlements")
+    const { data, error } = await klien.from("digital_entitlements")
       .select("product_id, digital_products(judul)")
       .eq("product_id", produkId)
       .single();
-    expect(data?.digital_products).not.toBeNull();
+    expect(error).toBeNull();
+    expect(data?.digital_products).toEqual({ judul: "PAD-UJI Akses Materi" });
     await svc.from("digital_products").update({ aktif: true }).eq("id", produkId);
   });
 
   it("akses_aktif tidak bisa dipanggil pemegang sesi", async () => {
     const klien = await signInAs(KLIEN);
     const { error } = await klien.rpc("akses_aktif", { p_client_id: ANANDA_CLIENT_ID, p_product_id: produkId });
-    expect(error).not.toBeNull();
+    expect(error?.code).toBe("42501");
   });
 });
