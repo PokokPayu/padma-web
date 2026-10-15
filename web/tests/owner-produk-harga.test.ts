@@ -18,7 +18,7 @@ afterEach(async () => {
 
 async function produkUji(slug: string): Promise<string> {
   const { data } = await createAdminSupabase().from("digital_products")
-    .insert({ judul: `Uji ${slug}`, slug, jenis: "pdf" }).select("id").single();
+    .insert({ judul: `Uji ${slug}`, slug }).select("id").single();
   bersihkan.push(data!.id);
   return data!.id;
 }
@@ -174,12 +174,12 @@ describe("tetapkanHargaProduk — pemanggilan langsung action", () => {
     // satu produk membuat test-test soal "tanggal terakhir" saling
     // mengganggu urutan eksekusi).
     const { data: baru } = await admin.from("digital_products")
-      .insert({ judul: "PAD-UJI Aksi Produk Baru", slug: `pad-uji-aksi-baru-${Date.now()}-${Math.random()}`, jenis: "pdf" })
+      .insert({ judul: "PAD-UJI Aksi Produk Baru", slug: `pad-uji-aksi-baru-${Date.now()}-${Math.random()}` })
       .select("id").single();
     produkBaru = baru!.id;
 
     const { data: mundur } = await admin.from("digital_products")
-      .insert({ judul: "PAD-UJI Aksi Produk Mundur", slug: `pad-uji-aksi-mundur-${Date.now()}-${Math.random()}`, jenis: "pdf" })
+      .insert({ judul: "PAD-UJI Aksi Produk Mundur", slug: `pad-uji-aksi-mundur-${Date.now()}-${Math.random()}` })
       .select("id").single();
     produkMundur = mundur!.id;
     await admin.from("digital_product_prices")

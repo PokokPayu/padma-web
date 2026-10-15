@@ -7,8 +7,13 @@ import { signInAs } from "./helpers/as-user";
 
 const AKAR = path.resolve(__dirname, "..");
 const UNGGAH = readFileSync(path.join(AKAR, "src/app/admin/produk/[id]/unggah.ts"), "utf8");
+// `aksi-isi.ts` (bab, materi, sampul) juga memegang service role — untuk
+// storage dan pembersihan `hapusMateri` — jadi pagarnya sama dan diperiksa di
+// sini, bukan di `admin-produk.test.ts` yang melarang service role sama sekali.
+const AKSI_ISI = readFileSync(path.join(AKAR, "src/app/admin/produk/[id]/aksi-isi.ts"), "utf8");
+const BERKAS_PAGAR: Array<[string, string]> = [["unggah.ts", UNGGAH], ["aksi-isi.ts", AKSI_ISI]];
 
-// `lepasIsiProduk` memakai sesi pengguna (`createServerSupabase`). Di vitest
+// `lepasIsiMateri` memakai sesi pengguna (`createServerSupabase`). Di vitest
 // tidak ada cookie, jadi klien ber-SESI SUNGGUHAN disuntikkan — RLS dan
 // `requireRole` di dalamnya tetap berjalan apa adanya, persis pola
 // `tests/admin-produk.test.ts` / `tests/admin-materi.test.ts`.
@@ -18,7 +23,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const { lepasIsiProduk } = await import("@/app/admin/produk/[id]/unggah");
+const { lepasIsiMateri } = await import("@/app/admin/produk/[id]/unggah");
 
 /**
  * Unggahan adalah satu-satunya titik di modul ini yang boleh memegang service
@@ -27,21 +32,21 @@ const { lepasIsiProduk } = await import("@/app/admin/produk/[id]/unggah");
  * terhapus dari satu action di antara empat.
  */
 describe("pagar unggahan produk", () => {
-  it("setiap server action dibuka requireRole", () => {
-    const jumlahAction = (UNGGAH.match(/^export async function /gm) ?? []).length;
-    const jumlahGerbang = (UNGGAH.match(/requireRole\(\[/g) ?? []).length;
+  it.each(BERKAS_PAGAR)("%s: setiap server action dibuka requireRole", (_nama, sumber) => {
+    const jumlahAction = (sumber.match(/^export async function /gm) ?? []).length;
+    const jumlahGerbang = (sumber.match(/requireRole\(\[/g) ?? []).length;
     expect(jumlahAction).toBeGreaterThan(0);
     expect(jumlahGerbang).toBe(jumlahAction);
   });
 
   it("path objek diturunkan dari helper, tidak pernah dari parameter berkas", () => {
-    expect(UNGGAH).toContain("namaObjekVideoProduk");
-    expect(UNGGAH).toContain("namaObjekHalamanProduk");
+    expect(UNGGAH).toContain("namaObjekVideoMateri");
+    expect(UNGGAH).toContain("namaObjekHalamanMateri");
     // Tidak ada satu pun path yang dirakit dari nama berkas kiriman browser.
     expect(UNGGAH).not.toMatch(/formData\.get\(["']nama/);
   });
 
-  it("keberadaan produk diperiksa lewat SESI pengguna, bukan service role — PER ACTION", () => {
+  it.each(BERKAS_PAGAR)("%s: keberadaan data diperiksa lewat SESI pengguna, bukan service role — PER ACTION", (_nama, sumber) => {
     // Perbandingan GLOBAL (indexOf pertama-pertama di seluruh berkas) tidak
     // cukup: action KEDELAPAN yang kelak memanggil createAdminSupabase()
     // sebelum createServerSupabase()-nya SENDIRI tetap lolos selama order
@@ -51,7 +56,7 @@ describe("pagar unggahan produk", () => {
     // sendiri-sendiri, urutannya mengikat DI DALAM blok itu saja: kunci objek
     // storage baru boleh disentuh (`createAdminSupabase`) sesudah action yang
     // sama membaca haknya lewat sesi pengguna (`createServerSupabase`).
-    const blok = UNGGAH.split(/(?=^export async function )/m).filter((b) =>
+    const blok = sumber.split(/(?=^export async function )/m).filter((b) =>
       b.startsWith("export async function"),
     );
     // Uji yang diam-diam memeriksa larik kosong selalu "lulus" tanpa menjaga
@@ -67,11 +72,22 @@ describe("pagar unggahan produk", () => {
     expect(blokDenganService.length).toBeGreaterThan(0);
 
     for (const b of blokDenganService) {
-      const posisiSesi = b.indexOf("createServerSupabase");
+      // `bacaMateri(` adalah pembaca materi lewat SESI pengguna (diperiksa di
+      // bawah), jadi pemanggilannya sama sahnya dengan `createServerSupabase`.
+      const kandidat = [b.indexOf("createServerSupabase"), b.indexOf("bacaMateri(")].filter((x) => x > -1);
+      const posisiSesi = kandidat.length ? Math.min(...kandidat) : -1;
       const posisiService = b.indexOf("createAdminSupabase");
       expect(posisiSesi).toBeGreaterThan(-1);
       expect(posisiService).toBeGreaterThan(posisiSesi);
     }
+  });
+
+  it("bacaMateri membaca lewat SESI pengguna, bukan service role", () => {
+    const awal = UNGGAH.indexOf("async function bacaMateri(");
+    expect(awal).toBeGreaterThan(-1);
+    const badan = UNGGAH.slice(awal, UNGGAH.indexOf("\n}\n", awal));
+    expect(badan).toContain("createServerSupabase");
+    expect(badan).not.toContain("createAdminSupabase");
   });
 
   it("batas ukuran dipakai ulang dari modul materi, bukan ditulis ulang", () => {
@@ -94,19 +110,24 @@ afterEach(async () => {
     // Cadangan: sapu sisa objek storage kalau uji gagal di tengah (cascade
     // Postgres tidak menyentuh bucket — bukan baris) — pola yang sama dengan
     // `tests/materi-unggah-lib.test.ts`.
-    const { data: sisa } = await svc.storage.from(BUCKET_HALAMAN).list(id, { limit: 1000 });
-    if (sisa && sisa.length > 0) {
-      await svc.storage.from(BUCKET_HALAMAN).remove(sisa.map((o) => `${id}/${o.name}`));
+    // Objek kini bersarang `<produk>/<materi>/<n>.webp`: tiap entri tingkat
+    // pertama adalah folder materi.
+    const { data: folder } = await svc.storage.from(BUCKET_HALAMAN).list(id, { limit: 1000 });
+    for (const f of folder ?? []) {
+      const { data: sisa } = await svc.storage.from(BUCKET_HALAMAN).list(`${id}/${f.name}`, { limit: 1000 });
+      if (sisa && sisa.length > 0) {
+        await svc.storage.from(BUCKET_HALAMAN).remove(sisa.map((o) => `${id}/${f.name}/${o.name}`));
+      }
     }
   }
 });
 
 /**
- * Sesi admin sungguhan, tetapi RPC `lepas_berkas_produk` dipaksa gagal
+ * Sesi admin sungguhan, tetapi RPC `lepas_berkas_materi` dipaksa gagal
  * SECARA SINTETIS — mensimulasikan blip PostgREST pada delete KEDUA milik
- * `lepasIsiProduk`, tanpa mengubah satu baris pun di tabel lain. `unggah.ts`
+ * `lepasIsiMateri`, tanpa mengubah satu baris pun di tabel lain. `unggah.ts`
  * tidak lagi memanggil `.from("digital_product_files").delete()` langsung
- * (migration `produk_hapus_isi`, review round 2) — jalur tulisnya sekarang
+ * (migrasi bab & materi) — jalur tulisnya sekarang
  * RPC, jadi yang perlu dipalsukan adalah `.rpc()`, bukan `.from()`.
  *
  * `Object.create(asli)` + shadow `.rpc` SENGAJA dipilih ketimbang Proxy:
@@ -119,7 +140,7 @@ function sesiDenganLepasBerkasGagal(asli: SupabaseClient): SupabaseClient {
   const rpcAsli = asli.rpc.bind(asli);
   const sesiPalsu = Object.create(asli) as SupabaseClient;
   (sesiPalsu as unknown as { rpc: typeof asli.rpc }).rpc = ((nama: string, params?: unknown) => {
-    if (nama === "lepas_berkas_produk") {
+    if (nama === "lepas_berkas_materi") {
       return Promise.resolve({
         data: null,
         error: { code: "FAKE", message: "dipaksa gagal untuk uji" },
@@ -133,7 +154,7 @@ function sesiDenganLepasBerkasGagal(asli: SupabaseClient): SupabaseClient {
 }
 
 /**
- * Finding 1 (review Task 6): `lepasIsiProduk` menyentuh DUA tabel untuk PDF
+ * Finding 1 (review Task 6): `lepasIsiMateri` menyentuh DUA tabel untuk PDF
  * (`digital_product_pages` lalu `digital_product_files`) dan sempat membuat
  * pembersihan objek halaman di storage MENUNGGU suksesnya penghapusan baris
  * `digital_product_files` — begitu delete kedua itu gagal, fungsi berhenti
@@ -143,18 +164,24 @@ function sesiDenganLepasBerkasGagal(asli: SupabaseClient): SupabaseClient {
  * `objekTersisa` tidak pernah sempat dilaporkan. Uji ini merah persis pada
  * kasus itu bila kopling itu kembali.
  */
-describe("lepasIsiProduk — pembersihan objek halaman TIDAK disandera baris digital_product_files", () => {
+describe("lepasIsiMateri — pembersihan objek halaman TIDAK disandera baris digital_product_files", () => {
   it("delete digital_product_files gagal, objek halaman tetap terhapus dari storage", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc
       .from("digital_products")
-      .insert({ judul: "Uji Lepas Isi Coupling", slug: "uji-lepas-isi-coupling", jenis: "pdf" })
+      .insert({ judul: "Uji Lepas Isi Coupling", slug: "uji-lepas-isi-coupling" })
       .select("id")
       .single();
     const id = produk!.id;
     bersihkan.push(id);
+    const { data: bab } = await svc.from("digital_product_sections")
+      .insert({ product_id: id, judul: "Bab" }).select("id").single();
+    const { data: materi } = await svc.from("digital_product_materials")
+      .insert({ section_id: bab!.id, product_id: id, judul: "Materi", jenis: "pdf", boleh_unduh: true })
+      .select("id").single();
+    const materiId = materi!.id;
 
-    const objekHalaman = [`${id}/1.webp`, `${id}/2.webp`];
+    const objekHalaman = [`${id}/${materiId}/1.webp`, `${id}/${materiId}/2.webp`];
     for (const objek of objekHalaman) {
       const { error } = await svc.storage
         .from(BUCKET_HALAMAN)
@@ -162,16 +189,16 @@ describe("lepasIsiProduk — pembersihan objek halaman TIDAK disandera baris dig
       expect(error).toBeNull();
     }
     await svc.from("digital_product_pages").insert(
-      objekHalaman.map((objek, i) => ({ product_id: id, halaman: i + 1, objek })),
+      objekHalaman.map((objek, i) => ({ material_id: materiId, halaman: i + 1, objek })),
     );
     await svc.from("digital_product_files").insert({
-      product_id: id, objek: `${id}/isi.pdf`, mime: "application/pdf", byte: 100,
+      material_id: materiId, objek: `${id}/${materiId}/isi.pdf`, mime: "application/pdf", byte: 100,
     });
 
     const sesiAsli = await signInAs("admin@padma.test");
     ref.sesi = sesiDenganLepasBerkasGagal(sesiAsli);
 
-    const hasil = await lepasIsiProduk(id);
+    const hasil = await lepasIsiMateri(materiId);
     // Delete KEDUA (`digital_product_files`) dipaksa gagal, jadi fungsi ini
     // sungguh melaporkan gagal — itu benar dan bukan yang diuji di sini.
     expect(hasil.ok).toBe(false);
@@ -179,19 +206,19 @@ describe("lepasIsiProduk — pembersihan objek halaman TIDAK disandera baris dig
     // Baris halaman sungguh sudah kosong: delete PERTAMA, terhadap tabel
     // yang tidak dipalsukan, tetap benar-benar berhasil.
     const { data: halamanSisa } = await svc
-      .from("digital_product_pages").select("halaman").eq("product_id", id);
+      .from("digital_product_pages").select("halaman").eq("material_id", materiId);
     expect(halamanSisa ?? []).toEqual([]);
 
     // INTINYA finding ini: objek halaman ikut lenyap dari storage WALAU
     // delete kedua gagal. Sebelum perbaikan, baris kosong + objek yang masih
     // ada di titik ini adalah PERSIS keadaan bug-nya.
-    const { data: sisaStorage } = await svc.storage.from(BUCKET_HALAMAN).list(id);
+    const { data: sisaStorage } = await svc.storage.from(BUCKET_HALAMAN).list(`${id}/${materiId}`);
     expect(sisaStorage ?? []).toEqual([]);
 
     // Baris `digital_product_files` memang TIDAK ikut terhapus — delete-nya
     // sengaja dipaksa gagal, dan itu bukan bagian yang diuji fix ini.
     const { data: berkasSisa } = await svc
-      .from("digital_product_files").select("id").eq("product_id", id);
+      .from("digital_product_files").select("id").eq("material_id", materiId);
     expect((berkasSisa ?? []).length).toBe(1);
   });
 });

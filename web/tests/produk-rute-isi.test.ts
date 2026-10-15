@@ -13,7 +13,7 @@ import { signInAs } from "./helpers/as-user";
  * `tests/produk-gerbang-isi.test.ts` menjaga ketiga rute HANYA dengan memindai
  * TEKS SUMBERNYA, dan asersi terlemahnya menuntut kata `boleh_unduh` muncul di
  * berkas rute unduh — yang sudah dipenuhi oleh baris `.select(...)`-nya sendiri.
- * Hapus `if (!produk.boleh_unduh) return 404` dan seluruh suite tetap hijau
+ * Hapus `if (!materi.boleh_unduh) return 404` dan seluruh suite tetap hijau
  * sementara setiap produk yang sengaja tidak boleh diunduh menjadi bisa diunduh
  * siapa pun yang memegang entitlement. Pemindaian sumber tetap berguna untuk
  * pagar yang tidak punya bentuk perilaku (mis. "tidak pernah 401/403"), tapi ia
@@ -30,11 +30,11 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 
-const { GET: getVideo } = await import("@/app/api/produk/[id]/video/route");
-const { GET: getHalaman } = await import("@/app/api/produk/[id]/halaman/[n]/route");
-const { GET: getUnduh } = await import("@/app/api/produk/[id]/unduh/route");
+const { GET: getVideo } = await import("@/app/api/produk/materi/[id]/video/route");
+const { GET: getHalaman } = await import("@/app/api/produk/materi/[id]/halaman/[n]/route");
+const { GET: getUnduh } = await import("@/app/api/produk/materi/[id]/unduh/route");
 const { produkSaya } = await import("@/lib/passport/produk-saya");
-const { terbitkanUrlUnggahPdfProduk, lepasIsiProduk } = await import(
+const { terbitkanUrlUnggahPdfMateri, lepasIsiMateri } = await import(
   "@/app/admin/produk/[id]/unggah"
 );
 
@@ -42,24 +42,48 @@ const BUCKET_HALAMAN = "produk-halaman";
 const BUCKET_BERKAS = "produk-berkas";
 const KLIEN = "ananda@padma.test";
 
-/** Dua produk PDF dipakai bergantian; keduanya PUNYA berkas unduhan. */
+/**
+ * Setiap produk uji punya SATU bab dan SATU materi; variabel `id...` di bawah
+ * menyimpan id MATERI, dan `produkDari` memetakannya ke id produknya. Dua
+ * materi PDF dipakai bergantian (keduanya PUNYA berkas unduhan), ditambah satu
+ * materi PDF pratinjau yang `boleh_unduh`-nya menyala.
+ */
 let idVideo = "";
 let idPdfTerkunci = ""; // boleh_unduh = false
 let idPdfUnduh = ""; // boleh_unduh = true
+let idPratinjau = ""; // pratinjau = true, boleh_unduh = true
 let clientId = "";
+const produkDari: Record<string, string> = {};
 
 const permintaan = () => new Request("http://uji.local/");
 
-async function beriEntitlement(productId: string) {
-  const svc = createAdminSupabase();
-  await svc.from("digital_entitlements")
-    .insert({ client_id: clientId, product_id: productId, sumber: "gratis" });
+async function beriEntitlement(materiId: string) {
+  await createAdminSupabase().from("digital_entitlements")
+    .insert({ client_id: clientId, product_id: produkDari[materiId], sumber: "gratis" });
 }
 
-async function cabutEntitlement(productId: string) {
+async function cabutEntitlement(materiId: string) {
+  await createAdminSupabase().from("digital_entitlements").delete()
+    .eq("client_id", clientId).eq("product_id", produkDari[materiId]);
+}
+
+/** Satu produk tayang dengan satu bab dan satu materi; memulangkan id MATERI. */
+async function semaiProdukBermateri(opsi: {
+  slug: string; jenis: "video" | "pdf"; bolehUnduh?: boolean; pratinjau?: boolean;
+}): Promise<string> {
   const svc = createAdminSupabase();
-  await svc.from("digital_entitlements").delete()
-    .eq("client_id", clientId).eq("product_id", productId);
+  const { data: p } = await svc.from("digital_products")
+    .insert({ judul: `Rute ${opsi.slug}`, slug: opsi.slug, aktif: true }).select("id").single();
+  const { data: b } = await svc.from("digital_product_sections")
+    .insert({ product_id: p!.id, judul: "Bab" }).select("id").single();
+  const { data: m } = await svc.from("digital_product_materials")
+    .insert({
+      section_id: b!.id, product_id: p!.id, judul: `Materi ${opsi.slug}`, jenis: opsi.jenis,
+      boleh_unduh: opsi.bolehUnduh ?? false, pratinjau: opsi.pratinjau ?? false,
+    })
+    .select("id").single();
+  produkDari[m!.id] = p!.id;
+  return m!.id;
 }
 
 beforeAll(async () => {
@@ -71,19 +95,16 @@ beforeAll(async () => {
     .select("id").eq("user_id", user.user!.id).single();
   clientId = barisKlien!.id;
 
-  // ===== Produk VIDEO =====
-  const { data: pv } = await svc.from("digital_products")
-    .insert({ judul: "Rute video", slug: "rute-uji-video", jenis: "video", aktif: true })
-    .select("id").single();
-  idVideo = pv!.id;
+  // ===== Materi VIDEO =====
+  idVideo = await semaiProdukBermateri({ slug: "rute-uji-video", jenis: "video" });
   await svc.from("digital_product_files").insert({
-    product_id: idVideo,
-    objek: `produk/${idVideo}/isi.mp4`,
+    material_id: idVideo,
+    objek: `produk/${produkDari[idVideo]}/${idVideo}/isi.mp4`,
     mime: "video/mp4",
     byte: 1024,
   });
 
-  // ===== Dua produk PDF, keduanya berisi SUNGGUHAN =====
+  // ===== Tiga materi PDF, semuanya berisi SUNGGUHAN =====
   const halamanWebp = await sharp({
     create: { width: 200, height: 200, channels: 3, background: { r: 250, g: 250, b: 245 } },
   }).webp().toBuffer();
@@ -92,49 +113,46 @@ beforeAll(async () => {
   dok.addPage();
   const pdfAsli = Buffer.from(await dok.save());
 
-  for (const [slug, bolehUnduh] of [
-    ["rute-uji-pdf-terkunci", false],
-    ["rute-uji-pdf-unduh", true],
-  ] as Array<[string, boolean]>) {
-    const { data } = await svc.from("digital_products")
-      .insert({
-        judul: `Rute ${slug}`, slug, jenis: "pdf", aktif: true, boleh_unduh: bolehUnduh,
-      })
-      .select("id").single();
-    const id = data!.id;
-    if (bolehUnduh) idPdfUnduh = id;
+  for (const [slug, bolehUnduh, pratinjau] of [
+    ["rute-uji-pdf-terkunci", false, false],
+    ["rute-uji-pdf-unduh", true, false],
+    ["rute-uji-pdf-pratinjau", true, true],
+  ] as Array<[string, boolean, boolean]>) {
+    const id = await semaiProdukBermateri({ slug, jenis: "pdf", bolehUnduh, pratinjau });
+    if (pratinjau) idPratinjau = id;
+    else if (bolehUnduh) idPdfUnduh = id;
     else idPdfTerkunci = id;
+    const p = produkDari[id];
 
     await svc.storage.from(BUCKET_HALAMAN)
-      .upload(`${id}/1.webp`, halamanWebp, { contentType: "image/webp", upsert: true });
-    await svc.from("digital_product_pages")
-      .insert({ product_id: id, halaman: 1, objek: `${id}/1.webp` });
+      .upload(`${p}/${id}/1.webp`, halamanWebp, { contentType: "image/webp", upsert: true });
+    await svc.rpc("ganti_halaman_materi_produk", { p_material_id: id, p_halaman: [{ halaman: 1, objek: `${p}/${id}/1.webp` }] });
 
-    // BERKAS UNDUHAN ADA untuk KEDUANYA — termasuk yang `boleh_unduh`-nya mati.
+    // BERKAS UNDUHAN ADA untuk SEMUANYA — termasuk yang `boleh_unduh`-nya mati.
     // Inilah yang membuat uji "ditolak karena boleh_unduh" menagih pagar yang
     // benar: kalau berkasnya tidak ada, 404-nya bisa datang dari ketiadaan
     // berkas dan uji itu akan tetap hijau seandainya pagarnya dihapus.
     await svc.storage.from(BUCKET_BERKAS)
-      .upload(`${id}/isi.pdf`, pdfAsli, { contentType: "application/pdf", upsert: true });
+      .upload(`${p}/${id}/isi.pdf`, pdfAsli, { contentType: "application/pdf", upsert: true });
     await svc.from("digital_product_files").insert({
-      product_id: id, objek: `${id}/isi.pdf`, mime: "application/pdf", byte: pdfAsli.length,
+      material_id: id, objek: `${p}/${id}/isi.pdf`, mime: "application/pdf", byte: pdfAsli.length,
     });
   }
 });
 
 afterAll(async () => {
   const svc = createAdminSupabase();
-  for (const id of [idVideo, idPdfTerkunci, idPdfUnduh]) {
+  for (const id of [idVideo, idPdfTerkunci, idPdfUnduh, idPratinjau]) {
     if (!id) continue;
     for (const bucket of [BUCKET_HALAMAN, BUCKET_BERKAS]) {
-      for (const prefiks of [id, `${id}/pembeli`]) {
+      for (const prefiks of [`${produkDari[id]}/${id}`, `${produkDari[id]}/${id}/pembeli`]) {
         const { data } = await svc.storage.from(bucket).list(prefiks, { limit: 1000 });
         if (data && data.length > 0) {
           await svc.storage.from(bucket).remove(data.map((o) => `${prefiks}/${o.name}`));
         }
       }
     }
-    await svc.from("digital_products").delete().eq("id", id);
+    await svc.from("digital_products").delete().eq("id", produkDari[id]);
   }
 });
 
@@ -175,7 +193,7 @@ describe("rute isi produk — dengan entitlement", () => {
     // Objeknya sendiri tidak perlu ada di R2: yang diuji adalah gerbangnya,
     // dan tanda tangan diterbitkan tanpa menyentuh jaringan.
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toContain(`produk/${idVideo}/isi.mp4`);
+    expect(res.headers.get("location")).toContain(`produk/${produkDari[idVideo]}/${idVideo}/isi.mp4`);
   });
 
   it("rute halaman menyajikan gambar ber-watermark, bukan 404", async () => {
@@ -196,7 +214,7 @@ describe("rute isi produk — dengan entitlement", () => {
     expect(res.headers.get("location")).toBeTruthy();
 
     const svc = createAdminSupabase();
-    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${idPdfUnduh}/pembeli`);
+    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${produkDari[idPdfUnduh]}/${idPdfUnduh}/pembeli`);
     expect((data ?? []).map((o) => o.name)).toContain(`${clientId}.pdf`);
   });
 
@@ -206,7 +224,7 @@ describe("rute isi produk — dengan entitlement", () => {
 
     // Dan tidak ada salinan tercap yang terlanjur dibuat untuknya.
     const svc = createAdminSupabase();
-    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${idPdfTerkunci}/pembeli`);
+    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${produkDari[idPdfTerkunci]}/${idPdfTerkunci}/pembeli`);
     expect(data ?? []).toEqual([]);
   });
 
@@ -224,7 +242,7 @@ describe("rute isi produk — entitlement yang DICABUT menutup kembali ketiganya
     await beriEntitlement(idPdfUnduh);
     await createAdminSupabase().from("digital_entitlements")
       .update({ dicabut_pada: new Date().toISOString() })
-      .eq("client_id", clientId).eq("product_id", idPdfUnduh);
+      .eq("client_id", clientId).eq("product_id", produkDari[idPdfUnduh]);
   });
 
   afterAll(async () => {
@@ -258,13 +276,13 @@ describe("produk yang DINONAKTIFKAN tetap terbuka bagi pemegang entitlement", ()
     // `idPdfTerkunci` ikut dinonaktifkan TANPA entitlement — kontrol negatif
     // di bawah bersandar padanya.
     await svc.from("digital_products").update({ aktif: false })
-      .in("id", [idVideo, idPdfUnduh, idPdfTerkunci]);
+      .in("id", [idVideo, idPdfUnduh, idPdfTerkunci].map((x) => produkDari[x]));
   });
 
   afterAll(async () => {
     const svc = createAdminSupabase();
     await svc.from("digital_products").update({ aktif: true })
-      .in("id", [idVideo, idPdfUnduh, idPdfTerkunci]);
+      .in("id", [idVideo, idPdfUnduh, idPdfTerkunci].map((x) => produkDari[x]));
     await cabutEntitlement(idVideo);
     await cabutEntitlement(idPdfUnduh);
   });
@@ -274,7 +292,7 @@ describe("produk yang DINONAKTIFKAN tetap terbuka bagi pemegang entitlement", ()
     // membaca produk apa pun") akan menghijaukan seluruh describe ini sambil
     // membuka katalog yang belum tayang kepada setiap akun yang login.
     const { data } = await ref.sesi!.from("digital_products")
-      .select("id").eq("id", idPdfTerkunci);
+      .select("id").eq("id", produkDari[idPdfTerkunci]);
     expect(data ?? []).toEqual([]);
   });
 
@@ -297,8 +315,8 @@ describe("produk yang DINONAKTIFKAN tetap terbuka bagi pemegang entitlement", ()
 
   it('kartunya tetap berdiri di "Pembelian saya"', async () => {
     const daftar = await produkSaya(clientId);
-    expect(daftar.map((p) => p.id)).toContain(idVideo);
-    expect(daftar.map((p) => p.id)).toContain(idPdfUnduh);
+    expect(daftar.map((p) => p.id)).toContain(produkDari[idVideo]);
+    expect(daftar.map((p) => p.id)).toContain(produkDari[idPdfUnduh]);
   });
 
   it("etalase publik TETAP menyembunyikannya — yang berubah cuma penjualannya", async () => {
@@ -308,21 +326,21 @@ describe("produk yang DINONAKTIFKAN tetap terbuka bagi pemegang entitlement", ()
 });
 
 /**
- * Salinan tercap pembeli (`<produk>/pembeli/<klien>.pdf`) adalah TURUNAN dari
+ * Salinan tercap pembeli (`<produk>/<materi>/pembeli/<klien>.pdf`) adalah TURUNAN dari
  * PDF sumber, dan rute unduh memakainya ulang tanpa pernah membandingkannya
  * dengan sumbernya. Sebelum perbaikan ini, admin yang mengunggah PDF perbaikan
  * tidak akan PERNAH bisa mengirimkannya kepada siapa pun yang sudah pernah
  * mengunduh — permanen, tanpa satu pun galat di layar.
  */
 describe("salinan tercap pembeli dikosongkan saat sumbernya diganti atau dilepas", () => {
-  async function buatSalinanTercap(productId: string) {
+  async function buatSalinanTercap(materiId: string) {
     ref.sesi = await signInAs(KLIEN);
-    await beriEntitlement(productId);
-    const res = await getUnduh(permintaan(), { params: Promise.resolve({ id: productId }) });
+    await beriEntitlement(materiId);
+    const res = await getUnduh(permintaan(), { params: Promise.resolve({ id: materiId }) });
     expect(res.status).toBe(302);
 
     const svc = createAdminSupabase();
-    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${productId}/pembeli`);
+    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${produkDari[materiId]}/${materiId}/pembeli`);
     expect((data ?? []).length).toBe(1);
   }
 
@@ -330,11 +348,11 @@ describe("salinan tercap pembeli dikosongkan saat sumbernya diganti atau dilepas
     await buatSalinanTercap(idPdfUnduh);
 
     ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await terbitkanUrlUnggahPdfProduk(idPdfUnduh, 2048);
+    const hasil = await terbitkanUrlUnggahPdfMateri(idPdfUnduh, 2048);
     expect(hasil.ok).toBe(true);
 
     const svc = createAdminSupabase();
-    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${idPdfUnduh}/pembeli`);
+    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${produkDari[idPdfUnduh]}/${idPdfUnduh}/pembeli`);
     expect(data ?? []).toEqual([]);
 
     ref.sesi = await signInAs(KLIEN);
@@ -347,16 +365,39 @@ describe("salinan tercap pembeli dikosongkan saat sumbernya diganti atau dilepas
     const svc = createAdminSupabase();
     // "Lepas isi" menolak produk yang masih tayang — itu pagar lain, bukan
     // yang diuji di sini.
-    await svc.from("digital_products").update({ aktif: false }).eq("id", idPdfUnduh);
+    await svc.from("digital_products").update({ aktif: false }).eq("id", produkDari[idPdfUnduh]);
 
     ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await lepasIsiProduk(idPdfUnduh);
+    const hasil = await lepasIsiMateri(idPdfUnduh);
     expect(hasil.ok).toBe(true);
 
-    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${idPdfUnduh}/pembeli`);
+    const { data } = await svc.storage.from(BUCKET_BERKAS).list(`${produkDari[idPdfUnduh]}/${idPdfUnduh}/pembeli`);
     expect(data ?? []).toEqual([]);
 
     ref.sesi = await signInAs(KLIEN);
+    await cabutEntitlement(idPdfUnduh);
+  });
+});
+
+describe("pratinjau & kedaluwarsa (spec 2026-10-16)", () => {
+  it("non-pembeli MEMBACA halaman materi pratinjau, tapi TIDAK bisa mengunduhnya", async () => {
+    ref.sesi = await signInAs(KLIEN);
+    const halaman = await getHalaman(permintaan(), { params: Promise.resolve({ id: idPratinjau, n: "1" }) });
+    expect(halaman.status).toBe(200);
+    const unduh = await getUnduh(permintaan(), { params: Promise.resolve({ id: idPratinjau }) });
+    expect(unduh.status).toBe(404);
+  });
+
+  it("pemilik KEDALUWARSA ditolak ketiga rute", async () => {
+    ref.sesi = await signInAs(KLIEN);
+    await createAdminSupabase().from("digital_entitlements").insert({
+      client_id: clientId, product_id: produkDari[idPdfUnduh], sumber: "gratis",
+      berlaku_sampai: new Date(Date.now() - 60_000).toISOString(),
+    });
+    const halaman = await getHalaman(permintaan(), { params: Promise.resolve({ id: idPdfUnduh, n: "1" }) });
+    const unduh = await getUnduh(permintaan(), { params: Promise.resolve({ id: idPdfUnduh }) });
+    expect(halaman.status).toBe(404);
+    expect(unduh.status).toBe(404);
     await cabutEntitlement(idPdfUnduh);
   });
 });

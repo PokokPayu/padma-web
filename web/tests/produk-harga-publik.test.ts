@@ -56,7 +56,7 @@ describe("harga produk digital", () => {
     // PENYARINGAN, bukan ketiadaan data.
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji klien select", slug: "uji-klien-select-harga", jenis: "pdf" })
+      .insert({ judul: "Uji klien select", slug: "uji-klien-select-harga" })
       .select("id").single();
     await svc.from("digital_product_prices").insert({ product_id: produk!.id, harga: 12_345 });
 
@@ -72,7 +72,7 @@ describe("harga produk digital", () => {
   it("klien yang menyisipkan harga langsung lewat REST ditolak RLS", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji klien insert", slug: "uji-klien-insert-harga", jenis: "pdf" })
+      .insert({ judul: "Uji klien insert", slug: "uji-klien-insert-harga" })
       .select("id").single();
 
     const klien = await signInAs("ananda@padma.test");
@@ -95,7 +95,7 @@ describe("harga produk digital", () => {
   it("harga yang belum berlaku tidak bocor ke pengunjung", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji harga", slug: "uji-harga-masa-depan", jenis: "pdf", aktif: true })
+      .insert({ judul: "Uji harga", slug: "uji-harga-masa-depan", aktif: true })
       .select("id").single();
 
     // Kalender JAKARTA, bukan UTC — view memakai `(now() at time zone
@@ -124,7 +124,7 @@ describe("harga produk digital", () => {
   it("harga produk yang BELUM tayang tidak bocor ke anon", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji belum tayang", slug: "uji-harga-belum-tayang", jenis: "pdf", aktif: false })
+      .insert({ judul: "Uji belum tayang", slug: "uji-harga-belum-tayang", aktif: false })
       .select("id").single();
     // Harga yang SUDAH berlaku hari ini — jadi 0 baris di bawah hanya bisa
     // berarti saringan `aktif`, bukan saringan tanggal yang sudah diuji di
@@ -154,7 +154,7 @@ describe("harga produk digital", () => {
     // justru sedang ia siapkan harganya.
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji staf belum tayang", slug: "uji-staf-belum-tayang", jenis: "pdf", aktif: false })
+      .insert({ judul: "Uji staf belum tayang", slug: "uji-staf-belum-tayang", aktif: false })
       .select("id").single();
     await svc.from("digital_product_prices")
       .insert({ product_id: produk!.id, harga: 55_000 });
@@ -179,7 +179,7 @@ describe("harga produk digital", () => {
   it("admin melihat harga terjadwal lewat produk_harga_staf", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji staf", slug: "uji-staf-harga-terjadwal", jenis: "pdf", aktif: true })
+      .insert({ judul: "Uji staf", slug: "uji-staf-harga-terjadwal", aktif: true })
       .select("id").single();
 
     // Kalender JAKARTA, bukan UTC — sama seperti uji "tidak bocor" di atas.
@@ -201,7 +201,7 @@ describe("harga produk digital", () => {
   it("klien mendapat array kosong (bukan galat) dari produk_harga_staf", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji staf klien", slug: "uji-staf-harga-klien", jenis: "pdf", aktif: true })
+      .insert({ judul: "Uji staf klien", slug: "uji-staf-harga-klien", aktif: true })
       .select("id").single();
 
     await svc.from("digital_product_prices")
@@ -222,7 +222,7 @@ describe("harga produk digital", () => {
   it("harga coret yang lebih murah dari harga jual DITOLAK basis data", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji coret", slug: "uji-coret-murah", jenis: "pdf" })
+      .insert({ judul: "Uji coret", slug: "uji-coret-murah" })
       .select("id").single();
 
     const { error } = await svc.from("digital_product_prices")
@@ -236,7 +236,7 @@ describe("harga produk digital", () => {
   it("harga tidak bisa disunting maupun dihapus lewat peran API", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji riwayat", slug: "uji-riwayat-harga", jenis: "pdf" })
+      .insert({ judul: "Uji riwayat", slug: "uji-riwayat-harga" })
       .select("id").single();
     await svc.from("digital_product_prices")
       .insert({ product_id: produk!.id, harga: 50_000 });

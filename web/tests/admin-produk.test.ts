@@ -1,7 +1,6 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { slugDariJudul } from "@/lib/produk/status";
@@ -13,18 +12,6 @@ afterEach(async () => {
   const svc = createAdminSupabase();
   while (bersihkan.length) await svc.from("digital_products").delete().eq("id", bersihkan.pop()!);
 });
-
-// `aktifkanProduk` memakai sesi pengguna (`createServerSupabase`). Di vitest
-// tidak ada cookie, jadi klien ber-SESI SUNGGUHAN disuntikkan — RLS dan
-// `requireRole` di dalamnya tetap berjalan apa adanya, persis pola
-// `tests/admin-materi.test.ts`.
-const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
-vi.mock("@/lib/supabase/server", () => ({
-  createServerSupabase: async () => ref.sesi!,
-}));
-vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
-
-const { aktifkanProduk, perbaruiProduk } = await import("@/app/admin/produk/aksi");
 
 describe("master produk admin", () => {
   it("rute baru terdaftar di tabel rute README", () => {
@@ -45,22 +32,33 @@ describe("master produk admin", () => {
     expect(jumlahGerbang).toBeGreaterThanOrEqual(jumlahAction);
   });
 
+  // `aksi-isi.ts` memegang service role untuk storage dan `hapusMateri`, jadi
+  // larangan service role di atas tidak berlaku padanya; pagar per-action-nya
+  // (requireRole + sesi sebelum service role) ada di `admin-produk-unggah.test.ts`.
+  it("setiap server action di aksi-isi memanggil requireRole", () => {
+    const sumber = readFileSync(path.join(AKAR, "src/app/admin/produk/[id]/aksi-isi.ts"), "utf8");
+    const jumlahAction = (sumber.match(/^export async function /gm) ?? []).length;
+    const jumlahGerbang = (sumber.match(/requireRole\(/g) ?? []).length;
+    expect(jumlahAction).toBeGreaterThan(0);
+    expect(jumlahGerbang).toBeGreaterThanOrEqual(jumlahAction);
+  });
+
   it("admin bisa membuat produk, dan produknya lahir nonaktif", async () => {
     const admin = await signInAs("admin@padma.test");
     const slug = slugDariJudul("Uji Buat Produk");
     const { data, error } = await admin.from("digital_products")
-      .insert({ judul: "Uji Buat Produk", slug, jenis: "pdf" })
-      .select("id, aktif, boleh_unduh").single();
+      .insert({ judul: "Uji Buat Produk", slug })
+      .select("id, aktif, masa_berlaku_bulan").single();
     expect(error).toBeNull();
     expect(data!.aktif).toBe(false);
-    expect(data!.boleh_unduh).toBe(false);
+    expect(data!.masa_berlaku_bulan).toBeNull();
     bersihkan.push(data!.id);
   });
 
   it("admin TIDAK bisa menetapkan harga", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji harga admin", slug: "uji-harga-admin", jenis: "pdf" })
+      .insert({ judul: "Uji harga admin", slug: "uji-harga-admin" })
       .select("id").single();
     bersihkan.push(produk!.id);
 
@@ -73,7 +71,7 @@ describe("master produk admin", () => {
   it("admin MELIHAT harga lewat view staf", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji lihat harga", slug: "uji-lihat-harga", jenis: "pdf" })
+      .insert({ judul: "Uji lihat harga", slug: "uji-lihat-harga" })
       .select("id").single();
     bersihkan.push(produk!.id);
     await svc.from("digital_product_prices")
@@ -93,139 +91,5 @@ describe("master produk admin", () => {
     const klien = await signInAs("ananda@padma.test");
     const { data } = await klien.from("produk_harga_staf").select("harga").limit(1);
     expect(data ?? []).toEqual([]);
-  });
-});
-
-/**
- * `aktifkanProduk` — "punya isi" harus JENIS-SADAR (`punyaIsi`,
- * `@/lib/produk/status`), bukan sekadar "ada baris `digital_product_files`".
- *
- * Sebelum perbaikan ini, produk PDF dengan `boleh_unduh = false` yang
- * halamannya sudah lengkap TIDAK PERNAH bisa ditayangkan: gerbangnya hanya
- * memeriksa `digital_product_files`, dan produk semacam itu tidak pernah
- * punya baris di situ (Task 6, `catatPdfProduk` di
- * `admin/produk/[id]/unggah.ts` hanya menulis baris itu bila `boleh_unduh`
- * menyala) — jalan buntu permanen lewat panel admin, dari jalur unggahan
- * yang justru jadi tugas modul yang sama.
- */
-describe("aktifkanProduk — punya isi jenis-sadar", () => {
-  it("PDF berhalaman lengkap TANPA berkas unduhan tetap bisa ditayangkan", async () => {
-    const svc = createAdminSupabase();
-    const { data: produk } = await svc.from("digital_products")
-      .insert({
-        judul: "Uji Aktifkan PDF Tanpa Unduhan",
-        slug: "uji-aktifkan-pdf-tanpa-unduhan",
-        jenis: "pdf",
-        boleh_unduh: false,
-      })
-      .select("id").single();
-    bersihkan.push(produk!.id);
-    await svc.from("digital_product_pages").insert(
-      Array.from({ length: 3 }, (_, i) => ({
-        product_id: produk!.id, halaman: i + 1, objek: `${produk!.id}/${i + 1}.webp`,
-      })),
-    );
-    // Kontrol: benar-benar TIDAK ada baris `digital_product_files` — pagar
-    // lama akan menolak persis di sini.
-    const { data: berkas } = await svc.from("digital_product_files")
-      .select("id").eq("product_id", produk!.id);
-    expect(berkas ?? []).toEqual([]);
-
-    ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await aktifkanProduk(produk!.id);
-    expect(hasil.ok).toBe(true);
-
-    const { data: baris } = await svc.from("digital_products")
-      .select("aktif").eq("id", produk!.id).single();
-    expect(baris!.aktif).toBe(true);
-  });
-
-  it("PDF tanpa halaman DAN tanpa berkas tetap ditolak", async () => {
-    const svc = createAdminSupabase();
-    const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji Aktifkan PDF Kosong", slug: "uji-aktifkan-pdf-kosong", jenis: "pdf" })
-      .select("id").single();
-    bersihkan.push(produk!.id);
-
-    ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await aktifkanProduk(produk!.id);
-    expect(hasil.ok).toBe(false);
-  });
-});
-
-
-/**
- * `jenis` menentukan DI MANA isi produk hidup (`digital_product_files` untuk
- * video, `digital_product_pages` untuk PDF) dan setiap pembaca isi bercabang
- * padanya. Membaliknya sesudah isinya ada membuat halaman terlantar,
- * `punyaIsi` memeriksa tabel yang salah, dan reader 404 untuk pemilik yang
- * SUDAH membayar — sementara etalase tetap memajangnya. Satu dropdown tidak
- * boleh seberbahaya itu.
- */
-describe("perbaruiProduk — jenis terkunci sesudah isi ada", () => {
-  function medan(judul: string, slug: string, jenis: string): FormData {
-    const f = new FormData();
-    f.set("judul", judul);
-    f.set("slug", slug);
-    f.set("jenis", jenis);
-    f.set("deskripsi", "");
-    f.set("urutan", "0");
-    return f;
-  }
-
-  it("PDF yang sudah punya halaman TIDAK bisa dijadikan video", async () => {
-    const svc = createAdminSupabase();
-    const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji Kunci Jenis", slug: "uji-kunci-jenis", jenis: "pdf" })
-      .select("id").single();
-    bersihkan.push(produk!.id);
-    await svc.from("digital_product_pages")
-      .insert({ product_id: produk!.id, halaman: 1, objek: `${produk!.id}/1.webp` });
-
-    ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await perbaruiProduk(produk!.id, medan("Uji Kunci Jenis", "uji-kunci-jenis", "video"));
-    expect(hasil.ok).toBe(false);
-
-    // Yang penting bukan pesannya, melainkan barisnya: jenisnya tidak berubah.
-    const { data: baris } = await svc.from("digital_products")
-      .select("jenis").eq("id", produk!.id).single();
-    expect(baris!.jenis).toBe("pdf");
-  });
-
-  it("produk yang BELUM berisi masih bebas ganti jenis", async () => {
-    const svc = createAdminSupabase();
-    const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji Jenis Bebas", slug: "uji-jenis-bebas", jenis: "pdf" })
-      .select("id").single();
-    bersihkan.push(produk!.id);
-
-    ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await perbaruiProduk(produk!.id, medan("Uji Jenis Bebas", "uji-jenis-bebas", "video"));
-    expect(hasil.ok).toBe(true);
-
-    const { data: baris } = await svc.from("digital_products")
-      .select("jenis").eq("id", produk!.id).single();
-    expect(baris!.jenis).toBe("video");
-  });
-
-  it("menyunting judul produk berisi TIDAK ikut tertolak — pagarnya hanya soal jenis", async () => {
-    const svc = createAdminSupabase();
-    const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Uji Sunting Judul", slug: "uji-sunting-judul", jenis: "pdf" })
-      .select("id").single();
-    bersihkan.push(produk!.id);
-    await svc.from("digital_product_pages")
-      .insert({ product_id: produk!.id, halaman: 1, objek: `${produk!.id}/1.webp` });
-
-    ref.sesi = await signInAs("admin@padma.test");
-    const hasil = await perbaruiProduk(
-      produk!.id,
-      medan("Uji Sunting Judul Baru", "uji-sunting-judul", "pdf"),
-    );
-    expect(hasil.ok).toBe(true);
-
-    const { data: baris } = await svc.from("digital_products")
-      .select("judul").eq("id", produk!.id).single();
-    expect(baris!.judul).toBe("Uji Sunting Judul Baru");
   });
 });
