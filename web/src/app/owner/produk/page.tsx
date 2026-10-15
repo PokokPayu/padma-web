@@ -9,8 +9,9 @@ import { Paginasi } from "@/app/_shell/panel/paginasi";
 import { PanelGeser } from "@/app/_shell/panel/panel-geser";
 import { Bantuan } from "@/app/_shell/panel/bantuan";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
-import { LABEL_JENIS } from "@/lib/produk/status";
+import { labelMasaBerlaku } from "@/lib/produk/status";
 import { FormHargaProduk } from "./form-harga-produk";
+import { FormMasaBerlaku } from "./form-masa-berlaku";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Harga Produk" };
@@ -96,7 +97,7 @@ export default async function ProdukHargaPage({
           <Tabel label="Harga produk digital">
             <thead>
               <tr>
-                <Th>Produk</Th><Th>Jenis</Th><Th>Harga</Th><Th>Harga coret</Th>
+                <Th>Produk</Th><Th>Masa berlaku</Th><Th>Harga</Th><Th>Harga coret</Th>
                 <Th>Berlaku sejak</Th><Th>Aksi</Th>
               </tr>
             </thead>
@@ -111,11 +112,7 @@ export default async function ProdukHargaPage({
                         {!b.aktif && "tidak ditayangkan"}
                       </span>
                     </Td>
-                    <Td>
-                      <span className="rounded-full border border-panel-border px-2.5 py-1 text-[11px] font-extrabold text-panel-ink">
-                        {LABEL_JENIS[b.jenis]}
-                      </span>
-                    </Td>
+                    <Td className="text-[12.5px]">{labelMasaBerlaku(b.masaBerlakuBulan)}</Td>
                     <Td className="font-mono text-[13px]">
                       {t ? formatRupiah(t.harga) : <span className="text-clay">Belum bertarif</span>}
                     </Td>
@@ -128,7 +125,7 @@ export default async function ProdukHargaPage({
                         href={`${BASIS}${bangunQuery(param, { ubah: b.productId })}`}
                         className="text-[12px] font-bold text-panel-ink underline"
                       >
-                        Tetapkan harga
+                        Harga &amp; masa berlaku
                       </Link>
                     </Td>
                   </tr>
@@ -150,6 +147,7 @@ export default async function ProdukHargaPage({
             hargaSekarang={barisUbah.berlaku?.harga ?? null}
             hargaCoretSekarang={barisUbah.berlaku?.hargaCoret ?? null}
           />
+          <FormMasaBerlaku productId={barisUbah.productId} masaBerlakuBulan={barisUbah.masaBerlakuBulan} />
 
           {barisUbah.riwayat.length > 0 && (
             <div className="mt-4">
