@@ -135,8 +135,11 @@ ditolak Postgres.
   server dan tidak pernah dikirim peramban.
 - RPC `ganti_halaman_produk` dan `lepas_berkas_produk` berganti parameter ke
   `material_id`. Postur hak aksesnya tidak berubah.
-- Sampul materi: `<product_id>/<material_id>/sampul.<ext>` di `produk-sampul`.
-  Sampul produk: `<product_id>/sampul.<ext>`.
+- Sampul materi: `<product_id>/<material_id>/sampul-<uuid>.<ext>` di
+  `produk-sampul`. Sampul produk: `<product_id>/sampul-<uuid>.<ext>`. Nama
+  **unik per unggahan**: bucket-nya publik dan di-cache CDN, jadi menimpa
+  nama yang sama membuat pengunjung terus melihat gambar lama. Objek lama
+  dihapus sesudah baris menunjuk yang baru.
 
 ### Akses — `digital_entitlements`
 
@@ -226,10 +229,13 @@ sebagai "pembayaran sedang ditinjau" (`punya_pesanan_menunggu` dan gerbang di
 memeriksa entitlement lebih dulu. Dengan masa berlaku, pesanan `lunas` lama
 yang aksesnya sudah kedaluwarsa akan memblokir pembelian ulang **selamanya**.
 
-Aturan baru: pesanan `lunas` dianggap menggantung **hanya jika** belum ada
-entitlement yang tidak dicabut dengan `diberikan_pada >= lunas_pada` untuk
-produk itu. Pesanan `ditahan` dan `lunas_setelah_tutup` tetap menggantung
-seperti sekarang.
+Aturan baru: pesanan beruang (`ditahan`, `lunas`, atau bersebab
+`lunas_setelah_tutup`) dianggap menggantung **hanya jika** belum ada
+entitlement tak dicabut untuk produk itu dengan `diberikan_pada >=
+o.dibuat_pada`. Acuannya `dibuat_pada`, bukan `lunas_pada`, karena pesanan
+`lunas_setelah_tutup` berstatus kedaluwarsa/dibatalkan dan tidak selalu punya
+`lunas_pada`. Entitlement yang dicabut tidak pernah menyelesaikan apa pun:
+`akses_tertahan` tetap menggantung seperti sekarang.
 
 Kriteria ini ditulis **satu kali** di fungsi pembantu
 `pembayaran_produk_menggantung(client_id, product_id)`, dipakai oleh
@@ -423,3 +429,19 @@ disebut satu per satu, bukan dianggap lulus.
 - Pembelian per materi
 - Pratinjau untuk pengunjung anonim
 - Pemasangan ulang seksi produk di landing
+
+## Tindak lanjut (mode uji dipangkas, 16 Oktober)
+
+Pemilik repo memilih tingkat uji **dipangkas**. Yang diuji otomatis: RLS
+`boleh_buka_materi` untuk enam keadaan, cabang penerbitan akses + webhook
+kembar, pembekuan durasi, FK bab-materi, pagar kolom masa berlaku, cookie
+tujuan, dan gerbang rute (porting uji lama + pratinjau + kedaluwarsa). Yang
+**tidak** dijaga uji otomatis:
+
+1. Radius RPC `ganti_halaman_materi` / `lepas_berkas_materi` (satu materi
+   tidak menyentuh materi lain).
+2. Aturan tayang "isi lengkap" dan "jenis materi terkunci sesudah isi diunggah".
+3. Render tombol unduh di penampil materi.
+4. Pembersihan objek storage + salinan bercap saat materi dihapus.
+5. Seksi landing produk tetap tidak dipasang.
+
