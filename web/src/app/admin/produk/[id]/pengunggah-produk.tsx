@@ -10,13 +10,13 @@ import {
 import { periksaBerkasVideo, MAKS_BYTE_VIDEO } from "@/lib/materi/video";
 import { moovDiDepan } from "@/lib/materi/moov";
 import {
-  terbitkanUrlUnggahVideoProduk,
-  catatVideoProduk,
-  terbitkanUrlUnggahHalamanProduk,
-  catatHalamanProduk,
-  terbitkanUrlUnggahPdfProduk,
-  catatPdfProduk,
-  lepasIsiProduk,
+  terbitkanUrlUnggahVideoMateri,
+  catatVideoMateri,
+  terbitkanUrlUnggahHalamanMateri,
+  catatHalamanMateri,
+  terbitkanUrlUnggahPdfMateri,
+  catatPdfMateri,
+  lepasIsiMateri,
 } from "./unggah";
 
 const BUCKET_HALAMAN = "produk-halaman";
@@ -26,7 +26,7 @@ const BYTE_KEPALA = 512 * 1024;
 
 // ===========================================================================
 // VIDEO — mirror `admin/materi/pengunggah-video.tsx`, menulis lewat
-// `./unggah.ts` (produk), bukan `./unggah-video.ts` (materi).
+// `./unggah.ts` (materi produk), bukan `./unggah-video.ts` (materi kelas).
 // ===========================================================================
 
 type KeadaanVideo =
@@ -35,7 +35,7 @@ type KeadaanVideo =
   | { fase: "sukses" }
   | { fase: "gagal"; pesan: string };
 
-export function PengunggahVideoProduk({ productId }: { productId: string }) {
+export function PengunggahVideoMateri({ materiId }: { materiId: string }) {
   const router = useRouter();
   const [keadaan, setKeadaan] = useState<KeadaanVideo>({ fase: "diam" });
   const [peringatan, setPeringatan] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export function PengunggahVideoProduk({ productId }: { productId: string }) {
     }
 
     setKeadaan({ fase: "unggah", persen: 0 });
-    const terbit = await terbitkanUrlUnggahVideoProduk(productId, periksa.nilai, berkas.size);
+    const terbit = await terbitkanUrlUnggahVideoMateri(materiId, periksa.nilai, berkas.size);
     if (!terbit.ok) {
       setKeadaan({ fase: "gagal", pesan: terbit.pesan });
       return;
@@ -100,7 +100,7 @@ export function PengunggahVideoProduk({ productId }: { productId: string }) {
       return;
     }
 
-    const catat = await catatVideoProduk(productId, terbit.objek, periksa.nilai, berkas.size);
+    const catat = await catatVideoMateri(materiId, terbit.objek, periksa.nilai, berkas.size);
     if (!catat.ok) {
       setKeadaan({ fase: "gagal", pesan: catat.pesan });
       return;
@@ -165,11 +165,11 @@ export function PengunggahVideoProduk({ productId }: { productId: string }) {
 
 type FasePdf = "diam" | "membaca" | "mengunggah" | "mengunggah-utuh" | "selesai" | "galat";
 
-export function PengunggahPdfProduk({
-  productId,
+export function PengunggahPdfMateri({
+  materiId,
   bolehUnduh,
 }: {
-  productId: string;
+  materiId: string;
   bolehUnduh: boolean;
 }) {
   const router = useRouter();
@@ -192,7 +192,7 @@ export function PengunggahPdfProduk({
         return;
       }
 
-      const izin = await terbitkanUrlUnggahHalamanProduk(productId, halaman.length);
+      const izin = await terbitkanUrlUnggahHalamanMateri(materiId, halaman.length);
       if (!izin.ok) { setFase("galat"); setPesan(izin.pesan); return; }
       // Disalin ke variabel sendiri: TypeScript tidak menyempitkan tipe `izin`
       // ke dalam `pekerja()` di bawah — persis alasan yang sama di
@@ -225,8 +225,8 @@ export function PengunggahPdfProduk({
       // Baru SESUDAH seluruh unggahan halaman sukses. Gagal di tengah = tidak
       // ada baris tercatat = produk tampak "belum ada isi", bukan setengah
       // terisi.
-      const catat = await catatHalamanProduk(
-        productId,
+      const catat = await catatHalamanMateri(
+        materiId,
         halaman.map((h, i) => ({ halaman: h.halaman, objek: daftarUnggahan[i].objek })),
       );
       if (!catat.ok) { setFase("galat"); setPesan(catat.pesan); return; }
@@ -236,7 +236,7 @@ export function PengunggahPdfProduk({
       // sama sekali (spec §1, digital_products.boleh_unduh).
       if (bolehUnduh) {
         setFase("mengunggah-utuh");
-        const terbitPdf = await terbitkanUrlUnggahPdfProduk(productId, berkas.size);
+        const terbitPdf = await terbitkanUrlUnggahPdfMateri(materiId, berkas.size);
         if (!terbitPdf.ok) { setFase("galat"); setPesan(terbitPdf.pesan); return; }
 
         const { error: errPdf } = await supabase.storage
@@ -248,7 +248,7 @@ export function PengunggahPdfProduk({
           return;
         }
 
-        const catatPdf = await catatPdfProduk(productId, berkas.size);
+        const catatPdf = await catatPdfMateri(materiId, berkas.size);
         if (!catatPdf.ok) { setFase("galat"); setPesan(catatPdf.pesan); return; }
       }
 
@@ -306,11 +306,11 @@ export function PengunggahPdfProduk({
 
 // ===========================================================================
 // LEPAS ISI — hanya ditawarkan pada produk yang sudah ditarik (server
-// memeriksanya ulang lewat `lepasIsiProduk`), mirror tombol "Lepas video"
+// memeriksanya ulang lewat `lepasIsiMateri`), mirror tombol "Lepas video"
 // milik `IsiVideo` (`admin/materi/form-materi.tsx`).
 // ===========================================================================
 
-export function LepasIsiProduk({ productId }: { productId: string }) {
+export function LepasIsiMateri({ materiId }: { materiId: string }) {
   const router = useRouter();
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
@@ -322,7 +322,7 @@ export function LepasIsiProduk({ productId }: { productId: string }) {
         disabled={pending}
         onClick={() =>
           mulai(async () => {
-            const r = await lepasIsiProduk(productId);
+            const r = await lepasIsiMateri(materiId);
             if (r.ok) {
               // Lunak, tetapi tidak boleh senyap: sama seperti peringatan
               // `objekLamaTersisa` milik `PengunggahVideo` materi — objek
