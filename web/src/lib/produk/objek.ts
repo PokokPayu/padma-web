@@ -58,8 +58,15 @@ export function namaObjekSampul(
 }
 
 const POLA_UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const UUID_PENUH = new RegExp(`^${POLA_UUID}$`);
 
 export function objekSampulSah(objek: string, productId: string, materiId: string | null): boolean {
+  // Id disisipkan mentah ke RegExp di bawah. Tanpa pemeriksaan ini, "." atau
+  // ".*" membuat pola yang cocok dengan produk lain, dan "(" melempar
+  // SyntaxError di tengah jalur validasi. Id yang bukan UUID tidak mungkin
+  // berasal dari basis data, jadi ditolak sebelum pola dibentuk.
+  if (!UUID_PENUH.test(productId)) return false;
+  if (materiId !== null && !UUID_PENUH.test(materiId)) return false;
   const dasar = materiId ? `${productId}/${materiId}` : productId;
   const pola = new RegExp(`^${dasar}/sampul-${POLA_UUID}\\.(jpg|png|webp)$`);
   return pola.test(objek);

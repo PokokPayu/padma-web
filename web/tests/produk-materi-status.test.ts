@@ -76,6 +76,15 @@ describe("nama objek per materi", () => {
     expect(objekSampulSah(`${P}/../x/sampul-${A}.webp`, P, null)).toBe(false);
   });
 
+  it("objekSampulSah menolak id yang bukan UUID (tanpa regex injection)", () => {
+    const materi = namaObjekSampul(P, M, "image/jpeg", A);
+    expect(objekSampulSah(`${P}/sampul-${A}.webp`, ".*", null)).toBe(false);
+    expect(objekSampulSah(`OTHERPROD/sampul-${A}.webp`, ".*", null)).toBe(false);
+    expect(objekSampulSah(`${P}/sampul-${A}.webp`, "(", null)).toBe(false);
+    expect(objekSampulSah(materi, P, ".*")).toBe(false);
+    expect(objekSampulSah(materi, P, "(")).toBe(false);
+  });
+
   it("periksaBerkasSampul", () => {
     expect(periksaBerkasSampul("image/png", 1000).ok).toBe(true);
     expect(periksaBerkasSampul("image/gif", 1000).ok).toBe(false);
