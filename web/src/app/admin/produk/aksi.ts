@@ -3,15 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
-import {
-  periksaJudul,
-  periksaSlug,
-  periksaJenis,
-  slugDariJudul,
-  punyaIsi,
-  PANJANG_DESKRIPSI_MAKS,
-  type JenisProduk,
-} from "@/lib/produk/status";
+import { periksaJudul, periksaSlug, slugDariJudul, PANJANG_DESKRIPSI_MAKS } from "@/lib/produk/status";
+import { ambilIsiProduk, isiLengkap } from "@/lib/admin/produk-admin";
 
 /**
  * Jalur tulis panel admin untuk master produk digital.
@@ -23,11 +16,11 @@ import {
  *     langsung, jadi `requireRole(["admin","owner"])` ditulis DI DALAM setiap
  *     action.
  *
- *  2. PRODUK LAHIR NONAKTIF. Berkasnya (Task 6) diunggah lewat komponen
- *     tersendiri SESUDAH `productId` ini ada, jadi `simpanProduk` TIDAK
- *     PERNAH mengirim `aktif` — default basis data (false) yang berlaku.
+ *  2. PRODUK LAHIR NONAKTIF. Bab, materi, dan berkasnya (`[id]/aksi-isi.ts`,
+ *     `[id]/unggah.ts`) dibuat SESUDAH `productId` ini ada, jadi `simpanProduk`
+ *     TIDAK PERNAH mengirim `aktif` — default basis data (false) yang berlaku.
  *
- *  3. `aktifkanProduk` MENOLAK produk tanpa berkas. Tanpa itu, pagar (2) bisa
+ *  3. `aktifkanProduk` MENOLAK produk yang isinya belum lengkap. Tanpa itu, pagar (2) bisa
  *     dilewati hanya dengan satu klik lanjutan pada produk yang isinya belum
  *     ada.
  *
@@ -57,15 +50,10 @@ function periksaMedanProduk(formData: FormData): Gagal | {
   ok: true;
   judul: string;
   slug: string;
-  jenis: "video" | "pdf";
   deskripsi: string;
-  bolehUnduh: boolean;
 } {
   const judul = periksaJudul(String(formData.get("judul") ?? ""));
   if (!judul.ok) return { ok: false, pesan: judul.pesan };
-
-  const jenis = periksaJenis(String(formData.get("jenis") ?? ""));
-  if (!jenis.ok) return { ok: false, pesan: jenis.pesan };
 
   // Slug diambil dari medan bila diisi, kalau tidak diturunkan dari judul.
   const mentahSlug = String(formData.get("slug") ?? "").trim();
@@ -77,9 +65,7 @@ function periksaMedanProduk(formData: FormData): Gagal | {
     return { ok: false, pesan: `Deskripsi maksimal ${PANJANG_DESKRIPSI_MAKS} karakter.` };
   }
 
-  const bolehUnduh = formData.get("boleh_unduh") === "on";
-
-  return { ok: true, judul: judul.nilai, slug: slug.nilai, jenis: jenis.nilai, deskripsi, bolehUnduh };
+  return { ok: true, judul: judul.nilai, slug: slug.nilai, deskripsi };
 }
 
 /**
@@ -102,8 +88,6 @@ export async function simpanProduk(formData: FormData): Promise<Dibuat | Gagal> 
       judul: medan.judul,
       slug: medan.slug,
       deskripsi: medan.deskripsi,
-      jenis: medan.jenis,
-      boleh_unduh: medan.bolehUnduh,
     })
     .select("id");
 
@@ -121,14 +105,14 @@ export async function simpanProduk(formData: FormData): Promise<Dibuat | Gagal> 
 }
 
 /**
- * Mengubah identitas produk (judul/slug/deskripsi/boleh_unduh/urutan).
+ * Mengubah identitas produk (judul/slug/deskripsi/urutan).
  *
  * `aktif` dan harga sengaja tidak muncul di sini — keadaan tayang punya
  * action tersendiri (`aktifkanProduk`/`nonaktifkanProduk`), dan harga adalah
  * wilayah owner (Task 7).
  *
- * `jenis` boleh diubah hanya SELAMA produknya belum berisi — lihat pagar di
- * dalam badan fungsi.
+ * Jenis dan izin unduh bukan milik produk lagi: keduanya melekat pada MATERI
+ * (`perbaruiMateri` di `[id]/aksi-isi.ts`).
  */
 export async function perbaruiProduk(id: string, formData: FormData): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
@@ -141,40 +125,12 @@ export async function perbaruiProduk(id: string, formData: FormData): Promise<Be
 
   const supabase = await createServerSupabase();
 
-  // `jenis` TERKUNCI begitu isinya ada. Video dan PDF menyimpan isinya di
-  // tempat yang berbeda (`digital_product_files` vs `digital_product_pages`),
-  // dan setiap pembaca isi bercabang pada kolom ini: membalik jenis produk PDF
-  // yang sudah terisi membuat halamannya terlantar tanpa pembaca, `punyaIsi`
-  // memeriksa tabel yang salah, dan reader 404 untuk pemilik yang SUDAH
-  // membayar — sementara etalase tetap memajangnya seperti tidak terjadi apa
-  // pun. Salah ketik satu dropdown tidak boleh berakibat sebesar itu; yang
-  // benar-benar ingin mengubah jenis melepas isinya lebih dulu, dan itu
-  // tindakan yang sadar.
-  const { data: kini, error: kiniError } = await supabase
-    .from("digital_products").select("jenis").eq("id", id).maybeSingle();
-  if (kiniError) return { ok: false, pesan: `Gagal membaca produk (${kiniError.code}).` };
-  if (!kini) return { ok: false, pesan: "Produk tidak ditemukan atau hak akses ditolak." };
-
-  if (kini.jenis !== medan.jenis) {
-    const isi = await hitungIsi(supabase, id, kini.jenis as JenisProduk);
-    if (!isi.ok) return isi;
-    if (punyaIsi(kini.jenis as JenisProduk, isi.berkas, isi.halaman)) {
-      return {
-        ok: false,
-        pesan:
-          "Jenis produk tidak bisa diubah setelah isinya diunggah. Lepas isi produk lebih dulu.",
-      };
-    }
-  }
-
   const { data, error } = await supabase
     .from("digital_products")
     .update({
       judul: medan.judul,
       slug: medan.slug,
       deskripsi: medan.deskripsi,
-      jenis: medan.jenis,
-      boleh_unduh: medan.bolehUnduh,
       urutan,
     })
     .eq("id", id)
@@ -193,69 +149,28 @@ export async function perbaruiProduk(id: string, formData: FormData): Promise<Be
 }
 
 /**
- * Menghitung isi produk menurut JENISNYA — satu pembaca untuk dua pemakai
- * (`aktifkanProduk` dan pagar `jenis` di `perbaruiProduk`), supaya "apa yang
- * dianggap berisi" hidup di satu tempat saja.
- *
- * Galat query DIKEMBALIKAN, tidak ditelan: "0 karena tidak ada isi" dan "0
- * karena kueri gagal" adalah dua keadaan berbeda, dan yang kedua tidak boleh
- * menyamar sebagai yang pertama — di `perbaruiProduk` ia akan berarti pagar
- * yang diam-diam terbuka.
- */
-async function hitungIsi(
-  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
-  id: string,
-  jenis: JenisProduk,
-): Promise<{ ok: true; berkas: number; halaman: number } | Gagal> {
-  if (jenis === "video") {
-    const { data, error } = await supabase
-      .from("digital_product_files")
-      .select("id")
-      .eq("product_id", id);
-    if (error) return { ok: false, pesan: `Gagal memeriksa isi (${error.code}).` };
-    return { ok: true, berkas: (data ?? []).length, halaman: 0 };
-  }
-
-  const { count, error } = await supabase
-    .from("digital_product_pages")
-    .select("halaman", { count: "exact", head: true })
-    .eq("product_id", id);
-  if (error) return { ok: false, pesan: `Gagal memeriksa isi (${error.code}).` };
-  return { ok: true, berkas: 0, halaman: count ?? 0 };
-}
-
-/**
  * Menayangkan produk.
  *
  * Produk tanpa isi yang terpajang di etalase adalah janji yang tidak bisa
  * ditepati: pengunjung membuka halamannya dan tidak menemukan apa pun.
  *
- * "Punya isi" adalah predikat JENIS-SADAR (`punyaIsi`, `@/lib/produk/status`),
- * BUKAN sekadar "ada baris `digital_product_files`". Video menyimpan isinya
- * SELALU di situ, tapi PDF menyimpan isinya di `digital_product_pages` —
- * `digital_product_files` untuk PDF hanya terisi bila `boleh_unduh` menyala
- * (Task 6, `admin/produk/[id]/unggah.ts`). Memeriksa `digital_product_files`
- * saja di sini dulu berarti produk PDF yang tidak mengizinkan unduhan TIDAK
- * PERNAH bisa ditayangkan walau halamannya sudah lengkap — jalan buntu, bukan
- * sekadar ketidaknyamanan, dan justru lewat jalur unggahan yang jadi tugas
- * modul ini sendiri untuk mengisi.
+ * "Isi lengkap" (`isiLengkap`, `@/lib/admin/produk-admin`) berarti minimal satu
+ * materi DAN setiap materi berisi menurut jenisnya (`materiBerisi`): video
+ * lewat `digital_product_files`, PDF lewat `digital_product_pages`. Satu materi
+ * kosong cukup untuk menolak — pembeli yang membuka bab dan menemukan materi
+ * kosong adalah gembok yang tak pernah terbuka.
  */
 export async function aktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
-  const { data: produk, error: produkError } = await supabase
-    .from("digital_products").select("jenis").eq("id", id).maybeSingle();
-  if (produkError) return { ok: false, pesan: `Gagal membaca produk (${produkError.code}).` };
-  if (!produk) return { ok: false, pesan: "Produk tidak ditemukan." };
-
-  const isi = await hitungIsi(supabase, id, produk.jenis as JenisProduk);
-  if (!isi.ok) return isi;
-
-  if (!punyaIsi(produk.jenis as JenisProduk, isi.berkas, isi.halaman)) {
+  // Produk setengah jadi di etalase lebih buruk daripada produk yang belum
+  // ada: SETIAP materi wajib berisi, bukan sekadar "ada satu".
+  const bab = await ambilIsiProduk(id);
+  if (!isiLengkap(bab)) {
     return {
       ok: false,
-      pesan: "Produk belum punya berkas — unggah isinya dulu sebelum ditayangkan.",
+      pesan: "Isi belum lengkap — produk butuh minimal satu materi, dan setiap materi harus sudah diunggah isinya.",
     };
   }
 

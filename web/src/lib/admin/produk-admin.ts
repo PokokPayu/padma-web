@@ -1,6 +1,6 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
-import { punyaIsi, type JenisProduk } from "@/lib/produk/status";
+import { materiBerisi, type JenisMateri } from "@/lib/produk/status";
 
 /**
  * Lapisan data modul Produk Digital — sisi admin.
@@ -17,58 +17,89 @@ export type ProdukKelola = {
   judul: string;
   slug: string;
   deskripsi: string;
-  jenis: JenisProduk;
-  bolehUnduh: boolean;
   aktif: boolean;
   urutan: number;
-  /**
-   * Punya isi — JENIS-SADAR lewat `punyaIsi` (`@/lib/produk/status`): video
-   * lewat `digital_product_files`, PDF lewat `digital_product_pages`. Produk
-   * tanpa isi tidak boleh diaktifkan.
-   */
+  sampulObjek: string | null;
+  masaBerlakuBulan: number | null;
+  jenisMateri: JenisMateri[];
+  /** Isi LENGKAP: minimal satu materi, dan setiap materi sudah berisi. Syarat tayang. */
   adaIsi: boolean;
   /** Dari view `produk_harga_staf`. null = owner belum menetapkan harga. */
   harga: number | null;
   hargaCoret: number | null;
 };
 
+export type MateriKelola = {
+  id: string;
+  judul: string;
+  keterangan: string;
+  jenis: JenisMateri;
+  sampulObjek: string | null;
+  pratinjau: boolean;
+  bolehUnduh: boolean;
+  adaBerkas: boolean;
+  jumlahHalaman: number;
+  berisi: boolean;
+};
+
+export type BabKelola = { id: string; judul: string; materi: MateriKelola[] };
+
 export const SARING_PRODUK = {
   aktif: ["ya", "tidak"],
-  jenis: ["video", "pdf"],
   isi: ["ada", "belum"],
 } as const satisfies SaringSah;
+
+// Embed AGREGAT, selalu tepat satu objek `{ count }` (LEFT JOIN) — bukan
+// array kosong bila tak ada baris anak.
+type BarisMateriRingkas = {
+  jenis: JenisMateri;
+  digital_product_files: Array<{ count: number }>;
+  digital_product_pages: Array<{ count: number }>;
+};
 
 type BarisProduk = {
   id: string;
   judul: string;
   slug: string;
   deskripsi: string;
-  jenis: JenisProduk;
-  boleh_unduh: boolean;
   aktif: boolean;
   urutan: number;
-  // Embed AGREGAT, selalu tepat satu objek `{ count }` (LEFT JOIN) — bukan
-  // larik berkas sungguhan. Sama alasannya dengan `material_pages(count)` di
-  // materi-admin.ts: PostgREST memotong BARIS pada `max_rows`, tidak pernah
-  // nilai agregat.
-  digital_product_files: Array<{ count: number }>;
-  // Sama bentuknya, untuk halaman PDF terasterisasi — dibutuhkan `punyaIsi`
-  // (`@/lib/produk/status`) supaya "isi" produk PDF tidak salah dibaca dari
-  // `digital_product_files`, yang untuk jenis ini kosong kecuali `boleh_unduh`
-  // menyala.
-  digital_product_pages: Array<{ count: number }>;
+  sampul_objek: string | null;
+  masa_berlaku_bulan: number | null;
+  digital_product_materials: BarisMateriRingkas[];
 };
 type BarisHarga = { product_id: string; harga: number; harga_coret: number | null };
 
-/**
- * Satu halaman daftar produk, datar — dengan harga dari view staf.
- *
- * DUA query digabung di JS, sama bentuknya dengan `ambilDaftarMateri`:
- * satu untuk baris produk (dengan hitungan berkas agregat), satu untuk harga
- * lewat `produk_harga_staf`. Menggabung keduanya lewat satu embed langsung
- * atas view tidak dipakai di sini karena `produk_harga_staf` bukan tabel
- * fisik dengan FK yang bisa PostgREST tautkan otomatis lewat embed.
- */
+const KOLOM_PRODUK =
+  "id, judul, slug, deskripsi, aktif, urutan, sampul_objek, masa_berlaku_bulan, " +
+  "digital_product_materials(jenis, digital_product_files(count), digital_product_pages(count))";
+
+function lengkap(materi: BarisMateriRingkas[]): boolean {
+  return (
+    materi.length > 0 &&
+    materi.every((m) =>
+      materiBerisi(m.jenis, m.digital_product_files[0]?.count ?? 0, m.digital_product_pages[0]?.count ?? 0),
+    )
+  );
+}
+
+function rakit(p: BarisProduk, h: BarisHarga | undefined | null): ProdukKelola {
+  return {
+    id: p.id,
+    judul: p.judul,
+    slug: p.slug,
+    deskripsi: p.deskripsi,
+    aktif: p.aktif,
+    urutan: p.urutan,
+    sampulObjek: p.sampul_objek,
+    masaBerlakuBulan: p.masa_berlaku_bulan,
+    jenisMateri: p.digital_product_materials.map((m) => m.jenis),
+    adaIsi: lengkap(p.digital_product_materials),
+    harga: h?.harga ?? null,
+    hargaCoret: h?.harga_coret ?? null,
+  };
+}
+
 export async function ambilDaftarProduk(
   param: ParamDaftar,
 ): Promise<{ baris: ProdukKelola[]; total: number }> {
@@ -77,24 +108,17 @@ export async function ambilDaftarProduk(
 
   let q = supabase
     .from("digital_products")
-    .select(
-      "id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(count), digital_product_pages(count)",
-      { count: "exact" },
-    )
+    .select(KOLOM_PRODUK, { count: "exact" })
     .order("urutan")
     .order("judul");
 
   if (param.saring.aktif) q = q.eq("aktif", param.saring.aktif === "ya");
-  if (param.saring.jenis) q = q.eq("jenis", param.saring.jenis);
   if (param.cari !== "") {
     const aman = param.cari.replace(/[%_\\]/g, (c) => `\\${c}`);
     q = q.ilike("judul", `%${aman}%`);
   }
 
   const { data: produk, count, error } = await q.range(dari, sampai).returns<BarisProduk[]>();
-  // GALAT DIBACA, BUKAN DIBUANG: `data ?? []` menyamakan kegagalan PostgREST
-  // dengan "tidak ada produk", dan admin tidak bisa membedakan keduanya dari
-  // layar kosong.
   if (error) throw new Error(`Gagal membaca daftar produk: ${error.message}`);
 
   const { data: harga, error: hargaError } = await supabase
@@ -104,33 +128,8 @@ export async function ambilDaftarProduk(
   if (hargaError) throw new Error(`Gagal membaca harga produk: ${hargaError.message}`);
 
   const hargaPer = new Map((harga ?? []).map((h) => [h.product_id, h] as const));
+  let baris = (produk ?? []).map((p) => rakit(p, hargaPer.get(p.id)));
 
-  let baris: ProdukKelola[] = (produk ?? []).map((p) => {
-    const adaIsi = punyaIsi(
-      p.jenis,
-      p.digital_product_files[0]?.count ?? 0,
-      p.digital_product_pages[0]?.count ?? 0,
-    );
-    const h = hargaPer.get(p.id);
-    return {
-      id: p.id,
-      judul: p.judul,
-      slug: p.slug,
-      deskripsi: p.deskripsi,
-      jenis: p.jenis,
-      bolehUnduh: p.boleh_unduh,
-      aktif: p.aktif,
-      urutan: p.urutan,
-      adaIsi,
-      harga: h?.harga ?? null,
-      hargaCoret: h?.harga_coret ?? null,
-    };
-  });
-
-  // Saringan "isi" dikerjakan di JS: `adaIsi` bukan kolom, ia dihitung dari
-  // embed agregat. Konsekuensinya jujur — `total` ikut dilaporkan sebagai
-  // jumlah yang benar-benar tampil sesudah saringan JS ini, sama seperti
-  // saringan "belum ada isi" di `ambilDaftarMateri`.
   if (param.saring.isi) {
     const ingin = param.saring.isi === "ada";
     baris = baris.filter((p) => p.adaIsi === ingin);
@@ -139,50 +138,83 @@ export async function ambilDaftarProduk(
   return { baris, total: param.saring.isi ? baris.length : (count ?? 0) };
 }
 
-/** Satu produk, atau `null` bila id-nya tidak ada. */
 export async function ambilProduk(id: string): Promise<ProdukKelola | null> {
   const supabase = await createServerSupabase();
 
-  // GALAT DIBACA, BUKAN DIBUANG: `data ?? null` menyamakan kegagalan PostgREST
-  // dengan "produk tidak ada", dan kedua kalimat itu tidak bisa dibedakan di
-  // layar admin.
   const { data, error } = await supabase
     .from("digital_products")
-    // SATU string literal, TIDAK dikonkatenasi: supabase-js menyimpulkan
-    // tipe baris hasil dari literal `select` ini lewat template literal type
-    // di level TypeScript. Merakitnya lewat `+` menghilangkan literal itu dan
-    // menjatuhkan hasilnya ke `GenericStringError` (dibuktikan empiris —
-    // `tsc` menolak setiap akses medan di bawah begitu string ini dipecah).
-    .select(
-      "id, judul, slug, deskripsi, jenis, boleh_unduh, aktif, urutan, digital_product_files(id), digital_product_pages(halaman)",
-    )
+    .select(KOLOM_PRODUK)
     .eq("id", id)
-    .maybeSingle();
+    .maybeSingle<BarisProduk>();
   if (error) throw new Error(`Gagal membaca produk: ${error.message}`);
   if (!data) return null;
 
   const { data: harga, error: hargaError } = await supabase
     .from("produk_harga_staf")
-    .select("harga, harga_coret")
+    .select("product_id, harga, harga_coret")
     .eq("product_id", id)
-    .maybeSingle();
+    .maybeSingle<BarisHarga>();
   if (hargaError) throw new Error(`Gagal membaca harga produk: ${hargaError.message}`);
 
-  return {
-    id: data.id,
-    judul: data.judul,
-    slug: data.slug,
-    deskripsi: data.deskripsi,
-    jenis: data.jenis as JenisProduk,
-    bolehUnduh: data.boleh_unduh,
-    aktif: data.aktif,
-    urutan: data.urutan,
-    adaIsi: punyaIsi(
-      data.jenis as JenisProduk,
-      (data.digital_product_files ?? []).length,
-      (data.digital_product_pages ?? []).length,
-    ),
-    harga: harga?.harga ?? null,
-    hargaCoret: harga?.harga_coret ?? null,
-  };
+  return rakit(data, harga);
+}
+
+type BarisBab = {
+  id: string;
+  judul: string;
+  digital_product_materials: Array<{
+    id: string;
+    judul: string;
+    keterangan: string;
+    jenis: JenisMateri;
+    sampul_objek: string | null;
+    pratinjau: boolean;
+    boleh_unduh: boolean;
+    urutan: number;
+    created_at: string;
+    digital_product_files: Array<{ id: string }>;
+    digital_product_pages: Array<{ count: number }>;
+  }>;
+};
+
+export async function ambilIsiProduk(productId: string): Promise<BabKelola[]> {
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("digital_product_sections")
+    .select(
+      "id, judul, digital_product_materials(id, judul, keterangan, jenis, sampul_objek, pratinjau, boleh_unduh, urutan, created_at, digital_product_files(id), digital_product_pages(count))",
+    )
+    .eq("product_id", productId)
+    .order("urutan")
+    .order("created_at")
+    .returns<BarisBab[]>();
+  if (error) throw new Error(`Gagal membaca isi produk: ${error.message}`);
+
+  return (data ?? []).map((b) => ({
+    id: b.id,
+    judul: b.judul,
+    materi: [...b.digital_product_materials]
+      .sort((x, y) => x.urutan - y.urutan || x.created_at.localeCompare(y.created_at))
+      .map((m) => {
+        const adaBerkas = m.digital_product_files.length > 0;
+        const jumlahHalaman = m.digital_product_pages[0]?.count ?? 0;
+        return {
+          id: m.id,
+          judul: m.judul,
+          keterangan: m.keterangan,
+          jenis: m.jenis,
+          sampulObjek: m.sampul_objek,
+          pratinjau: m.pratinjau,
+          bolehUnduh: m.boleh_unduh,
+          adaBerkas,
+          jumlahHalaman,
+          berisi: materiBerisi(m.jenis, adaBerkas ? 1 : 0, jumlahHalaman),
+        };
+      }),
+  }));
+}
+
+export function isiLengkap(bab: BabKelola[]): boolean {
+  const semua = bab.flatMap((b) => b.materi);
+  return semua.length > 0 && semua.every((m) => m.berisi);
 }
