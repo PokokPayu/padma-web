@@ -9,14 +9,22 @@
  * persis, dan path ber-slug tidak bisa didaftar. Yang ini sengaja lebih sempit
  * lagi — hanya `/produk/<slug>`. Cookie ini ditulis peramban, jadi isinya
  * dianggap masukan musuh sampai lolos fungsi di bawah.
+ *
+ * Sejak spec 2026-10-16 ada pola KEDUA yang sama sempitnya: penampil materi
+ * `/passport/produk/<slug>/<uuid>`, untuk pengunjung yang menekan "Lihat" pada
+ * materi pratinjau sebelum login.
  */
 export const COOKIE_LANJUT = "padma_lanjut";
 
 const POLA_TUJUAN_PRODUK = /^\/produk\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const POLA_TUJUAN_MATERI =
+  /^\/passport\/produk\/[a-z0-9]+(?:-[a-z0-9]+)*\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function tujuanProdukAman(nilai: string | null | undefined): string | null {
-  if (typeof nilai !== "string" || nilai.length > 120) return null;
-  return POLA_TUJUAN_PRODUK.test(nilai) ? nilai : null;
+  // 200: slug terpanjang (judul 120 karakter) + awalan + uuid masih muat;
+  // apa pun yang lebih panjang bukan path yang pernah kita tulis.
+  if (typeof nilai !== "string" || nilai.length > 200) return null;
+  return POLA_TUJUAN_PRODUK.test(nilai) || POLA_TUJUAN_MATERI.test(nilai) ? nilai : null;
 }
 
 /** Dipanggil di peramban tepat sebelum `router.push("/masuk")`. */

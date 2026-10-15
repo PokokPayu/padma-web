@@ -2,9 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
+import { COOKIE_LANJUT } from "@/lib/auth/tujuan-produk";
 
 /**
  * `punya` BUKAN salinan dari `ok`. RPC `ambil_produk_gratis` memakai
@@ -24,18 +26,24 @@ type Hasil = { ok: true; punya: boolean } | { ok: false; pesan: string };
  * diputuskan RPC di basis data, bukan di sini. Pemeriksaan yang hanya hidup
  * di server action bisa dilewati dengan satu panggilan langsung ke PostgREST.
  *
- * Repo ini TIDAK punya parameter pengalihan pasca-login (`?lanjut=` atau
- * sejenisnya): `/masuk` tidak membaca query string apa pun, dan
- * `/setelah-masuk` selalu mengarahkan menurut peran (`pastikanKlien`),
- * mengabaikan URL asal sepenuhnya. Menambahkan `?lanjut=` di sini tanpa
- * mengubah kedua berkas itu hanya melahirkan parameter mati — janji
- * "kembali ke sini" yang tidak pernah ditepati. Karena itu pengunjung anon
- * diarahkan ke `/masuk` polos; sesudah masuk ia mendarat di `/passport`
- * seperti biasa dan bisa mengambil produknya lagi dari sana.
+ * Pengunjung anon dititipi tujuan `/produk/<slug>` di cookie `padma_lanjut`
+ * (lihat `lib/auth/tujuan-produk.ts`), lalu diarahkan ke `/masuk`;
+ * `/setelah-masuk` memulangkannya ke sini.
  */
 export async function ambilProdukGratis(slug: string): Promise<Hasil> {
   const user = await penggunaSaatIni();
-  if (!user) redirect("/masuk");
+  if (!user) {
+    // Dititipkan di cookie yang sama dengan tombol beli (spec P2); dibaca
+    // dan dihapus oleh `/setelah-masuk`. Pengunjung mendarat lagi di produk
+    // ini dan menekan "Ambil gratis" sekali lagi — tidak ada pengambilan
+    // yang berjalan otomatis sesudah login.
+    (await cookies()).set(COOKIE_LANJUT, `/produk/${slug}`, {
+      path: "/",
+      maxAge: 3600,
+      sameSite: "lax",
+    });
+    redirect("/masuk");
+  }
 
   const produk = await bacaProdukPerSlug(slug);
   if (!produk) return { ok: false, pesan: "Produk tidak ditemukan." };
