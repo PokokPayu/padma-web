@@ -191,7 +191,7 @@ Ketiga cabang yang ada tetap, tetapi cabang (2) dipecah:
 |---|---|---|
 | (1) Belum ada | Insert dengan `berlaku_sampai = now() + durasi beku` | `akses_terbit` |
 | (2a) Ada, belum dicabut, **masih aktif** | Seperti hari ini: hanya mengisi `pesanan_id` jika kosong | `akses_sudah_ada` |
-| (2b) Ada, belum dicabut, **sudah kedaluwarsa** | Update `berlaku_sampai = now() + durasi beku`, `pesanan_id`, `sumber = 'beli'`, `diberikan_pada = now()` | `akses_diperbarui` (nilai jejak baru) |
+| (2b) Ada, belum dicabut, **sudah kedaluwarsa** | Update `berlaku_sampai = now() + durasi beku`, `pesanan_id`, `sumber = 'beli'`, `diberikan_pada = now()` | `akses_terbit`, keterangan "diperbarui" |
 | (3) Dicabut | Seperti hari ini: tertahan, tinjauan menyala | `akses_tertahan` |
 
 - **Durasi dihitung sejak akses terbit (`now()`), bukan sejak `lunas_pada`.**
@@ -213,6 +213,38 @@ Ketiga cabang yang ada tetap, tetapi cabang (2) dipecah:
   berubah.
 - Dua pesanan menunggu bayar untuk produk yang sama sudah dicegah oleh
   `punya_pesanan_menunggu`. Tidak berubah.
+- **Tidak ada nilai enum `order_event` baru.** Pembaruan dicatat sebagai
+  `akses_terbit` dengan keterangan `diperbarui`. Menambah nilai enum pesanan
+  menyentuh himpunan status yang ditulis tangan di TypeScript; pembaruan akses
+  memang penerbitan akses, jadi nilai yang ada sudah benar.
+
+### Pesanan `lunas` lama tidak boleh memblokir beli ulang
+
+Ditemukan saat menyusun rencana. P1 menganggap **setiap** pesanan `lunas`
+sebagai "pembayaran sedang ditinjau" (`punya_pesanan_menunggu` dan gerbang di
+`buat_pesanan_keranjang`). Itu aman selama akses selamanya, karena layar selalu
+memeriksa entitlement lebih dulu. Dengan masa berlaku, pesanan `lunas` lama
+yang aksesnya sudah kedaluwarsa akan memblokir pembelian ulang **selamanya**.
+
+Aturan baru: pesanan `lunas` dianggap menggantung **hanya jika** belum ada
+entitlement yang tidak dicabut dengan `diberikan_pada >= lunas_pada` untuk
+produk itu. Pesanan `ditahan` dan `lunas_setelah_tutup` tetap menggantung
+seperti sekarang.
+
+Kriteria ini ditulis **satu kali** di fungsi pembantu
+`pembayaran_produk_menggantung(client_id, product_id)`, dipakai oleh
+`punya_pesanan_menunggu` dan `buat_pesanan_keranjang`. Dua salinan "set
+cermin" yang bisa berselisih diam-diam diganti satu definisi.
+
+### Pemilik kedaluwarsa tetap bisa membaca data produknya
+
+Policy `"produk: pemilik entitlement baca"` di `digital_products` memakai
+`punya_produk`. Kalau predikat itu menolak akses kedaluwarsa, produk
+**nonaktif** yang aksesnya habis memulangkan `null` di embed `produkSaya`, dan
+hilang diam-diam dari "Pembelian Saya". Policy ini karena itu beralih ke
+predikat baru **`pernah_punya_produk(id)`**: entitlement milik pemanggil yang
+belum dicabut, berapa pun `berlaku_sampai`-nya. Yang dibuka hanya baris
+`digital_products` (judul, slug, deskripsi), bukan isi.
 
 ## Panel admin — isi
 
