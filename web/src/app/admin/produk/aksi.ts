@@ -164,9 +164,23 @@ export async function aktifkanProduk(id: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
+  // Produk yang tidak ada dilaporkan apa adanya — bukan "isi belum lengkap",
+  // karena daftar bab kosong untuk produk yang tak ada sama dengan produk kosong.
+  const { data: ada, error: adaError } = await supabase
+    .from("digital_products").select("id").eq("id", id).maybeSingle();
+  if (adaError) return { ok: false, pesan: `Gagal membaca produk (${adaError.code}).` };
+  if (!ada) return { ok: false, pesan: "Produk tidak ditemukan." };
+
   // Produk setengah jadi di etalase lebih buruk daripada produk yang belum
-  // ada: SETIAP materi wajib berisi, bukan sekadar "ada satu".
-  const bab = await ambilIsiProduk(id);
+  // ada: SETIAP materi wajib berisi, bukan sekadar "ada satu". `ambilIsiProduk`
+  // melempar bila kueri gagal; galat dijawab sebagai Gagal, bukan dilempar ke
+  // klien.
+  let bab;
+  try {
+    bab = await ambilIsiProduk(id);
+  } catch {
+    return { ok: false, pesan: "Gagal membaca isi produk." };
+  }
   if (!isiLengkap(bab)) {
     return {
       ok: false,

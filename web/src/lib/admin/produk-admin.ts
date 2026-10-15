@@ -49,11 +49,13 @@ export const SARING_PRODUK = {
   isi: ["ada", "belum"],
 } as const satisfies SaringSah;
 
-// Embed AGREGAT, selalu tepat satu objek `{ count }` (LEFT JOIN) — bukan
-// array kosong bila tak ada baris anak.
+// `digital_product_files.material_id` UNIQUE → PostgREST memperlakukannya
+// one-to-one: embed `(count)` datang sebagai OBJEK `{ count }` (terukur: `{count:0}`
+// tanpa baris), BUKAN array; `| null` dijaga untuk berjaga-jaga. Embed `(id)`
+// datang sebagai objek atau `null`. `digital_product_pages` one-to-many → array.
 type BarisMateriRingkas = {
   jenis: JenisMateri;
-  digital_product_files: Array<{ count: number }>;
+  digital_product_files: { count: number } | null;
   digital_product_pages: Array<{ count: number }>;
 };
 
@@ -78,7 +80,7 @@ function lengkap(materi: BarisMateriRingkas[]): boolean {
   return (
     materi.length > 0 &&
     materi.every((m) =>
-      materiBerisi(m.jenis, m.digital_product_files[0]?.count ?? 0, m.digital_product_pages[0]?.count ?? 0),
+      materiBerisi(m.jenis, m.digital_product_files?.count ?? 0, m.digital_product_pages[0]?.count ?? 0),
     )
   );
 }
@@ -172,7 +174,8 @@ type BarisBab = {
     boleh_unduh: boolean;
     urutan: number;
     created_at: string;
-    digital_product_files: Array<{ id: string }>;
+    // one-to-one (material_id UNIQUE) → objek atau null; halaman one-to-many → array.
+    digital_product_files: { id: string } | null;
     digital_product_pages: Array<{ count: number }>;
   }>;
 };
@@ -196,7 +199,7 @@ export async function ambilIsiProduk(productId: string): Promise<BabKelola[]> {
     materi: [...b.digital_product_materials]
       .sort((x, y) => x.urutan - y.urutan || x.created_at.localeCompare(y.created_at))
       .map((m) => {
-        const adaBerkas = m.digital_product_files.length > 0;
+        const adaBerkas = m.digital_product_files !== null;
         const jumlahHalaman = m.digital_product_pages[0]?.count ?? 0;
         return {
           id: m.id,

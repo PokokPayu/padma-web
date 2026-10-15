@@ -506,6 +506,9 @@ export async function lepasIsiMateri(
     p_material_id: materiId,
   });
   if (delBerkas) {
+    // Halaman SUDAH kosong di titik ini: panel admin harus menampilkan keadaan
+    // barunya, bukan salinan basi dari sebelum percobaan.
+    segarkan(m.product_id);
     return {
       ok: false,
       pesan: objekTersisa

@@ -175,7 +175,7 @@ export async function perbaruiMateri(materiId: string, formData: FormData): Prom
     .maybeSingle<{
       product_id: string;
       jenis: string;
-      digital_product_files: Array<{ id: string }>;
+      digital_product_files: { id: string } | null; // one-to-one (material_id UNIQUE)
       digital_product_pages: Array<{ count: number }>;
     }>();
   if (kiniError) return { ok: false, pesan: `Gagal membaca materi (${kiniError.code}).` };
@@ -184,7 +184,7 @@ export async function perbaruiMateri(materiId: string, formData: FormData): Prom
   // Isi yang sudah terunggah terikat pada jenisnya (video di R2, PDF sebagai
   // halaman). Mengganti jenis tanpa melepas isi akan meninggalkan objek yatim
   // dan materi yang tak pernah terbuka.
-  const adaIsi = kini.digital_product_files.length > 0 || (kini.digital_product_pages[0]?.count ?? 0) > 0;
+  const adaIsi = kini.digital_product_files !== null || (kini.digital_product_pages[0]?.count ?? 0) > 0;
   if (kini.jenis !== jenis.nilai && adaIsi) {
     return { ok: false, pesan: "Jenis materi tidak bisa diubah setelah isinya diunggah. Lepas isinya lebih dulu." };
   }
@@ -294,12 +294,21 @@ async function sampulLama(
   supabase: Supabase,
   productId: string,
   materiId: string | null,
-): Promise<{ ada: boolean; objek: string | null }> {
+): Promise<{ ada: boolean; objek: string | null; productId: string; materiId: string | null }> {
+  // Id kanonis (huruf kecil) diambil dari BARIS, bukan dari argumen: bentuk
+  // UUID non-kanonis dari klien tetap cocok di Postgres, tetapi tidak boleh
+  // ikut masuk ke nama objek.
   const { data } = materiId
-    ? await supabase.from("digital_product_materials").select("sampul_objek")
+    ? await supabase.from("digital_product_materials").select("id, product_id, sampul_objek")
         .eq("id", materiId).eq("product_id", productId).maybeSingle()
-    : await supabase.from("digital_products").select("sampul_objek").eq("id", productId).maybeSingle();
-  return { ada: data !== null, objek: (data?.sampul_objek as string | null) ?? null };
+    : await supabase.from("digital_products").select("id, sampul_objek").eq("id", productId).maybeSingle();
+  const baris = data as { id: string; product_id?: string; sampul_objek: string | null } | null;
+  return {
+    ada: baris !== null,
+    objek: baris?.sampul_objek ?? null,
+    productId: materiId ? (baris?.product_id ?? productId) : (baris?.id ?? productId),
+    materiId: materiId ? (baris?.id ?? materiId) : null,
+  };
 }
 
 export async function terbitkanUrlSampul(
@@ -316,7 +325,7 @@ export async function terbitkanUrlSampul(
   const lama = await sampulLama(supabase, productId, materiId);
   if (!lama.ada) return { ok: false, pesan: "Produk atau materi tidak ditemukan." };
 
-  const objek = namaObjekSampul(productId, materiId, periksa.nilai, randomUUID());
+  const objek = namaObjekSampul(lama.productId, lama.materiId, periksa.nilai, randomUUID());
   const { data, error } = await createAdminSupabase().storage
     .from(BUCKET_SAMPUL)
     .createSignedUploadUrl(objek);
