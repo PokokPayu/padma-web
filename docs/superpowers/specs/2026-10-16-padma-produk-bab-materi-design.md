@@ -438,7 +438,7 @@ kembar, pembekuan durasi, FK bab-materi, pagar kolom masa berlaku, cookie
 tujuan, dan gerbang rute (porting uji lama + pratinjau + kedaluwarsa). Yang
 **tidak** dijaga uji otomatis:
 
-1. Radius RPC `ganti_halaman_materi` / `lepas_berkas_materi` (satu materi
+1. Radius RPC `ganti_halaman_materi_produk` / `lepas_berkas_materi` (satu materi
    tidak menyentuh materi lain).
 2. Aturan tayang "isi lengkap" dan "jenis materi terkunci sesudah isi diunggah".
 3. Render tombol unduh di penampil materi.
