@@ -8,15 +8,6 @@
  * `src/app/admin/materi/status.ts`.
  */
 
-export type JenisProduk = "video" | "pdf";
-
-export const JENIS_SAH: JenisProduk[] = ["video", "pdf"];
-
-export const LABEL_JENIS: Record<JenisProduk, string> = {
-  video: "Video",
-  pdf: "PDF",
-};
-
 export type Periksa<T> = { ok: true; nilai: T } | { ok: false; pesan: string };
 
 export const PANJANG_JUDUL_MINIMAL = 2;
@@ -30,12 +21,20 @@ export const PANJANG_DESKRIPSI_MAKS = 2000;
  */
 export const HARGA_MAKS = 50_000_000;
 
+export const PANJANG_KETERANGAN_MATERI_MAKS = 500;
+// Cermin CHECK `masa_berlaku_bulan between 1 and 120` di migrasi 20261016100000.
+export const MASA_BERLAKU_MAKS_BULAN = 120;
+
 export const PESAN_PRODUK = {
   judulPendek: `Judul minimal ${PANJANG_JUDUL_MINIMAL} karakter.`,
   judulPanjang: `Judul maksimal ${PANJANG_JUDUL_MAKS} karakter.`,
   slugWajib: "Alamat produk tidak boleh kosong.",
   slugTidakSah: "Alamat produk hanya boleh huruf kecil, angka, dan tanda hubung.",
-  jenisTidakSah: "Jenis produk harus Video atau PDF.",
+  jenisMateriTidakSah: "Jenis materi harus Video atau Artikel (PDF).",
+  judulBabWajib: "Judul bab tidak boleh kosong.",
+  judulBabPanjang: `Judul bab maksimal ${PANJANG_JUDUL_MAKS} karakter.`,
+  keteranganPanjang: `Keterangan maksimal ${PANJANG_KETERANGAN_MATERI_MAKS} karakter.`,
+  masaBerlakuTidakSah: `Masa berlaku harus 1–${MASA_BERLAKU_MAKS_BULAN} bulan atau 1–${MASA_BERLAKU_MAKS_BULAN / 12} tahun.`,
   hargaWajib: "Harga wajib diisi. Produk gratis diisi 0.",
   hargaTidakSah: "Harga harus bilangan bulat rupiah, tanpa titik atau koma.",
   hargaTerlaluBesar: `Harga maksimal Rp ${HARGA_MAKS.toLocaleString("id-ID")}.`,
@@ -78,41 +77,6 @@ export function periksaSlug(teks: string): Periksa<string> {
 }
 
 /**
- * "Punya isi" adalah predikat JENIS-SADAR, bukan sekadar "ada baris
- * `digital_product_files`".
- *
- * Video menyimpan isinya SELALU lewat baris itu (`catatVideoProduk`,
- * `admin/produk/[id]/unggah.ts`). PDF TIDAK: isi produk PDF adalah halaman
- * terasterisasi di `digital_product_pages`, dan `digital_product_files`
- * untuk jenis ini hanya terisi bila `boleh_unduh` menyala (lihat
- * `catatPdfProduk` di berkas yang sama) — unduhan berkas mentah adalah
- * pertanyaan TERPISAH dari "produk ini berisi sesuatu". Produk PDF yang
- * tidak mengizinkan unduhan tapi halamannya sudah lengkap tetap "punya isi".
- *
- * SATU predikat dipakai `aktifkanProduk` (`admin/produk/aksi.ts`) DAN
- * `ambilDaftarProduk`/`ambilProduk` (`lib/admin/produk-admin.ts`): dua
- * salinan "punya isi" adalah dua tempat yang bisa berbeda begitu salah
- * satunya disunting — persis yang dulu membuat produk PDF tanpa unduhan
- * terkunci permanen (tidak pernah bisa ditayangkan) di panel admin, karena
- * gerbangnya hanya melihat `digital_product_files` yang memang selalu
- * kosong untuk produk semacam itu.
- */
-export function punyaIsi(
-  jenis: JenisProduk,
-  jumlahBerkas: number,
-  jumlahHalaman: number,
-): boolean {
-  return jenis === "video" ? jumlahBerkas > 0 : jumlahHalaman > 0;
-}
-
-export function periksaJenis(teks: string): Periksa<JenisProduk> {
-  if (!(JENIS_SAH as string[]).includes(teks)) {
-    return { ok: false, pesan: PESAN_PRODUK.jenisTidakSah };
-  }
-  return { ok: true, nilai: teks as JenisProduk };
-}
-
-/**
  * Harga. Medan KOSONG ditolak, dan itu disengaja: "gratis" dan "belum
  * ditetapkan" adalah dua keadaan berbeda, dan medan yang lupa diisi tidak
  * boleh diam-diam menjadi produk gratis.
@@ -141,4 +105,106 @@ export function periksaHargaCoretProduk(teks: string, harga: number): Periksa<nu
   if (nilai > HARGA_MAKS) return { ok: false, pesan: PESAN_PRODUK.hargaTerlaluBesar };
   if (nilai <= harga) return { ok: false, pesan: PESAN_PRODUK.coretLebihMurah };
   return { ok: true, nilai };
+}
+
+// ===== MATERI =====
+
+export type JenisMateri = "video" | "pdf";
+
+export const JENIS_MATERI: readonly JenisMateri[] = ["video", "pdf"];
+
+// "Artikel", bukan "PDF": itu kata yang dipakai klien di etalase
+// ("11 Video · 1 Artikel"). Di basis data nilainya tetap 'pdf'.
+export const LABEL_JENIS_MATERI: Record<JenisMateri, string> = {
+  video: "Video",
+  pdf: "Artikel",
+};
+
+export function periksaJenisMateri(teks: string): Periksa<JenisMateri> {
+  if (!(JENIS_MATERI as readonly string[]).includes(teks)) {
+    return { ok: false, pesan: PESAN_PRODUK.jenisMateriTidakSah };
+  }
+  return { ok: true, nilai: teks as JenisMateri };
+}
+
+export function periksaJudulBab(teks: string): Periksa<string> {
+  const rapi = teks.trim();
+  if (rapi === "") return { ok: false, pesan: PESAN_PRODUK.judulBabWajib };
+  if (rapi.length > PANJANG_JUDUL_MAKS) return { ok: false, pesan: PESAN_PRODUK.judulBabPanjang };
+  return { ok: true, nilai: rapi };
+}
+
+export function periksaKeteranganMateri(teks: string): Periksa<string> {
+  const rapi = teks.trim();
+  if (rapi.length > PANJANG_KETERANGAN_MATERI_MAKS) {
+    return { ok: false, pesan: PESAN_PRODUK.keteranganPanjang };
+  }
+  return { ok: true, nilai: rapi };
+}
+
+/** Video berisi bila berkasnya ada; PDF berisi bila halamannya ada (berkas utuh opsional). */
+export function materiBerisi(
+  jenis: JenisMateri,
+  jumlahBerkas: number,
+  jumlahHalaman: number,
+): boolean {
+  return jenis === "video" ? jumlahBerkas > 0 : jumlahHalaman > 0;
+}
+
+export function ringkasJumlahMateri(jenis: readonly JenisMateri[]): string {
+  return JENIS_MATERI
+    .map((j) => ({ j, n: jenis.filter((x) => x === j).length }))
+    .filter(({ n }) => n > 0)
+    .map(({ j, n }) => `${n} ${LABEL_JENIS_MATERI[j]}`)
+    .join(" · ");
+}
+
+// ===== MASA BERLAKU =====
+
+export function labelMasaBerlaku(bulan: number | null): string {
+  if (bulan === null) return "Selamanya";
+  if (bulan % 12 === 0) return `${bulan / 12} Tahun`;
+  return `${bulan} Bulan`;
+}
+
+/** `satuan` dari form owner: "selamanya" | "bulan" | "tahun". Hasil dalam BULAN. */
+export function periksaMasaBerlaku(satuan: string, jumlah: string): Periksa<number | null> {
+  if (satuan === "selamanya") return { ok: true, nilai: null };
+  if (satuan !== "bulan" && satuan !== "tahun") {
+    return { ok: false, pesan: PESAN_PRODUK.masaBerlakuTidakSah };
+  }
+  const rapi = jumlah.trim();
+  if (!/^\d+$/.test(rapi)) return { ok: false, pesan: PESAN_PRODUK.masaBerlakuTidakSah };
+  const bulan = Number(rapi) * (satuan === "tahun" ? 12 : 1);
+  if (bulan < 1 || bulan > MASA_BERLAKU_MAKS_BULAN) {
+    return { ok: false, pesan: PESAN_PRODUK.masaBerlakuTidakSah };
+  }
+  return { ok: true, nilai: bulan };
+}
+
+export type StatusAkses =
+  | { keadaan: "selamanya" }
+  | { keadaan: "aktif"; sampai: string }
+  | { keadaan: "habis"; sampai: string };
+
+/**
+ * Cermin syarat `akses_aktif` di SQL (`berlaku_sampai > now()`) — untuk
+ * MENAMPILKAN status. Keputusan boleh-buka tetap milik basis data.
+ */
+export function statusAkses(berlakuSampai: string | null, sekarang: Date = new Date()): StatusAkses {
+  if (berlakuSampai === null) return { keadaan: "selamanya" };
+  return new Date(berlakuSampai).getTime() > sekarang.getTime()
+    ? { keadaan: "aktif", sampai: berlakuSampai }
+    : { keadaan: "habis", sampai: berlakuSampai };
+}
+
+const FORMAT_TANGGAL_AKSES = new Intl.DateTimeFormat("id-ID", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Jakarta",
+});
+
+export function formatTanggalAkses(iso: string): string {
+  return FORMAT_TANGGAL_AKSES.format(new Date(iso));
 }
