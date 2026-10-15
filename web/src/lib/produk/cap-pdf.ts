@@ -83,7 +83,7 @@ export function objekPdfPembeli(productId: string, materiId: string, clientId: s
  * mudah terlupa: ia adalah TURUNAN dari PDF sumber, bukan berkas mandiri.
  * Begitu sumbernya diganti atau dilepas, seluruh isi folder ini menjadi
  * jawaban lama atas pertanyaan yang sudah berubah — dan rute unduh
- * (`/api/produk/[id]/unduh`) memakai ulang salinan yang ada tanpa pernah
+ * (`/api/produk/materi/[id]/unduh`) memakai ulang salinan yang ada tanpa pernah
  * membandingkannya dengan sumber. Yang mengganti sumber karena itu WAJIB
  * mengosongkan folder ini; lihat `admin/produk/[id]/unggah.ts`.
  */

@@ -55,6 +55,8 @@ export default async function PenampilMateri({
   if (!terbuka) notFound();
 
   const pemilik = punya === true;
+  // Untuk PDF, baris berkas hanya ada bila `boleh_unduh` menyala saat unggah, padahal
+  // bendera itu bisa dinyalakan belakangan; tombol berdasarkan bendera saja berujung 404.
   const bolehUnduh = pemilik && materi.boleh_unduh && berkas !== null;
 
   return (

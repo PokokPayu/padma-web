@@ -36,8 +36,13 @@ type BarisEntitlement = {
  * memulangkan `null` di sini (embed RLS tidak pernah melempar) dan hilang
  * diam-diam dari daftar.
  *
- * `clientId` tidak dipakai sebagai filter: RLS "klien baca miliknya" sudah
- * menyaring. Parameternya dipertahankan supaya pemanggil tetap eksplisit.
+ * `clientId` tidak dipakai sebagai filter di TS: RLS "klien baca miliknya"
+ * sudah menyaring. Filter di sini berbahaya — id pemanggil yang salah atau
+ * gerbang yang mati menghasilkan daftar kosong yang tak terbedakan dari
+ * "belum memiliki apa pun". Parameternya dipertahankan supaya pemanggil tetap
+ * eksplisit.
+ *
+ * Embed `null` dibuang supaya tidak ada kartu tanpa nama.
  */
 export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
   void clientId;
