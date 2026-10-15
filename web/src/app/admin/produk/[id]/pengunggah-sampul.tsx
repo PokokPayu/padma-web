@@ -49,8 +49,8 @@ export function PengunggahSampul({
       >
         {url ? (
           <>
-          {/* eslint-disable-next-line @next/next/no-img-element -- pratinjau admin dari bucket publik, tanpa optimasi */}
-          <img src={url} alt="" className="h-full w-full object-cover" />
+            {/* eslint-disable-next-line @next/next/no-img-element -- pratinjau admin dari bucket publik, tanpa optimasi */}
+            <img src={url} alt="" className="h-full w-full object-cover" />
           </>
         ) : (
           <span className="flex h-full items-center justify-center text-[10.5px] text-panel-muted">Tanpa sampul</span>

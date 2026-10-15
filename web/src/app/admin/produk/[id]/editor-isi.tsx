@@ -18,8 +18,11 @@ const KELAS_TOMBOL =
 
 type Hasil = { ok: true } | { ok: false; pesan: string };
 
+const PESAN_OBJEK_TERSISA =
+  "Materi terhapus, tetapi sebagian berkas lama gagal dibersihkan. Beri tahu tim teknis.";
+
 /** Satu pola untuk setiap aksi di layar ini: jalankan, tampilkan galat, segarkan. */
-function useAksi() {
+function useAksi(onPeringatan?: (teks: string) => void) {
   const router = useRouter();
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
@@ -27,13 +30,19 @@ function useAksi() {
     mulai(async () => {
       const r = await fn();
       if (!r.ok) { setPesan(r.pesan); return; }
-      setPesan("objekTersisa" in r && r.objekTersisa
-        ? "Terhapus, tetapi sebagian berkas lama gagal dibersihkan. Beri tahu tim teknis."
-        : null);
+      const sisa = "objekTersisa" in r && r.objekTersisa;
+      // Baris yang dihapus ikut lenyap saat refresh, jadi peringatannya harus
+      // dititipkan ke induk yang tetap terpasang.
+      if (sisa && onPeringatan) {
+        setPesan(null);
+        onPeringatan(PESAN_OBJEK_TERSISA);
+      } else {
+        setPesan(sisa ? PESAN_OBJEK_TERSISA : null);
+      }
       router.refresh();
     });
   }
-  return { pending, pesan, jalankan };
+  return { pending, pesan, setPesan, jalankan };
 }
 
 function Pesan({ teks }: { teks: string | null }) {
@@ -41,15 +50,16 @@ function Pesan({ teks }: { teks: string | null }) {
 }
 
 function BarisMateri({
-  productId, produkAktif, materi, pertama, terakhir,
+  productId, produkAktif, materi, pertama, terakhir, onPeringatan,
 }: {
   productId: string;
   produkAktif: boolean;
   materi: MateriKelola;
   pertama: boolean;
   terakhir: boolean;
+  onPeringatan: (teks: string) => void;
 }) {
-  const { pending, pesan, jalankan } = useAksi();
+  const { pending, pesan, jalankan } = useAksi(onPeringatan);
 
   return (
     <li className="rounded-lg border border-panel-border bg-panel-surface p-3">
@@ -137,7 +147,7 @@ function KartuBab({
   pertama: boolean;
   terakhir: boolean;
 }) {
-  const { pending, pesan, jalankan } = useAksi();
+  const { pending, pesan, setPesan, jalankan } = useAksi();
 
   return (
     <section className="rounded-lg border border-panel-border bg-panel-bg p-3">
@@ -162,7 +172,8 @@ function KartuBab({
       <ul className="mt-3 grid gap-2">
         {bab.materi.map((m, i) => (
           <BarisMateri key={m.id} productId={productId} produkAktif={produkAktif} materi={m}
-            pertama={i === 0} terakhir={i === bab.materi.length - 1} />
+            pertama={i === 0} terakhir={i === bab.materi.length - 1}
+            onPeringatan={setPesan} />
         ))}
       </ul>
 

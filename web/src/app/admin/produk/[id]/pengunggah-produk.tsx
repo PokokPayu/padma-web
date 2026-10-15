@@ -106,8 +106,8 @@ export function PengunggahVideoMateri({ materiId }: { materiId: string }) {
       return;
     }
     setKeadaan({ fase: "sukses" });
-    // Kartu "Isi" & saklar tayang milik `<FormProduk/>` membaca `produk.adaIsi`
-    // yang dipasok server — tanpa refresh, statusnya basi begitu unggahan
+    // Status "belum berisi" per materi dan saklar tayang produk dibaca dari
+    // data yang dipasok server — tanpa refresh, keduanya basi begitu unggahan
     // sukses secara lokal, persis alasan `router.refresh()` di `IsiVideo`
     // (`admin/materi/form-materi.tsx`).
     router.refresh();
@@ -223,7 +223,7 @@ export function PengunggahPdfMateri({
       );
 
       // Baru SESUDAH seluruh unggahan halaman sukses. Gagal di tengah = tidak
-      // ada baris tercatat = produk tampak "belum ada isi", bukan setengah
+      // ada baris tercatat = materi tampak "belum berisi", bukan setengah
       // terisi.
       const catat = await catatHalamanMateri(
         materiId,
