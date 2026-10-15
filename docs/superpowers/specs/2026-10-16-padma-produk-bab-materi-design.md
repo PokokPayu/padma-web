@@ -177,8 +177,15 @@ penolakan pembelian ganda:
 Semuanya memakai satu predikat bersama, bukan salinan kalimat `exists (...)`
 yang ditulis ulang di tiap fungsi.
 
-**Penerbitan akses** — `terbitkan_akses_item`. Ketiga cabang yang ada tetap,
-tetapi cabang (2) dipecah:
+**Penerbitan akses** — `terbitkan_akses_item`. Fungsi ini bagian dari alur
+**otomatis**: webhook Midtrans → `terapkan_notifikasi_midtrans` menandai
+pesanan `lunas` → fungsi ini membuat entitlement, semuanya tanpa campur tangan
+manusia dan dalam hitungan detik. Tombol "Terbitkan akses" di panel admin
+memanggil fungsi yang sama, tetapi hanya untuk pesanan yang ditandai butuh
+tinjauan (`lunas_setelah_tutup`, `selisih_status`, `akses_tertahan`,
+`penangan_belum_ada`).
+
+Ketiga cabang yang ada tetap, tetapi cabang (2) dipecah:
 
 | Keadaan baris | Tindakan | Jejak |
 |---|---|---|
@@ -188,9 +195,10 @@ tetapi cabang (2) dipecah:
 | (3) Dicabut | Seperti hari ini: tertahan, tinjauan menyala | `akses_tertahan` |
 
 - **Durasi dihitung sejak akses terbit (`now()`), bukan sejak `lunas_pada`.**
-  Di jalur normal selisihnya beberapa detik. Kalau pesanan tertahan lalu admin
-  menerbitkan akses manual beberapa hari kemudian, pembeli tidak kehilangan
-  hari-hari itu.
+  Di alur otomatis selisihnya beberapa detik. Bedanya hanya terasa pada
+  pesanan yang tertahan: kalau admin menerbitkan aksesnya beberapa hari
+  kemudian, pembeli tidak kehilangan hari-hari itu. Dikonfirmasi pemilik repo
+  16 Oktober.
 - **Idempotensi webhook:** notifikasi kembar untuk pesanan yang sama jatuh ke
   (2a), karena aksesnya baru saja diperbarui dan sudah aktif. Tidak ada
   perpanjangan ganda.
