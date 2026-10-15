@@ -147,7 +147,12 @@ export default async function ProdukHargaPage({
             hargaSekarang={barisUbah.berlaku?.harga ?? null}
             hargaCoretSekarang={barisUbah.berlaku?.hargaCoret ?? null}
           />
-          <FormMasaBerlaku productId={barisUbah.productId} masaBerlakuBulan={barisUbah.masaBerlakuBulan} />
+          {/* key memasang ulang formulir saat produk atau nilai tersimpan berubah; tanpanya satuan/jumlah basi (mis. 12 bulan tersimpan tampil "Bulan / 1"). */}
+          <FormMasaBerlaku
+            key={`${barisUbah.productId}-${barisUbah.masaBerlakuBulan ?? "selamanya"}`}
+            productId={barisUbah.productId}
+            masaBerlakuBulan={barisUbah.masaBerlakuBulan}
+          />
 
           {barisUbah.riwayat.length > 0 && (
             <div className="mt-4">
