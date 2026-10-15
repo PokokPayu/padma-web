@@ -231,9 +231,10 @@ export function PengunggahPdfMateri({
       );
       if (!catat.ok) { setFase("galat"); setPesan(catat.pesan); return; }
 
-      // PDF utuh HANYA diunggah bila `boleh_unduh` menyala — produk yang
-      // tidak mengizinkan unduhan tidak perlu menyimpan berkas mentahnya
-      // sama sekali (spec §1, digital_products.boleh_unduh).
+      // PDF utuh HANYA diunggah bila `boleh_unduh` MATERI ini menyala — materi
+      // yang tidak mengizinkan unduhan tidak perlu menyimpan berkas mentahnya
+      // sama sekali (spec §1, digital_product_materials.boleh_unduh). Server
+      // juga membuang PDF utuh lama pada unggah ulang saat bendera itu mati.
       if (bolehUnduh) {
         setFase("mengunggah-utuh");
         const terbitPdf = await terbitkanUrlUnggahPdfMateri(materiId, berkas.size);
@@ -305,8 +306,9 @@ export function PengunggahPdfMateri({
 }
 
 // ===========================================================================
-// LEPAS ISI — hanya ditawarkan pada produk yang sudah ditarik (server
-// memeriksanya ulang lewat `lepasIsiMateri`), mirror tombol "Lepas video"
+// LEPAS ISI — hanya ditawarkan bila produknya tidak aktif / sudah ditarik dari
+// penjualan (server memeriksanya ulang lewat `lepasIsiMateri`), dan berlaku
+// per MATERI (bukan per produk), mirror tombol "Lepas video"
 // milik `IsiVideo` (`admin/materi/form-materi.tsx`).
 // ===========================================================================
 

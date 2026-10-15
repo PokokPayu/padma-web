@@ -24,7 +24,8 @@ const BUCKET_BERKAS = "produk-berkas";
 function segarkan(productId: string) {
   revalidatePath(`/admin/produk/${productId}`);
   revalidatePath("/admin/produk");
-  revalidatePath("/produk");
+  // Detail publik memuat daftar bab/materi dan pratinjaunya.
+  revalidatePath("/produk/[slug]", "page");
 }
 
 async function produkDariBab(supabase: Supabase, sectionId: string): Promise<string | null> {

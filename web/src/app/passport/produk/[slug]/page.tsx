@@ -19,9 +19,9 @@ export default async function DaftarIsiProduk({
   const supabase = await createServerSupabase();
   const { data: produk } = await supabase
     .from("digital_products")
-    .select("id, judul, deskripsi")
+    .select("id, judul, deskripsi, aktif")
     .eq("slug", slug)
-    .maybeSingle<{ id: string; judul: string; deskripsi: string }>();
+    .maybeSingle<{ id: string; judul: string; deskripsi: string; aktif: boolean }>();
   if (!produk) notFound();
 
   const [bab, { data: punya }] = await Promise.all([
@@ -52,11 +52,16 @@ export default async function DaftarIsiProduk({
       {!pemilik && (
         <p className="mb-4 rounded-xl border border-clay/30 bg-clay/5 p-4 text-[13px] text-ink">
           Akses Anda ke produk ini tidak aktif — belum dibeli, atau masa berlakunya sudah habis.{" "}
-          <Link href={`/produk/${slug}`} className="font-bold text-leaf underline">Lihat halaman produk</Link>
+          {/* `/produk/<slug>` hanya ada untuk produk yang masih dijual. */}
+          {produk.aktif ? (
+            <Link href={`/produk/${slug}`} className="font-bold text-leaf underline">Lihat halaman produk</Link>
+          ) : (
+            <span className="font-semibold">Produk ini sudah tidak dijual lagi.</span>
+          )}
         </p>
       )}
 
-      <DaftarMateri slug={slug} bab={bab} bolehSemua={pemilik} />
+      <DaftarMateri slug={slug} bab={bab} bolehSemua={pemilik} aktif={produk.aktif} />
     </>
   );
 }

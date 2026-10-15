@@ -5,6 +5,8 @@ export type ProdukDimiliki = {
   id: string;
   judul: string;
   slug: string;
+  /** Produk berhenti dijual (`aktif = false`) tetapi pemegang entitlement tetap membacanya. */
+  aktif: boolean;
   sampulObjek: string | null;
   jenisMateri: JenisMateri[];
   sumber: string;
@@ -22,6 +24,7 @@ type BarisEntitlement = {
     id: string;
     judul: string;
     slug: string;
+    aktif: boolean;
     sampul_objek: string | null;
     digital_product_materials: Array<{ jenis: JenisMateri }>;
   } | null;
@@ -51,7 +54,7 @@ export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
   const { data } = await supabase
     .from("digital_entitlements")
     .select(
-      "id, sumber, diberikan_pada, berlaku_sampai, digital_products(id, judul, slug, sampul_objek, digital_product_materials(jenis))",
+      "id, sumber, diberikan_pada, berlaku_sampai, digital_products(id, judul, slug, aktif, sampul_objek, digital_product_materials(jenis))",
     )
     .is("dicabut_pada", null)
     .order("diberikan_pada", { ascending: false })
@@ -65,6 +68,7 @@ export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
       id: r.digital_products.id,
       judul: r.digital_products.judul,
       slug: r.digital_products.slug,
+      aktif: r.digital_products.aktif,
       sampulObjek: r.digital_products.sampul_objek,
       jenisMateri: r.digital_products.digital_product_materials.map((m) => m.jenis),
       sumber: r.sumber,

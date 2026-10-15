@@ -9,13 +9,16 @@ import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { COOKIE_LANJUT } from "@/lib/auth/tujuan-produk";
 
 /**
- * `punya` BUKAN salinan dari `ok`. RPC `ambil_produk_gratis` memakai
- * `on conflict do nothing` supaya pengambilan ulang tidak menghidupkan kembali
- * entitlement yang sudah DICABUT admin — artinya ia menjawab "tidak ada galat"
- * untuk klien yang justru sedang tidak berhak. Melaporkan "berhasil, produk
- * sudah masuk" kepada orang itu adalah kebohongan yang baru ketahuan saat ia
- * mengklik dan menemukan halaman kosong. Karena itu kepemilikannya DIBACA
- * ULANG sesudah RPC, dari predikat yang sama yang menjaga isinya.
+ * `punya` BUKAN salinan dari `ok`. RPC `ambil_produk_gratis` hanya MEMPERBARUI
+ * baris yang sudah ada bila entitlementnya kedaluwarsa dan TIDAK dicabut
+ * (`on conflict ... do update ... where dicabut_pada is null and berlaku_sampai
+ * <= now()`); sisanya dibiarkan apa adanya, sehingga entitlement yang DICABUT
+ * admin tidak hidup kembali lewat pengambilan ulang. Artinya RPC menjawab
+ * "tidak ada galat" untuk klien yang justru sedang tidak berhak. Melaporkan
+ * "berhasil, produk sudah masuk" kepada orang itu adalah kebohongan yang baru
+ * ketahuan saat ia mengklik dan menemukan halaman kosong. Karena itu
+ * kepemilikannya DIBACA ULANG sesudah RPC, dari predikat yang sama yang menjaga
+ * isinya.
  */
 type Hasil = { ok: true; punya: boolean } | { ok: false; pesan: string };
 

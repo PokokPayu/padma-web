@@ -47,7 +47,8 @@ const STATUS_BOLEH_TERBIT = "lunas" satisfies StatusPesanan;
  */
 const KALIMAT_HASIL = {
   akses_terbit: "akses terbit",
-  akses_sudah_ada: "akses sudah ada sebelumnya",
+  akses_sudah_ada:
+    "akses sudah ada sebelumnya, atau durasi pesanan ini sudah pernah diserahkan — tidak ada yang diterbitkan ulang",
   akses_tertahan:
     "akses DITAHAN — entitlementnya sudah dicabut, jadi aksesnya sengaja tidak dihidupkan dan pesanan ini ditandai butuh tinjauan",
 } satisfies Partial<Record<KejadianPesanan, string>>;

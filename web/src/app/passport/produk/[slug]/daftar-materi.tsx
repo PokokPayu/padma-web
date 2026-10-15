@@ -4,18 +4,22 @@ import { LABEL_JENIS_MATERI } from "@/lib/produk/status";
 
 /**
  * Daftar bab/materi di sisi pembeli. `bolehSemua` = pemilik aktif; selain
- * itu hanya materi pratinjau yang bertaut. Tautan hanyalah kemudahan — yang
- * menolak adalah RLS di penampil dan rute isi.
+ * itu hanya materi pratinjau yang bertaut — dan hanya bila produknya masih
+ * `aktif`: pratinjau produk nonaktif ditolak RLS (404), jadi tautannya tidak
+ * boleh ditawarkan. Tautan hanyalah kemudahan — yang menolak adalah RLS di
+ * penampil dan rute isi.
  */
 export function DaftarMateri({
   slug,
   bab,
   bolehSemua,
+  aktif,
   aktifId,
 }: {
   slug: string;
   bab: BabPublik[];
   bolehSemua: boolean;
+  aktif: boolean;
   aktifId?: string;
 }) {
   return (
@@ -27,14 +31,14 @@ export function DaftarMateri({
           </h2>
           <ul className="grid gap-1">
             {b.materi.map((m) => {
-              const buka = bolehSemua || m.pratinjau;
+              const buka = bolehSemua || (m.pratinjau && aktif);
               const isi = (
                 <>
                   <span className="w-5 flex-none text-center">{buka ? (m.jenis === "pdf" ? "📖" : "▶") : "🔒"}</span>
                   <span className="min-w-0">
                     <span className="block text-[13px] font-semibold">{m.judul}</span>
                     <span className="text-[11.5px] text-ink-soft">
-                      {LABEL_JENIS_MATERI[m.jenis]}{m.pratinjau && !bolehSemua ? " · Pratinjau" : ""}
+                      {LABEL_JENIS_MATERI[m.jenis]}{m.pratinjau && !bolehSemua && aktif ? " · Pratinjau" : ""}
                     </span>
                   </span>
                 </>

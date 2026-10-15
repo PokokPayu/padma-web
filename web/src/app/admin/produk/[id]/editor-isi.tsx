@@ -91,6 +91,15 @@ function BarisMateri({
         </div>
       </div>
       <Pesan teks={pesan} />
+      {/* Materi PDF yang boleh diunduh tetapi tidak punya PDF utuh: terjadi
+          sesudah unduhan dimatikan lalu dinyalakan lagi (unggah ulang
+          membuang berkas utuh yang basi). Pembeli melihat unduhan gagal —
+          hanya admin yang bisa memperbaikinya, jadi harus diberi tahu. */}
+      {materi.jenis === "pdf" && materi.bolehUnduh && materi.berisi && !materi.adaBerkas && (
+        <p className="mt-1 text-[12px] font-semibold text-clay">
+          PDF utuh belum tersimpan — unggah ulang berkas PDF agar pembeli bisa mengunduhnya.
+        </p>
+      )}
 
       <details className="mt-2">
         <summary className="cursor-pointer text-[12px] font-bold text-panel-muted">Sunting & unggah isi</summary>

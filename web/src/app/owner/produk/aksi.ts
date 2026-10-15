@@ -79,6 +79,9 @@ export async function tetapkanHargaProduk(formData: FormData): Promise<Hasil> {
   revalidatePath("/owner/produk");
   revalidatePath("/admin/produk");
   revalidatePath("/produk");
+  // Halaman detail membekukan harga/masa berlaku di cache; tanpa ini ia
+  // menampilkan angka lama sampai revalidasi berikutnya.
+  revalidatePath("/produk/[slug]", "page");
   revalidatePath("/");
   return { ok: true };
 }
@@ -114,5 +117,6 @@ export async function tetapkanMasaBerlaku(formData: FormData): Promise<Hasil> {
   revalidatePath("/owner/produk");
   revalidatePath("/admin/produk");
   revalidatePath("/produk");
+  revalidatePath("/produk/[slug]", "page");
   return { ok: true };
 }

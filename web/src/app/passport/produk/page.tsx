@@ -63,7 +63,11 @@ export default async function HalamanProdukSaya() {
             return (
               <Link
                 key={p.id}
-                href={habis ? `/produk/${p.slug}` : `/passport/produk/${p.slug}`}
+                // Beli lagi hanya bermakna bila produknya masih dijual: `/produk/<slug>`
+                // untuk produk nonaktif adalah 404. Yang sudah ditarik tetap
+                // bisa dibuka daftar isinya (pratinjau tak berlaku, lihat
+                // `DaftarMateri`).
+                href={habis && p.aktif ? `/produk/${p.slug}` : `/passport/produk/${p.slug}`}
                 data-produk-id={p.id}
                 className="flex items-start gap-3.5 rounded-xl border border-black/10 bg-[#FFFEFA] p-4 transition hover:-translate-y-0.5 hover:border-gold"
               >
@@ -76,7 +80,7 @@ export default async function HalamanProdukSaya() {
                   <span className={`mt-0.5 block text-[11.5px] font-semibold ${habis ? "text-clay" : "text-leaf"}`}>
                     {s.keadaan === "selamanya" && "Akses selamanya"}
                     {s.keadaan === "aktif" && `Aktif sampai ${formatTanggalAkses(s.sampai)}`}
-                    {habis && "Masa berlaku habis · Beli lagi"}
+                    {habis && (p.aktif ? "Masa berlaku habis · Beli lagi" : "Masa berlaku habis · Produk tidak dijual lagi")}
                   </span>
                 </span>
               </Link>

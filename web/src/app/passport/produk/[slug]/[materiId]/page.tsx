@@ -29,8 +29,8 @@ export default async function PenampilMateri({
 
   const supabase = await createServerSupabase();
   const { data: produk } = await supabase
-    .from("digital_products").select("id, judul").eq("slug", slug)
-    .maybeSingle<{ id: string; judul: string }>();
+    .from("digital_products").select("id, judul, aktif").eq("slug", slug)
+    .maybeSingle<{ id: string; judul: string; aktif: boolean }>();
   if (!produk) notFound();
 
   // UUID tak sah membuat PostgREST melempar 22P02; `data` null → 404.
@@ -101,7 +101,7 @@ export default async function PenampilMateri({
           </p>
         </div>
 
-        <DaftarMateri slug={slug} bab={bab} bolehSemua={pemilik} aktifId={materi.id} />
+        <DaftarMateri slug={slug} bab={bab} bolehSemua={pemilik} aktif={produk.aktif} aktifId={materi.id} />
       </div>
     </>
   );
