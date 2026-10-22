@@ -9,7 +9,7 @@ import { Bantuan } from "@/app/_shell/panel/bantuan";
 import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { FormProduk } from "./form-produk";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { LABEL_JENIS } from "@/lib/produk/status";
+import { ringkasJumlahMateri } from "@/lib/produk/status";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Produk Digital" };
@@ -35,7 +35,7 @@ function PillAktif({ aktif }: { aktif: boolean }) {
 function PillBelumAdaIsi() {
   return (
     <span className="rounded-full bg-clay/10 px-2.5 py-1 text-[11px] font-extrabold text-clay">
-      Belum ada berkas
+      Isi belum lengkap
     </span>
   );
 }
@@ -86,19 +86,11 @@ export default async function ProdukPage({
             ],
           },
           {
-            nama: "jenis",
-            label: "Jenis",
-            pilihan: [
-              { nilai: "video", label: LABEL_JENIS.video },
-              { nilai: "pdf", label: LABEL_JENIS.pdf },
-            ],
-          },
-          {
             nama: "isi",
             label: "Isi",
             pilihan: [
-              { nilai: "ada", label: "Ada berkas" },
-              { nilai: "belum", label: "Belum ada berkas", menuntut: true },
+              { nilai: "ada", label: "Isi lengkap" },
+              { nilai: "belum", label: "Isi belum lengkap", menuntut: true },
             ],
           },
         ]}
@@ -127,7 +119,7 @@ export default async function ProdukPage({
           <Tabel label="Daftar produk digital">
             <thead>
               <tr>
-                <Th>Judul</Th><Th>Jenis</Th><Th>Isi</Th><Th>Harga</Th><Th>Tayang</Th><Th>Urutan</Th><Th>Aksi</Th>
+                <Th>Judul</Th><Th>Materi</Th><Th>Isi</Th><Th>Harga</Th><Th>Tayang</Th><Th>Urutan</Th><Th>Aksi</Th>
               </tr>
             </thead>
             <tbody>
@@ -139,14 +131,14 @@ export default async function ProdukPage({
                       {p.deskripsi || "Belum ada deskripsi."}
                     </span>
                   </Td>
-                  <Td>
-                    <span className="rounded-full border border-panel-border px-2.5 py-1 text-[11px] font-extrabold text-panel-ink">
-                      {LABEL_JENIS[p.jenis]}
-                    </span>
+                  <Td className="text-[12.5px]">
+                    {ringkasJumlahMateri(p.jenisMateri) || (
+                      <span className="italic text-panel-muted">Belum ada materi</span>
+                    )}
                   </Td>
                   <Td>
                     {p.adaIsi ? (
-                      <span className="font-mono text-[12.5px]">berkas terpasang</span>
+                      <span className="font-mono text-[12.5px]">lengkap</span>
                     ) : (
                       <PillBelumAdaIsi />
                     )}

@@ -97,7 +97,7 @@ Uji untuk risiko yang buta bagi tes manual (RLS per keadaan, cabang penerbitan a
   - `public.digital_product_pages(material_id, halaman, objek)`, PK `(material_id, halaman)`
   - `public.digital_products.masa_berlaku_bulan int null` (1..120); kolom `jenis` dan `boleh_unduh` DIBUANG; enum `product_type` DIBUANG
   - RPC (authenticated, bergerbang `user_role()`):
-    - `ganti_halaman_materi(p_material_id uuid, p_halaman jsonb) returns table(objek text)`
+    - `ganti_halaman_materi_produk(p_material_id uuid, p_halaman jsonb) returns table(objek text)`
     - `lepas_berkas_materi(p_material_id uuid) returns table(objek text)`
     - `hapus_bab_produk(p_section_id uuid) returns void`
     - `hapus_materi_produk(p_material_id uuid) returns table(asal text, objek text)`, dengan `asal ∈ {'video','pdf','halaman','sampul'}`
@@ -455,7 +455,7 @@ revoke delete on public.digital_product_files from authenticated;
 
 comment on table public.digital_product_pages is
   'Halaman PDF materi terasterisasi. SELURUH hak tabel dicabut dari '
-  'authenticated; satu-satunya jalur tulis: ganti_halaman_materi(p_material_id, '
+  'authenticated; satu-satunya jalur tulis: ganti_halaman_materi_produk(p_material_id, '
   'p_halaman). Filter PostgREST adalah pilihan pemanggil, bukan pembatas baris.';
 comment on table public.digital_product_files is
   'Berkas isi materi (video ATAU PDF utuh), satu baris per materi. Upsert '
@@ -465,7 +465,7 @@ comment on table public.digital_product_files is
 -- ===== RPC TULIS (radius terkunci parameter) =====
 -- Guard `auth.uid() is not null and user_role() not in (...)`: service role
 -- tidak punya baris profil dan akan jatuh ke 'klien' tanpa syarat pertama.
-create or replace function public.ganti_halaman_materi(
+create or replace function public.ganti_halaman_materi_produk(
   p_material_id uuid,
   p_halaman     jsonb
 ) returns table(objek text)
@@ -556,11 +556,11 @@ begin
   delete from public.digital_product_materials where id = p_material_id;
 end $$;
 
-revoke all on function public.ganti_halaman_materi(uuid, jsonb) from public, anon;
+revoke all on function public.ganti_halaman_materi_produk(uuid, jsonb) from public, anon;
 revoke all on function public.lepas_berkas_materi(uuid) from public, anon;
 revoke all on function public.hapus_bab_produk(uuid) from public, anon;
 revoke all on function public.hapus_materi_produk(uuid) from public, anon;
-grant execute on function public.ganti_halaman_materi(uuid, jsonb) to authenticated;
+grant execute on function public.ganti_halaman_materi_produk(uuid, jsonb) to authenticated;
 grant execute on function public.lepas_berkas_materi(uuid) to authenticated;
 grant execute on function public.hapus_bab_produk(uuid) to authenticated;
 grant execute on function public.hapus_materi_produk(uuid) to authenticated;
@@ -658,8 +658,8 @@ beforeAll(async () => {
     .select("id").single();
   materiTerkunci = m1!.id;
   materiPratinjau = m2!.id;
-  await svc.rpc("ganti_halaman_materi", { p_material_id: materiTerkunci, p_halaman: [{ halaman: 1, objek: "a/1.webp" }] });
-  await svc.rpc("ganti_halaman_materi", { p_material_id: materiPratinjau, p_halaman: [{ halaman: 1, objek: "b/1.webp" }] });
+  await svc.rpc("ganti_halaman_materi_produk", { p_material_id: materiTerkunci, p_halaman: [{ halaman: 1, objek: "a/1.webp" }] });
+  await svc.rpc("ganti_halaman_materi_produk", { p_material_id: materiPratinjau, p_halaman: [{ halaman: 1, objek: "b/1.webp" }] });
 });
 
 afterAll(async () => {
@@ -2712,7 +2712,7 @@ export async function terbitkanUrlUnggahHalamanMateri(
 
   // Kosongkan halaman lama DULU, lewat RPC berradius satu materi.
   const supabase = await createServerSupabase();
-  const { data: lama, error: bersih } = await supabase.rpc("ganti_halaman_materi", {
+  const { data: lama, error: bersih } = await supabase.rpc("ganti_halaman_materi_produk", {
     p_material_id: materiId,
     p_halaman: [],
   });
@@ -2759,7 +2759,7 @@ export async function catatHalamanMateri(
   }
 
   const supabase = await createServerSupabase();
-  const { error } = await supabase.rpc("ganti_halaman_materi", {
+  const { error } = await supabase.rpc("ganti_halaman_materi_produk", {
     p_material_id: materiId,
     p_halaman: halaman.map((h) => ({ halaman: h.halaman, objek: h.objek })),
   });
@@ -2860,7 +2860,7 @@ export async function lepasIsiMateri(
       try { await hapusObjekVideo(objekBerkas); } catch { objekTersisa = true; }
     }
   } else {
-    const { data: halamanLama, error: delHalaman } = await supabase.rpc("ganti_halaman_materi", {
+    const { data: halamanLama, error: delHalaman } = await supabase.rpc("ganti_halaman_materi_produk", {
       p_material_id: materiId,
       p_halaman: [],
     });
@@ -5018,7 +5018,7 @@ Ganti loop dua produk PDF dengan versi berikut. Selain dua produk lama, loop ini
 
     await svc.storage.from(BUCKET_HALAMAN)
       .upload(`${p}/${id}/1.webp`, halamanWebp, { contentType: "image/webp", upsert: true });
-    await svc.rpc("ganti_halaman_materi", { p_material_id: id, p_halaman: [{ halaman: 1, objek: `${p}/${id}/1.webp` }] });
+    await svc.rpc("ganti_halaman_materi_produk", { p_material_id: id, p_halaman: [{ halaman: 1, objek: `${p}/${id}/1.webp` }] });
 
     await svc.storage.from(BUCKET_BERKAS)
       .upload(`${p}/${id}/isi.pdf`, pdfAsli, { contentType: "application/pdf", upsert: true });
@@ -5100,7 +5100,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Disalin juga ke spec. Semuanya **tidak** dijaga uji otomatis:
 
-1. Radius RPC `ganti_halaman_materi` / `lepas_berkas_materi`: mengosongkan materi A tidak menyentuh materi B. Polanya identik dengan RPC lama yang dulu teruji; ujinya ikut terhapus bersama RPC lama.
+1. Radius RPC `ganti_halaman_materi_produk` / `lepas_berkas_materi`: mengosongkan materi A tidak menyentuh materi B. Polanya identik dengan RPC lama yang dulu teruji; ujinya ikut terhapus bersama RPC lama.
 2. Aturan aktifkan produk "isi lengkap" (`isiLengkap`) dan "jenis materi terkunci sesudah isi diunggah" (`perbaruiMateri`) hanya diuji manual.
 3. Tombol unduh di penampil (pemilik aktif + `boleh_unduh` + berkas ada) tidak punya uji render; gerbang sesungguhnya (rute unduh) teruji di Task 11 Step 4.
 4. `hapusMateri` membersihkan objek R2/storage + salinan bercap: diuji manual (Review Focus 1).

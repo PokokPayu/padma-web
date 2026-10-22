@@ -92,15 +92,9 @@ const pesananDibuat: string[] = [];
 async function semaiProduk(harga: number): Promise<string> {
   const { data } = await svc
     .from("digital_products")
-    .insert({ judul: "PAD-UJI Webhook Midtrans", slug: "pad-uji-webhook-midtrans", jenis: "pdf", aktif: true })
+    .insert({ judul: "PAD-UJI Webhook Midtrans", slug: "pad-uji-webhook-midtrans", aktif: true })
     .select("id")
     .single<{ id: string }>();
-  await svc.from("digital_product_files").insert({
-    product_id: data!.id,
-    objek: `${data!.id}/isi.pdf`,
-    mime: "application/pdf",
-    byte: 1024,
-  });
   await svc.from("digital_product_prices").insert({ product_id: data!.id, harga });
   return data!.id;
 }

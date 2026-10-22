@@ -1,4 +1,3 @@
-// src/app/api/produk/[id]/halaman/[n]/route.ts
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { ambilKlien } from "@/lib/passport/data";
@@ -10,15 +9,13 @@ export const runtime = "nodejs";
 const BUCKET = "produk-halaman";
 
 /**
- * Menyajikan satu halaman e-book produk, ber-watermark identitas pembacanya.
+ * Satu halaman PDF materi, ber-watermark nama + PADMA ID pembaca. Pratinjau
+ * pun ber-watermark: pratinjau WAJIB login (keputusan pemilik repo), jadi
+ * selalu ada identitas untuk dibakar.
  *
  * Route handler adalah endpoint MANDIRI: layout `/passport` tidak menjaganya,
  * dan itu sudah dibuktikan di repo ini dengan mem-POST server action panel
  * admin dari rute lain. Karena itu seluruh pemeriksaan ada di sini.
- *
- * Urutannya mengikat: hak diputuskan RLS memakai SESI PEMBACA (policy
- * "halaman produk: pemilik baca"), dan service role baru menyentuh storage
- * sesudah basis data mengembalikan barisnya.
  */
 export async function GET(
   _request: Request,
@@ -26,26 +23,26 @@ export async function GET(
 ) {
   const { id, n } = await params;
   const halaman = Number(n);
-  if (!Number.isInteger(halaman) || halaman < 1) {
-    return new Response(null, { status: 404 });
-  }
+  if (!Number.isInteger(halaman) || halaman < 1) return new Response(null, { status: 404 });
 
   // 1. Identitas pembaca. Tidak ada -> 404, bukan 401: route ini tidak boleh
-  //    mengonfirmasi bahwa produknya ada.
+  //    mengonfirmasi bahwa materinya ada.
   const klien = await ambilKlien();
   if (!klien) return new Response(null, { status: 404 });
 
-  // 2. RLS-lah hakim haknya, bukan `if` di sini.
+  // 2. Hak lewat SESI dulu (RLS `boleh_buka_materi`); service role baru dipakai
+  //    SESUDAH basis data memulangkan barisnya, dan path objeknya diambil dari
+  //    baris itu — tidak pernah dirakit dari parameter URL.
   const supabase = await createServerSupabase();
   const { data: baris } = await supabase
     .from("digital_product_pages")
     .select("objek")
-    .eq("product_id", id)
+    .eq("material_id", id)
     .eq("halaman", halaman)
     .maybeSingle();
   if (!baris) return new Response(null, { status: 404 });
 
-  // 3. Hak sudah terbukti. Path diambil dari BARIS, tidak pernah dari parameter.
+  // 3. Hak sudah terbukti.
   const admin = createAdminSupabase();
   const { data: objek } = await admin.storage.from(BUCKET).download(baris.objek);
   if (!objek) return new Response(null, { status: 404 });

@@ -27,7 +27,7 @@ const produkUji: string[] = [];
 async function semaiProduk(slug: string, harga: number): Promise<string> {
   const { data, error } = await svc
     .from("digital_products")
-    .insert({ judul: `Uji ${slug}`, slug, jenis: "pdf", aktif: true })
+    .insert({ judul: `Uji ${slug}`, slug, aktif: true })
     .select("id")
     .single();
   if (error) throw error;

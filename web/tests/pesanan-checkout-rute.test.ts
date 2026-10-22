@@ -80,12 +80,9 @@ let clientId = "";
 async function semaiProduk(slug: string, harga: number): Promise<string> {
   const { data } = await svc
     .from("digital_products")
-    .insert({ judul: `PAD-UJI ${slug}`, slug, jenis: "pdf", aktif: true })
+    .insert({ judul: `PAD-UJI ${slug}`, slug, aktif: true })
     .select("id")
     .single<{ id: string }>();
-  await svc.from("digital_product_files").insert({
-    product_id: data!.id, objek: `${data!.id}/isi.pdf`, mime: "application/pdf", byte: 1024,
-  });
   await svc.from("digital_product_prices").insert({ product_id: data!.id, harga });
   return data!.id;
 }

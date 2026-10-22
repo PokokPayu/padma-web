@@ -6,9 +6,9 @@ const AKAR = path.resolve(__dirname, "..");
 const baca = (p: string) => readFileSync(path.join(AKAR, p), "utf8");
 
 const RUTE = [
-  "src/app/api/produk/[id]/video/route.ts",
-  "src/app/api/produk/[id]/halaman/[n]/route.ts",
-  "src/app/api/produk/[id]/unduh/route.ts",
+  "src/app/api/produk/materi/[id]/video/route.ts",
+  "src/app/api/produk/materi/[id]/halaman/[n]/route.ts",
+  "src/app/api/produk/materi/[id]/unduh/route.ts",
 ];
 
 /**
@@ -58,28 +58,28 @@ describe("gerbang isi produk", () => {
   });
 
   it("rute unduh memakai umur tanda tangan unduh, bukan umur tonton", () => {
-    const sumber = baca("src/app/api/produk/[id]/unduh/route.ts");
+    const sumber = baca("src/app/api/produk/materi/[id]/unduh/route.ts");
     expect(sumber).toContain("urlUnduhBerkas");
     expect(sumber).not.toContain("UMUR_TONTON_DETIK");
   });
 
   /**
    * Asersi ini dulu berbunyi `expect(sumber).toContain("boleh_unduh")` — dan
-   * itu HAMPA: baris `.select("id, judul, jenis, boleh_unduh")` sendiri sudah
-   * memenuhinya, sehingga menghapus `if (!produk.boleh_unduh) return 404` tidak
+   * itu HAMPA: baris `.select("id, product_id, judul, jenis, boleh_unduh")` sendiri sudah
+   * memenuhinya, sehingga menghapus `if (!materi.boleh_unduh) return 404` tidak
    * memerahkan apa pun sementara setiap produk yang sengaja tidak boleh diunduh
    * menjadi bisa diunduh siapa pun yang memegang entitlement (temuan review
    * menyeluruh, Finding 10).
    *
    * Yang menjaga pagar ini sekarang adalah uji PERILAKU di
-   * `tests/produk-rute-isi.test.ts` ("rute unduh MENOLAK produk yang
+   * `tests/produk-rute-isi.test.ts` ("rute unduh MENOLAK materi yang
    * boleh_unduh-nya mati, walau berkasnya ada"), yang memanggil rutenya
    * sungguhan. Yang tersisa di sini hanyalah bentuk `if`-nya — diikat pada
    * PENOLAKANNYA, bukan pada kemunculan nama kolomnya.
    */
   it("rute unduh menolak produk yang boleh_unduh-nya mati", () => {
-    const sumber = baca("src/app/api/produk/[id]/unduh/route.ts");
-    expect(sumber).toMatch(/if\s*\(!\s*produk\.boleh_unduh\)[^\n]*404/);
+    const sumber = baca("src/app/api/produk/materi/[id]/unduh/route.ts");
+    expect(sumber).toMatch(/if\s*\(!\s*materi\.boleh_unduh\)[^\n]*404/);
   });
 
   it("rute video memeriksa jenis produknya sendiri, tidak memercayai modul lain", () => {
@@ -87,8 +87,15 @@ describe("gerbang isi produk", () => {
     // rute video menandatangani kunci objek PDF terhadap bucket video.
     // Perilakunya ditagih di tests/produk-rute-isi.test.ts ("rute video MENOLAK
     // produk PDF").
-    const sumber = baca("src/app/api/produk/[id]/video/route.ts");
-    expect(sumber).toMatch(/produk\.jenis !== "video"/);
+    const sumber = baca("src/app/api/produk/materi/[id]/video/route.ts");
+    expect(sumber).toMatch(/materi\.jenis !== "video"/);
+  });
+
+  it("rute unduh memanggil punya_produk — pratinjau tidak pernah boleh diunduh", () => {
+    const sumber = baca("src/app/api/produk/materi/[id]/unduh/route.ts");
+    const badan = sumber.slice(sumber.indexOf("export async function GET"));
+    expect(badan).toMatch(/rpc\("punya_produk"/);
+    expect(badan).toMatch(/if \(punya !== true\)[^\n]*404/);
   });
 
   it("umur unduh benar-benar 15 menit", async () => {
@@ -98,10 +105,11 @@ describe("gerbang isi produk", () => {
 
   it("empat rute baru terdaftar di README", () => {
     const readme = baca("README.md");
-    expect(readme).toContain("| `/api/produk/[id]/video` |");
-    expect(readme).toContain("| `/api/produk/[id]/halaman/[n]` |");
-    expect(readme).toContain("| `/api/produk/[id]/unduh` |");
+    expect(readme).toContain("| `/api/produk/materi/[id]/video` |");
+    expect(readme).toContain("| `/api/produk/materi/[id]/halaman/[n]` |");
+    expect(readme).toContain("| `/api/produk/materi/[id]/unduh` |");
     expect(readme).toContain("| `/passport/produk/[slug]` |");
+    expect(readme).toContain("| `/passport/produk/[slug]/[materiId]` |");
   });
 });
 
@@ -120,7 +128,7 @@ describe("cap PDF pembeli", () => {
 
   it("objek PDF tercap dipisahkan per pembeli", async () => {
     const { objekPdfPembeli } = await import("@/lib/produk/cap-pdf");
-    expect(objekPdfPembeli("prod-1", "klien-9")).toBe("prod-1/pembeli/klien-9.pdf");
+    expect(objekPdfPembeli("prod-1", "materi-3", "klien-9")).toBe("prod-1/materi-3/pembeli/klien-9.pdf");
   });
 
   /**
