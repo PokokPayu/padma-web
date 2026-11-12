@@ -19,7 +19,7 @@ const PEMROSES = [
   { nama: "Cloudflare R2", guna: "Penyimpanan video materi, produk, dan testimoni" },
   { nama: "Resend", guna: "Pengiriman email sistem dan tagihan" },
   { nama: "Google", guna: "Masuk dengan akun Google, bila Anda memilihnya" },
-  { nama: "DOKU", guna: "Pemrosesan pembayaran produk digital" },
+  { nama: "DOKU", guna: "Pemrosesan pembayaran produk digital dan tagihan sesi" },
   { nama: "OpenStreetMap (Nominatim)", guna: "Mengubah teks alamat menjadi titik koordinat" },
 ] as const;
 

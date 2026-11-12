@@ -103,12 +103,16 @@ export function IsiSyaratKetentuan({
       <Bagian daftar={BAGIAN_SK} id="pembayaran">
         <Butir>
           <li>
-            Sesi kunjungan dibayar lewat QRIS PADMA, lalu bukti pembayarannya diunggah di Digital
-            Passport.
+            Sesi kunjungan yang Anda ajukan lewat aplikasi dibayar dari Digital Passport, melalui
+            halaman pembayaran DOKU.
           </li>
           <li>
-            Tagihan sesi harus dibayar dalam 24 jam sejak terbit. Lewat dari itu, pengajuan batal dan
-            slotnya dilepas untuk klien lain.
+            Sesi yang dijadwalkan langsung oleh admin PADMA dibayar sesuai arahan admin.
+          </li>
+          <li>
+            Tagihan sesi berlaku 24 jam atau sampai jam kunjungan, mana yang lebih dulu. Bila tenggat
+            itu lewat, pengajuan tidak batal dengan sendirinya: admin akan menghubungi Anda untuk
+            menerbitkan ulang tagihan atau membatalkan pengajuan.
           </li>
           <li>
             Produk digital dibayar lewat DOKU. Pesanan yang tidak dibayar dalam 24 jam kedaluwarsa
