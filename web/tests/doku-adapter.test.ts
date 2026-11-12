@@ -101,7 +101,10 @@ describe("buatPembayaranDoku", () => {
     expect(b.order.auto_redirect).toBe(true);
     expect(b.order.recover_abandoned_cart).toBe(false);
     expect(b.payment.payment_due_date).toBe(90);
+    // Dicek di dua tingkat: DOKU menaruh `customer` di puncak badan, tetapi
+    // penyelipan di dalam `order` sama-sama membocorkan data pribadi.
     expect("customer" in b).toBe(false);
+    expect("customer" in b.order).toBe(false);
   });
 
   it("400 -> ok:false tanpa membocorkan error_messages ke pesan", async () => {

@@ -7,6 +7,7 @@ import {
   bongkarKlienKedua,
 } from "./helpers/klien-kedua";
 import { terbitkanTautanBayar } from "@/lib/doku/tautan";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 const svc = createAdminSupabase();
 const KLIEN_EMAIL = "ananda@padma.test";
@@ -88,7 +89,9 @@ async function setKedaluwarsa(id: string, detik: number) {
 describe("terbitkanTautanBayar", () => {
   it("panggilan pertama: satu panggilan DOKU, tautan dan jejak tercatat; kedua: pakai ulang", async () => {
     const { sesi, id } = await pesananBaru();
+    const sebelum = Date.now();
     const r1 = await terbitkanTautanBayar(sesi, id, "/passport/pesanan");
+    const sesudah = Date.now();
     expect(r1).toEqual({ ok: true, url: "https://sandbox.doku.test/bayar/abc" });
     expect(panggilanDoku).toHaveLength(1);
 
@@ -101,10 +104,20 @@ describe("terbitkanTautanBayar", () => {
     expect(o!.tautan_gateway).toBe("https://sandbox.doku.test/bayar/abc");
     expect(o!.tautan_terbit_pada).not.toBeNull();
     expect(b.order.invoice_number).toMatch(/^PSN\d{6}[0-9A-F]{6}[1-9]$/);
+    expect(b.order.invoice_number).toBe(rakitInvoice(o!.kode, o!.percobaan));
     expect(b.order.amount).toBe(150_000);
     expect(b.order.callback_url).toBe("https://padma.test/passport/pesanan");
-    // 24 jam penuh dikurangi beberapa detik, dibulatkan ke bawah.
-    expect(b.payment.payment_due_date).toBe(1439);
+    // Dihitung dari `kedaluwarsa_pada` hasil baca-ulang dan jam sekitar
+    // panggilan, bukan angka mati: jam VM Docker (yang mengisi kolom lewat
+    // now()) boleh miring terhadap jam mesin uji. Rentangnya dibulatkan ke
+    // bawah seperti kode.
+    const kedaluwarsa = Date.parse(o!.kedaluwarsa_pada);
+    expect(b.payment.payment_due_date).toBeGreaterThanOrEqual(
+      Math.floor((kedaluwarsa - sesudah) / 60_000),
+    );
+    expect(b.payment.payment_due_date).toBeLessThanOrEqual(
+      Math.floor((kedaluwarsa - sebelum) / 60_000),
+    );
 
     const { data: jejak } = await svc
       .from("jejak_pesanan")
@@ -122,7 +135,9 @@ describe("terbitkanTautanBayar", () => {
     const { sesi, id } = await pesananBaru();
     await setKedaluwarsa(id, 30);
     const r = await terbitkanTautanBayar(sesi, id, "/passport/pesanan");
-    expect(r).toMatchObject({ ok: false, status: 409 });
+    // Pesan persis, bukan hanya 409: jalur 409 lain (bukan milik/ sudah
+    // tidak terbuka) memakai kalimat berbeda.
+    expect(r).toEqual({ ok: false, status: 409, pesan: "Tagihan lewat tenggat." });
     expect(panggilanDoku).toHaveLength(0);
   });
 
