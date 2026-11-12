@@ -36,7 +36,7 @@ async function semaiProdukLunas(
 
   const { data: produk, error: eProduk } = await sb
     .from("digital_products")
-    .insert({ slug, judul, jenis: "pdf", aktif: true })
+    .insert({ slug, judul, aktif: true })
     .select("id")
     .single();
   if (eProduk) throw eProduk;

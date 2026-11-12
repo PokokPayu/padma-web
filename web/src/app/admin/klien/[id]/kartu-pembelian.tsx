@@ -1,11 +1,16 @@
-import { bacaPenjualan } from "@/lib/penjualan/baca";
 import { urutkanBaris, type BarisPenjualan } from "@/lib/penjualan/hitung";
 import { TabelPenjualan } from "@/app/admin/penjualan/tabel-penjualan";
 import { notaTampil } from "@/app/admin/penjualan/ringkas";
 
 /**
- * Bagian MURNI — dipisah dari pengambilan datanya supaya bisa dirender di
- * uji tanpa Supabase. `KartuPembelian` di bawah yang melakukan IO-nya.
+ * Bagian MURNI — IO-nya milik halaman (`../page.tsx`), yang memanggil
+ * `bacaPenjualan({ clientId })` lalu `barisRiwayatPembelian`.
+ *
+ * Sengaja TIDAK ada komponen server async di berkas ini. Halaman detail klien
+ * dirender di uji lewat `renderToStaticMarkup`, yang menolak komponen yang
+ * suspend ("A component suspended while responding to synchronous input").
+ * Next produksi menerimanya, jadi build hijau sementara enam uji halaman
+ * merah — pola repo: halaman memuat, komponen murni.
  */
 export function BagianPembelian({ baris }: { baris: readonly BarisPenjualan[] }) {
   return (
@@ -26,19 +31,14 @@ export function BagianPembelian({ baris }: { baris: readonly BarisPenjualan[] })
 }
 
 /**
- * Riwayat pembelian satu klien — TANPA batas periode.
- *
- * Batasnya datang dari kliennya sendiri: seorang klien punya puluhan
- * pembelian, bukan puluhan ribu. Inilah layar yang dibuka admin saat sedang
- * menelepon klien, dan menyaringnya per bulan di sana akan membuat
- * pertanyaan "saya sudah pernah beli ini belum" butuh tiga klik.
+ * Baris riwayat pembelian satu klien, siap render. Tanpa batas periode —
+ * alasannya di pemanggilan `bacaPenjualan` di `../page.tsx`.
  */
-export async function KartuPembelian({ clientId }: { clientId: string }) {
-  const { baris } = await bacaPenjualan({ clientId });
+export function barisRiwayatPembelian(baris: readonly BarisPenjualan[]): BarisPenjualan[] {
   // `notaTampil` DULU, sebelum pengurutan dan sebelum perenderan. Judul
   // bagian ini adalah "Riwayat pembelian"; checkout yang ditinggalkan klien
   // lalu kedaluwarsa bukan pembelian, dan di bawah judul itu ia terbaca
   // sebagai pembelian yang sudah dibayar. Alasan lengkapnya ada di
   // `notaTampil` (`@/app/admin/penjualan/ringkas`).
-  return <BagianPembelian baris={urutkanBaris(notaTampil(baris))} />;
+  return urutkanBaris(notaTampil(baris));
 }

@@ -10,7 +10,8 @@ import { bacaPengaturan } from "@/lib/settings";
 import { FormEditKlien } from "../form-klien";
 import { KartuAktivasi } from "./kartu-aktivasi";
 import { KartuHak } from "./kartu-hak";
-import { KartuPembelian } from "./kartu-pembelian";
+import { bacaPenjualan } from "@/lib/penjualan/baca";
+import { BagianPembelian, barisRiwayatPembelian } from "./kartu-pembelian";
 
 export const metadata = { title: "Detail Klien" };
 
@@ -66,7 +67,15 @@ export default async function DetailKlienPage({
   // layar tujuh jam lebih awal setiap hari.
   const hariIni = hariIniJakarta();
 
-  const [{ data: fase }, { data: sesi, count: totalSesi }, wa, hak, mitra, { jamLayanan }] = await Promise.all([
+  const [
+    { data: fase },
+    { data: sesi, count: totalSesi },
+    wa,
+    hak,
+    mitra,
+    { jamLayanan },
+    { baris: barisPembelian },
+  ] = await Promise.all([
     supabase
       .from("phases")
       .select("id, nama, urutan")
@@ -86,6 +95,11 @@ export default async function DetailKlienPage({
     hakBerlakuKlien(id, hariIni),
     pilihanMitra(),
     bacaPengaturan(),
+    // Riwayat pembelian TANPA batas periode: seorang klien punya puluhan
+    // pembelian, bukan puluhan ribu, dan inilah layar yang dibuka admin saat
+    // menelepon klien — "saya sudah pernah beli ini belum" harus terjawab di
+    // sini tanpa memilih bulan.
+    bacaPenjualan({ clientId: id }),
   ]);
 
   const aktif = klien.user_id !== null;
@@ -241,7 +255,7 @@ export default async function DetailKlienPage({
           )}
         </section>
 
-        <KartuPembelian clientId={klien.id} />
+        <BagianPembelian baris={barisRiwayatPembelian(barisPembelian)} />
       </div>
     </main>
   );
