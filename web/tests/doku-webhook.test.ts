@@ -214,6 +214,36 @@ describe("peta kode jawaban — satu kasus per baris", () => {
     expect(isi.hasil).toBe("badan_terlalu_besar");
   });
 
+  it("batas 16 KB: tepat 16*1024 byte LOLOS lapis ukuran; 16*1024+1 ditolak — dengan dan tanpa content-length", async () => {
+    const MAKS = 16 * 1024;
+    // `{"x":"` (6) + isi + `"}` (2): panjang byte persis `n`.
+    const badanBayt = (n: number) => `{"x":"${"x".repeat(n - 8)}"}`;
+    const dariString = (teks: string, denganLength: boolean) => {
+      const h: Record<string, string> = { "content-type": "application/json" };
+      if (denganLength) h["content-length"] = String(new TextEncoder().encode(teks).byteLength);
+      return new Request(`http://127.0.0.1${PATH_WEBHOOK_DOKU}`, { method: "POST", headers: h, body: teks });
+    };
+    const hasilDari = async (r: Request) => ((await (await POST(r)).json()) as { hasil?: string }).hasil;
+
+    expect(new TextEncoder().encode(badanBayt(MAKS)).byteLength).toBe(MAKS);
+    // Pagar header berdiri sendiri: badan kecil, tetapi content-length = MAKS+1
+    // (aliran tidak akan menangkapnya, hanya cabang header).
+    const dusta = new Request(`http://127.0.0.1${PATH_WEBHOOK_DOKU}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "content-length": String(MAKS + 1) },
+      body: "{}",
+    });
+    expect(await hasilDari(dusta)).toBe("badan_terlalu_besar");
+    for (const denganLength of [true, false]) {
+      // Tepat di batas: lolos lapis ukuran; badan bukan skema kita -> skema_gagal.
+      expect(await hasilDari(dariString(badanBayt(MAKS), denganLength))).toBe("skema_gagal");
+      // Satu byte lebih: ditolak.
+      const r = await POST(dariString(badanBayt(MAKS + 1), denganLength));
+      expect(r.status).toBe(400);
+      expect(((await r.json()) as { hasil?: string }).hasil).toBe("badan_terlalu_besar");
+    }
+  });
+
   it("badan > 16 KB TANPA content-length (aliran) -> 400 — pagar BYTE", async () => {
     const potongan = "x".repeat(4 * 1024);
     const aliran = new ReadableStream<Uint8Array>({
@@ -326,8 +356,9 @@ describe("peta kode jawaban — satu kasus per baris", () => {
     const { status } = await kirim(JSON.stringify(badanSah(p.invoice)), { signature: "HMACSHA256=" + "A".repeat(44) });
     expect(status).toBe(401);
     expect(await jumlahDitolakHariIni()).toBe(sebelum + 1);
-    const { data } = await svc.from("notifikasi_pesanan").select("id").eq("pesanan_id", p.id);
-    expect(data ?? []).toEqual([]);
+    const { data, error } = await svc.from("notifikasi_pesanan").select("id").eq("pesanan_id", p.id);
+    expect(error).toBeNull();
+    expect(data).toEqual([]);
   });
 
   it("invoice sah bentuknya tapi tak dikenal -> 200 pesanan_tidak_ada, penghitung tak_dikenal NAIK", async () => {
@@ -376,9 +407,10 @@ describe("jalur uang", () => {
     expect(r).toEqual({ status: 200, hasil: "diterapkan" });
     const { data } = await svc.from("orders").select("status").eq("id", p.id).single<{ status: string }>();
     expect(data!.status).toBe("lunas");
-    const { data: hak } = await svc
+    const { data: hak, error: galatHak } = await svc
       .from("digital_entitlements").select("id").eq("product_id", productId).eq("client_id", clientId);
-    expect((hak ?? []).length).toBe(1);
+    expect(galatHak).toBeNull();
+    expect(hak).toHaveLength(1);
   });
 
   it("amount berdesimal bukan nol (\"150000.50\") -> ditahan + selisih_nominal, tidak dibulatkan", async () => {
@@ -390,9 +422,10 @@ describe("jalur uang", () => {
       .single<{ status: string; sebab_tinjauan: string | null }>();
     expect(data!.status).toBe("ditahan");
     expect(data!.sebab_tinjauan).toBe("selisih_nominal");
-    const { data: hak } = await svc
+    const { data: hak, error: galatHak } = await svc
       .from("digital_entitlements").select("id").eq("product_id", productId).eq("client_id", clientId);
-    expect(hak ?? []).toEqual([]);
+    expect(galatHak).toBeNull();
+    expect(hak).toEqual([]);
   });
 
   it("amount \"150000.40\" -> ditahan, BUKAN lunas (pembulatan ke bawah juga dilarang)", async () => {
@@ -428,8 +461,13 @@ describe("jalur uang", () => {
     const p = await buatPesanan();
     const r = await kirim(JSON.stringify(badanSah(p.invoice, { status: "FAILED" })));
     expect(r).toEqual({ status: 200, hasil: "tanpa_efek" });
-    const { data } = await svc.from("orders").select("status").eq("id", p.id).single<{ status: string }>();
-    expect(data!.status).not.toBe("lunas");
+    const { data, error } = await svc
+      .from("orders").select("status, butuh_tinjauan_pada, sebab_tinjauan").eq("id", p.id)
+      .single<{ status: string; butuh_tinjauan_pada: string | null; sebab_tinjauan: string | null }>();
+    expect(error).toBeNull();
+    expect(data!.status).toBe("menunggu_bayar");
+    expect(data!.butuh_tinjauan_pada).toBeNull();
+    expect(data!.sebab_tinjauan).toBeNull();
   });
 
   it("sidik: status berbeda atas invoice sama = dua sidik; byte identik = satu sidik", async () => {
