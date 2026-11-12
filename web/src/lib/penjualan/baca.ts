@@ -159,7 +159,9 @@ export async function bacaPenjualan(opsi: {
   let saringTutup = sb
     .from("orders")
     .select(KOLOM_ORDERS)
-    .in("status", STATUS_DIBACA);
+    .in("status", STATUS_DIBACA)
+    // Laporan P4 hanya produk digital; tagihan sesi bukan penjualan produk.
+    .eq("jenis", "produk_digital");
   if (opsi.mulai) saringTutup = saringTutup.gte("ditutup_pada", opsi.mulai);
   if (opsi.sampai) saringTutup = saringTutup.lt("ditutup_pada", opsi.sampai);
   if (opsi.clientId) saringTutup = saringTutup.eq("client_id", opsi.clientId);
@@ -178,6 +180,7 @@ export async function bacaPenjualan(opsi: {
     .from("orders")
     .select(KOLOM_ORDERS)
     .in("status", PESANAN_BERUANG)
+    .eq("jenis", "produk_digital")
     // Tanpa rentang, gte/lt di bawah tidak terpasang sama sekali dan baris
     // `ditahan` (yang `lunas_pada`-nya NULL) ikut terbawa — pada
     // `order(desc)` PostgreSQL justru NULL yang mendahului, jadi batas 500
@@ -272,7 +275,8 @@ export async function bacaPenjualan(opsi: {
             .from("orders")
             .select(KOLOM_ORDERS)
             .in("id", idTambahan)
-            .in("status", STATUS_DIBACA);
+            .in("status", STATUS_DIBACA)
+            .eq("jenis", "produk_digital");
           // Putaran 1(b) tidak bisa menyaring klien (notifikasi tak punya
           // client_id), jadi saringan ini WAJIB dipasang lagi di sini.
           if (opsi.clientId) q = q.eq("client_id", opsi.clientId);

@@ -522,6 +522,8 @@ export function TombolBeli({
     const { data: baris } = await sb
       .from("orders")
       .select("id, status, sebab_tinjauan")
+      // Tagihan sesi bukan urusan tombol beli produk.
+      .eq("jenis", "produk_digital")
       .order("dibuat_pada", { ascending: false })
       .limit(BATAS_BARIS_PESANAN);
     return { keadaan: hasil, baris: (baris ?? []) as BarisPesananSaya[] };

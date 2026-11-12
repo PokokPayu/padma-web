@@ -51,6 +51,9 @@ export async function pesananTerbukaSaya(
     .select("id, kode")
     .eq("client_id", clientId)
     .eq("status", "menunggu_bayar")
+    // Tagihan sesi (jenis 'sesi') bisa terbuka bersamaan; hanya pesanan
+    // PRODUK yang boleh tampil di keranjang dan memunculkan tombol batal.
+    .eq("jenis", "produk_digital")
     .maybeSingle<{ id: string; kode: string }>();
   if (error) throw new Error(`Gagal membaca pesanan terbuka: ${error.message}`);
   return data;

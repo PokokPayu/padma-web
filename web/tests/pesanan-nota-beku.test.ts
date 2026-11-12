@@ -155,7 +155,7 @@ async function sisipPesanan(bentuk: BentukPesanan = {}) {
 }
 
 describe("struktur orders", () => {
-  it("berkolom PERSIS sembilan belas, urut seperti yang ditulis migrasi", async () => {
+  it("berkolom PERSIS dua puluh satu, urut seperti yang ditulis migrasi", async () => {
     // Daftar dikunci karena menambah kolom ke tabel uang adalah satu baris
     // ketikan yang tidak memerahkan apa pun — dan tabel ini yang menjadi nota.
     const kolom = await querySql<{ column_name: string }>(
@@ -183,6 +183,8 @@ describe("struktur orders", () => {
       "kanal",
       "transaksi_id",
       "status_gateway",
+      "jenis",
+      "booking_request_id",
     ]);
   });
 
@@ -288,7 +290,7 @@ describe("satu pesanan terbuka per klien", () => {
 
     const kedua = await sisipPesanan();
     expect(kedua.error?.code).toBe("23505");
-    expect(kedua.error?.message).toContain("pesanan_terbuka_satu_per_klien");
+    expect(kedua.error?.message).toContain("pesanan_produk_terbuka_satu_per_klien");
   });
 
   it("dua klien BERBEDA boleh sama-sama punya pesanan terbuka", async () => {
