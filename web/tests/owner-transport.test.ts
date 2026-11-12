@@ -40,6 +40,7 @@ import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { tarifTransportPadaTanggal, type TarifTransportRingkas } from "@/lib/transport/tarif";
 import { pesanKodePostgres, pesanKodePostgresKhusus } from "@/app/owner/transport/status";
+import { SESI_BATAL } from "@/lib/jadwal/status";
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -87,9 +88,21 @@ const PADMA_ID_UJI = "PAD-UJI-00F4";
 const SESI = {
   jauh: "66666666-6666-6666-6666-6666666661f4", // di_atas_20, belum ditetapkan
   jauhSudah: "66666666-6666-6666-6666-6666666662f4", // di_atas_20, SUDAH ditetapkan
-  jauhBatal: "66666666-6666-6666-6666-6666666663f4", // di_atas_20, tapi batal
   biasa: "66666666-6666-6666-6666-6666666664f4", // jenjang biasa (0_5)
 };
+
+/**
+ * SATU sesi di_atas_20 tanpa nominal untuk SETIAP anggota himpunan batal —
+ * diturunkan dari `SESI_BATAL` (TypeScript), bukan ditulis tangan. View
+ * `sesi_menunggu_tarif_transport` adalah plpgsql-nya himpunan itu, dan SQL
+ * tidak punya `Record` menyeluruh yang menolak build: anggota batal BARU di
+ * `SESI_TIDAK_TERJADI` melahirkan baris fixture baru di sini, dan uji di
+ * bawah memerah sampai view ikut menyebutnya.
+ */
+const SESI_BATAL_FIXTURE = SESI_BATAL.map((status, i) => ({
+  status,
+  id: `66666666-6666-6666-6666-66666666${70 + i}f4`,
+}));
 
 const HARI_INI = hariIniJakarta();
 // Jauh di masa depan supaya rate card insert-only di sini TIDAK PERNAH
@@ -115,7 +128,7 @@ async function tarifJenjang(jenjang: string): Promise<Array<{ id: string; berlak
 }
 
 async function bersihkan() {
-  for (const id of Object.values(SESI)) {
+  for (const id of [...Object.values(SESI), ...SESI_BATAL_FIXTURE.map((b) => b.id)]) {
     await admin.from("transport_khusus").delete().eq("session_id", id);
     await admin.from("sessions").delete().eq("id", id);
     // Tabel jejak SENGAJA tanpa foreign key — penghapusan sesi tidak
@@ -208,8 +221,18 @@ beforeAll(async () => {
     // tidak akan pernah ada tarif yang menutup tanggal ini kemudian.
     { ...dasarSesi, id: SESI.jauh, tanggal: geserHari(HARI_INI, -3650), status: "terjadwal", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.jauhSudah, status: "terjadwal", jenjang: "di_atas_20" },
-    { ...dasarSesi, id: SESI.jauhBatal, status: "dibatalkan_padma", jenjang: "di_atas_20" },
     { ...dasarSesi, id: SESI.biasa, status: "terjadwal", jenjang: "0_5" },
+    // Bertanggal SAMA TUANYA dengan SESI.jauh. Versi lama fixture ini memakai
+    // HARI_INI — tanggal yang sudah ditutup tarif dasar seed — sehingga sesi
+    // batal itu tersaring oleh `not exists transport_rates`, BUKAN oleh
+    // statusnya, dan ujinya tetap hijau walau predikat status dihapus.
+    ...SESI_BATAL_FIXTURE.map((b) => ({
+      ...dasarSesi,
+      id: b.id,
+      tanggal: geserHari(HARI_INI, -3650),
+      status: b.status,
+      jenjang: "di_atas_20" as const,
+    })),
   ]);
   // SESI.jauhSudah SUDAH punya tarif khusus SEBELUM test apa pun berjalan —
   // dipakai membuktikan exclusion-nya dari daftar menunggu.
@@ -423,10 +446,16 @@ describe("ambilSesiMenungguTarif", () => {
     expect(menunggu.map((s) => s.id)).not.toContain(SESI.jauhSudah);
   });
 
-  it("sesi BATAL tidak pernah muncul, walau berjenjang di_atas_20", async () => {
-    const menunggu = await ambilSesiMenungguTarif();
-    expect(menunggu.map((s) => s.id)).not.toContain(SESI.jauhBatal);
-  });
+  it.each(SESI_BATAL_FIXTURE)(
+    "sesi $status tidak pernah muncul, walau di_atas_20 tanpa nominal sama sekali",
+    async ({ id }) => {
+      const menunggu = await ambilSesiMenungguTarif();
+      // Kontrol: SESI.jauh (tanggal & jenjang sama, status hidup) MUNCUL —
+      // jadi ketidakhadiran baris batal hanya bisa disebabkan statusnya.
+      expect(menunggu.map((s) => s.id)).toContain(SESI.jauh);
+      expect(menunggu.map((s) => s.id)).not.toContain(id);
+    },
+  );
 
   it("sesi berjenjang BIASA tidak ikut muncul", async () => {
     const menunggu = await ambilSesiMenungguTarif();

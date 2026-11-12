@@ -3,8 +3,9 @@ import { tujuanProdukAman } from "@/lib/auth/tujuan-produk";
 /**
  * Ke mana `/persetujuan` memulangkan klien sesudah ia setuju.
  *
- * SATU-SATUNYA pemberi `lanjut` adalah tombol beli di `/produk/[slug]`, jadi
- * whitelist-nya cukup regex ketat yang sudah ada (`^/produk/<slug>$`) —
+ * Pemberi `lanjut` hanya dua, keduanya di `/produk/[slug]`: tombol beli dan
+ * server action ambil gratis. Karena itu whitelist-nya cukup regex ketat yang
+ * sudah ada (`^/produk/<slug>$`) —
  * dipakai ulang, tidak disalin. Layout `/passport` tidak tahu path asalnya,
  * sehingga klien yang tertahan di sana kembali ke `/passport`. Semua yang lain
  * — termasuk `//evil.com`, skema apa pun, dan larik dari query string ganda —

@@ -684,6 +684,34 @@ describe("jadwalkanSesi menghitung & menyimpan jenjang transport", () => {
     expect(data!.jenjang_alasan).toBe("");
   });
 
+  it("menyalin alamat & koordinat bawaan klien ke sesi — yang dipakai menghitung jenjangnya", async () => {
+    // Jalur konfirmasi permintaan menyalin alamat dari barisnya; jalur ini
+    // dulu hanya MEMBACA koordinat klien untuk jenjang lalu membuangnya, jadi
+    // Passport menampilkan "Tempat: —" untuk setiap sesi yang dibuat admin,
+    // dan jenjang tersimpan tanpa alamat yang menjelaskannya.
+    const KOORD_KLIEN = { lat: -6.9201, lon: 107.6102 };
+    const { data: asal } = await admin.from("clients").select("alamat").eq("id", KLIEN).single();
+    await admin.from("clients").update({ alamat: "Jl. Uji Alamat Sesi No. 7, Bandung" }).eq("id", KLIEN);
+    await pasangKoordinat(KOORD_SAMA, KOORD_KLIEN);
+    try {
+      const r = await jadwalkanSesi(fdJadwal());
+      expect(r.ok).toBe(true);
+
+      const { data } = await svc
+        .from("sessions")
+        .select("alamat, alamat_lat, alamat_lon")
+        .eq("tanggal", TGL)
+        .single();
+      expect(data).toEqual({
+        alamat: "Jl. Uji Alamat Sesi No. 7, Bandung",
+        alamat_lat: KOORD_KLIEN.lat,
+        alamat_lon: KOORD_KLIEN.lon,
+      });
+    } finally {
+      await admin.from("clients").update({ alamat: asal!.alamat }).eq("id", KLIEN);
+    }
+  });
+
   it("jenjang tetap NULL bila salah satu koordinat kosong — bukan galat", async () => {
     // Hanya mitra yang punya koordinat; alamat default klien kosong.
     await pasangKoordinat(KOORD_SAMA, null);
