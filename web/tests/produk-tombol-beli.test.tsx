@@ -340,7 +340,7 @@ describe("muatSkripSnap", () => {
  * diproses", kalimat yang tidak benar untuk orang yang tidak pernah membayar.
  *
  * Jalan keluarnya sudah dibangun mesin (`buat_pesanan(p_ulang := true)`
- * menaikkan `percobaan` dan mengosongkan `snap_token`) dan sampai perbaikan
+ * menaikkan `percobaan` dan mengosongkan `tautan_gateway`) dan sampai perbaikan
  * ini NOL pemanggil di `src/` pernah mengirimnya.
  */
 describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () => {

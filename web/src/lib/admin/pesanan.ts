@@ -46,7 +46,7 @@ export type BarisPesanan = {
   sebabTinjauan: string | null;
   kanal: string | null;
   transaksiId: string | null;
-  statusMidtrans: string | null;
+  statusGateway: string | null;
   items: ItemPesanan[];
   /**
    * null = ITEMNYA TIDAK TERBACA, bukan "totalnya nol".
@@ -75,13 +75,13 @@ type BarisOrders = {
   sebab_tinjauan: string | null;
   kanal: string | null;
   transaksi_id: string | null;
-  status_midtrans: string | null;
+  status_gateway: string | null;
   clients: { padma_id: string } | null;
 };
 
 const KOLOM =
   "id, kode, status, percobaan, jumlah_item, dibuat_pada, kedaluwarsa_pada, lunas_pada, " +
-  "diperiksa_pada, butuh_tinjauan_pada, sebab_tinjauan, kanal, transaksi_id, status_midtrans, " +
+  "diperiksa_pada, butuh_tinjauan_pada, sebab_tinjauan, kanal, transaksi_id, status_gateway, " +
   "clients ( padma_id )";
 
 /**
@@ -269,7 +269,7 @@ export async function bacaPesananStaf(): Promise<{
       sebabTinjauan: b.sebab_tinjauan,
       kanal: b.kanal,
       transaksiId: b.transaksi_id,
-      statusMidtrans: b.status_midtrans,
+      statusGateway: b.status_gateway,
       items,
       // Dijumlahkan dari `harga_beku`, karena `orders` memang lahir NOL kolom
       // nominal (spec "Bentuk data / orders").

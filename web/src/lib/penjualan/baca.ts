@@ -38,7 +38,7 @@ export const BATAS_BARIS_PENJUALAN = 500;
  */
 const STATUS_DIBACA: StatusPesanan[] = [...PESANAN_BERUANG, ...PESANAN_MATI];
 
-/** Nilai `status_midtrans` yang berarti uang KELUAR lagi. */
+/** Nilai `status_gateway` yang berarti uang KELUAR lagi. */
 const STATUS_KEMBALI = ["refund", "partial_refund", "chargeback", "partial_chargeback"];
 
 /** Kejadian yang menandai uang mendarat sesudah pesanan ditutup. Bertipe, bukan literal: rename enum jadi galat kompilasi. */
@@ -95,7 +95,7 @@ const KOLOM_ORDERS =
  *  DILEWATI, dan cabang yang dilewati harus memulangkan bentuk yang sama. */
 type BarisNotifikasi = {
   pesanan_id: string | null;
-  status_midtrans: string | null;
+  status_gateway: string | null;
   nominal_diterima: number | null;
   diterima_pada: string;
 };
@@ -218,7 +218,7 @@ export async function bacaPenjualan(opsi: {
     : (() => {
         let q = sb
           .from("notifikasi_pesanan")
-          .select("pesanan_id, status_midtrans, nominal_diterima, diterima_pada")
+          .select("pesanan_id, status_gateway, nominal_diterima, diterima_pada")
           .not("pesanan_id", "is", null)
           .order("diterima_pada", { ascending: false })
           .limit(BATAS_BARIS_PENJUALAN);
@@ -288,7 +288,7 @@ export async function bacaPenjualan(opsi: {
     bacaBerbongkah(semuaId, (ids, batas) =>
       sb
         .from("notifikasi_pesanan")
-        .select("pesanan_id, status_midtrans, nominal_diterima, diterima_pada")
+        .select("pesanan_id, status_gateway, nominal_diterima, diterima_pada")
         .in("pesanan_id", ids)
         .order("diterima_pada", { ascending: false })
         // PEMECAH SERI, tugasnya STABILITAS. `diterima_pada` hanyalah
@@ -326,7 +326,7 @@ export async function bacaPenjualan(opsi: {
   const uangPer = new Map<string, string>();
   for (const r of notif.data ?? []) {
     const kunci = r.pesanan_id as string;
-    const status = (r.status_midtrans as string | null) ?? "";
+    const status = (r.status_gateway as string | null) ?? "";
     if (STATUS_KEMBALI.includes(status)) dikembalikan.add(kunci);
     // Hanya notifikasi yang MEMBAWA uang (`nominal_diterima` terisi) yang
     // menentukan tanggal uang: expire/deny/refund susulan tidak boleh

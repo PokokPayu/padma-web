@@ -164,13 +164,13 @@ describe("POST /api/pesanan/checkout", () => {
 
     const { data } = await svc
       .from("orders")
-      .select("id, status, client_id, snap_token, jumlah_item")
+      .select("id, status, client_id, tautan_gateway, jumlah_item")
       .eq("id", isi.pesananId)
-      .single<{ id: string; status: string; client_id: string; snap_token: string | null; jumlah_item: number }>();
+      .single<{ id: string; status: string; client_id: string; tautan_gateway: string | null; jumlah_item: number }>();
     expect(data!.status).toBe("menunggu_bayar");
     // `client_id` dipilih RPC dari auth.uid(), bukan dikirim rute.
     expect(data!.client_id).toBe(clientId);
-    expect(data!.snap_token).toBe("snap-token-uji");
+    expect(data!.tautan_gateway).toBe("snap-token-uji");
     expect(data!.jumlah_item).toBe(1);
   });
 

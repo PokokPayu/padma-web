@@ -77,7 +77,7 @@ const TERBUKA_SADAR = {
   batalkan_pesanan_saya: "auth.uid",
   buat_pesanan: "auth.uid",
   buat_pesanan_keranjang: "auth.uid",
-  catat_token_snap: "auth.uid",
+  catat_tautan_gateway: "auth.uid",
   hapus_dari_keranjang: "auth.uid",
   tambah_ke_keranjang: "auth.uid",
   // Gerbang PERAN. `auth.uid()` juga muncul di badan keduanya, tapi hanya

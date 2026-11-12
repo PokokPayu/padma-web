@@ -133,7 +133,7 @@ async function semai(o: {
       sebab_tinjauan: o.butuhTinjauan ?? null,
       kanal: o.status === "menunggu_bayar" ? null : "bank_transfer",
       transaksi_id: o.status === "menunggu_bayar" ? null : `trx-${o.kode}`,
-      status_midtrans: o.status === "menunggu_bayar" ? null : "settlement",
+      status_gateway: o.status === "menunggu_bayar" ? null : "settlement",
     })
     .select("id")
     .single();
@@ -211,7 +211,7 @@ async function siapkan() {
     pesanan_id: idDitahan,
     sidik: `sidik-${K_DITAHAN}`,
     transaksi_id: `trx-${K_DITAHAN}`,
-    status_midtrans: "settlement",
+    status_gateway: "settlement",
     kanal: "bank_transfer",
     nominal_diterima: 95_000,
   });
@@ -425,7 +425,7 @@ describe("TabelPesanan", () => {
     sebabTinjauan: "selisih_nominal",
     kanal: "bank_transfer",
     transaksiId: "trx-9999",
-    statusMidtrans: "settlement",
+    statusGateway: "settlement",
     items: [
       {
         pesananId: "11111111-1111-1111-1111-111111111111",

@@ -124,14 +124,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ pesan: snap.pesan }, { status: 502 });
   }
 
-  const { error: eCatat } = await supabase.rpc("catat_token_snap", {
+  const { error: eCatat } = await supabase.rpc("catat_tautan_gateway", {
     p_pesanan_id: baris.pesanan_id,
-    p_token: snap.token,
+    p_percobaan: baris.percobaan,
+    p_tautan: snap.token,
   });
   if (eCatat) {
     // SENGAJA tidak menggagalkan checkout. Tokennya sudah terbit dan pembeli
     // sudah bisa membayar; yang hilang hanyalah catatan kita sendiri, dan
-    // `snap_token` tidak pernah dipercaya sebagai bukti pembayaran oleh apa pun.
+    // `tautan_gateway` tidak pernah dipercaya sebagai bukti pembayaran oleh apa pun.
     console.error(`[pesanan] gagal mencatat token snap ${baris.pesanan_id}: ${eCatat.message}`);
   }
 

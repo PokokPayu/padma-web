@@ -314,7 +314,7 @@ describe("terapkan_notifikasi_midtrans — jantung mesin", () => {
 
     const { data: baris } = await svc
       .from("orders")
-      .select("status, lunas_pada, ditutup_pada, kanal, transaksi_id, status_midtrans, notifikasi_pada")
+      .select("status, lunas_pada, ditutup_pada, kanal, transaksi_id, status_gateway, notifikasi_pada")
       .eq("id", p.pesananId)
       .single();
     expect(baris!.status).toBe("lunas");
@@ -322,7 +322,7 @@ describe("terapkan_notifikasi_midtrans — jantung mesin", () => {
     expect(baris!.ditutup_pada).not.toBeNull();
     expect(baris!.kanal).toBe("bank_transfer");
     expect(baris!.transaksi_id).toBe("trx-lunas-1");
-    expect(baris!.status_midtrans).toBe("settlement");
+    expect(baris!.status_gateway).toBe("settlement");
     expect(baris!.notifikasi_pada).not.toBeNull();
 
     const { data: ent } = await svc

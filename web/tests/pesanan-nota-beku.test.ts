@@ -174,15 +174,15 @@ describe("struktur orders", () => {
       "kedaluwarsa_pada",
       "lunas_pada",
       "ditutup_pada",
-      "snap_token",
-      "snap_diterbitkan_pada",
+      "tautan_gateway",
+      "tautan_terbit_pada",
       "notifikasi_pada",
       "diperiksa_pada",
       "butuh_tinjauan_pada",
       "sebab_tinjauan",
       "kanal",
       "transaksi_id",
-      "status_midtrans",
+      "status_gateway",
     ]);
   });
 

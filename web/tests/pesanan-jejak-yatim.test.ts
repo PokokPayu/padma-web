@@ -70,7 +70,7 @@ async function yatim(): Promise<Yatim[]> {
        left join public.orders o on o.id = j.pesanan_id
       where j.pesanan_id is not null and o.id is null
      union all
-     select 'notifikasi_pesanan', n.id::text, n.pesanan_id::text, n.status_midtrans
+     select 'notifikasi_pesanan', n.id::text, n.pesanan_id::text, n.status_gateway
        from public.notifikasi_pesanan n
        left join public.orders o2 on o2.id = n.pesanan_id
       where n.pesanan_id is not null and o2.id is null
@@ -159,7 +159,7 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
 
     const pertama = await svc
       .from("notifikasi_pesanan")
-      .insert({ pesanan_id: pesananId, sidik, status_midtrans: "settlement" })
+      .insert({ pesanan_id: pesananId, sidik, status_gateway: "settlement" })
       .select("id")
       .single();
     expect(pertama.error).toBeNull();
@@ -167,7 +167,7 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
 
     const kedua = await svc
       .from("notifikasi_pesanan")
-      .insert({ pesanan_id: pesananId, sidik, status_midtrans: "settlement" })
+      .insert({ pesanan_id: pesananId, sidik, status_gateway: "settlement" })
       .select("id");
     expect(kedua.error?.code).toBe("23505");
     expect(kedua.error?.message).toContain("notifikasi_pesanan_sidik_unik");
@@ -183,7 +183,7 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
     for (const status of ["pending", "settlement"]) {
       const { data, error } = await svc
         .from("notifikasi_pesanan")
-        .insert({ pesanan_id: pesananId, sidik: `sidik-${status}-${Date.now()}`, status_midtrans: status })
+        .insert({ pesanan_id: pesananId, sidik: `sidik-${status}-${Date.now()}`, status_gateway: status })
         .select("id")
         .single();
       expect(error).toBeNull();

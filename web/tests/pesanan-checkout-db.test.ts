@@ -524,9 +524,10 @@ describe("buat_pesanan", () => {
     const pertama = await pesananBaru(produk);
 
     const klien = await signInAs(KLIEN_EMAIL);
-    const token = await klien.rpc("catat_token_snap", {
+    const token = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: pertama.pesanan_id,
-      p_token: "token-snap-lama",
+      p_percobaan: 1,
+      p_tautan: "token-snap-lama",
     });
     expect(token.error).toBeNull();
 
@@ -539,13 +540,13 @@ describe("buat_pesanan", () => {
 
     const { data: pesanan } = await svc
       .from("orders")
-      .select("percobaan, snap_token, snap_diterbitkan_pada")
+      .select("percobaan, tautan_gateway, tautan_terbit_pada")
       .eq("id", pertama.pesanan_id)
       .single();
     expect(pesanan!.percobaan).toBe(2);
     // Token percobaan lama tidak boleh tertinggal: order_id-nya sudah terbakar.
-    expect(pesanan!.snap_token).toBeNull();
-    expect(pesanan!.snap_diterbitkan_pada).toBeNull();
+    expect(pesanan!.tautan_gateway).toBeNull();
+    expect(pesanan!.tautan_terbit_pada).toBeNull();
 
     // order_id percobaan kedua tetap berbentuk sah bagi TypeScript.
     expect(rakitOrderId(barisKedua.kode, barisKedua.percobaan)).toMatch(POLA_ORDER_ID);
@@ -575,25 +576,26 @@ describe("buat_pesanan", () => {
   });
 });
 
-describe("catat_token_snap & batalkan_pesanan_saya", () => {
+describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
   it("token tercatat pada pesanan milik pemanggil, dan jejak token_terbit lahir", async () => {
     const produk = await semaiProduk("token-milik-sendiri", 120_000);
     const pesanan = await pesananBaru(produk);
 
     const klien = await signInAs(KLIEN_EMAIL);
-    const { error } = await klien.rpc("catat_token_snap", {
+    const { error } = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
-      p_token: "snap-token-abc",
+      p_percobaan: 1,
+      p_tautan: "snap-token-abc",
     });
     expect(error).toBeNull();
 
     const { data: baris } = await svc
       .from("orders")
-      .select("snap_token, snap_diterbitkan_pada")
+      .select("tautan_gateway, tautan_terbit_pada")
       .eq("id", pesanan.pesanan_id)
       .single();
-    expect(baris!.snap_token).toBe("snap-token-abc");
-    expect(baris!.snap_diterbitkan_pada).not.toBeNull();
+    expect(baris!.tautan_gateway).toBe("snap-token-abc");
+    expect(baris!.tautan_terbit_pada).not.toBeNull();
 
     const { data: jejak } = await svc
       .from("jejak_pesanan")
@@ -613,19 +615,20 @@ describe("catat_token_snap & batalkan_pesanan_saya", () => {
     const pesanan = await pesananBaru(produk);
 
     const admin = await signInAs("admin@padma.test");
-    const { error } = await admin.rpc("catat_token_snap", {
+    const { error } = await admin.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
-      p_token: "token-orang-lain",
+      p_percobaan: 1,
+      p_tautan: "token-orang-lain",
     });
     expect(error?.code).toBe("42501");
     expect(error!.message).toContain("belum tertaut ke rekam klien");
 
     const { data: baris } = await svc
       .from("orders")
-      .select("snap_token")
+      .select("tautan_gateway")
       .eq("id", pesanan.pesanan_id)
       .single();
-    expect(baris!.snap_token).toBeNull();
+    expect(baris!.tautan_gateway).toBeNull();
   });
 
   it("KLIEN LAIN tidak bisa menimpa token pesanan orang — P0002, token utuh", async () => {
@@ -637,9 +640,10 @@ describe("catat_token_snap & batalkan_pesanan_saya", () => {
     const pesanan = await pesananBaru(produk);
 
     const lain = await signInAs(EMAIL_KLIEN_KEDUA);
-    const { error } = await lain.rpc("catat_token_snap", {
+    const { error } = await lain.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
-      p_token: "token-klien-lain",
+      p_percobaan: 1,
+      p_tautan: "token-klien-lain",
     });
     // P0002, bukan 42501: ia PUNYA rekam klien, hanya bukan pemilik barisnya.
     // Dan pesanan orang lain tidak boleh bisa dibedakan dari pesanan yang
@@ -648,10 +652,10 @@ describe("catat_token_snap & batalkan_pesanan_saya", () => {
 
     const { data: baris } = await svc
       .from("orders")
-      .select("snap_token")
+      .select("tautan_gateway")
       .eq("id", pesanan.pesanan_id)
       .single();
-    expect(baris!.snap_token).toBeNull();
+    expect(baris!.tautan_gateway).toBeNull();
   });
 
   it("KLIEN LAIN membatalkan pesanan orang: false, dan pesanannya UTUH", async () => {
@@ -683,9 +687,10 @@ describe("catat_token_snap & batalkan_pesanan_saya", () => {
     // pemanggil. Dipakai uuid yang tidak menunjuk apa pun karena seed hanya
     // punya SATU klien tertaut.
     const klien = await signInAs(KLIEN_EMAIL);
-    const { error } = await klien.rpc("catat_token_snap", {
+    const { error } = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: "00000000-0000-0000-0000-0000000000bb",
-      p_token: "token-hantu",
+      p_percobaan: 1,
+      p_tautan: "token-hantu",
     });
     expect(error?.code).toBe("P0002");
   });
@@ -831,7 +836,7 @@ describe("putuskan_pesanan_ditahan", () => {
         pesanan_id: pesanan.pesanan_id,
         sidik: randomUUID(),
         transaksi_id: "trx-uji",
-        status_midtrans: "settlement",
+        status_gateway: "settlement",
         kanal: "bank_transfer",
         nominal_diterima: 100_000,
       });
