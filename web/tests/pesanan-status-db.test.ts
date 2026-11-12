@@ -12,7 +12,7 @@ import {
   LABEL_STATUS_PESANAN,
   JAM_TENGGAT_PESANAN,
   MENIT_JEDA_PERIKSA,
-  JAM_TENGGANG_404,
+  JAM_TENGGANG_TANPA_VONIS,
   type StatusPesanan,
 } from "@/lib/pesanan/status";
 
@@ -135,7 +135,7 @@ describe("himpunan status — partisi yang tidak boleh bocor", () => {
   it("konstanta waktu bernilai seperti yang diputuskan spec", () => {
     expect(JAM_TENGGAT_PESANAN).toBe(24);
     expect(MENIT_JEDA_PERIKSA).toBe(5);
-    expect(JAM_TENGGANG_404).toBe(1);
+    expect(JAM_TENGGANG_TANPA_VONIS).toBe(1);
   });
 });
 

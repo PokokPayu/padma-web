@@ -154,7 +154,7 @@ export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string> = {
  * Dua angka yang boleh berbeda adalah dua kegagalan simetris. Kolom lebih
  * pendek: kita berhenti bertanya sementara VA-nya masih bisa dibayar, dan
  * settlement mendarat pada pesanan yang sudah kita tutup. Kolom lebih panjang:
- * penyapu menanyai Midtrans tentang transaksi yang tak akan pernah berubah.
+ * penyapu menanyai DOKU tentang transaksi yang tak akan pernah berubah.
  */
 export const JAM_TENGGAT_PESANAN = 24;
 
@@ -166,9 +166,11 @@ export const JAM_TENGGAT_PESANAN = 24;
 export const MENIT_JEDA_PERIKSA = 5;
 
 /**
- * Margin terhadap jam Midtrans sebelum jawaban 404 ("Transaction doesn't
- * exist") boleh dibaca sebagai kedaluwarsa. Bukan perpanjangan tenggat: yang
- * memutuskan tetap Midtrans — ia menyatakan transaksinya tidak pernah ada —
- * dan waktu lokal hanya memutuskan kapan berhenti bertanya.
+ * Margin terhadap jam DOKU sebelum jawaban Check Status yang belum final
+ * (invoice tidak ditemukan, PENDING, REDIRECT, TIMEOUT, FAILED) boleh dibaca
+ * sebagai kedaluwarsa. Bukan perpanjangan tenggat: vonis tetap dari gateway,
+ * dan waktu lokal hanya memutuskan kapan berhenti bertanya. Dulu
+ * `JAM_TENGGANG_404`; namanya dinetralkan karena kini berlaku juga untuk
+ * status non-final, bukan hanya 404.
  */
-export const JAM_TENGGANG_404 = 1;
+export const JAM_TENGGANG_TANPA_VONIS = 1;

@@ -15,13 +15,13 @@
  *  2. RAHASIA HARFIAH DI BERKAS PUBLIK. Repo `PokokPayu/padma-web` PUBLIK.
  *     `CRON_SECRET` yang tertulis harfiah di workflow adalah rahasia yang
  *     terbit ke seluruh internet dalam satu commit, dan rute yang dijaganya
- *     menembakkan permintaan ke Midtrans.
+ *     menembakkan permintaan ke DOKU.
  *
  * Ditambah gerbang rutenya sendiri, yang punya satu cara gagal khas: terbuka
  * lebar ketika konfigurasinya lupa dipasang. Kelimanya meniru
  * `tests/cron-tenggat.test.ts`.
  *
- * Midtrans TIDAK PERNAH ditembak dari suite. Berkas ini mengimpor rute cron,
+ * DOKU TIDAK PERNAH ditembak dari suite. Berkas ini mengimpor rute cron,
  * jadi ia WAJIB menstub `globalThis.fetch` — dan stubnya dibuat MELEMPAR untuk
  * host selain 127.0.0.1, supaya "adapternya berhenti di-mock" jadi merah,
  * bukan jadi permintaan sungguhan yang lambat dan senyap.
@@ -33,25 +33,28 @@ import { createAdminSupabase } from "@/lib/supabase/admin";
 
 const admin = createAdminSupabase();
 
-// Adapter Midtrans dipalsukan seluruhnya; `jawabPer` dikunci PER order_id
+/** Invoice DOKU dari `kode`: tanpa tanda hubung + digit percobaan 1. */
+const inv = (kode: string) => `${kode.replaceAll("-", "")}1`;
+
+// Adapter DOKU dipalsukan seluruhnya; `jawabPer` dikunci PER order_id
 // supaya pesanan menggantung milik berkas uji lain — rute ini memilih barisnya
 // dengan service role, jadi lintas klien — tidak ikut tergerakkan.
-const midtrans = vi.hoisted(() => ({
+const doku = vi.hoisted(() => ({
   jawabPer: new Map<string, unknown>(),
   panggilan: [] as string[],
 }));
-vi.mock("@/lib/midtrans/adapter", () => ({
-  bacaStatusTransaksi: async (orderId: string) => {
-    midtrans.panggilan.push(orderId);
+vi.mock("@/lib/doku/adapter", () => ({
+  bacaStatusDoku: async (invoice: string) => {
+    doku.panggilan.push(invoice);
     return (
-      midtrans.jawabPer.get(orderId) ?? {
+      doku.jawabPer.get(invoice) ?? {
         ok: false,
         kode: 500,
         pesan: "bukan pesanan milik berkas uji ini",
       }
     );
   },
-  terbitkanTokenSnap: async () => ({ ok: false, pesan: "tidak dipakai di berkas ini" }),
+  buatPembayaranDoku: async () => ({ ok: false, pesan: "tidak dipakai di berkas ini" }),
 }));
 
 const { POST } = await import("@/app/api/cron/pesanan/route");
@@ -250,8 +253,8 @@ beforeEach(async () => {
     return asli(...arg);
   });
 
-  midtrans.panggilan.length = 0;
-  midtrans.jawabPer.clear();
+  doku.panggilan.length = 0;
+  doku.jawabPer.clear();
   await bersihkan();
 });
 
@@ -270,11 +273,11 @@ describe("gerbang rahasia /api/cron/pesanan", () => {
   it("MENOLAK semua orang ketika CRON_SECRET tidak terpasang", async () => {
     // Fail-closed, persis seperti rute tenggat. Rute yang terbuka karena
     // konfigurasinya lupa dipasang adalah rute publik yang menembakkan
-    // permintaan ke Midtrans sebanyak yang diminta siapa pun.
+    // permintaan ke DOKU sebanyak yang diminta siapa pun.
     delete process.env.CRON_SECRET;
     const r = await POST(permintaan("Bearer apa pun"));
     expect(r.status).toBe(401);
-    expect(midtrans.panggilan).toEqual([]);
+    expect(doku.panggilan).toEqual([]);
   });
 
   it("menolak tanpa header", async () => {
@@ -318,16 +321,14 @@ describe("sapuan /api/cron/pesanan", () => {
     process.env.CRON_SECRET = "rahasia-uji";
     const kode = `${AWALAN_KODE}0001`;
     const id = await semaiMenggantung(kode);
-    midtrans.jawabPer.set(`${kode}.1`, {
+    doku.jawabPer.set(inv(kode), {
       ok: true,
       status: {
-        order_id: `${kode}.1`,
-        status_code: "200",
-        transaction_status: "settlement",
-        transaction_id: `trx-${kode}`,
-        gross_amount: `${HARGA}.00`,
-        fraud_status: null,
-        payment_type: "qris",
+        invoice: inv(kode),
+        status: "SUCCESS",
+        nominal: HARGA,
+        transaksiId: `trx-${kode}`,
+        kanal: "QRIS",
       },
     });
 
@@ -341,7 +342,7 @@ describe("sapuan /api/cron/pesanan", () => {
     expect(typeof isi.diperiksa).toBe("number");
     expect(isi.diperiksa).toBeGreaterThanOrEqual(1);
 
-    expect(midtrans.panggilan).toContain(`${kode}.1`);
+    expect(doku.panggilan).toContain(inv(kode));
     expect(await statusPesanan(id)).toBe("lunas");
   });
 
@@ -352,10 +353,10 @@ describe("sapuan /api/cron/pesanan", () => {
     process.env.CRON_SECRET = "rahasia-uji";
     const kode = `${AWALAN_KODE}0002`;
     const id = await semaiMenggantung(kode);
-    midtrans.jawabPer.set(`${kode}.1`, {
+    doku.jawabPer.set(inv(kode), {
       ok: false,
       kode: 404,
-      pesan: "Transaction doesn't exist",
+      pesan: "Invoice tidak dikenal DOKU.",
     });
     // Tenggat sudah lewat lebih dari satu jam -> 404 boleh dibaca kedaluwarsa.
     await admin
@@ -365,7 +366,7 @@ describe("sapuan /api/cron/pesanan", () => {
 
     const r = await POST(permintaan("Bearer rahasia-uji"));
     expect(r.status).toBe(200);
-    expect(midtrans.panggilan).toContain(`${kode}.1`);
+    expect(doku.panggilan).toContain(inv(kode));
     expect(await statusPesanan(id)).toBe("kedaluwarsa");
   });
 
@@ -380,14 +381,14 @@ describe("sapuan /api/cron/pesanan", () => {
 
     await POST(permintaan("Bearer rahasia-uji"));
 
-    expect(midtrans.panggilan).not.toContain(`${kode}.1`);
+    expect(doku.panggilan).not.toContain(inv(kode));
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
   });
 
   it("kunci server yang belum terpasang melaporkan diperiksa: 0, BUKAN jumlah barisnya", async () => {
     // Kegagalan termahal yang bisa lolos dari berkas ini, dan satu-satunya
     // yang tidak menghasilkan galat di mana pun: server tanpa
-    // `MIDTRANS_SERVER_KEY` melaporkan "diperiksa: 20" tiap lima belas menit
+    // `DOKU_SECRET_KEY` melaporkan "diperiksa: 20" tiap lima belas menit
     // tanpa satu permintaan pun pernah keluar. Penjadwal yang sakit terbaca
     // PERSIS seperti penjadwal yang sehat, dan angka di badan jawaban inilah
     // satu-satunya hal yang pernah dicatat siapa pun — `curl --fail` tidak
@@ -405,10 +406,10 @@ describe("sapuan /api/cron/pesanan", () => {
     process.env.CRON_SECRET = "rahasia-uji";
     const kode = `${AWALAN_KODE}0004`;
     const id = await semaiMenggantung(kode);
-    midtrans.jawabPer.set(`${kode}.1`, {
+    doku.jawabPer.set(inv(kode), {
       ok: false,
       kode: -1,
-      pesan: "Kunci Midtrans belum dipasang.",
+      pesan: "Kunci DOKU belum dipasang.",
     });
 
     const r = await POST(permintaan("Bearer rahasia-uji"));
@@ -417,7 +418,7 @@ describe("sapuan /api/cron/pesanan", () => {
     // Barisnya BENAR-BENAR terpilih dan diproses. Tanpa baris ini `0` juga
     // dipulangkan oleh sapuan yang tidak menemukan apa-apa, dan ujinya hijau
     // untuk alasan yang salah — persis bentuk kegagalan yang sedang dijaga.
-    expect(midtrans.panggilan).toContain(`${kode}.1`);
+    expect(doku.panggilan).toContain(inv(kode));
 
     const isi = (await r.json()) as { diperiksa: number; dilewati: number };
     expect(isi.diperiksa).toBe(0);
@@ -463,13 +464,13 @@ describe("sapuan /api/cron/pesanan", () => {
       dilewati: 0,
     });
 
-    // (b) MATI TOTAL — satu baris, dan Midtrans tidak menjawabnya.
+    // (b) MATI TOTAL — satu baris, dan DOKU tidak menjawabnya.
     const kode = `${AWALAN_KODE}0005`;
     await semaiMenggantung(kode);
-    midtrans.jawabPer.set(`${kode}.1`, { ok: false, kode: 503, pesan: "Service unavailable" });
+    doku.jawabPer.set(inv(kode), { ok: false, kode: 503, pesan: "Service unavailable" });
     const mati = await sapu();
 
-    expect(midtrans.panggilan).toContain(`${kode}.1`);
+    expect(doku.panggilan).toContain(inv(kode));
     // Kedua keadaan memulangkan `diperiksa` yang SAMA — itulah sebab
     // `dilewati` harus ada...
     expect(mati.diperiksa).toBe(sepi.diperiksa);

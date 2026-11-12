@@ -30,7 +30,7 @@ export const runtime = "nodejs";
  * ===== KENAPA RAHASIA, BUKAN requireRole =====
  * Pemanggilnya mesin: tidak ada sesi, tidak ada peran. Tanpa `CRON_SECRET`
  * terpasang, rute ini MENOLAK semua orang — fail-closed persis seperti rute
- * tenggat. Rute publik yang menembakkan permintaan ke Midtrans bisa dipanggil
+ * tenggat. Rute publik yang menembakkan permintaan ke DOKU bisa dipanggil
  * siapa pun berulang kali, dan ongkosnya dibayar akun merchant PADMA.
  * Nilainya hidup sebagai GitHub Secret, bukan di repo: repo ini PUBLIK, jadi
  * itu syarat, bukan kehati-hatian umum.
@@ -62,7 +62,7 @@ export const runtime = "nodejs";
  *     ------------------------------------------------------------
  *     kasus terburuk ≈ 160 s   <   maxDuration 240 s   <   batas Hobby 300 s
  *
- * Kasus terburuk itu berarti Midtrans mati total dan SETIAP panggilan habis
+ * Kasus terburuk itu berarti DOKU mati total dan SETIAP panggilan habis
  * waktunya — keadaan yang tidak menyelesaikan apa pun betapapun lama ia
  * dibiarkan. Yang penting justru bahwa ia berhenti, bukan bahwa ia selesai.
  */

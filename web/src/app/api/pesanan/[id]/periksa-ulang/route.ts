@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
-  terapkanJawabanMidtrans,
+  terapkanJawabanGateway,
   type HasilPeriksaPesanan,
 } from "@/lib/pesanan/periksa-menggantung";
 
@@ -11,34 +11,34 @@ export const runtime = "nodejs";
 /**
  * PERIKSA ULANG — RUTE, BUKAN RPC BERPARAMETER STATUS (spec "Rekonsiliasi").
  *
- * Vonis Midtrans tidak boleh jadi parameter yang dikirim pemanggil bersesi,
+ * Vonis gateway tidak boleh jadi parameter yang dikirim pemanggil bersesi,
  * atau admin mana pun bisa mencetak `lunas` dengan satu curl. Karena itu yang
  * dikirim dari layar hanyalah ID pesanan; yang menentukan hasilnya adalah
- * Status API Midtrans, dan jawabannya masuk lewat `terapkan_notifikasi_midtrans`
+ * Check Status DOKU, dan jawabannya masuk lewat `terapkan_notifikasi_gateway`
  * — fungsi yang tertutup bagi `authenticated` justru supaya begitu.
  *
  * Hidup di `src/app/api/**`, bukan `src/app/admin/**`: larangan service role
  * (`tests/admin-shell.test.ts:643`) tidak tersentuh.
  */
 const PESAN: Record<HasilPeriksaPesanan, string> = {
-  diterapkan: "Jawaban Midtrans diterapkan.",
+  diterapkan: "Jawaban DOKU diterapkan.",
   duplikat: "Notifikasi itu sudah pernah diproses sebelumnya.",
-  tanpa_efek: "Tidak ada yang berubah — keadaan pesanan sudah sesuai jawaban Midtrans.",
-  pesanan_tidak_ada: "Midtrans tidak mengenali nomor pesanan ini.",
-  // Bukan kegagalan Midtrans, melainkan baris kita sendiri yang cacat — dan
+  tanpa_efek: "Tidak ada yang berubah — keadaan pesanan sudah sesuai jawaban DOKU.",
+  pesanan_tidak_ada: "DOKU tidak mengenali nomor pesanan ini.",
+  // Bukan kegagalan DOKU, melainkan baris kita sendiri yang cacat — dan
   // kalimatnya harus menyuruh manusia melihat barisnya, bukan mencoba lagi.
-  bentuk_order_id:
-    "Nomor pesanan ini tidak berbentuk sah, jadi Midtrans tidak bisa ditanyai. Periksa barisnya.",
+  bentuk_invoice:
+    "Nomor pesanan ini tidak berbentuk sah, jadi DOKU tidak bisa ditanyai. Periksa barisnya.",
   belum_kedaluwarsa:
-    "Midtrans belum mengenal transaksinya, dan tenggang satu jam sesudah tenggat belum lewat.",
-  midtrans_tak_terjawab: "Midtrans tidak menjawab. Coba lagi beberapa saat lagi.",
+    "DOKU belum mengenal transaksinya, dan tenggang satu jam sesudah tenggat belum lewat.",
+  gateway_tak_terjawab: "DOKU tidak menjawab. Coba lagi beberapa saat lagi.",
   // Kalimat yang SAMA PERSIS dengan yang sudah dipilih `terbitkanTokenSnap`
   // (Tugas 8) untuk keadaan yang sama, dan sengaja TIDAK menyuruh mencoba
-  // lagi: `MIDTRANS_SERVER_KEY` yang belum terpasang tidak berubah karena
+  // lagi: `DOKU_SECRET_KEY` yang belum terpasang tidak berubah karena
   // tombolnya ditekan ulang. Satu-satunya tindakan yang menolong adalah
   // memanggil orang yang bisa memasang env-nya.
   kunci_belum_terpasang: "Pembayaran belum aktif. Hubungi tim PADMA.",
-  galat_basis_data: "Jawaban Midtrans gagal diterapkan.",
+  galat_basis_data: "Jawaban DOKU gagal diterapkan.",
 };
 
 export async function POST(
@@ -50,7 +50,7 @@ export async function POST(
 
   // Barisnya dibaca dengan SESI PEMANGGIL — policy "pesanan: staf baca" yang
   // memutuskan, bukan perbandingan yang ditulis di sini. Service role baru
-  // muncul di dalam `terapkanJawabanMidtrans`, sesudah haknya diputuskan RLS.
+  // muncul di dalam `terapkanJawabanGateway`, sesudah haknya diputuskan RLS.
   const sb = await createServerSupabase();
   const { data: pesanan, error: galatPesanan } = await sb
     .from("orders")
@@ -73,7 +73,7 @@ export async function POST(
     return NextResponse.json({ pesan: "Pesanan tidak ditemukan." }, { status: 404 });
   }
 
-  const hasil = await terapkanJawabanMidtrans({
+  const hasil = await terapkanJawabanGateway({
     id: pesanan.id,
     kode: pesanan.kode,
     percobaan: pesanan.percobaan,
@@ -82,7 +82,7 @@ export async function POST(
 
   // 502, bukan 200: "sudah diperiksa" untuk pemeriksaan yang tidak pernah
   // terjadi membuat staf berhenti memeriksanya.
-  if (hasil === "midtrans_tak_terjawab") {
+  if (hasil === "gateway_tak_terjawab") {
     return NextResponse.json({ hasil, pesan: PESAN[hasil] }, { status: 502 });
   }
   // 503, angka yang sama dengan jawaban rute webhook untuk keadaan yang sama
@@ -96,7 +96,7 @@ export async function POST(
   }
   // 500: yang rusak adalah baris kita, bukan pihak ketiga, dan tidak ada yang
   // bisa disembuhkan dengan menekan tombolnya lagi.
-  if (hasil === "bentuk_order_id") {
+  if (hasil === "bentuk_invoice") {
     return NextResponse.json({ hasil, pesan: PESAN[hasil] }, { status: 500 });
   }
   if (hasil === "galat_basis_data") {
