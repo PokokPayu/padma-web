@@ -650,6 +650,11 @@ describe("halaman detail klien (/admin/klien/[id])", () => {
     expect(m).toContain("PAD-UJI-0005");
     expect(m).toContain(EMAIL_FIXTURE);
     expect(m).toContain("Belum aktif");
+    // Riwayat pembelian (P4) ikut dirender oleh HALAMAN — bukan oleh komponen
+    // server async, yang membuat renderToStaticMarkup suspend. Fixture ini
+    // belum pernah membeli, jadi yang tampil keadaan kosongnya dan pagar
+    // nominal di bawah tetap berlaku.
+    expect(m).toContain('data-bagian="riwayat-pembelian"');
     expect(nominalDalam(m), "nominal bocor").toEqual([]);
   });
 

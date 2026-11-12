@@ -1015,7 +1015,7 @@ describe("terapkan_notifikasi_midtrans — jantung mesin", () => {
 });
 
 describe("view pesanan_item_staf", () => {
-  it("staf melihat enam kolom BERNOMINAL; klien tidak melihat baris apa pun", async () => {
+  it("staf melihat TUJUH kolom BERNOMINAL; klien tidak melihat baris apa pun", async () => {
     const produk = await semaiProduk("view-staf", 120_000);
     const p = await semaiPesanan({
       produkId: produk,
@@ -1037,11 +1037,16 @@ describe("view pesanan_item_staf", () => {
       "judul_beku",
       "kode",
       "pesanan_id",
+      "product_id",
       "urutan",
     ]);
     expect(data![0].harga_beku).toBe(120_000);
     expect(data![0].kode).toBe(p.kode);
     expect(data![0].judul_beku).toBe("Kelas Menyusui");
+    // Kolom ini SEBAB migrasi 20261006100000 ada: pengelompokan per produk
+    // harus berpegang pada identitas, bukan pada judul beku yang pecah jadi
+    // dua baris laporan saat produk diganti nama.
+    expect(data![0].product_id).toBe(produk);
 
     const klien = await signInAs(KLIEN_EMAIL);
     const { data: lewatKlien, error: eKlien } = await klien
