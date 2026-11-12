@@ -18,12 +18,11 @@
  * benar hari ini dan salah begitu `ditahan` lahir; `PESANAN_BERUANG.includes(...)`
  * memaksa orang berikutnya memutuskan di mana nilai barunya masuk.
  *
- * ===== KENAPA BUKAN MENGIMPOR `JAM_TENGGAT_BAYAR` =====
- * `src/lib/tagihan/tenggat.ts:10` sudah mengekspor `JAM_TENGGAT_BAYAR = 24`
- * untuk tenggat bayar SESI. `JAM_TENGGAT_PESANAN` di bawah bernilai sama dan
- * SENGAJA tidak mengimpornya: P3-lah yang memindahkan pembayaran sesi ke mesin
- * pesanan, dan penyatuan dua konstanta ini adalah keputusannya, bukan keputusan
- * P1. Menyatukannya sekarang berarti P1 mendahului keputusan yang belum diambil.
+ * ===== SATU TENGGAT UNTUK PRODUK DAN SESI (P3/B2) =====
+ * `JAM_TENGGAT_BAYAR` (`src/lib/tagihan/tenggat.ts`) dulu memegang tenggat bayar
+ * SESI dengan nilai yang sama. P1 sengaja tidak menyatukannya; P3 memindahkan
+ * tagihan sesi ke mesin pesanan dan menyatukannya: `JAM_TENGGAT_PESANAN` kini
+ * satu-satunya, dan konstanta lama dihapus.
  */
 
 /**
@@ -150,6 +149,12 @@ export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string> = {
 /**
  * Tenggat pesanan, dalam jam. SATU konstanta untuk DUA tempat: kolom
  * `orders.kedaluwarsa_pada` dan `expiry` di payload Snap.
+ *
+ * Tagihan sesi memakai angka yang sama di SQL: `interval '24 hours'` di
+ * `terbitkan_tagihan_sesi` (migrasi 20261113140100), dengan batas jam
+ * kunjungan Jakarta — `least(now() + 24 jam, jam kunjungan)`. Pengikatnya uji
+ * tenggat di `tests/tagihan-sesi-db.test.ts`, yang menghitung harapannya dari
+ * konstanta ini.
  *
  * Dua angka yang boleh berbeda adalah dua kegagalan simetris. Kolom lebih
  * pendek: kita berhenti bertanya sementara VA-nya masih bisa dibayar, dan

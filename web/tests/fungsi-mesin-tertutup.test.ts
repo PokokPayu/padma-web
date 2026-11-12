@@ -53,6 +53,11 @@ const MESIN_TERTUTUP = [
   "salurkan_pesanan",
   "terapkan_notifikasi_gateway",
   "terbitkan_akses_item",
+  // Bukan penulis (B2, Ruling 1): predikat "uang sudah masuk" yang dipakai
+  // fungsi definer lain (terbit ulang B2, penjaga batal B4, tombol Bayar B6).
+  // Dikunci di sini supaya membukanya — memberi tahu siapa pun pengajuan mana
+  // yang sudah dibayar — memerahkan pagar.
+  "uang_sudah_masuk_permintaan",
 ] as const;
 
 /**
@@ -84,6 +89,10 @@ const TERBUKA_SADAR = {
   // untuk mengambil nama pemutus/penutup — dan itulah sebabnya kolom ini
   // menyebut gerbang yang diharapkan, bukan menerima salah satu dari dua.
   putuskan_pesanan_ditahan: "user_role",
+  // B2: rumus harga (bukan penulis) dan penerbit tagihan sesi. Keduanya hanya
+  // menerima id pengajuan; gerbangnya peran staf.
+  rincian_tagihan_permintaan: "user_role",
+  terbitkan_tagihan_sesi: "user_role",
   tutup_tinjauan: "user_role",
 } as const;
 

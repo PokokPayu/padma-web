@@ -6,8 +6,11 @@
  * basis data.
  */
 
-/** 24 jam sejak tagihan terbit. Keputusan pemilik repo 8 September 2026. */
-export const JAM_TENGGAT_BAYAR = 24;
+// `JAM_TENGGAT_BAYAR` (24 jam, keputusan pemilik repo 8 September 2026)
+// DISATUKAN dengan `JAM_TENGGAT_PESANAN` (`@/lib/pesanan/status`) di P3/B2:
+// tagihan sesi kini pesanan, dan tenggatnya dipasang `terbitkan_tagihan_sesi`
+// di SQL. Dua konstanta bernilai sama untuk satu tenggat adalah dua tempat
+// yang suatu hari berselisih.
 
 /**
  * Sisa waktu dalam JAM. Negatif berarti sudah lewat.

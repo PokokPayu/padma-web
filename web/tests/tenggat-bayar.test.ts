@@ -13,7 +13,8 @@ import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { skriningHijau } from "./helpers/skrining";
 import { querySql } from "./helpers/db";
-import { sisaJam, sudahLewatTenggat, labelSisaWaktu, JAM_TENGGAT_BAYAR } from "@/lib/tagihan/tenggat";
+import { sisaJam, sudahLewatTenggat, labelSisaWaktu } from "@/lib/tagihan/tenggat";
+import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
 
 const admin = createAdminSupabase();
 
@@ -79,8 +80,8 @@ beforeEach(bersihkan);
 afterAll(bersihkan);
 
 describe("fungsi murni tenggat", () => {
-  it("tenggatnya 24 jam", () => {
-    expect(JAM_TENGGAT_BAYAR).toBe(24);
+  it("tenggatnya 24 jam (satu konstanta untuk produk dan sesi sejak P3/B2)", () => {
+    expect(JAM_TENGGAT_PESANAN).toBe(24);
   });
 
   it("sisa jam negatif berarti sudah lewat", () => {

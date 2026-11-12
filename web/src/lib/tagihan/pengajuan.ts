@@ -49,8 +49,24 @@ export type SebabTagihanTakLengkap =
   | "tarif_varian_kosong"
   | "tarif_transport_kosong";
 
+/**
+ * Sebab `terbitkan_tagihan_sesi` MENOLAK menerbitkan tagihan (B2). Empat sebab
+ * tagihan-tak-lengkap di atas, ditambah empat keadaan yang hanya diketahui
+ * fungsi SQL itu saat ia mengunci barisnya.
+ *
+ * Fungsi SQL melempar `message` = salah satu kunci ini dengan
+ * `hint = 'sebab_tagihan'`; kalimatnya tetap tinggal di sini, supaya SQL tidak
+ * pernah memegang teks layar.
+ */
+export type SebabTagihanDitolak =
+  | SebabTagihanTakLengkap
+  | "jam_kunjungan_lewat"
+  | "bidan_nonaktif"
+  | "uang_sudah_masuk"
+  | "permintaan_tidak_siap";
+
 /** Kalimat untuk ADMIN: menyebut akibat DAN layar yang memperbaikinya. */
-export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanTakLengkap, string> = {
+export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanDitolak, string> = {
   mitra_tanpa_titik:
     "Bidan yang ditetapkan belum punya titik di peta, jadi jaraknya tidak bisa dihitung. Lengkapi di menu Mitra.",
   alamat_tanpa_pin:
@@ -59,7 +75,30 @@ export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanTakLengkap, string> = {
     "Belum ada tarif varian yang berlaku pada tanggal sesi ini. Owner menetapkannya di menu Tarif.",
   tarif_transport_kosong:
     "Belum ada tarif transport yang berlaku untuk jenjang jarak ini pada tanggal sesi. Owner menetapkannya di menu Transport.",
+  jam_kunjungan_lewat:
+    "Jam kunjungan permintaan ini sudah lewat (waktu Jakarta), jadi tagihannya tidak bisa dibayar tepat waktu. Ubah tanggal atau jam kunjungannya lebih dulu.",
+  bidan_nonaktif:
+    "Bidan yang ditetapkan sudah nonaktif. Ganti bidannya lebih dulu, lalu terbitkan tagihannya.",
+  uang_sudah_masuk:
+    "Pembayaran untuk permintaan ini sudah masuk atau sedang diperiksa. Selesaikan dulu di menu Pesanan; tagihan kedua tidak diterbitkan.",
+  permintaan_tidak_siap:
+    "Permintaan sudah ditangani atau tidak ditemukan. Muat ulang halaman.",
 };
+
+/**
+ * Sebab penolakan dari galat RPC `terbitkan_tagihan_sesi`, atau `null` bila
+ * galatnya BUKAN penolakan bersebab (galat sistem, jaringan, kendala lain).
+ * Dicocokkan lewat `hint` DAN kunci yang dikenal: pesan galat Postgres lain
+ * tidak pernah boleh menyamar menjadi kalimat admin.
+ */
+export function sebabTagihanDitolak(
+  galat: { message?: string; hint?: string | null } | null,
+): SebabTagihanDitolak | null {
+  if (!galat || galat.hint !== "sebab_tagihan" || !galat.message) return null;
+  return Object.prototype.hasOwnProperty.call(KALIMAT_SEBAB_ADMIN, galat.message)
+    ? (galat.message as SebabTagihanDitolak)
+    : null;
+}
 
 /**
  * Kalimat untuk KLIEN. Tidak satu pun menyebut nama layar internal atau

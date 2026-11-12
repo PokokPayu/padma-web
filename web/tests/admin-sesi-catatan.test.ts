@@ -1244,8 +1244,12 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     }
     expect(sumberAksi).not.toContain("setDate(");
     expect(sumberAksi).not.toContain("getDay(");
-    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(2);
-    expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
+    // B2 (P3): `terbitkanTagihan` tidak lagi menghitung `tenggat` — fungsi SQL
+    // `terbitkan_tagihan_sesi` memasangnya (least(24 jam, jam kunjungan
+    // Jakarta)). Pemakaian sah yang TERSISA hanya `email_tagihan_pada`.
+    // Angkanya turun dari 2 ke 1, tetap TEPAT, bukan dilonggarkan.
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect(sumberAksi).not.toMatch(/const tenggat = new Date\(/);
     expect(sumberAksi).toMatch(/email_tagihan_pada:\s*new Date\(\)\.toISOString\(\)/);
   });
 
@@ -1264,8 +1268,13 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // gerbang penerbitan tagihan kini menangkap galat baca rincian dan
     // menolak penerbitan alih-alih melewatinya. Argumennya `e` — objek galat
     // generik, tanpa satu pun medan klien — sama seperti tiga baris lainnya.
+    // B2 (P3): gerbang baca rincian di `terbitkanTagihan` DIHAPUS (harga kini
+    // dihitung di SQL), jadi barisnya keluar dari daftar. Penggantinya
+    // mencatat galat RPC `terbitkan_tagihan_sesi` yang BUKAN penolakan
+    // bersebab — argumennya `error` (objek galat Postgres, tanpa medan klien),
+    // sama seperti tiga baris lainnya. Jumlahnya tetap empat.
     const KONSOL_SAH = [
-      'console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);',
+      'console.error("[tagihan] terbitkan_tagihan_sesi gagal:", error);',
       'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
       'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
       'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',

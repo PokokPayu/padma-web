@@ -9,7 +9,7 @@ import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
-import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
+import { KALIMAT_SEBAB_ADMIN, sebabTagihanDitolak } from "@/lib/tagihan/pengajuan";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
@@ -17,7 +17,6 @@ import {
   PERMINTAAN_SIAP_KONFIRMASI,
   STATUS_ANTRE,
 } from "@/lib/jadwal/status";
-import { JAM_TENGGAT_BAYAR } from "@/lib/tagihan/tenggat";
 import { kirimEmail } from "@/lib/email/kirim";
 import { emailTagihan, subjekTagihan } from "@/lib/tagihan/email-tagihan";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
@@ -150,97 +149,50 @@ export async function pilihMitra(
 }
 
 /**
- * `mitra_siap` -> `menunggu_bayar`: menerbitkan tagihan (spec C2 P1, P3).
+ * `mitra_siap` -> `menunggu_bayar`: menerbitkan tagihan (spec C2 P1, P3;
+ * sejak P3/B2 tagihan = pesanan sesi berharga beku, spec §6.2). Dari
+ * `menunggu_bayar` aksi yang sama menerbitkan ULANG (§6.5).
  *
  * Terbit TEPAT di sini, tidak lebih awal, dan alasannya struktural: tarif
  * transport berasal dari domisili MITRA ke alamat KLIEN, jadi total tagihan
  * tidak bisa diketahui sebelum bidannya dipilih.
  *
- * `tenggat` diisi server, bukan diterima dari pemanggil — tenggat yang bisa
- * disebut peramban adalah tenggat yang bisa dipanjangkan sendiri.
+ * `tenggat` diisi basis data, bukan diterima dari pemanggil — tenggat yang
+ * bisa disebut peramban adalah tenggat yang bisa dipanjangkan sendiri.
  */
 export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
-  // GERBANG: tagihan tanpa nominal tidak boleh terbit.
+  // SATU fungsi SQL, SATU transaksi (B2, spec §6.2): mengunci baris
+  // pengajuan, menghitung harga dengan `rincian_tagihan_permintaan`,
+  // membekukannya ke pesanan jenis 'sesi', memasang tenggat
+  // least(24 jam, jam kunjungan Jakarta), dan memindahkan status. Tidak satu
+  // pun angka atau tenggat dikirim dari sini — nilai turunan yang menyeberang
+  // dari pemanggil adalah nilai yang bisa dikarang.
   //
-  // Alasannya bukan kerapian. Fungsi ini memasang tenggat 24 jam, dan lewat
-  // dari tenggat itu `batalkan_lewat_tenggat()` melepas slotnya. Tagihan tanpa
-  // angka di atas tenggat 24 jam adalah jebakan: klien tidak pernah diberi tahu
-  // berapa yang harus ia bayar, lalu kehilangan jadwalnya karena tidak
-  // membayarnya.
-  //
-  // Diperiksa SEBELUM satu baris pun berubah, jadi tidak ada yang perlu
-  // dikompensasi bila gerbangnya menutup. Dibaca lewat cabang `permintaanId`
-  // (Step 4) karena baris ini BELUM `menunggu_bayar` — inilah fungsi yang
-  // memindahkannya ke sana.
-  // GAGAL TERTUTUP, TERMASUK PADA GALAT BACA (Ruling 26, gelombang perbaikan
-  // akhir). Sebelumnya baris ini berbunyi `(await daftar...)[0] ?? null` dan
-  // gerbang di bawahnya hanya menutup bila `rincianAwal` ADA dan totalnya
-  // null. Dua keadaan lolos begitu saja:
-  //
-  //   1. `daftarTagihanPengajuanAdmin` membuang galat PostgREST-nya dan
-  //      memulangkan `[]` (sudah diperbaiki di modul itu — ia MELEMPAR
-  //      sekarang);
-  //   2. `rincianAwal === null` apa pun sebabnya.
-  //
-  // Keduanya berujung sama: gerbang dilewati, status pindah ke
-  // `menunggu_bayar`, tenggat 24 jam berjalan, dan klien menerima tagihan
-  // tanpa angka. Yang benar adalah kebalikannya — bila totalnya tidak bisa
-  // DIPASTIKAN, penerbitan ditolak. Menahan penerbitan bisa dicoba lagi satu
-  // menit kemudian; tenggat yang sudah berjalan atas tagihan tanpa angka
-  // tidak bisa ditarik kembali.
-  //
-  // Galatnya ditangkap di sini, bukan dibiarkan melempar ke Next.js: server
-  // action yang melempar sampai ke admin sebagai layar galat generik tanpa
-  // satu kalimat pun tentang apa yang harus ia lakukan, sementara yang
-  // dibutuhkan justru "coba lagi" yang eksplisit.
-  let rincianAwal: Awaited<ReturnType<typeof daftarTagihanPengajuanAdmin>>[number] | null = null;
-  try {
-    rincianAwal = (await daftarTagihanPengajuanAdmin({ permintaanId }))[0] ?? null;
-  } catch (e) {
-    console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);
+  // Dari `menunggu_bayar` panggilan yang sama adalah TERBIT ULANG: pesanan
+  // lama ditutup dan pesanan baru terbit, kecuali uang untuk pengajuan ini
+  // sudah masuk (§6.5).
+  const { error } = await supabase.rpc("terbitkan_tagihan_sesi", {
+    p_permintaan_id: permintaanId,
+  });
+  if (error) {
+    const sebab = sebabTagihanDitolak(error);
+    if (sebab) {
+      return { ok: false, pesan: `Tagihan belum bisa terbit. ${KALIMAT_SEBAB_ADMIN[sebab]}` };
+    }
+    // Bukan penolakan bersebab: galat sistem. Dicatat (objek galat Postgres,
+    // tanpa medan klien) dan admin diberi "coba lagi" yang eksplisit, bukan
+    // diagnosis yang salah tentang tarif atau pin peta.
+    console.error("[tagihan] terbitkan_tagihan_sesi gagal:", error);
     return {
       ok: false,
       pesan:
-        "Tagihan belum bisa terbit: rincian totalnya gagal dibaca dari basis data. " +
-        "Ini kegagalan sistem, bukan data yang kurang — jangan mengubah tarif atau " +
-        "pin peta. Coba lagi beberapa saat lagi; bila tetap gagal, laporkan ke teknis.",
+        "Tagihan belum bisa terbit karena galat sistem, bukan data yang kurang — " +
+        "jangan mengubah tarif atau pin peta. Coba lagi beberapa saat lagi; bila " +
+        "tetap gagal, laporkan ke teknis.",
     };
-  }
-  if (rincianAwal === null) {
-    return {
-      ok: false,
-      pesan:
-        "Tagihan belum bisa terbit: baris permintaannya tidak terbaca. " +
-        "Muat ulang halaman — kemungkinan besar permintaan ini sudah ditangani orang lain.",
-    };
-  }
-  if (rincianAwal.total === null) {
-    return {
-      ok: false,
-      pesan: `Tagihan belum bisa terbit. ${
-        rincianAwal.sebab
-          ? KALIMAT_SEBAB_ADMIN[rincianAwal.sebab]
-          : "Totalnya belum bisa dihitung."
-      }`,
-    };
-  }
-
-  const tenggat = new Date(Date.now() + JAM_TENGGAT_BAYAR * 3_600_000).toISOString();
-
-  const { data } = await supabase
-    .from("booking_requests")
-    .update({ status: PERMINTAAN_MENUNGGU_BAYAR, tenggat })
-    .eq("id", permintaanId)
-    // Hanya dari `mitra_siap`. Memanggilnya dua kali karena itu TIDAK
-    // memperpanjang tenggat — yang kedua tidak mengenai baris mana pun.
-    .eq("status", PERMINTAAN_SIAP_KONFIRMASI)
-    .select("id");
-
-  if ((data ?? []).length === 0) {
-    return { ok: false, pesan: "Permintaan sudah ditangani atau tidak ditemukan." };
   }
 
   revalidatePath("/admin/sesi");
@@ -295,7 +247,8 @@ type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
  *
  * PAGAR STATUS: bacaan `booking_requests` DIKUNCI ke `menunggu_bayar`.
  * `daftarTagihanPengajuanAdmin({ permintaanId })` sengaja mengabaikan status
- * (dipakai gerbang `terbitkanTagihan()` yang membaca SEBELUM transisi), tetapi
+ * (dulu dipakai gerbang `terbitkanTagihan()` yang membaca SEBELUM transisi;
+ * gerbang itu kini hidup di `terbitkan_tagihan_sesi`), tetapi
  * fungsi ini punya DUA pemanggil: `terbitkanTagihan()` sendiri (baris sudah
  * `menunggu_bayar` pada titik ini) dan server action `kirimUlangEmailTagihan`
  * — endpoint POST tersendiri (aturan #1 dokblok atas berkas ini) yang bisa
@@ -369,8 +322,7 @@ async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail>
       .eq("id", permintaanId)
       // Lihat dokblok: mengunci bacaan ini ke `menunggu_bayar` melindungi
       // KEDUA jalur pemanggil (`terbitkanTagihan` dan `kirimUlangEmailTagihan`)
-      // sekaligus, sejajar dengan `.eq("status", PERMINTAAN_SIAP_KONFIRMASI)`
-      // pada `terbitkanTagihan` di atas.
+      // sekaligus.
       .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
       .maybeSingle<{
         tenggat: string | null;
