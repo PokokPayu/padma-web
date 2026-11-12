@@ -67,3 +67,42 @@ export function uraiOrderId(orderId: string): { kode: string; percobaan: number 
     percobaan: Number(orderId.slice(pisah + 1)),
   };
 }
+
+/**
+ * INVOICE DOKU: `kode` tanpa tanda hubung + satu digit percobaan 1..9.
+ *
+ * DOKU membatasi `invoice_number` pada alfanumerik, jadi tanda hubung dan titik
+ * Midtrans tidak bisa dipakai di sini. Sufiks percobaan tetap satu digit agar
+ * panjangnya tetap 16 karakter; sama seperti `order_id` Midtrans, sufiks itulah
+ * yang memberi jalan keluar ketika invoice sebelumnya sudah terbakar.
+ *
+ * TANPA flag `g` — lihat dokblok `POLA_KODE_PESANAN`.
+ */
+export const POLA_INVOICE_DOKU = /^PSN\d{6}[0-9A-F]{6}[1-9]$/;
+
+/**
+ * MELEMPAR bila `kode` atau `percobaan` tidak berbentuk benar, sama seperti
+ * `rakitOrderId`: invoice cacat tidak boleh sampai ke DOKU.
+ */
+export function rakitInvoice(kode: string, percobaan: number): string {
+  if (!POLA_KODE_PESANAN.test(kode)) {
+    throw new Error(`Kode pesanan tidak berbentuk PSN-YYMMDD-XXXXXX: ${kode}`);
+  }
+  if (!Number.isInteger(percobaan) || percobaan < 1 || percobaan > 9) {
+    throw new Error(`Percobaan invoice di luar 1..9: ${percobaan}`);
+  }
+  return `${kode.replace(/-/g, "")}${percobaan}`;
+}
+
+/**
+ * `null` untuk bentuk asing, dengan alasan yang sama seperti `uraiOrderId`:
+ * tebakan bebas terhadap string dari luar bisa menjadikan sembarang teks
+ * sebuah kode pesanan.
+ */
+export function uraiInvoice(invoice: string): { kode: string; percobaan: number } | null {
+  if (!POLA_INVOICE_DOKU.test(invoice)) return null;
+  return {
+    kode: `PSN-${invoice.slice(3, 9)}-${invoice.slice(9, 15)}`,
+    percobaan: Number(invoice.slice(15)),
+  };
+}
