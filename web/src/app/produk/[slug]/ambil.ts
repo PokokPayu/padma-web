@@ -7,6 +7,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
 import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { COOKIE_LANJUT } from "@/lib/auth/tujuan-produk";
+import { statusPersetujuan } from "@/lib/persetujuan/status";
 
 /**
  * `punya` BUKAN salinan dari `ok`. RPC `ambil_produk_gratis` hanya MEMPERBARUI
@@ -32,6 +33,12 @@ type Hasil = { ok: true; punya: boolean } | { ok: false; pesan: string };
  * Pengunjung anon dititipi tujuan `/produk/<slug>` di cookie `padma_lanjut`
  * (lihat `lib/auth/tujuan-produk.ts`), lalu diarahkan ke `/masuk`;
  * `/setelah-masuk` memulangkannya ke sini.
+ *
+ * Klien yang belum menyetujui S&K versi berlaku diarahkan ke `/persetujuan`
+ * dengan `lanjut=/produk/<slug>`, sejajar dengan checkout (spec 2026-10-06):
+ * tombol ini juga bisa dicapai tanpa pernah membuka `/passport`, jadi gerbang
+ * layout passport tidak pernah melihatnya. Sama seperti di checkout, ini
+ * pencatat persetujuan, bukan batas keamanan.
  */
 export async function ambilProdukGratis(slug: string): Promise<Hasil> {
   const user = await penggunaSaatIni();
@@ -50,6 +57,12 @@ export async function ambilProdukGratis(slug: string): Promise<Hasil> {
 
   const produk = await bacaProdukPerSlug(slug);
   if (!produk) return { ok: false, pesan: "Produk tidak ditemukan." };
+
+  // Sesudah produk ditemukan: slug yang dirakit ke `lanjut` adalah slug dari
+  // basis data, bukan masukan peramban.
+  if (!(await statusPersetujuan(user.id)).sudahSetuju) {
+    redirect(`/persetujuan?lanjut=${encodeURIComponent(`/produk/${produk.slug}`)}`);
+  }
 
   const supabase = await createServerSupabase();
   const { error } = await supabase.rpc("ambil_produk_gratis", { p_product_id: produk.id });
