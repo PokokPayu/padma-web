@@ -459,6 +459,49 @@ describe("percobaan, sumber, dan cermin kolom", () => {
     expect(notif[0].keterangan).toContain("percobaan 2");
   });
 
+  it("SUCCESS percobaan basi pada pesanan yang sudah lunas di percobaan lain: tinjauan bayar ganda", async () => {
+    // Tautan percobaan 1 yang masih di tangan pembeli dibayar SESUDAH
+    // percobaan 2 lunas: uang kedua yang sungguhan. Tanpa tanda, uang itu
+    // hanya tercatat di jejak `notifikasi` yang tidak dibaca siapa pun.
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+    expect((ulang.data as Array<{ percobaan: number }>)[0].percobaan).toBe(2);
+
+    const bayar = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 2) });
+    expect(bayar.error).toBeNull();
+    expect(bayar.data).toBe("diterapkan");
+    expect((await bacaPesanan(p.id)).status).toBe("lunas");
+
+    // Pembanding: SUCCESS kedua pada percobaan YANG SAMA tetap tanpa tanda
+    // (spec §5.5 baris 1, K4 masih terbuka di DOKU).
+    const sama = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 2) });
+    expect(sama.error).toBeNull();
+    expect(sama.data).toBe("tanpa_efek");
+    const sesudahSama = await bacaPesanan(p.id);
+    expect(sesudahSama.sebab_tinjauan).toBeNull();
+    expect(sesudahSama.butuh_tinjauan_pada).toBeNull();
+
+    const jejakAwal = new Set((await jejak(p.id)).map((j) => j.id));
+    const basi = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 1) });
+    expect(basi.error).toBeNull();
+    expect(basi.data).toBe("tanpa_efek");
+
+    const akhir = await bacaPesanan(p.id);
+    expect(akhir.status).toBe("lunas");
+    expect(akhir.sebab_tinjauan).toBe("selisih_status");
+    expect(akhir.butuh_tinjauan_pada).not.toBeNull();
+
+    const baru = (await jejak(p.id)).filter((j) => !jejakAwal.has(j.id));
+    expect(baru.map((j) => j.kejadian).sort()).toEqual(["notifikasi", "selisih_status"]);
+    const selisih = baru.find((j) => j.kejadian === "selisih_status")!;
+    expect(selisih.keterangan).toContain("bayar ganda");
+    expect(selisih.keterangan).toContain("percobaan 1");
+    expect(selisih.keterangan).toContain("percobaan 2");
+    // Akses dari pembayaran pertama tidak disentuh.
+    expect(await aksesAktif()).toBe(true);
+  });
+
   it("p_sumber = 'status_api': diperiksa_pada terisi, jejak diperiksa_ulang, keterangan menempel", async () => {
     const p = await pesananBaru();
     const keterangan = "DOKU menjawab PENDING sesudah tenggat (uji)";

@@ -241,7 +241,8 @@ begin
     elsif v_status = 'lunas' and v_vonis = 'ditahan' then
       -- Pembayaran kedua bernominal lain pada pesanan yang sudah lunas: uang
       -- yang tidak cocok dengan apa pun yang kami tagih. SUCCESS kedua yang
-      -- nominalnya cocok tetap tanpa tanda (spec §5.5 baris 1, K4).
+      -- nominalnya cocok pada percobaan YANG SAMA tetap tanpa tanda (spec
+      -- §5.5 baris 1, K4).
       insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
       values (v_pesanan_id, v_padma_id, 'selisih_nominal',
               format('%s bernominal tidak cocok mendarat pada pesanan lunas; ditagih %s, diterima %s',
@@ -250,6 +251,22 @@ begin
       update public.orders o
          set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
              sebab_tinjauan = coalesce(o.sebab_tinjauan, 'selisih_nominal')
+       where o.id = v_pesanan_id
+         and o.status = any (array['lunas']::public.order_status[]);
+
+    elsif v_status = 'lunas' and v_vonis = 'lunas' and v_percobaan <> v_percobaan_kini then
+      -- SUCCESS untuk invoice percobaan LAIN pada pesanan yang sudah lunas:
+      -- tautan lama yang masih di tangan pembeli dibayar sesudah percobaan
+      -- baru lunas. Itu pembayaran kedua yang sungguhan, bukan pengiriman
+      -- ulang, dan tanpa tanda ia hanya tercatat di jejak `notifikasi`.
+      insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+      values (v_pesanan_id, v_padma_id, 'selisih_status',
+              format('SUCCESS percobaan %s mendarat pada pesanan yang sudah lunas di percobaan %s — kemungkinan bayar ganda',
+                     v_percobaan, v_percobaan_kini));
+
+      update public.orders o
+         set butuh_tinjauan_pada = coalesce(o.butuh_tinjauan_pada, now()),
+             sebab_tinjauan = coalesce(o.sebab_tinjauan, 'selisih_status')
        where o.id = v_pesanan_id
          and o.status = any (array['lunas']::public.order_status[]);
     end if;
