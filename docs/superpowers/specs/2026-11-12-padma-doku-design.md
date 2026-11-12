@@ -155,6 +155,8 @@ indeks `https://developers.doku.com/llms.txt`.
 
 ### 4.2 Fakta yang dipakai desain
 
+> Terukur 13 Nov (sandbox): permintaan buat-pembayaran TANPA `customer` diterima DOKU (HTTP 200, `url` di host `staging.doku.com`), jadi `customer` tidak wajib. Check Status invoice baru menjawab `PENDING` dengan `order.amount` 10000.
+
 **Produk: DOKU Checkout (non-SNAP).**
 
 - Halaman bayar ter-hosting dengan banyak metode dalam satu integrasi, bisa
@@ -270,11 +272,11 @@ Butir bertanda ✉ sudah ditanyakan di email 12 Nov (nomor email dalam kurung).
 | K4 ✉(B5) | Bisakah satu invoice tercatat SUCCESS dua kali bila pelanggan berganti metode? | Desain sudah menangkapnya (notifikasi kedua `tanpa_efek`, tercatat di jejak). Bila "ya", tambahkan tanda tinjauan untuk SUCCESS kedua (§5.5 baris 1, kolom "lunas") |
 | K5 ✉(B6) | Mungkinkah SUCCESS setelah `payment_due_date` lewat, dengan Recover Abandoned Cart mati? | Sudah ditangkap sebagai `lunas_setelah_tutup` |
 | K6 ✉(B7) | Karakter apa yang sah di `invoice_number`, dan bolehkah nomor dipakai ulang dengan Request-Id baru? | Desain memakai alfanumerik saja dan nomor baru per percobaan (§5.2), jadi aman di kedua jawaban |
-| K7 ✉(B8) | Apa jawaban Check Status untuk invoice tak dikenal, berapa rate limit-nya, dan transaksi mana yang dipulangkan bila percobaannya banyak? | Memengaruhi cabang "tidak ditemukan" (§5.6) |
+| K7 ✉(B8) | Apa jawaban Check Status untuk invoice tak dikenal, berapa rate limit-nya, dan transaksi mana yang dipulangkan bila percobaannya banyak? | Memengaruhi cabang "tidak ditemukan" (§5.6). **Terukur 13 Nov (sandbox):** invoice tak pernah dibuat menjawab HTTP 404 dengan badan JSON berkunci tunggal `error`; cabang `kode === 404` benar. Rate limit dan perilaku percobaan banyak belum terukur |
 | K8 ✉(B9) | Apakah pengiriman ulang berhenti hanya pada 2xx atau pada jawaban apa pun? Berapa timeout-nya, dan adakah daftar IP? | Peta kode jawaban (§5.4) tetap. Daftar IP opsional |
 | K9 | Bagaimana format notifikasi bila Checkout dibayar lewat channel yang terdaftar sebagai "VA SNAP"? | Bila berformat SNAP, webhook butuh jalur tanda tangan kedua. Relevan hanya bila VA diaktifkan |
 | K10 | Payload notifikasi kedaluwarsa Checkout | Tidak dipakai (§5.6); fiturnya jangan dinyalakan |
-| K11 | Apakah `auto_redirect` benar-benar wajib, dan parameter apa yang ditambahkan ke `callback_url`? | Halaman kembali tidak memercayai parameter apa pun, jadi aman di kedua jawaban |
+| K11 | Apakah `auto_redirect` benar-benar wajib, dan parameter apa yang ditambahkan ke `callback_url`? | Halaman kembali tidak memercayai parameter apa pun, jadi aman di kedua jawaban. **Terukur 13 Nov (sandbox):** permintaan tanpa `auto_redirect` diterima (HTTP 200, `SUCCESS`), jadi medan itu tidak wajib untuk diterima; perilaku pengalihan dan parameter tambahan pada `callback_url` belum teramati (butuh pembayaran lewat simulator) |
 | K12 | Batas atas `payment_due_date` | Kita mengirim ≤ 1440 menit |
 | K13 | Pertentangan cakupan Cancel Order API antara dua situs dokumentasi | Desain tidak bergantung padanya (§6.6) |
 | K14 | Apakah `order.status` aktif untuk akun ini? | Opsional, hanya memperkaya jejak |
