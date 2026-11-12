@@ -100,8 +100,11 @@ export async function tarikArtikel(id: string): Promise<{ ok: true } | Gagal> {
 export async function hapusArtikel(id: string): Promise<{ ok: true } | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase.from("articles").delete().eq("id", id).select("slug");
-  if (error || (data ?? []).length === 0) return { ok: false, pesan: "Gagal menghapus artikel." };
-  segarkan((data![0] as { slug: string }).slug);
+  // Lewat RPC, bukan `.delete()`: verba DELETE atas `articles` dicabut dari
+  // peran API (migration 20261112100000) karena filter PostgREST tidak
+  // membatasi baris. RPC-nya memulangkan slug, atau null bila tidak ada.
+  const { data: slug, error } = await supabase.rpc("hapus_artikel", { artikel_id: id });
+  if (error || typeof slug !== "string") return { ok: false, pesan: "Gagal menghapus artikel." };
+  segarkan(slug);
   return { ok: true };
 }
