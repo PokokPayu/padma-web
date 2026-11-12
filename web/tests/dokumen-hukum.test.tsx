@@ -164,7 +164,7 @@ describe("Syarat & Ketentuan — fakta wajib", () => {
 
 describe("Kebijakan Privasi — fakta wajib", () => {
   it("menyebut setiap pemroses pihak ketiga", () => {
-    for (const nama of ["Supabase", "Vercel", "Cloudflare R2", "Resend", "Google", "Midtrans", "OpenStreetMap"]) {
+    for (const nama of ["Supabase", "Vercel", "Cloudflare R2", "Resend", "Google", "DOKU", "OpenStreetMap"]) {
       expect(teksPrivasi, `pemroses hilang: ${nama}`).toContain(nama);
     }
   });

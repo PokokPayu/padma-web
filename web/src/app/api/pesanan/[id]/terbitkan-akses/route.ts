@@ -58,7 +58,7 @@ const KALIMAT_HASIL = {
  *
  * ===== KENAPA terbitkan_akses_item, BUKAN salurkan_pesanan =====
  * Penyalur di-key pada TRANSISI, bukan pada niat: ia hanya dipanggil dari
- * cabang `terapkan_notifikasi_midtrans` yang benar-benar memindahkan baris
+ * cabang `terapkan_notifikasi_gateway` yang benar-benar memindahkan baris
  * (spec, "Kejadian dan penyaluran"). Memanggilnya dari sini akan membuat
  * kalimat itu tidak lagi benar, dan kalimat itulah yang membuat "lunas tanpa
  * akses" mustahil alih-alih sekadar jarang. Jadi tombol ini memanggil

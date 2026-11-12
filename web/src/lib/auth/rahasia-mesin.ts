@@ -8,7 +8,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
  * membanding membocorkan berapa karakter awal yang sudah cocok. Dua rute di
  * repo ini dijaga rahasia bersama tanpa sesi dan tanpa peran
  * (`/api/cron/tenggat`, `/api/cron/pesanan`), dan yang kedua menembakkan
- * permintaan ke Midtrans dengan service role lintas klien. Keterpaparannya
+ * permintaan ke DOKU dengan service role lintas klien. Keterpaparannya
  * lewat HTTPS memang rendah — derau jaringan jauh lebih besar daripada selisih
  * beberapa nanodetik — tapi harganya satu panggilan fungsi, dan dokblok
  * `/api/cron/tenggat` sudah MENJANJIKAN banding panjang-tetap sejak rute itu
@@ -24,8 +24,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
  *
  * Jalan keluar yang biasa dipakai — banding panjang lebih dulu, lalu
  * `timingSafeEqual` — dipakai `tandaTanganCocok()`
- * (`src/lib/midtrans/tanda-tangan.ts`) dan BENAR di sana: kedua sisinya sha512
- * heksadesimal, 128 karakter TETAP, jadi panjangnya bukan rahasia. Di sini
+ * (`src/lib/doku/tanda-tangan.ts`) dan BENAR di sana: kedua sisinya sha256
+ * base64 dengan awalan tetap, panjang TETAP, jadi panjangnya bukan rahasia. Di sini
  * tidak: panjang `CRON_SECRET` adalah properti rahasianya sendiri, dan
  * memungutnya dari sebuah pra-banding adalah kebocoran yang tidak perlu ada.
  * Karena itu fungsi ini TIDAK memanggil `tandaTanganCocok` — ia bukan tanda

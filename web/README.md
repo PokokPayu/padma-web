@@ -137,7 +137,7 @@ sama-sama membuat `npm test` MERAH.
 | `/admin/penilaian` | Admin, Owner | Penilaian sesi: dua angka TERPISAH (sesi & bidan), saringan bintang ≤ 3, komentar klien sebagai teks biasa |
 | `/admin/mitra` | Admin, Owner | Daftar mitra/bidan, tambah/ubah, aktif–nonaktif |
 | `/admin/bayar` | Admin, Owner | Verifikasi klaim pembayaran (tanpa nominal); tandai lunas / tolak klaim |
-| `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan Midtrans: blok "Butuh perhatian" (bertanda tinjauan, atau uang sudah masuk tapi akses belum tercatat terbit) dan "Terbuka"; satu-satunya layar admin yang menampilkan nominal PESANAN (yang ditagih vs yang diterima) — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
+| `/admin/pesanan` | Admin, Owner | Rekonsiliasi pesanan DOKU: blok "Butuh perhatian" (bertanda tinjauan, atau uang sudah masuk tapi akses belum tercatat terbit) dan "Terbuka"; satu-satunya layar admin yang menampilkan nominal PESANAN (yang ditagih vs yang diterima) — keputusan pemilik repo, dijaga `tests/admin-pesanan.test.tsx` |
 | `/admin/penjualan` | Admin, Owner | Daftar nota penjualan produk digital, satu baris per produk; cari (kode, PADMA ID, nama klien, judul produk), saring periode, total hanya dari nota lunas yang tidak dikembalikan; BACA SAJA |
 | `/admin/layanan` | Admin, Owner | Daftar layanan datar: cari, saring ketersediaan, paginasi; baris menaut ke detail |
 | `/admin/layanan/[id]` | Admin, Owner | Detail layanan: data, varian, paket, dan materi terkait (bacaan) |
@@ -176,12 +176,11 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/cron/tenggat` | Mesin | POST pembatal pengajuan yang lewat tenggat bayar. Dijaga `CRON_SECRET`, fail-closed bila secret tidak terpasang |
 | `/api/pesanan/checkout` | Klien | POST membuat pesanan lalu menerbitkan token Snap. Rute TIPIS: RPC `buat_pesanan` dipanggil dengan SESI PEMANGGIL, tidak pernah service role — `client_id` dipilih dari `auth.uid()` di dalam RPC, harga dibekukan di sana, dan pesanan terbuka kedua ditolak unique parsial |
 | `/api/pesanan/[id]/batal` | Klien | POST pembatalan mandiri pesanan sendiri yang masih `menunggu_bayar`. Ada karena satu klien hanya boleh punya satu pesanan terbuka: tanpanya, berubah pikiran soal produk berarti menunggu 24 jam |
-| `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Status API Midtrans untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_midtrans` (service role). Vonisnya datang dari Midtrans, tidak pernah dari badan permintaan |
+| `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Check Status DOKU untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_gateway` (service role). Vonisnya datang dari DOKU, tidak pernah dari badan permintaan |
 | `/api/pesanan/[id]/terbitkan-akses` | Admin, Owner | POST menerbitkan ulang akses untuk pesanan **lunas** yang aksesnya tidak pernah terbit; memanggil `terbitkan_akses_item` per item, bukan penyalur — aturan "penyalur hanya dari transisi" tetap utuh |
 | `/api/pesanan/[id]/putuskan` | Admin, Owner | POST putusan staf atas pesanan `ditahan`: `lunas` atau `dibatalkan`. RPC dengan sesi pemanggil, bergerbang `user_role()`, nama pemutus ikut tercatat di jejak |
 | `/api/pesanan/[id]/tutup-tinjauan` | Admin, Owner | POST mengosongkan penanda tinjauan tanpa menyentuh status; MENOLAK baris `ditahan` — yang itu menuntut putusan, bukan penutupan |
-| `/api/pembayaran/midtrans` | Mesin | POST notifikasi Midtrans. Berlapis: batas 16 KB body → kunci server terpasang (kosong = 503, supaya Midtrans mengirim ulang) → skema Zod non-strict → bentuk `order_id` → tanda tangan sha512 waktu-tetap → idempotensi lewat `unique (sidik)`. Verifikasi jumlah, transisi status, dan penerbitan akses terjadi di SATU transaksi di dalam RPC |
-| `/api/pembayaran/doku` | Mesin | POST notifikasi DOKU (menggantikan Midtrans; rute Midtrans dihapus di A10). Berlapis: batas 16 KB body → `DOKU_CLIENT_ID`/`DOKU_SECRET_KEY` terpasang (kosong = 503) → skema Zod non-strict + empat header wajib → bentuk `invoice_number` → HMAC-SHA256 waktu-tetap atas byte badan mentah (tanpa cek selisih jam) → normalisasi nominal → sidik → RPC `terapkan_notifikasi_gateway` dalam SATU transaksi. DOKU hanya mengirim ulang 3× dalam 12 jam; Lapis 1b/3 penyelamat sesungguhnya |
+| `/api/pembayaran/doku` | Mesin | POST notifikasi DOKU. Berlapis: batas 16 KB body → `DOKU_CLIENT_ID`/`DOKU_SECRET_KEY` terpasang (kosong = 503) → skema Zod non-strict + empat header wajib → bentuk `invoice_number` → HMAC-SHA256 waktu-tetap atas byte badan mentah (tanpa cek selisih jam) → normalisasi nominal → sidik → RPC `terapkan_notifikasi_gateway` dalam SATU transaksi. DOKU hanya mengirim ulang 3× dalam 12 jam; Lapis 1b/3 penyelamat sesungguhnya |
 | `/api/skrining/akun` | Klien | POST skrining dari dalam Passport dengan **service role**; `client_id` diambil dari SESI, tidak pernah dari body. Pembatas berkunci `client_id`, terpisah dari ember anonim |
 | `/api/skrining` | Publik | POST penyimpanan skrining dengan **service role** — `anon` tidak punya hak tabel pada `screenings`. Berlapis: rate limit → batas 16 KB body → skema Zod → penyaringan id soal → CHECK ukuran di DB |
 | `/api/geocode` | Admin/Owner | POST alamat → koordinat untuk pemilih lokasi di peta panel staf. Ada supaya geocoding tetap di SERVER: `lib/transport/geocode.ts` memasang `server-only`, browser tidak bisa menyetel `User-Agent` yang dituntut Nominatim, dan cache serta jeda 1 permintaan/detik hidup di sisi server. Hasilnya hanya menggeser peta — tidak ada apa pun yang tersimpan dari rute ini |
@@ -192,7 +191,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/produk/materi/[id]/video` | Pemilik aktif / pratinjau | Alih ke presigned R2 untuk satu materi video; tanpa hak menerima 404 |
 | `/api/produk/materi/[id]/halaman/[n]` | Pemilik aktif / pratinjau | Satu halaman PDF materi, ber-watermark identitas pembaca |
 | `/api/produk/materi/[id]/unduh` | Pemilik aktif | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
-| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
+| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Check Status DOKU untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
@@ -384,8 +383,8 @@ data acuan yang dirujuk kode, jadi ia ditanam lewat migrasi
 `20260908120000_tanam_fase_acuan.sql`. Jangan mengembalikannya ke `seed.sql`.
 
 **Fase 1 — Vercel:** import repo, pasang env produksi (lihat §6 spec), deploy.
-§6 ditulis 7 September 2026, sebelum pembayaran Midtrans ada; keempat env
-pembayaran menyusul di Fase 3 di bawah, bukan di sana.
+§6 ditulis 7 September 2026, sebelum pembayaran ada; env pembayaran
+(DOKU) menyusul di Fase 3 di bawah, bukan di sana.
 
 **Fase 2 — sesudah domain tertempel dan sertifikatnya terbit**
 
@@ -403,67 +402,58 @@ pembayaran menyusul di Fase 3 di bawah, bukan di sana.
 5. Isi data lewat panel: `nomor_wa`, tarif transport, katalog layanan asli.
    **Jangan** jalankan `npm run seed:users` — itu akun dev bersandi seragam.
 
-**Fase 3 — go-live pembayaran Midtrans**
+**Fase 3 — go-live pembayaran DOKU**
 
-Urutannya mengikat, dan langkah 6 adalah yang paling mudah terlupa justru karena
-ia tidak ada di dalam repo: sampai ia dikerjakan, webhook tidak pernah menyala
-sekali pun dan setiap pembayaran hanya terbaca ketika kliennya kebetulan membuka
-halamannya lagi (Lapis 1b).
+Urutannya mengikat, dan langkah 3 adalah yang paling mudah terlupa justru karena
+ia tidak ada di dalam repo: sampai Notification URL terpasang, webhook tidak
+pernah menyala sekali pun dan setiap pembayaran hanya terbaca ketika kliennya
+kebetulan membuka halamannya lagi (Lapis 1b). Sumbernya spec DOKU §8
+(`docs/superpowers/specs/2026-11-12-padma-doku-design.md`).
 
-0. **Ambil backup produksi, dan pastikan ia bisa dipulihkan.** Per 28 September
-   2026 **belum ada satu pun backup**: kodenya ter-merge tetapi jadwalnya mati
-   karena tiga secret belum dipasang. Langkah berikutnya menyentuh basis data
-   berisi pemesanan dan rekam data pasien sungguhan, dan mengambil salinan
-   setelahnya bukan backup melainkan kenang-kenangan. Yang membuktikan backup
-   berhasil adalah **memulihkannya ke tempat lain**, bukan melihat berkasnya
-   ada.
-1. **Putuskan urutan migrasi P1 terhadap cabang `umpan-balik-klien-gelombang-1`**
-   — keputusan pemilik repo, dan diambil SEBELUM apa pun diterapkan. Cabang itu
-   membawa `20260922100000` dan `20260924100000`, dan cap waktu keduanya lebih
-   TUA daripada seluruh migrasi P1; menggabungkannya belakangan berarti Supabase
-   menjalankan migrasi di luar urutan versinya.
-2. **Terapkan ENAM BELAS migrasi yang tertunda** — bukan tujuh. Diukur
-   `supabase migration list --linked` pada 28 Sep 2026: produksi berhenti tepat
-   di `20260915100000_sertifikat_sesi`, yaitu migrasi ke-75 dari 91. Yang
-   tertunda adalah **satu** skrining usia kehamilan (`20260920100000`),
-   **delapan** produk digital (`20260921100000` … `20260921170000`), dan
-   **tujuh** inti pembayaran P1 (`20260926100000` … `20260927100000`).
-   Kerjakan **sengaja, satu per satu, bukan `npx supabase db push`** — `db push`
-   menjalankan apa pun yang kebetulan belum tercatat, termasuk yang belum
-   diputuskan di langkah 1, pada basis data yang sudah memuat data orang
-   sungguhan.
-
-   Dua hal yang sudah diperiksa, supaya tidak diperiksa ulang dengan cemas:
-   keenam belasnya **sudah dijalankan berurutan di lingkungan dev dan lulus**;
-   dan pemindaian atas keenam belasnya untuk DDL yang bisa tersandung baris yang
-   sudah ada (`ADD COLUMN NOT NULL` tanpa default, `ADD CHECK`, `ALTER COLUMN
-   TYPE`, `SET NOT NULL`, `DROP`) menemukan **satu-satunya** kandidat: empat
-   `ADD CHECK` pada `screenings` di `20260920100000`. Keempatnya berbentuk
-   `<kolom> is null or …` terhadap kolom yang lahir nullable tanpa default,
-   jadi setiap baris lama lolos otomatis.
-3. **Pasang empat env pembayaran di Vercel:** `MIDTRANS_SERVER_KEY`,
-   `NEXT_PUBLIC_MIDTRANS_CLIENT_KEY`, `MIDTRANS_PRODUKSI`, `CRON_SECRET`.
-   Bentuk dan jebakan masing-masing ada di `.env.example` — terutama bahwa
-   `MIDTRANS_PRODUKSI` sengaja TIDAK berprefix `NEXT_PUBLIC_`.
-4. **Pastikan Fluid Compute menyala** di proyek Vercel. Ini setelan proyek,
-   bukan kode: kalau mati, batas fungsi paket Hobby adalah 60 detik sementara
-   `/api/cron/pesanan` menyatakan `maxDuration = 240` — dan akibatnya **build
-   GAGAL**, bukan berjalan lebih lambat.
-5. **Deploy — dan ketahui bahwa ini BUKAN "rilis P1".** Per 28 September 2026
-   `origin/main` ada di `defda92`, **10 September**. Deploy berikutnya membawa
-   tiga pekan pekerjaan sekaligus: skrining usia kehamilan, seluruh fitur produk
-   digital, dan pembayaran Midtrans. Rencanakan uji asapnya untuk ketiganya,
-   bukan untuk pembayaran saja.
-6. **Daftarkan Payment Notification URL di dasbor merchant Midtrans:**
-   `https://padmawellnessid.com/api/pembayaran/midtrans`. Tidak ada satu pun
-   langkah di repo ini yang bisa menggantikannya, dan tanpa ia pintu masuk uang
-   tidak pernah terbuka.
-7. **Pasang `CRON_SECRET` yang sama sebagai GitHub Secret**, supaya
-   `.github/workflows/rekonsiliasi-pesanan.yml` bisa memanggil rutenya.
-8. **Hidupkan penjadwalnya:** buka komentar blok `schedule:` di workflow itu,
+1. **DOKU:** QRIS berstatus **Active** (K1), Checkout dikonfirmasi tersedia
+   (K2), dan jawaban email 12 Nov sudah masuk ke spec atau rencana.
+2. **Sandbox:**
+   - Daftar akun sandbox [S27] dan pasang kunci **hanya** di `.env.local`.
+   - Uji asap ujung-ke-ujung di **deploy preview Vercel**, bukan terowongan
+     lokal, karena ngrok dilarang DOKU [S11].
+   - Bayar lewat simulator [S29], lalu pastikan webhook mengubah pesanan produk
+     **dan** pesanan sesi.
+3. **Back Office produksi:**
+   - Pasang Notification URL `https://<domain-produksi>/api/pembayaran/doku`
+     untuk setiap kelompok channel yang aktif (K3). Tidak ada satu pun langkah
+     di repo ini yang bisa menggantikannya.
+   - **Matikan Recover Abandoned Cart** [S22].
+   - **Jangan** menyalakan notifikasi kedaluwarsa Checkout (K10).
+4. **Env Vercel:**
+   - Pasang `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY`, `DOKU_PRODUKSI=true`,
+     `NEXT_PUBLIC_BASIS_URL` (URL tujuan kembali pembeli; tanpanya checkout
+     tidak menerbitkan tautan bayar), dan `CRON_SECRET`. Bentuk dan jebakan
+     masing-masing ada di `.env.example` — terutama bahwa `DOKU_PRODUKSI` hanya
+     memilih produksi bila nilainya `true` PERSIS.
+   - Pastikan **tidak ada env Midtrans yang tersisa**.
+   - **Fluid Compute tetap menyala.** Ini setelan proyek, bukan kode: kalau
+     mati, batas fungsi paket Hobby adalah 60 detik sementara
+     `/api/cron/pesanan` menyatakan `maxDuration = 240` — dan akibatnya **build
+     GAGAL**, bukan berjalan lebih lambat.
+5. **Migrasi** diterapkan dengan sengaja, **bukan `npx supabase db push`** —
+   `db push` menjalankan apa pun yang kebetulan belum tercatat pada basis data
+   yang sudah memuat data orang sungguhan. Urutannya diputuskan bersama
+   migrasi lain yang menunggu di produksi (wewenang `padma-c3`, termasuk ranjau
+   `pekan_sabtu_jumat`). Ambil backup produksi dan pastikan ia bisa dipulihkan
+   SEBELUM menerapkan apa pun: yang membuktikan backup berhasil adalah
+   memulihkannya ke tempat lain, bukan melihat berkasnya ada. Sesudahnya,
+   periksa `supabase_migrations.schema_migrations`.
+6. **Peralihan** (§7 spec). Dikerjakan admin pada hari rilis.
+7. **Penjadwal:** pasang `CRON_SECRET` yang sama sebagai GitHub Secret, buka
+   komentar blok `schedule:` di `.github/workflows/rekonsiliasi-pesanan.yml`,
    lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di
    `tests/pesanan-jadwal-actions.test.ts`. Uji itu memang ada untuk merah pada
    hari ini, dan membiarkannya berarti langkah ini tidak pernah selesai.
+8. **Teks hukum:** review hukum selesai (S&K dan Kebijakan Privasi kini
+   menyebut DOKU sebagai pemroses pembayaran), dan pemilik memutuskan kenaikan
+   `VERSI_DOKUMEN`.
+9. **Rotasi kunci:** Secret Key DOKU tidak pernah ditempel di chat, issue, atau
+   log. Bila pernah, rotasi di Back Office sebelum go-live.
 
 **Membangun lingkungan lain (dev/staging): jalankan migrasinya, jangan restore
 dump skema.** Diukur 28 Sep 2026 saat menyiapkan dev: `supabase db dump` dari

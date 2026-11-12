@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  *
  * Dan justru karena ia tidak menyentuh status, RPC-nya MENOLAK baris `ditahan`
  * (P0001). Tanpa penolakan itu, satu klik menghasilkan pesanan `ditahan`
- * ber-`butuh_tinjauan_pada is null`: uang pembeli sudah di tangan Midtrans,
+ * ber-`butuh_tinjauan_pada is null`: uang pembeli sudah di tangan DOKU,
  * aksesnya tidak pernah terbit, dan barisnya lolos dari klausa penanda
  * sekaligus dari jaring `lunas`. Kalimat penolakannya diteruskan apa adanya ke
  * layar karena ia menyuruh memakai tombol yang benar.

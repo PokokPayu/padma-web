@@ -92,7 +92,7 @@ export function panduanSesudah(jalur: string, badan?: unknown): string | null {
  *
  * ===== KENAPA fetch KE RUTE, BUKAN SERVER ACTION =====
  * Dua di antaranya (periksa ulang, terbitkan akses) menulis lewat FUNGSI MESIN
- * yang tertutup bagi `authenticated` — `terapkan_notifikasi_midtrans` dan
+ * yang tertutup bagi `authenticated` — `terapkan_notifikasi_gateway` dan
  * `terbitkan_akses_item` ada di `MESIN_TERTUTUP`
  * (`tests/fungsi-mesin-tertutup.test.ts`), jadi keduanya menuntut service role.
  * Dan `tests/admin-shell.test.ts:643` melarang service role di seluruh
@@ -104,7 +104,7 @@ export function panduanSesudah(jalur: string, badan?: unknown): string | null {
  * — melainkan karena menawarkan tombol yang pasti ditolak adalah janji yang
  * tidak akan ditepati. `Tutup tinjauan` khususnya: pada baris `ditahan` ia
  * ditolak `P0001`, dan seandainya tidak ditolak ia akan mengubur pesanan yang
- * uangnya sudah di tangan Midtrans dan barangnya belum keluar.
+ * uangnya sudah di tangan DOKU dan barangnya belum keluar.
  *
  * ===== NOL LITERAL STATUS =====
  * Tidak satu pun cabang di bawah membandingkan `status` dengan string yang

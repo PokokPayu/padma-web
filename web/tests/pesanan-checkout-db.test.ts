@@ -5,9 +5,9 @@ import { signInAs } from "./helpers/as-user";
 import { querySql } from "./helpers/db";
 import {
   POLA_KODE_PESANAN,
-  POLA_ORDER_ID,
-  rakitOrderId,
-  uraiOrderId,
+  POLA_INVOICE_DOKU,
+  rakitInvoice,
+  uraiInvoice,
 } from "@/lib/pesanan/order-id";
 
 /**
@@ -152,41 +152,42 @@ async function pesananBaru(produkId: string): Promise<BarisPesanan> {
   return (data as BarisPesanan[])[0];
 }
 
-describe("bentuk kode & order_id — satu bentuk, dua bahasa", () => {
-  it("rakitOrderId menyusun kode + percobaan dan MENOLAK percobaan di luar 1..9", () => {
-    expect(rakitOrderId("PSN-260926-A1B2C3", 1)).toBe("PSN-260926-A1B2C3.1");
-    expect(POLA_ORDER_ID.test(rakitOrderId("PSN-260926-A1B2C3", 9))).toBe(true);
-    // Percobaan 10 akan melahirkan order_id yang TIDAK cocok POLA_ORDER_ID,
-    // dan webhook menolaknya sebelum satu sha512 pun dihitung: uang masuk,
-    // pesanan tidak bergerak. Karena itu ia melempar, bukan memulangkan string.
-    expect(() => rakitOrderId("PSN-260926-A1B2C3", 10)).toThrow();
-    expect(() => rakitOrderId("psn-260926-a1b2c3", 1)).toThrow();
+describe("bentuk kode & invoice — satu bentuk, dua bahasa", () => {
+  it("rakitInvoice menyusun kode tanpa tanda hubung + percobaan dan MENOLAK percobaan di luar 1..9", () => {
+    expect(rakitInvoice("PSN-260926-A1B2C3", 1)).toBe("PSN260926A1B2C31");
+    expect(POLA_INVOICE_DOKU.test(rakitInvoice("PSN-260926-A1B2C3", 9))).toBe(true);
+    // Percobaan 10 melahirkan invoice 17 karakter yang TIDAK cocok
+    // POLA_INVOICE_DOKU, dan webhook menolaknya sebelum menyentuh basis data:
+    // uang masuk, pesanan tidak bergerak. Karena itu ia melempar.
+    expect(() => rakitInvoice("PSN-260926-A1B2C3", 10)).toThrow();
+    expect(() => rakitInvoice("psn-260926-a1b2c3", 1)).toThrow();
   });
 
   it("kedua pola lahir TANPA flag `g` — dua panggilan berturut-turut sama jawabannya", () => {
     // `RegExp.test()` pada regex ber-`g` menyimpan `lastIndex` dan memulangkan
-    // false BERGANTIAN. Di rute webhook (Tugas 8) itu berarti setiap notifikasi
-    // sah KEDUA dijawab 400 — dan 400 memberi tahu Midtrans "sudah selesai,
+    // false BERGANTIAN. Di rute webhook itu berarti setiap notifikasi sah
+    // KEDUA dijawab 400 — dan 400 memberi tahu gateway "sudah selesai,
     // jangan kirim lagi": pesanan terkunci mati dengan uang yang sudah masuk,
     // tanpa satu pun galat di mana pun. Dua baris identik berturut-turut adalah
     // satu-satunya bentuk yang membedakannya.
     expect(POLA_KODE_PESANAN.flags).not.toContain("g");
-    expect(POLA_ORDER_ID.flags).not.toContain("g");
-    expect(POLA_ORDER_ID.test("PSN-260926-A1B2C3.1")).toBe(true);
-    expect(POLA_ORDER_ID.test("PSN-260926-A1B2C3.1")).toBe(true);
+    expect(POLA_INVOICE_DOKU.flags).not.toContain("g");
+    expect(POLA_INVOICE_DOKU.test("PSN260926A1B2C31")).toBe(true);
+    expect(POLA_INVOICE_DOKU.test("PSN260926A1B2C31")).toBe(true);
     expect(POLA_KODE_PESANAN.test("PSN-260926-A1B2C3")).toBe(true);
     expect(POLA_KODE_PESANAN.test("PSN-260926-A1B2C3")).toBe(true);
   });
 
-  it("uraiOrderId memulangkan null untuk bentuk asing, bukan tebakan", () => {
-    expect(uraiOrderId("PSN-260926-A1B2C3.2")).toEqual({
+  it("uraiInvoice memulangkan null untuk bentuk asing, bukan tebakan", () => {
+    expect(uraiInvoice("PSN260926A1B2C32")).toEqual({
       kode: "PSN-260926-A1B2C3",
       percobaan: 2,
     });
-    expect(uraiOrderId("PSN-260926-A1B2C3")).toBeNull();
-    expect(uraiOrderId("PSN-260926-A1B2C3.0")).toBeNull();
-    expect(uraiOrderId("PSN-260926-G1B2C3.1")).toBeNull();
-    expect(uraiOrderId("../../etc/passwd")).toBeNull();
+    expect(uraiInvoice("PSN260926A1B2C3")).toBeNull();
+    expect(uraiInvoice("PSN260926A1B2C30")).toBeNull();
+    expect(uraiInvoice("PSN260926G1B2C31")).toBeNull();
+    expect(uraiInvoice("PSN-260926-A1B2C3.1")).toBeNull();
+    expect(uraiInvoice("../../etc/passwd")).toBeNull();
   });
 });
 
@@ -384,35 +385,33 @@ describe("buat_pesanan", () => {
 
   it("REGRESI CRITICAL: expire lalu settlement TERLAMBAT — buat_pesanan kedua DITOLAK, bukan ditagih dua kali", async () => {
     // Jalan kejadian PERSIS yang reviewer jalankan sampai tuntas di DB lokal:
-    // VA dibayar lewat 24 jam, Midtrans mengirim `expire`, lalu `settlement`
+    // VA dibayar lewat 24 jam, DOKU mengirim `EXPIRED`, lalu `SUCCESS`
     // yang terlambat — urutan yang DIDESAIN spec ini, bukan skenario karangan.
     // Pesanan berakhir `kedaluwarsa` + `lunas_setelah_tutup`, nol entitlement.
-    // Dijalankan lewat webhook NYATA (`terapkan_notifikasi_midtrans`), bukan
+    // Dijalankan lewat webhook NYATA (`terapkan_notifikasi_gateway`), bukan
     // `update` kolom langsung — yang diuji adalah keadaan yang mesin ini
     // SENDIRI melahirkan, bukan keadaan yang kita karang dengan tangan.
     const produk = await semaiProduk("regresi-tagih-dua-kali", 120_000);
     const pertama = await pesananBaru(produk);
-    const orderId = rakitOrderId(pertama.kode, pertama.percobaan);
+    const orderId = rakitInvoice(pertama.kode, pertama.percobaan);
 
-    const expire = await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderId,
-      p_transaction_status: "expire",
-      p_fraud_status: "",
-      p_transaction_id: "",
-      p_payment_type: "",
-      p_gross_amount: 0,
+    const expire = await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderId,
+      p_status: "EXPIRED",
+      p_transaksi_id: "",
+      p_kanal: "",
+      p_nominal: 0,
       p_sidik: randomUUID(),
     });
     expect(expire.error).toBeNull();
     expect(expire.data).toBe("diterapkan");
 
-    const settelmenTerlambat = await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderId,
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-terlambat",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 120_000,
+    const settelmenTerlambat = await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderId,
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-terlambat",
+      p_kanal: "bank_transfer",
+      p_nominal: 120_000,
       p_sidik: randomUUID(),
     });
     expect(settelmenTerlambat.error).toBeNull();
@@ -460,14 +459,13 @@ describe("buat_pesanan", () => {
     expect(eEnt).toBeNull();
 
     const pertama = await pesananBaru(produk);
-    const orderId = rakitOrderId(pertama.kode, pertama.percobaan);
-    const settlement = await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderId,
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-akses-tertahan",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 120_000,
+    const orderId = rakitInvoice(pertama.kode, pertama.percobaan);
+    const settlement = await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderId,
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-akses-tertahan",
+      p_kanal: "bank_transfer",
+      p_nominal: 120_000,
       p_sidik: randomUUID(),
     });
     expect(settlement.error).toBeNull();
@@ -549,7 +547,7 @@ describe("buat_pesanan", () => {
     expect(pesanan!.tautan_terbit_pada).toBeNull();
 
     // order_id percobaan kedua tetap berbentuk sah bagi TypeScript.
-    expect(rakitOrderId(barisKedua.kode, barisKedua.percobaan)).toMatch(POLA_ORDER_ID);
+    expect(rakitInvoice(barisKedua.kode, barisKedua.percobaan)).toMatch(POLA_INVOICE_DOKU);
   });
 
   it("percobaan KESEPULUH menutup pesanan lama dan melahirkan yang baru — bukan 23514", async () => {
@@ -774,23 +772,21 @@ describe("punya_pesanan_menunggu", () => {
 
     const produkA = await semaiProduk("menunggu-lunas-setelah-tutup", 120_000);
     const pertamaA = await pesananBaru(produkA);
-    const orderIdA = rakitOrderId(pertamaA.kode, pertamaA.percobaan);
-    await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderIdA,
-      p_transaction_status: "expire",
-      p_fraud_status: "",
-      p_transaction_id: "",
-      p_payment_type: "",
-      p_gross_amount: 0,
+    const orderIdA = rakitInvoice(pertamaA.kode, pertamaA.percobaan);
+    await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderIdA,
+      p_status: "EXPIRED",
+      p_transaksi_id: "",
+      p_kanal: "",
+      p_nominal: 0,
       p_sidik: randomUUID(),
     });
-    await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderIdA,
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-menunggu-a",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 120_000,
+    await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderIdA,
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-menunggu-a",
+      p_kanal: "bank_transfer",
+      p_nominal: 120_000,
       p_sidik: randomUUID(),
     });
     const hasilA = await klien.rpc("punya_pesanan_menunggu", { p_product_id: produkA });
@@ -804,14 +800,13 @@ describe("punya_pesanan_menunggu", () => {
       dicabut_pada: new Date("2026-09-01T00:00:00Z").toISOString(),
     });
     const pertamaB = await pesananBaru(produkB);
-    const orderIdB = rakitOrderId(pertamaB.kode, pertamaB.percobaan);
-    await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: orderIdB,
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-menunggu-b",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 90_000,
+    const orderIdB = rakitInvoice(pertamaB.kode, pertamaB.percobaan);
+    await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: orderIdB,
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-menunggu-b",
+      p_kanal: "bank_transfer",
+      p_nominal: 90_000,
       p_sidik: randomUUID(),
     });
     const hasilB = await klien.rpc("punya_pesanan_menunggu", { p_product_id: produkB });

@@ -24,15 +24,15 @@ export default async function PesananPage() {
       <header className="mb-4">
         <h1 className="text-[18px] font-bold text-panel-ink">Pesanan</h1>
         <Bantuan judul="Tentang halaman ini">
-          Pembayaran produk digital berjalan sendiri lewat Midtrans; halaman ini hanya untuk
+          Pembayaran produk digital berjalan sendiri lewat DOKU; halaman ini hanya untuk
           yang <b>tidak</b> berjalan sendiri. <b>Butuh perhatian</b> memuat pesanan yang
           uangnya sudah masuk tapi barangnya belum keluar — <b>Ditahan</b> (nominalnya tidak
           cocok), pesanan bertanda tinjauan, dan pesanan <b>Lunas</b> yang aksesnya tidak
           pernah terbit. <b>Terbuka</b> memuat yang masih menunggu pembayaran, yang paling
           lama tidak diperiksa di atas.
           {" "}
-          <b>Periksa ulang</b> menanyakan keadaan transaksi ke Midtrans lalu menjalankan
-          jawabannya — vonisnya tetap datang dari Midtrans, bukan dari tombol ini.{" "}
+          <b>Periksa ulang</b> menanyakan keadaan transaksi ke DOKU lalu menjalankan
+          jawabannya — vonisnya tetap datang dari DOKU, bukan dari tombol ini.{" "}
           <b>Putuskan</b> hanya untuk baris Ditahan, dan nama Anda ikut tercatat. Ia
           memindahkan status dan menulis jejaknya, tetapi <b>tidak</b> menyerahkan
           produknya. <b>Terbitkan akses</b>-lah yang menyerahkannya: sesudah{" "}
@@ -45,8 +45,8 @@ export default async function PesananPage() {
           Nominal pesanan ditampilkan di halaman ini — satu-satunya di panel admin yang
           menunjukkan yang ditagih bersebelahan dengan yang diterima — karena
           pertanyaan &ldquo;berapa yang klien ini bayar&rdquo; harus bisa dijawab dari dalam
-          PADMA, bukan dari dashboard Midtrans. Pengembalian uang tidak dilakukan dari sini;
-          yang disediakan hanyalah nomor transaksi untuk diurus di dashboard Midtrans.
+          PADMA, bukan dari Back Office DOKU. Pengembalian uang tidak dilakukan dari sini;
+          yang disediakan hanyalah nomor transaksi untuk diurus di Back Office DOKU.
           {" "}
           Layar ini membaca paling banyak {BATAS_BARIS} baris per kueri. Kalau pesanan
           yang memenuhi syarat lebih banyak dari itu, ada yang tidak terlihat di sini —

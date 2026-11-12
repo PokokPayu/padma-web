@@ -673,7 +673,7 @@ describe("tabel §5.5 baris 9-11: vonis waktu lokal", () => {
 
 describe("kegagalan disembunyikan", () => {
   it("kode pesanan yang CACAT tidak melempar, dan tidak menghentikan sapuan", async () => {
-    // `rakitOrderId` MELEMPAR untuk kode cacat — keputusan yang benar di
+    // `rakitInvoice` MELEMPAR untuk kode cacat — keputusan yang benar di
     // checkout, tapi fungsi ini seluruh nilainya adalah tidak pernah melempar,
     // dan Tugas 11 membangun peta kode HTTP-nya di atas janji itu. Baris cacat
     // bisa lahir dari fixture service role atau perbaikan SQL manual: keduanya
@@ -759,7 +759,7 @@ describe("kegagalan disembunyikan", () => {
     //
     // `kode: 0` berarti kita SUDAH bertanya dan tidak mendapat jawaban;
     // `kode: -1` berarti NOL permintaan pernah keluar karena
-    // `MIDTRANS_SERVER_KEY` kosong. Satu nilai bedanya, dua tindakan manusia
+    // `DOKU_SECRET_KEY` kosong. Satu nilai bedanya, dua tindakan manusia
     // yang berbeda: yang pertama sembuh dengan dicoba lagi, yang kedua tidak
     // akan pernah sembuh sampai seseorang memasang env. Dilebur jadi
     // `gateway_tak_terjawab`, Tugas 11 menjawab 502 "Coba lagi beberapa saat
@@ -798,7 +798,7 @@ describe("kegagalan disembunyikan", () => {
     // memerah karenanya.
     //
     // Yang dijaga bukan kerapian tipe melainkan satu kalimat yang dibaca
-    // manusia: server yang `MIDTRANS_SERVER_KEY`-nya belum terpasang akan
+    // manusia: server yang `DOKU_SECRET_KEY`-nya belum terpasang akan
     // melaporkan "diperiksa: 20" setiap lima belas menit tanpa satu permintaan
     // pun pernah keluar. Penjadwal yang MATI terbaca persis seperti penjadwal
     // yang bersih, dan nol adalah satu-satunya angka yang jujur di sini.

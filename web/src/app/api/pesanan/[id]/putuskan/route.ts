@@ -11,10 +11,10 @@ export const runtime = "nodejs";
  * putusan. Admin yang menemukan pembayaran kurang Rp 50.000 harus punya jalan
  * selain "berikan saja".
  *
- * ===== KENAPA INI BOLEH DIPARAMETERKAN, SEMENTARA VONIS MIDTRANS TIDAK =====
- * Vonis Midtrans memang tidak boleh diparameterkan — itulah kenapa pemeriksaan
+ * ===== KENAPA INI BOLEH DIPARAMETERKAN, SEMENTARA VONIS GATEWAY TIDAK =====
+ * Vonis gateway memang tidak boleh diparameterkan — itulah kenapa pemeriksaan
  * ulang adalah rute yang MENANYAI Status API. Yang diputuskan di sini bukan
- * "apa kata Midtrans" melainkan "apa yang kita lakukan terhadap uang yang
+ * "apa kata DOKU" melainkan "apa yang kita lakukan terhadap uang yang
  * sudah masuk", dan ia dicatat dengan nama pemutusnya. Karena itu RPC-nya
  * dipanggil dengan SESI PEMANGGIL, bukan service role: `putuskan_pesanan_ditahan`
  * bergerbang `user_role()` dan mengambil `padma_id` pemutus dari sesi itu.

@@ -111,7 +111,7 @@ export function IsiSyaratKetentuan({
             slotnya dilepas untuk klien lain.
           </li>
           <li>
-            Produk digital dibayar lewat Midtrans. Pesanan yang tidak dibayar dalam 24 jam kedaluwarsa
+            Produk digital dibayar lewat DOKU. Pesanan yang tidak dibayar dalam 24 jam kedaluwarsa
             dengan sendirinya.
           </li>
           <li>Harga yang berlaku adalah harga yang tertera saat tagihan atau pesanan dibuat.</li>

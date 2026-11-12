@@ -45,14 +45,13 @@ import { querySql } from "./helpers/db";
  * Jantung mesin pembayaran. Semuanya kecuali `perpindahan_pesanan_sah` menulis
  * uang orang; yang satu itu adalah penjaga transisinya. Tidak satu pun boleh
  * bisa dipanggil dari PostgREST oleh pemegang sesi mana pun — vonis gateway
- * (Midtrans, lalu DOKU) tidak boleh menjadi parameter yang dikirim pemanggil
+ * (DOKU) tidak boleh menjadi parameter yang dikirim pemanggil
  * bersesi, atau admin mana pun bisa mencetak `lunas` dengan satu `curl`.
  */
 const MESIN_TERTUTUP = [
   "perpindahan_pesanan_sah",
   "salurkan_pesanan",
   "terapkan_notifikasi_gateway",
-  "terapkan_notifikasi_midtrans",
   "terbitkan_akses_item",
 ] as const;
 

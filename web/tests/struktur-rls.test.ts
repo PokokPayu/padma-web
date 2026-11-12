@@ -24,7 +24,7 @@ describe("invarian struktural: tidak ada tabel tanpa RLS", () => {
     // API mana pun, termasuk admin. Penerbitannya lewat server action
     // service-role yang mengembalikan token mentah sekali saja.
     "client_invites",
-    // Penghitung notifikasi Midtrans bertanda tangan salah (P1). RLS aktif
+    // Penghitung notifikasi gateway bertanda tangan salah (P1). RLS aktif
     // tanpa policy sama sekali: yang dicatat adalah jumlah, dan NOL teks
     // penyerang disimpan. Tidak ada peran API yang punya alasan membacanya,
     // termasuk staf — angkanya urusan pemilik service role.

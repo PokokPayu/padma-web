@@ -12,7 +12,7 @@ import type { PenjualanBulan, Pengecualian } from "@/lib/penjualan/hitung";
  * "undefined" di sebelah sebuah nominal.
  */
 const KALIMAT: Record<Pengecualian["golongan"], string> = {
-  ditahan: "ditahan Midtrans — uangnya belum di PADMA",
+  ditahan: "ditahan DOKU — uangnya belum di PADMA",
   lewat_tenggat: "dibayar sesudah pesanannya ditutup",
   dikembalikan: "uangnya sudah dikembalikan",
 };

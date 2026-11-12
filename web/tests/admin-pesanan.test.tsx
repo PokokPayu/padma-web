@@ -40,6 +40,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { nominalDalam } from "./helpers/nominal";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -773,13 +774,12 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
       butuhTinjauan: "lunas_setelah_tutup",
     });
 
-    const { error } = await admin.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: `${kode}.1`,
-      p_transaction_status: "refund",
-      p_fraud_status: "",
-      p_transaction_id: `trx-${kode}-refund`,
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 50_000,
+    const { error } = await admin.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(kode, 1),
+      p_status: "REFUNDED",
+      p_transaksi_id: `trx-${kode}-refund`,
+      p_kanal: "bank_transfer",
+      p_nominal: 50_000,
       p_sidik: `sidik-${kode}-refund`,
       p_sumber: "webhook",
     });
@@ -802,14 +802,13 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
     const kode = `${AWALAN_KODE}0007`;
     const id = await semai({ kode, clientId: KLIEN_RINA, status: "lunas", harga: 40_000 });
 
-    await admin.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: `${kode}.1`,
-      p_transaction_status: "chargeback",
-      p_fraud_status: "",
-      p_transaction_id: `trx-${kode}-cb`,
-      p_payment_type: "credit_card",
-      p_gross_amount: 40_000,
-      p_sidik: `sidik-${kode}-cb`,
+    await admin.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(kode, 1),
+      p_status: "REFUNDED",
+      p_transaksi_id: `trx-${kode}-rf`,
+      p_kanal: "bank_transfer",
+      p_nominal: 40_000,
+      p_sidik: `sidik-${kode}-rf`,
       p_sumber: "webhook",
     });
 
@@ -818,7 +817,7 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
       .select("sebab_tinjauan, butuh_tinjauan_pada")
       .eq("id", id)
       .single();
-    expect(data!.sebab_tinjauan).toBe("chargeback");
+    expect(data!.sebab_tinjauan).toBe("refund");
     expect(data!.butuh_tinjauan_pada).not.toBeNull();
   });
 });

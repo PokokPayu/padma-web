@@ -11,7 +11,7 @@
  * ===== SATU ARAH, DAN ITU DISENGAJA =====
  * Yang diuji hanya "dibaca kode -> ada di contoh". Arah sebaliknya (terdokumentasi
  * tetapi belum dipakai) TIDAK memerahkan apa pun. Alasannya praktis: P1 menulis
- * keempat env Midtrans ke `.env.example` di tugas ini, sementara yang membacanya
+ * env pembayaran ke `.env.example` lebih dulu, sementara yang membacanya
  * lahir di tugas-tugas berikutnya. Pagar dua arah akan memaksa urutan mendarat
  * yang tidak ada hubungannya dengan kebenaran apa pun.
  *

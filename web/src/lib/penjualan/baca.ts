@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { STATUS_DOKU_REFUND } from "@/lib/doku/status";
 import {
   PESANAN_BERUANG,
   PESANAN_MATI,
@@ -39,7 +40,7 @@ export const BATAS_BARIS_PENJUALAN = 500;
 const STATUS_DIBACA: StatusPesanan[] = [...PESANAN_BERUANG, ...PESANAN_MATI];
 
 /** Nilai `status_gateway` yang berarti uang KELUAR lagi. */
-const STATUS_KEMBALI = ["refund", "partial_refund", "chargeback", "partial_chargeback"];
+const STATUS_KEMBALI: string[] = [...STATUS_DOKU_REFUND];
 
 /** Kejadian yang menandai uang mendarat sesudah pesanan ditutup. Bertipe, bukan literal: rename enum jadi galat kompilasi. */
 const KEJADIAN_SETELAH_TUTUP: KejadianPesanan[] = ["lunas_setelah_tutup"];
@@ -127,7 +128,7 @@ export async function bacaPenjualan(opsi: {
   // KEDUA KOLOM ITU TIDAK SELALU SAMA — bahkan untuk pesanan `lunas`. Ada DUA
   // penulis `status = 'lunas'`, dan hanya satu yang membuat keduanya identik:
   //
-  //   1. Webhook Midtrans
+  //   1. Webhook gateway (dulu Midtrans)
   //      (`20260927100000_sebab_tinjauan_lestari.sql:506-513`) menulis
   //      `lunas_pada = now()` DAN `ditutup_pada = now()` dalam satu UPDATE.
   //      Di sanalah keduanya identik — dan UPDATE itu bergerbang
@@ -170,7 +171,7 @@ export async function bacaPenjualan(opsi: {
   // Kueri (c) — `lunas_pada` DI DALAM rentang. Satu-satunya yang memungut
   // pesanan yang keputusan lunasnya datang di bulan sesudah penutupannya.
   // Kueri (b) buta terhadapnya: keputusan manusia hanya menulis
-  // `jejak_pesanan`, tidak ada notifikasi Midtrans baru yang mendarat di
+  // `jejak_pesanan`, tidak ada notifikasi gateway baru yang mendarat di
   // bulan itu. Batas baris dan saringan kliennya sama persis dengan (a), dan
   // tutupnya ikut dilaporkan lewat `terpotong`.
   let saringLunas = sb

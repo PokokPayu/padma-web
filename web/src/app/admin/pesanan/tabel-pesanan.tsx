@@ -133,7 +133,7 @@ export function TabelPesanan({ baris }: { baris: BarisPesanan[] }) {
                     // BERDAMPINGAN, bukan menggantikan: selisih kedua angka
                     // inilah yang menjadi keputusan manusia pada baris
                     // `ditahan`. Tanpa keduanya, staf tetap harus membuka
-                    // dashboard Midtrans untuk tahu berapa yang benar-benar
+                    // Back Office DOKU untuk tahu berapa yang benar-benar
                     // masuk.
                     <>
                       <span className="mt-1 block font-bold text-clay">

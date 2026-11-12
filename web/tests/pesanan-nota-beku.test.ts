@@ -9,7 +9,7 @@ import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
  * NOTA PESANAN — tabel uang yang barisnya tidak boleh ditulis ulang.
  *
  * `order_items.harga_beku` adalah satu-satunya angka yang dipakai
- * memverifikasi `gross_amount` notifikasi Midtrans. Bila baris itu bisa
+ * memverifikasi `gross_amount` notifikasi gateway. Bila baris itu bisa
  * disunting sesudah terbit, verifikasi jumlah berhenti berarti apa pun:
  * siapa pun yang bisa menulisnya bisa membuat setiap notifikasi "cocok".
  *

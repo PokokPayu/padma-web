@@ -83,7 +83,7 @@ const TABEL_UANG = new Set([
   // disimpan" benar untuk TAGIHAN — pernyataan tentang apa yang HARUS dibayar,
   // yang boleh dihitung ulang dari tarif menurut tanggal sesi — dan salah
   // untuk PESANAN: pernyataan tentang apa yang SUDAH dibayar, yang tidak boleh
-  // dihitung ulang karena angka pembandingnya ada di tangan Midtrans dan ikut
+  // dihitung ulang karena angka pembandingnya ada di tangan gateway dan ikut
   // ditandatangani. Verifikasi jumlah mustahil tanpa angka beku.
   //
   // `orders` TIDAK ikut, dan itu bukan kelalaian: ia lahir NOL kolom nominal,
@@ -94,7 +94,7 @@ const TABEL_UANG = new Set([
   // `nominal_diterima`: gross_amount notifikasi yang SUDAH lolos signature.
   // Untuk pesanan `ditahan` — satu-satunya baris yang angkanya jadi keputusan
   // manusia — tanpa kolom itu yang tersimpan hanyalah angka yang KITA tagih,
-  // dan staf tetap harus membuka dashboard Midtrans untuk tahu selisihnya.
+  // dan staf tetap harus membuka Back Office DOKU untuk tahu selisihnya.
   // Ongkosnya: tabel ini ikut masuk daftar, dan policy-nya baca staf saja.
   "notifikasi_pesanan",
 ]);

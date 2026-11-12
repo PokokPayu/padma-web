@@ -322,9 +322,9 @@ describe("mintaLaluAlihkan — redirect menggantikan Snap", () => {
  * PEMULIHAN SESUDAH DOKU MENOLAK — inilah beda antara "coba lagi" dan
  * "terkunci 24 jam".
  *
- * Midtrans menolak `order_id` kembar SELAMANYA. Percobaan kedua yang mengirim
+ * DOKU menolak `invoice_number` kembar SELAMANYA. Percobaan kedua yang mengirim
  * `ulang: false` membuat `buat_pesanan` memulangkan pesanan terbuka yang SAMA
- * berikut `kode` dan `percobaan` yang sama; rute merakit `order_id` yang sama;
+ * berikut `kode` dan `percobaan` yang sama; rute merakit `invoice_number` yang sama;
  * DOKU menolaknya lagi; 502 berulang selamanya. Pembeli terkunci sampai
  * tenggat 24 jamnya lewat — dan layarnya berkata "Pembayaran Anda sedang
  * diproses", kalimat yang tidak benar untuk orang yang tidak pernah membayar.
