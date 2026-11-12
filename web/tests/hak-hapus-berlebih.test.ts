@@ -429,6 +429,158 @@ describe("radius satu permintaan: isi materi tidak bisa disapu massal", () => {
 });
 
 // ---------------------------------------------------------------------------
+// (A2) KONTEN SITUS TULISAN TANGAN — artikel & testimoni
+// ---------------------------------------------------------------------------
+describe("radius satu permintaan: artikel & testimoni tidak bisa disapu massal", () => {
+  /**
+   * Artikel adalah karangan owner; testimoni adalah izin klien yang tercatat
+   * beserta videonya. Kelasnya sama dengan bab/halaman materi: lenyap permanen
+   * begitu barisnya hilang. Migration 20261001100000 sempat memberi
+   * `authenticated` hak DELETE langsung, dan policy "staf kelola" membatasi
+   * PERAN, bukan BARIS — satu `DELETE articles?id=not.is.null` menyapu
+   * seluruhnya. Penggantinya RPC berparameter tunggal, pola
+   * `lepas_video_materi`.
+   *
+   * Snapshot lewat service role dipulihkan apa pun hasilnya, supaya jalur
+   * MERAH tidak merusak suite lain (landing, halaman artikel publik).
+   */
+  const ARTIKEL_UJI = "a1a1a1a1-0000-4000-8000-0000000009a1";
+  const TESTIMONI_VIDEO = "a1a1a1a1-0000-4000-8000-0000000009b1";
+  const TESTIMONI_POLOS = "a1a1a1a1-0000-4000-8000-0000000009b2";
+  const OBJEK_TESTIMONI = `testimoni/${TESTIMONI_VIDEO}/pad-uji.mp4`;
+
+  async function pasangFixture() {
+    await svc.from("articles").upsert(
+      { id: ARTIKEL_UJI, slug: "pad-uji-hapus-artikel", judul: "PAD-UJI artikel hapus" },
+      { onConflict: "id" },
+    );
+    await svc.from("testimonials").upsert(
+      [
+        { id: TESTIMONI_VIDEO, nama: "PAD-UJI video", video_objek: OBJEK_TESTIMONI, video_mime: "video/mp4" },
+        { id: TESTIMONI_POLOS, nama: "PAD-UJI polos" },
+      ],
+      { onConflict: "id" },
+    );
+  }
+
+  async function denganPemulihanKonten(fn: () => Promise<void>) {
+    const { data: artikelAwal } = await svc.from("articles").select("*");
+    const { data: testimoniAwal } = await svc.from("testimonials").select("*");
+    try {
+      await fn();
+    } finally {
+      if (artikelAwal?.length) await svc.from("articles").upsert(artikelAwal, { onConflict: "id" });
+      if (testimoniAwal?.length) await svc.from("testimonials").upsert(testimoniAwal, { onConflict: "id" });
+    }
+  }
+
+  beforeAll(pasangFixture);
+  afterAll(async () => {
+    await svc.from("articles").delete().eq("id", ARTIKEL_UJI);
+    await svc.from("testimonials").delete().in("id", [TESTIMONI_VIDEO, TESTIMONI_POLOS]);
+  });
+
+  it("admin: satu filter tautologis TIDAK menyapu seluruh artikel", async () => {
+    await denganPemulihanKonten(async () => {
+      const { data: sebelum } = await svc.from("articles").select("id");
+      expect(sebelum!.length).toBeGreaterThan(1);
+
+      const a = await signInAs("admin@padma.test");
+      await a.from("articles").delete().not("id", "is", null);
+
+      const { data: sesudah } = await svc.from("articles").select("id");
+      expect(sesudah!.length).toBe(sebelum!.length);
+    });
+  });
+
+  it("admin: satu filter tautologis TIDAK menyapu seluruh testimoni", async () => {
+    await denganPemulihanKonten(async () => {
+      const { data: sebelum } = await svc.from("testimonials").select("id");
+      expect(sebelum!.length).toBeGreaterThan(1);
+
+      const a = await signInAs("admin@padma.test");
+      await a.from("testimonials").delete().not("id", "is", null);
+
+      const { data: sesudah } = await svc.from("testimonials").select("id");
+      expect(sesudah!.length).toBe(sebelum!.length);
+    });
+  });
+
+  it("klien ditolak memanggil kedua RPC penghapus (42501), dan barisnya utuh", async () => {
+    const k = await signInAs("ananda@padma.test");
+    const artikel = await k.rpc("hapus_artikel", { artikel_id: ARTIKEL_UJI });
+    expect(artikel.error?.code).toBe("42501");
+    const testimoni = await k.rpc("hapus_testimoni", { testimoni_id: TESTIMONI_VIDEO });
+    expect(testimoni.error?.code).toBe("42501");
+
+    const { data: a } = await svc.from("articles").select("id").eq("id", ARTIKEL_UJI);
+    const { data: t } = await svc.from("testimonials").select("id").eq("id", TESTIMONI_VIDEO);
+    expect(a).toHaveLength(1);
+    expect(t).toHaveLength(1);
+  });
+
+  it("KONTROL: satu artikel TETAP bisa dihapus lewat hapus_artikel — tepat satu baris, slug dipulangkan", async () => {
+    const a = await signInAs("admin@padma.test");
+    const { data: sebelum } = await svc.from("articles").select("id");
+
+    const { data, error } = await a.rpc("hapus_artikel", { artikel_id: ARTIKEL_UJI });
+    expect(error).toBeNull();
+    // Slug dipakai pemanggil untuk merevalidasi /artikel/[slug].
+    expect(data).toBe("pad-uji-hapus-artikel");
+
+    const { data: sesudah } = await svc.from("articles").select("id");
+    expect(sesudah!.length).toBe(sebelum!.length - 1);
+    await pasangFixture();
+  });
+
+  it("KONTROL: hapus_testimoni memulangkan objek video untuk dibersihkan dari R2", async () => {
+    const a = await signInAs("admin@padma.test");
+
+    const video = await a.rpc("hapus_testimoni", { testimoni_id: TESTIMONI_VIDEO });
+    expect(video.error).toBeNull();
+    expect(video.data).toEqual([{ id: TESTIMONI_VIDEO, video_objek: OBJEK_TESTIMONI }]);
+
+    // Tanpa video: barisnya terhapus, objeknya null — BEDA dari "tidak ada".
+    const polos = await a.rpc("hapus_testimoni", { testimoni_id: TESTIMONI_POLOS });
+    expect(polos.error).toBeNull();
+    expect(polos.data).toEqual([{ id: TESTIMONI_POLOS, video_objek: null }]);
+
+    const hilang = await a.rpc("hapus_testimoni", { testimoni_id: TESTIMONI_POLOS });
+    expect(hilang.error).toBeNull();
+    expect(hilang.data).toEqual([]);
+
+    await pasangFixture();
+  });
+
+  it("anon tidak memegang EXECUTE atas hapus_artikel & hapus_testimoni", async () => {
+    // Hitungan fungsinya diperiksa DULU: tanpa itu, uji ini hijau hampa
+    // selama fungsinya belum ada.
+    const baris = await querySql<{ ada: string; terbuka: string }>(`
+      select count(*)::text as ada,
+             count(*) filter (
+               where has_function_privilege('anon', p.oid, 'EXECUTE')
+                  or has_function_privilege('public', p.oid, 'EXECUTE'))::text as terbuka
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public'
+         and p.proname in ('hapus_artikel','hapus_testimoni')`);
+    expect(Number(baris[0].ada)).toBe(2);
+    expect(Number(baris[0].terbuka)).toBe(0);
+  });
+
+  it("tabel artikel & testimoni membawa PENGGANTINYA di komentar", async () => {
+    const baris = await querySql<{ tabel: string; komentar: string | null }>(`
+      select c.relname as tabel, obj_description(c.oid, 'pg_class') as komentar
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relname in ('articles','testimonials')
+       order by 1`);
+    expect(baris.map((b) => b.tabel)).toEqual(["articles", "testimonials"]);
+    expect(baris[0].komentar).toContain("hapus_artikel");
+    expect(baris[1].komentar).toContain("hapus_testimoni");
+    for (const b of baris) expect(b.komentar!.toLowerCase()).toContain("service role");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (B) PERMINTAAN JADWAL — antrean adalah bukti klien
 // ---------------------------------------------------------------------------
 describe("permintaan jadwal tidak bisa dihapus staf", () => {

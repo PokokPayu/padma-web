@@ -110,10 +110,14 @@ export async function tarikTestimoni(id: string): Promise<{ ok: true } | Gagal> 
 export async function hapusTestimoni(id: string): Promise<{ ok: true; objekTersisa: boolean } | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase.from("testimonials").delete().eq("id", id).select("video_objek");
-  if (error || (data ?? []).length === 0) return { ok: false, pesan: "Gagal menghapus testimoni." };
+  // Lewat RPC, bukan `.delete()`: verba DELETE atas `testimonials` dicabut dari
+  // peran API (migration 20261112100000). Nol baris = tidak ada; satu baris =
+  // terhapus, beserta `video_objek` yang harus dibersihkan dari R2.
+  const { data, error } = await supabase.rpc("hapus_testimoni", { testimoni_id: id });
+  const baris = (data ?? []) as { id: string; video_objek: string | null }[];
+  if (error || baris.length === 0) return { ok: false, pesan: "Gagal menghapus testimoni." };
   segarkan();
-  const objek = (data![0] as { video_objek: string | null }).video_objek;
+  const objek = baris[0].video_objek;
   if (!objek) return { ok: true, objekTersisa: false };
   try {
     await hapusObjekVideo(objek);
