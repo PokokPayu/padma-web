@@ -458,7 +458,10 @@ Migrasi P1/P2 **tidak disunting**, karena sudah diterapkan di instans lokal dan
 uji bergantung pada riwayatnya. Satu migrasi maju baru:
 
 - **Ganti nama kolom:**
-  - `orders.snap_token` → `tautan_bayar`
+  - `orders.snap_token` → `tautan_gateway` (bukan `tautan_bayar`: pola
+    `(^|_)bayar(an)?(_|$)` di `money-firewall-struktural.test.ts` menuduhnya
+    kolom nominal, dan `orders` tidak ada di `TABEL_UANG`; koreksi 13 Nov saat
+    menulis rencana)
   - `orders.snap_diterbitkan_pada` → `tautan_terbit_pada`
   - `orders.status_midtrans` → `status_gateway`
   - `notifikasi_pesanan.status_midtrans` → `status_gateway`
@@ -468,7 +471,7 @@ uji bergantung pada riwayatnya. Satu migrasi maju baru:
     sidik, sumber.
   - Hak aksesnya identik dengan yang lama: `revoke all … from public, anon,
     authenticated`, sehingga hanya service role yang bisa memanggilnya.
-- **Fungsi lain:** `catat_token_snap` → `catat_tautan_bayar`. Setiap fungsi yang
+- **Fungsi lain:** `catat_token_snap` → `catat_tautan_gateway`. Setiap fungsi yang
   menulis `snap_token = null` (`buat_pesanan`, `buat_pesanan_keranjang`) dan
   setiap view atau fungsi yang membaca kolom lama ikut didefinisikan ulang.
   Builder **wajib** mengaudit dengan
@@ -677,8 +680,11 @@ diperluas sehingga untuk item sesi ia menjalankan ulang penyalur sesi. Admin
 mengganti bidan lebih dulu bila perlu (ganti bidan sesudah lunas **tidak**
 mengubah nominal; keputusan butir 2), lalu menekan tombol di `/admin/pesanan`.
 Labelnya disesuaikan builder ("Terbitkan akses / Buat sesi").
-`putuskan_pesanan_ditahan` yang memutuskan "lunas" juga harus menjalankan
-penyalur yang sama.
+`putuskan_pesanan_ditahan` yang memutuskan "lunas" **tetap tidak menyalurkan**
+(koreksi 13 Nov saat menulis rencana). Itu keputusan P1 yang dijaga
+`tests/admin-pesanan.test.tsx:486-510`: putusan staf lalu tombol "Terbitkan
+akses / Buat sesi". Pesanan sesi `lunas` tanpa sesi wajib muncul di "Butuh
+perhatian" `/admin/pesanan` supaya tombol itu tidak terlupa.
 
 `konfirmasi_permintaan` (RPC staf) **hanya** tersisa untuk tagihan warisan QRIS
 (§7): pengajuan yang **tidak punya satu pun pesanan**. Untuk pengajuan yang
