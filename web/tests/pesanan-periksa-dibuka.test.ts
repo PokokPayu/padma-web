@@ -295,18 +295,12 @@ beforeAll(async () => {
   await admin.from("digital_products").delete().eq("slug", SLUG);
   const { data, error } = await admin
     .from("digital_products")
-    .insert({ judul: JUDUL, slug: SLUG, jenis: "pdf", aktif: true })
+    .insert({ judul: JUDUL, slug: SLUG, aktif: true })
     .select("id")
     .single();
   if (error) throw error;
   produkId = data!.id as string;
   await admin.from("digital_product_prices").insert({ product_id: produkId, harga: HARGA });
-  await admin.from("digital_product_files").insert({
-    product_id: produkId,
-    objek: `${produkId}/isi.pdf`,
-    mime: "application/pdf",
-    byte: 1024,
-  });
 });
 
 beforeEach(async () => {

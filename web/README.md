@@ -122,7 +122,8 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/profil` | Klien | Identitas akun, read-only; perubahan data lewat admin |
 | `/passport/skrining` | Klien | Skrining keselamatan dari dalam Passport — wizard yang sama dengan corong publik, `client_id` terisi sejak awal |
 | `/passport/produk` | Klien | Pembelian saya: produk digital yang dimiliki, pintu ke pemutar/pembaca/unduhan |
-| `/passport/produk/[slug]` | Klien | Pembaca/pemutar produk digital yang dimiliki, plus tombol unduh bila diizinkan |
+| `/passport/produk/[slug]` | Klien | Daftar isi produk (bab & materi) milik pembeli; pratinjau bagi yang belum memiliki |
+| `/passport/produk/[slug]/[materiId]` | Klien | Penampil satu materi (video/PDF) plus tombol unduh bila diizinkan; pemilik aktif atau materi pratinjau |
 | `/passport/keranjang` | Klien | Keranjang produk digital (P2): daftar, total, bayar sekali lewat Snap, batal pesanan terbuka |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
@@ -184,9 +185,9 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/testimoni/[id]/video` | Publik | GET mengalihkan (302) ke presigned GET R2 yang segar untuk video testimoni; hak diputuskan query ber-RLS (anon: hanya yang terbit, staf: juga draf). URL tidak dirender ke HTML karena /testimoni di-cache dan presigned URL bisa kedaluwarsa lebih dulu |
 | `/api/materi/[id]/video` | Klien | GET presigned URL berumur pendek untuk satu video di bucket privat R2; hak diputuskan query ber-RLS memakai sesi klien SEBELUM presigned URL diterbitkan, urutan yang mengikat karena membaliknya berarti menerbitkan tautan unduhan sebelum tahu siapa yang meminta; tidak berhak → 403. URL-nya tidak pernah dirender ke HTML — komponen `<video>` di halaman lahir tanpa `src`, lalu klien mengambilnya sesudah hidup |
 | `/api/sertifikat/[sesi]` | Klien | GET berkas sertifikat; kepemilikan sesi diputuskan RLS lewat sesi klien SEBELUM bucket privat `sertifikat` (tanpa policy storage.objects) disentuh service role |
-| `/api/produk/[id]/video` | Klien pemilik | Alih ke presigned R2 untuk video produk; bukan-pemilik menerima 404 |
-| `/api/produk/[id]/halaman/[n]` | Klien pemilik | Satu halaman PDF produk, ber-watermark identitas pembaca |
-| `/api/produk/[id]/unduh` | Klien pemilik | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
+| `/api/produk/materi/[id]/video` | Pemilik aktif / pratinjau | Alih ke presigned R2 untuk satu materi video; tanpa hak menerima 404 |
+| `/api/produk/materi/[id]/halaman/[n]` | Pemilik aktif / pratinjau | Satu halaman PDF materi, ber-watermark identitas pembaca |
+| `/api/produk/materi/[id]/unduh` | Pemilik aktif | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
 | `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Status API Midtrans untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:

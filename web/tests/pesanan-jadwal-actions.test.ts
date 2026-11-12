@@ -228,7 +228,7 @@ beforeAll(async () => {
   await admin.from("digital_products").delete().eq("slug", SLUG);
   const { data, error } = await admin
     .from("digital_products")
-    .insert({ judul: JUDUL, slug: SLUG, jenis: "pdf", aktif: true })
+    .insert({ judul: JUDUL, slug: SLUG, aktif: true })
     .select("id")
     .single();
   if (error) throw error;

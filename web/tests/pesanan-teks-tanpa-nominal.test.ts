@@ -144,7 +144,6 @@ async function semaiProduk(judul: string): Promise<string> {
     .insert({
       judul,
       slug: `uji-teks-nominal-${Date.now()}-${nomorSlug}`,
-      jenis: "pdf",
       aktif: true,
     })
     .select("id")

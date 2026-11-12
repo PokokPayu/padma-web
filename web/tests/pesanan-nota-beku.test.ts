@@ -69,7 +69,7 @@ async function semaiProduk(judul = "Uji nota beku"): Promise<string> {
   urutanSlug += 1;
   const { data, error } = await svc
     .from("digital_products")
-    .insert({ judul, slug: `uji-nota-beku-${Date.now()}-${urutanSlug}`, jenis: "pdf", aktif: true })
+    .insert({ judul, slug: `uji-nota-beku-${Date.now()}-${urutanSlug}`, aktif: true })
     .select("id")
     .single();
   if (error) throw error;

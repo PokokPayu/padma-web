@@ -3,28 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { aktifkanProduk, nonaktifkanProduk, perbaruiProduk, simpanProduk } from "./aksi";
-import { JENIS_SAH, LABEL_JENIS, type JenisProduk } from "@/lib/produk/status";
+import { labelMasaBerlaku } from "@/lib/produk/status";
+import type { ProdukKelola } from "@/lib/admin/produk-admin";
 import { formatRupiah } from "@/lib/rupiah-publik";
 
 const KELAS_MEDAN =
   "mt-1 min-h-[38px] w-full rounded-lg border border-panel-border bg-panel-surface px-3 py-2 text-[13px]";
 const KELAS_LABEL = "block text-[12px] font-bold text-panel-muted";
 
-export type ProdukForm = {
-  id: string;
-  judul: string;
-  slug: string;
-  deskripsi: string;
-  jenis: JenisProduk;
-  bolehUnduh: boolean;
-  urutan: number;
-  aktif: boolean;
-  /** Ada berkas terunggah. `aktifkanProduk` menolak produk yang belum. */
-  adaIsi: boolean;
-  /** Dari view `produk_harga_staf` — TAMPIL saja, tidak pernah disunting di sini. */
-  harga: number | null;
-  hargaCoret: number | null;
-};
+export type ProdukForm = ProdukKelola;
 
 /**
  * Satu formulir untuk membuat DAN mengubah — pola yang sama dengan
@@ -75,16 +62,6 @@ export function FormProduk({
         />
       </label>
       <label>
-        <span className={KELAS_LABEL}>Jenis</span>
-        <select name="jenis" required defaultValue={produk?.jenis ?? JENIS_SAH[0]} className={KELAS_MEDAN}>
-          {JENIS_SAH.map((j) => (
-            <option key={j} value={j}>
-              {LABEL_JENIS[j]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
         <span className={KELAS_LABEL}>Alamat (slug)</span>
         <input
           name="slug"
@@ -108,18 +85,6 @@ export function FormProduk({
           className={KELAS_MEDAN}
         />
       </label>
-      <label className="flex items-center gap-2">
-        <input
-          name="boleh_unduh"
-          type="checkbox"
-          defaultChecked={produk?.bolehUnduh ?? false}
-          className="h-4 w-4"
-        />
-        <span className="text-[12.5px] font-semibold text-panel-ink">
-          Boleh diunduh (bukan sekadar ditonton/dibaca di tempat)
-        </span>
-      </label>
-
       {produk && (
         <label>
           <span className={KELAS_LABEL}>Urutan tampil</span>
@@ -155,6 +120,9 @@ export function FormProduk({
           <p className="mt-1 text-[11px] text-panel-muted/70">
             Harga hanya bisa ditetapkan owner. Panel ini hanya menampilkannya.
           </p>
+          <p className="mt-2 text-[13px] text-panel-ink">
+            Masa berlaku: <b>{labelMasaBerlaku(produk.masaBerlakuBulan)}</b>
+          </p>
         </div>
       )}
 
@@ -176,7 +144,7 @@ export function FormProduk({
             disabled={pending || (!produk.aktif && !produk.adaIsi)}
             title={
               !produk.aktif && !produk.adaIsi
-                ? "Unggah berkasnya dulu sebelum ditayangkan."
+                ? "Lengkapi isinya dulu: minimal satu materi, dan setiap materi sudah diunggah."
                 : undefined
             }
             onClick={() =>
@@ -197,7 +165,7 @@ export function FormProduk({
 
       {produk && !produk.adaIsi && (
         <p className="text-[11.5px] italic text-panel-muted">
-          Belum ada berkas terunggah — produk ini belum bisa ditayangkan.
+          Isi belum lengkap — produk ini belum bisa ditayangkan.
         </p>
       )}
     </form>

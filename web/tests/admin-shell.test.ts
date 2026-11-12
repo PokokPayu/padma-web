@@ -650,6 +650,10 @@ describe("layout admin", () => {
       "src/app/admin/materi/unggah.ts",
       "src/app/admin/sesi/[id]/unggah-sertifikat.ts",
       "src/app/admin/produk/[id]/unggah.ts",
+      // Bab/materi/sampul: storage + pembersihan `hapusMateri` memegang service
+      // role dengan alasan yang sama; urutan sesi-sebelum-service dijaga PER
+      // ACTION oleh tests/admin-produk-unggah.test.ts.
+      "src/app/admin/produk/[id]/aksi-isi.ts",
     ]);
     for (const berkas of berkasAdmin()) {
       if (DIKECUALIKAN.has(berkas)) continue;

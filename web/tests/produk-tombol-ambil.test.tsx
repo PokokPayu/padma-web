@@ -51,50 +51,44 @@ describe("tombol produk — tiga keadaan", () => {
 
 /**
  * Kepemilikan ditanyakan DARI PERAMBAN supaya `/produk/[slug]` tetap anon &
- * ter-cache (`revalidate = 300`). Dua sifatnya diuji di sini dengan klien
- * palsu, tanpa jaringan: tanpa sesi ia tidak bertanya sama sekali, dan
- * entitlement yang dicabut BUKAN kepemilikan.
+ * ter-cache (`revalidate = 300`). Pertanyaannya diajukan ke RPC `punya_produk`
+ * — predikat yang SAMA dengan gerbang isi (tidak dicabut DAN belum
+ * kedaluwarsa), bukan pembacaan tabel `digital_entitlements`. Sifatnya diuji
+ * di sini dengan klien palsu, tanpa jaringan: tanpa sesi ia tidak bertanya
+ * sama sekali, dan jawaban selain `true` BUKAN kepemilikan.
  */
 describe("punyaProdukDiPeramban", () => {
-  function klienPalsu(sesi: unknown, baris: { id: string } | null, jejak: string[]) {
+  function klienPalsu(sesi: unknown, jawaban: boolean, panggilan: Array<[string, unknown]>) {
     return {
       auth: { getSession: async () => ({ data: { session: sesi } }) },
-      from(tabel: string) {
-        jejak.push(tabel);
-        return {
-          select: () => ({
-            eq: () => ({
-              is: (kolom: string) => {
-                jejak.push(`is:${kolom}`);
-                return { maybeSingle: async () => ({ data: baris }) };
-              },
-            }),
-          }),
-        };
+      rpc: async (nama: string, params: unknown) => {
+        panggilan.push([nama, params]);
+        return { data: jawaban, error: null };
       },
     } as unknown as SupabaseClient;
   }
 
   it("pengunjung anon: tidak bertanya apa pun, dan tidak dianggap memiliki", async () => {
-    const jejak: string[] = [];
-    expect(await punyaProdukDiPeramban(klienPalsu(null, { id: "e1" }, jejak), "p1")).toBe(false);
-    // Kalau ia tetap bertanya, `anon` hanya akan menerima 42501 di konsol
+    const panggilan: Array<[string, unknown]> = [];
+    expect(await punyaProdukDiPeramban(klienPalsu(null, true, panggilan), "p1")).toBe(false);
+    // Kalau ia tetap bertanya, `anon` hanya akan menerima galat di konsol
     // pengunjung — kebisingan tanpa jawaban.
-    expect(jejak).toEqual([]);
+    expect(panggilan).toEqual([]);
   });
 
-  it("klien login dengan entitlement hidup: memiliki", async () => {
-    const jejak: string[] = [];
-    const sb = klienPalsu({ user: "x" }, { id: "e1" }, jejak);
+  it("klien login dengan akses hidup: memiliki, lewat RPC punya_produk", async () => {
+    const panggilan: Array<[string, unknown]> = [];
+    const sb = klienPalsu({ user: "x" }, true, panggilan);
     expect(await punyaProdukDiPeramban(sb, "p1")).toBe(true);
-    expect(jejak).toContain("digital_entitlements");
-    // `dicabut_pada is null` bukan hiasan: entitlement tercabut bukan milik.
-    expect(jejak).toContain("is:dicabut_pada");
+    // Predikat kepemilikan SATU pintu: dicabut dan kedaluwarsa sudah
+    // diputuskan di dalam RPC, bukan di sini.
+    expect(panggilan).toEqual([["punya_produk", { p_product_id: "p1" }]]);
   });
 
-  it("klien login tanpa baris: tidak memiliki", async () => {
-    const jejak: string[] = [];
-    const sb = klienPalsu({ user: "x" }, null, jejak);
+  it("klien login tanpa akses hidup (tak punya, dicabut, atau kedaluwarsa): tidak memiliki", async () => {
+    const panggilan: Array<[string, unknown]> = [];
+    const sb = klienPalsu({ user: "x" }, false, panggilan);
     expect(await punyaProdukDiPeramban(sb, "p1")).toBe(false);
+    expect(panggilan).toEqual([["punya_produk", { p_product_id: "p1" }]]);
   });
 });

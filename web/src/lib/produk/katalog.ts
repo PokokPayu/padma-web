@@ -1,28 +1,34 @@
 import { createClient } from "@supabase/supabase-js";
-import type { JenisProduk } from "@/lib/produk/status";
+import type { JenisMateri } from "@/lib/produk/status";
 
+/**
+ * Katalog publik dibaca dengan ANON KEY supaya policy baca publik benar-benar
+ * teruji: daftar bab & materi hanya terbaca untuk produk tayang, isinya
+ * (files/pages) tidak pernah.
+ */
 export type ProdukPublik = {
   id: string;
   judul: string;
   slug: string;
   deskripsi: string;
-  jenis: JenisProduk;
-  bolehUnduh: boolean;
   sampulObjek: string | null;
-  /** null = owner belum menetapkan harga. 0 = GRATIS. Dua keadaan berbeda. */
+  masaBerlakuBulan: number | null;
+  jenisMateri: JenisMateri[];
   harga: number | null;
   hargaCoret: number | null;
 };
 
-// Etalase dibaca dengan ANON KEY, bukan sesi pengguna — alasannya sama persis
-// dengan `lib/katalog.ts`, dan ketiganya masih berlaku:
-//   * `cookies()` hanya bermakna di dalam request scope; di luar itu (test,
-//     prerender statis) ia melempar "called outside a request scope";
-//   * membaca cookie membuat etalase publik ikut dynamic tanpa alasan —
-//     isinya sama untuk semua pengunjung;
-//   * service role TIDAK dipakai JUSTRU supaya policy "baca publik yang
-//     aktif" benar-benar teruji: bila policy itu hilang, etalase kosong
-//     tertangkap di test, bukan diam-diam kosong di produksi.
+export type MateriPublik = {
+  id: string;
+  judul: string;
+  keterangan: string;
+  jenis: JenisMateri;
+  sampulObjek: string | null;
+  pratinjau: boolean;
+};
+
+export type BabPublik = { id: string; judul: string; materi: MateriPublik[] };
+
 function klienPublik() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,10 +38,30 @@ function klienPublik() {
 }
 
 type BarisProduk = {
-  id: string; judul: string; slug: string; deskripsi: string;
-  jenis: JenisProduk; boleh_unduh: boolean; sampul_objek: string | null;
+  id: string;
+  judul: string;
+  slug: string;
+  deskripsi: string;
+  sampul_objek: string | null;
+  masa_berlaku_bulan: number | null;
+  digital_product_materials: Array<{ jenis: JenisMateri }>;
 };
 type BarisHarga = { product_id: string; harga: number; harga_coret: number | null };
+type BarisMateri = {
+  id: string; judul: string; keterangan: string; jenis: JenisMateri;
+  sampul_objek: string | null; pratinjau: boolean; urutan: number; created_at: string;
+};
+type BarisBab = {
+  id: string; judul: string; urutan: number; created_at: string;
+  digital_product_materials: BarisMateri[];
+};
+
+const KOLOM_PRODUK =
+  "id, judul, slug, deskripsi, sampul_objek, masa_berlaku_bulan, digital_product_materials(jenis)";
+
+function urut<T extends { urutan: number; created_at: string }>(a: T, b: T): number {
+  return a.urutan - b.urutan || a.created_at.localeCompare(b.created_at);
+}
 
 function rakit(produk: BarisProduk[], harga: BarisHarga[]): ProdukPublik[] {
   const peta = new Map(harga.map((h) => [h.product_id, h]));
@@ -46,12 +72,9 @@ function rakit(produk: BarisProduk[], harga: BarisHarga[]): ProdukPublik[] {
       judul: p.judul,
       slug: p.slug,
       deskripsi: p.deskripsi,
-      jenis: p.jenis,
-      bolehUnduh: p.boleh_unduh,
       sampulObjek: p.sampul_objek,
-      // `?? null` di sini AMAN dan tidak menyembunyikan kegagalan: galat
-      // query sudah dilempar di atas, jadi ketiadaan baris di sini benar-benar
-      // berarti "owner belum menetapkan harga".
+      masaBerlakuBulan: p.masa_berlaku_bulan,
+      jenisMateri: p.digital_product_materials.map((m) => m.jenis),
       harga: h?.harga ?? null,
       hargaCoret: h?.harga_coret ?? null,
     };
@@ -61,12 +84,9 @@ function rakit(produk: BarisProduk[], harga: BarisHarga[]): ProdukPublik[] {
 export async function bacaProdukPublik(batas?: number): Promise<ProdukPublik[]> {
   const supabase = klienPublik();
 
-  // RLS "produk: baca publik yang aktif" yang menyaring, bukan `.eq("aktif",
-  // true)` di sini — filter di TypeScript akan tetap hijau seandainya
-  // policy-nya hilang, dan itu persis kegagalan yang tidak boleh senyap.
   let q = supabase
     .from("digital_products")
-    .select("id, judul, slug, deskripsi, jenis, boleh_unduh, sampul_objek")
+    .select(KOLOM_PRODUK)
     .order("urutan", { ascending: true })
     .order("created_at", { ascending: false });
   if (batas !== undefined) q = q.limit(batas);
@@ -80,31 +100,53 @@ export async function bacaProdukPublik(batas?: number): Promise<ProdukPublik[]> 
     .select("product_id, harga, harga_coret")
     .in("product_id", produk!.map((p) => p.id))
     .returns<BarisHarga[]>();
-  // Dibaca lewat klien yang SAMA, dan galatnya dilempar: bila
-  // `harga_produk_publik` kehilangan grantnya, etalase kehilangan harganya di
-  // test yang sama — bukan diam-diam tampil "harga belum ditetapkan" untuk
-  // seluruh katalog di produksi.
   if (hargaError) throw new Error(`Gagal membaca harga produk: ${hargaError.message}`);
 
   return rakit(produk!, harga ?? []);
 }
 
-export async function bacaProdukPerSlug(slug: string): Promise<ProdukPublik | null> {
+export async function bacaProdukPerSlug(
+  slug: string,
+): Promise<(ProdukPublik & { bab: BabPublik[] }) | null> {
   const supabase = klienPublik();
   const { data: produk, error } = await supabase
     .from("digital_products")
-    .select("id, judul, slug, deskripsi, jenis, boleh_unduh, sampul_objek")
+    .select(KOLOM_PRODUK)
     .eq("slug", slug)
     .maybeSingle<BarisProduk>();
   if (error) throw new Error(`Gagal membaca produk: ${error.message}`);
   if (!produk) return null;
 
-  const { data: harga, error: hargaError } = await supabase
-    .from("harga_produk_publik")
-    .select("product_id, harga, harga_coret")
-    .eq("product_id", produk.id)
-    .returns<BarisHarga[]>();
+  const [{ data: harga, error: hargaError }, { data: bab, error: babError }] = await Promise.all([
+    supabase
+      .from("harga_produk_publik")
+      .select("product_id, harga, harga_coret")
+      .eq("product_id", produk.id)
+      .returns<BarisHarga[]>(),
+    supabase
+      .from("digital_product_sections")
+      .select(
+        "id, judul, urutan, created_at, digital_product_materials(id, judul, keterangan, jenis, sampul_objek, pratinjau, urutan, created_at)",
+      )
+      .eq("product_id", produk.id)
+      .returns<BarisBab[]>(),
+  ]);
   if (hargaError) throw new Error(`Gagal membaca harga produk: ${hargaError.message}`);
+  if (babError) throw new Error(`Gagal membaca daftar materi: ${babError.message}`);
 
-  return rakit([produk], harga ?? [])[0];
+  return {
+    ...rakit([produk], harga ?? [])[0],
+    bab: [...(bab ?? [])].sort(urut).map((b) => ({
+      id: b.id,
+      judul: b.judul,
+      materi: [...b.digital_product_materials].sort(urut).map((m) => ({
+        id: m.id,
+        judul: m.judul,
+        keterangan: m.keterangan,
+        jenis: m.jenis,
+        sampulObjek: m.sampul_objek,
+        pratinjau: m.pratinjau,
+      })),
+    })),
+  };
 }

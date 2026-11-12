@@ -1,6 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hitungRentang, type ParamDaftar, type SaringSah } from "@/app/_shell/panel/daftar";
-import type { JenisProduk } from "@/lib/produk/status";
 
 // ============================================================================
 // LAPISAN DATA — harga produk digital, panel OWNER
@@ -33,7 +32,7 @@ export type BarisProdukHarga = {
   productId: string;
   judul: string;
   slug: string;
-  jenis: JenisProduk;
+  masaBerlakuBulan: number | null;
   aktif: boolean;
   /** Harga yang berlaku pada `hariIni`; `null` bila produk belum bertarif. */
   berlaku: HargaRiwayat | null;
@@ -48,7 +47,7 @@ export const SARING_PRODUK_HARGA = {
 
 export type HalamanProdukHarga = { baris: BarisProdukHarga[]; total: number };
 
-type BarisProduk = { id: string; judul: string; slug: string; jenis: JenisProduk; aktif: boolean };
+type BarisProduk = { id: string; judul: string; slug: string; aktif: boolean; masa_berlaku_bulan: number | null };
 type BarisHarga = {
   id: string;
   product_id: string;
@@ -98,7 +97,7 @@ export async function ambilDaftarHargaProduk(
   const [{ data: produk, error: produkError }, { data: harga, error: hargaError }] = await Promise.all([
     supabase
       .from("digital_products")
-      .select("id, judul, slug, jenis, aktif")
+      .select("id, judul, slug, aktif, masa_berlaku_bulan")
       .order("judul")
       .returns<BarisProduk[]>(),
     // SELURUH riwayat, bukan hanya yang berlaku hari ini: halaman ini
@@ -139,7 +138,7 @@ export async function ambilDaftarHargaProduk(
       productId: p.id,
       judul: p.judul,
       slug: p.slug,
-      jenis: p.jenis,
+      masaBerlakuBulan: p.masa_berlaku_bulan,
       aktif: p.aktif,
       berlaku: riwayat.find((h) => h.berlakuSekarang) ?? null,
       riwayat,

@@ -15,10 +15,8 @@ afterEach(async () => {
 async function semai(slug: string, harga: number, aktif = true): Promise<string> {
   const svc = createAdminSupabase();
   const { data } = await svc.from("digital_products")
-    .insert({ judul: `Uji ${slug}`, slug, jenis: "pdf", aktif }).select("id").single();
+    .insert({ judul: `Uji ${slug}`, slug, aktif }).select("id").single();
   bersihkan.push(data!.id);
-  await svc.from("digital_product_files")
-    .insert({ product_id: data!.id, objek: `${data!.id}/isi.pdf`, mime: "application/pdf", byte: 1024 });
   await svc.from("digital_product_prices").insert({ product_id: data!.id, harga });
   return data!.id;
 }
@@ -57,7 +55,7 @@ describe("ambil_produk_gratis", () => {
   it("MENOLAK produk yang harganya belum ditetapkan", async () => {
     const svc = createAdminSupabase();
     const { data: produk } = await svc.from("digital_products")
-      .insert({ judul: "Tanpa harga", slug: "gratis-tanpa-harga", jenis: "pdf", aktif: true })
+      .insert({ judul: "Tanpa harga", slug: "gratis-tanpa-harga", aktif: true })
       .select("id").single();
     bersihkan.push(produk!.id);
 

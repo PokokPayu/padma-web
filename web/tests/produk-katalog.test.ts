@@ -15,7 +15,7 @@ afterEach(async () => {
 async function semaiProduk(slug: string, aktif: boolean, harga?: number, coret?: number) {
   const svc = createAdminSupabase();
   const { data } = await svc.from("digital_products")
-    .insert({ judul: `Produk ${slug}`, slug, jenis: "pdf", aktif, urutan: 1 })
+    .insert({ judul: `Produk ${slug}`, slug, aktif, urutan: 1 })
     .select("id").single();
   bersihkan.push(data!.id);
   if (harga !== undefined) {

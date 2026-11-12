@@ -100,10 +100,9 @@ export function PanelAmbil({
  * SELURUH halaman dynamic demi satu tombol. Karena itu kepemilikan ditanyakan
  * dari sisi klien, sesudah halamannya tayang.
  *
- * RLS "entitlement: klien baca miliknya" yang menjawab — bukan filter
- * `client_id` yang dirakit di sini, yang tetap akan memulangkan daftar kosong
- * seandainya gerbangnya sendiri mati. `dicabut_pada is null` disaring eksplisit
- * karena entitlement yang dicabut BUKAN kepemilikan.
+ * Pertanyaannya diajukan lewat RPC `punya_produk` (predikat yang sama dengan
+ * gerbang isi: tidak dicabut DAN belum kedaluwarsa), bukan membaca tabel
+ * `digital_entitlements` langsung.
  */
 export async function punyaProdukDiPeramban(
   sb: SupabaseClient,
@@ -112,16 +111,15 @@ export async function punyaProdukDiPeramban(
   // Tanpa sesi, tidak ada yang perlu ditanyakan: `anon` tidak punya hak tabel
   // atas `digital_entitlements` sama sekali, jadi permintaannya hanya akan
   // melahirkan 42501 di konsol pengunjung tanpa menjawab apa pun.
-  const { data } = await sb.auth.getSession();
-  if (!data.session) return false;
+  const { data: sesi } = await sb.auth.getSession();
+  if (!sesi.session) return false;
 
-  const { data: baris } = await sb
-    .from("digital_entitlements")
-    .select("id")
-    .eq("product_id", productId)
-    .is("dicabut_pada", null)
-    .maybeSingle();
-  return baris !== null;
+  // Predikat yang SAMA dengan gerbang isi: tidak dicabut DAN belum
+  // kedaluwarsa. Membaca tabel langsung akan menganggap akses yang habis
+  // masih dimiliki, sehingga tombol "Buka" menuju materi yang terkunci dan
+  // tombol beli ulang tidak pernah muncul.
+  const { data } = await sb.rpc("punya_produk", { p_product_id: productId });
+  return data === true;
 }
 
 // Tombol hanya mengirim slug produk. Sisanya — sesi ada atau tidak, produknya

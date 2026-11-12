@@ -1,69 +1,60 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import type { JenisProduk } from "@/lib/produk/status";
+import type { JenisMateri } from "@/lib/produk/status";
 
 export type ProdukDimiliki = {
   id: string;
   judul: string;
   slug: string;
-  jenis: JenisProduk;
-  bolehUnduh: boolean;
+  /** Produk berhenti dijual (`aktif = false`) tetapi pemegang entitlement tetap membacanya. */
+  aktif: boolean;
+  sampulObjek: string | null;
+  jenisMateri: JenisMateri[];
   sumber: string;
   diberikanPada: string;
+  /** NULL = selamanya. Termasuk yang SUDAH lewat — layar menampilkan "habis". */
+  berlakuSampai: string | null;
 };
 
 type BarisEntitlement = {
   id: string;
   sumber: string;
   diberikan_pada: string;
+  berlaku_sampai: string | null;
   digital_products: {
     id: string;
     judul: string;
     slug: string;
-    jenis: JenisProduk;
-    boleh_unduh: boolean;
+    aktif: boolean;
+    sampul_objek: string | null;
+    digital_product_materials: Array<{ jenis: JenisMateri }>;
   } | null;
 };
 
 /**
- * Dibaca lewat SESI PENGGUNA, bukan service role, dan TANPA `.eq("client_id",
- * …)` — policy "entitlement: klien baca miliknya" (migration
- * `produk_entitlement`) sendiri yang menyaring lewat `auth.uid()`. Menambah
- * filter `client_id` di TypeScript di atasnya tidak menutup radius apa pun
- * (RLS sudah menutupnya), tapi membuka celah yang lain: bila `clientId` yang
- * dioper caller keliru atau gerbangnya sendiri yang mati, filter TypeScript
- * itu akan tetap menghasilkan daftar kosong yang terlihat identik dengan
- * "klien ini memang tidak punya apa-apa" — persis kegagalan senyap yang
- * dijelaskan di `ambilSertifikatLayanan`/`ambilSesiSatu` soal embed yang
- * ditolak RLS.
+ * Entitlement milik pemanggil yang belum dicabut, TERMASUK yang kedaluwarsa.
  *
- * `dicabut_pada` disaring di sini (bukan hanya lewat RLS) supaya entitlement
- * yang sudah dicabut admin tidak lagi muncul di "Pembelian saya" — halaman
- * ini adalah daftar akses AKTIF, bukan riwayat lengkap.
+ * Embed `digital_products` bergantung pada policy "produk: pemilik
+ * entitlement baca" yang memakai `pernah_punya_produk` — BUKAN
+ * `punya_produk`. Dengan `punya_produk`, produk NONAKTIF yang aksesnya habis
+ * memulangkan `null` di sini (embed RLS tidak pernah melempar) dan hilang
+ * diam-diam dari daftar.
  *
- * Baris yang produknya tidak lagi terbaca dibuang, bukan ditampilkan dengan
- * judul kosong: embed yang ditolak RLS memulangkan `null`, bukan galat, dan
- * "Pembelian saya" tidak boleh menampilkan kartu tanpa nama.
+ * `clientId` tidak dipakai sebagai filter di TS: RLS "klien baca miliknya"
+ * sudah menyaring. Filter di sini berbahaya — id pemanggil yang salah atau
+ * gerbang yang mati menghasilkan daftar kosong yang tak terbedakan dari
+ * "belum memiliki apa pun". Parameternya dipertahankan supaya pemanggil tetap
+ * eksplisit.
  *
- * Yang TIDAK lagi termasuk di dalamnya: produk yang dinonaktifkan admin.
- * Policy "produk: pemilik entitlement baca" (migration `produk_akses_pemilik`)
- * membuat embed ini tetap terisi untuk pemegang entitlement yang hidup, tayang
- * atau tidak — `aktif = false` berarti berhenti dijual, bukan mencabut akses.
- * Penyaring di bawah karena itu kini hanya menjaga kasus sisa (mis. produknya
- * benar-benar dihapus di tengah pembacaan), bukan lagi diam-diam menjadi
- * pencabutan akses.
+ * Embed `null` dibuang supaya tidak ada kartu tanpa nama.
  */
 export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
-  // `clientId` diterima demi kesamaan bentuk dengan pembaca passport lain
-  // (`ambilSesi`, `ambilPaket`, …) yang dipanggil dari page.tsx dengan
-  // `klien.id` yang sama — tapi TIDAK dipakai memfilter query di sini,
-  // lihat komentar di atas.
   void clientId;
 
   const supabase = await createServerSupabase();
   const { data } = await supabase
     .from("digital_entitlements")
     .select(
-      "id, sumber, diberikan_pada, digital_products(id, judul, slug, jenis, boleh_unduh)",
+      "id, sumber, diberikan_pada, berlaku_sampai, digital_products(id, judul, slug, aktif, sampul_objek, digital_product_materials(jenis))",
     )
     .is("dicabut_pada", null)
     .order("diberikan_pada", { ascending: false })
@@ -77,9 +68,11 @@ export async function produkSaya(clientId: string): Promise<ProdukDimiliki[]> {
       id: r.digital_products.id,
       judul: r.digital_products.judul,
       slug: r.digital_products.slug,
-      jenis: r.digital_products.jenis,
-      bolehUnduh: r.digital_products.boleh_unduh,
+      aktif: r.digital_products.aktif,
+      sampulObjek: r.digital_products.sampul_objek,
+      jenisMateri: r.digital_products.digital_product_materials.map((m) => m.jenis),
       sumber: r.sumber,
       diberikanPada: r.diberikan_pada,
+      berlakuSampai: r.berlaku_sampai,
     }));
 }

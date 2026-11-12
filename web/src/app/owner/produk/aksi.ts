@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hariIniJakarta } from "@/lib/passport/waktu";
-import { periksaHarga, periksaHargaCoretProduk, PESAN_PRODUK } from "@/lib/produk/status";
+import { periksaHarga, periksaHargaCoretProduk, periksaMasaBerlaku, PESAN_PRODUK } from "@/lib/produk/status";
 
 type Hasil = { ok: true } | { ok: false; pesan: string };
 
@@ -79,6 +79,44 @@ export async function tetapkanHargaProduk(formData: FormData): Promise<Hasil> {
   revalidatePath("/owner/produk");
   revalidatePath("/admin/produk");
   revalidatePath("/produk");
+  // Halaman detail membekukan harga/masa berlaku di cache; tanpa ini ia
+  // menampilkan angka lama sampai revalidasi berikutnya.
+  revalidatePath("/produk/[slug]", "page");
   revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Masa berlaku adalah syarat jual, sepasang dengan harga — owner saja.
+ * Gerbang sesungguhnya ada di basis data (trigger jaga_masa_berlaku_produk);
+ * requireRole di sini hanya membuat penolakannya sopan.
+ *
+ * Mengubahnya TIDAK menyentuh pembeli lama (berlaku_sampai dibekukan saat
+ * akses terbit) maupun pesanan yang sedang menunggu bayar (durasi dibekukan
+ * di order_items saat checkout).
+ */
+export async function tetapkanMasaBerlaku(formData: FormData): Promise<Hasil> {
+  await requireRole(["owner"]);
+
+  const productId = String(formData.get("produk") ?? "").trim();
+  if (!productId) return { ok: false, pesan: "Produk wajib dipilih." };
+
+  const masa = periksaMasaBerlaku(String(formData.get("satuan") ?? ""), String(formData.get("jumlah") ?? ""));
+  if (!masa.ok) return { ok: false, pesan: masa.pesan };
+
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("digital_products")
+    .update({ masa_berlaku_bulan: masa.nilai })
+    .eq("id", productId)
+    .select("id");
+  if (error?.code === "42501") return { ok: false, pesan: "Masa berlaku hanya bisa diatur owner." };
+  if (error) return { ok: false, pesan: `Masa berlaku gagal disimpan (${error.code}).` };
+  if ((data ?? []).length === 0) return { ok: false, pesan: "Produk tidak dikenal." };
+
+  revalidatePath("/owner/produk");
+  revalidatePath("/admin/produk");
+  revalidatePath("/produk");
+  revalidatePath("/produk/[slug]", "page");
   return { ok: true };
 }
