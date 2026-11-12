@@ -437,6 +437,43 @@ describe("idempotensi dan invoice yang tidak dikenal", () => {
   });
 });
 
+describe("baris audit uang memuat KEDUA angka", () => {
+  // Staf memutuskan nasib uang dari kalimat ini. v_total pernah hanya dihitung
+  // di dalam cabang `lunas`, sehingga baris audit menulis "ditagih , diterima X"
+  // dengan angka tertagih KOSONG. Σ harga_beku dihitung dari tabel, bukan dari
+  // konstanta uji, supaya yang diadu adalah angka yang benar-benar tersimpan.
+  async function tertagih(id: string): Promise<number> {
+    const [b] = await querySql<{ jumlah: string }>(
+      "select coalesce(sum(harga_beku), 0)::text as jumlah from public.order_items where pesanan_id = $1",
+      [id],
+    );
+    return Number(b.jumlah);
+  }
+
+  it("selisih_nominal pada pesanan menunggu_bayar: ditagih Σ harga_beku, diterima nominal kiriman", async () => {
+    const p = await pesananBaru();
+    const diterima = HARGA + 7_000;
+    await terapkanPasti(p, STATUS_DOKU_LUNAS[0], diterima, "diterapkan");
+    const baris = (await jejak(p.id)).find((j) => j.kejadian === "selisih_nominal");
+    expect(baris, "jejak selisih_nominal tidak lahir").toBeDefined();
+    const total = await tertagih(p.id);
+    expect(total).toBe(HARGA);
+    expect(baris!.keterangan).toContain(`ditagih ${total}`);
+    expect(baris!.keterangan).toContain(`diterima ${diterima}`);
+  });
+
+  it("lunas_setelah_tutup pada pesanan tertutup: kedua angka terisi walau nominalnya meleset", async () => {
+    const p = await bentukPesanan("kedaluwarsa");
+    const diterima = HARGA - 5_000;
+    await terapkanPasti(p, STATUS_DOKU_LUNAS[0], diterima, "tanpa_efek");
+    const baris = (await jejak(p.id)).find((j) => j.kejadian === "lunas_setelah_tutup");
+    expect(baris, "jejak lunas_setelah_tutup tidak lahir").toBeDefined();
+    const total = await tertagih(p.id);
+    expect(baris!.keterangan).toContain(`ditagih ${total}`);
+    expect(baris!.keterangan).toContain(`diterima ${diterima}`);
+  });
+});
+
 describe("percobaan, sumber, dan cermin kolom", () => {
   it("invoice percobaan basi tetap diterapkan, dan jejak notifikasi menyebut percobaannya", async () => {
     const p = await pesananBaru();

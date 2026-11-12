@@ -80,7 +80,7 @@ export default async function PenjualanOwnerPage({
           Dihitung dari pesanan produk digital yang berstatus <b>Lunas</b> dan tidak pernah
           menerima notifikasi pengembalian dana. Dikelompokkan menurut <b>bulan kalender
           Jakarta</b>, berdasarkan kapan uangnya masuk — bukan kapan pesanannya dibuat.
-          Pesanan yang uangnya ditahan DOKU, yang dibayar sesudah tenggat, atau yang
+          Pesanan yang ditahan menunggu putusan staf (nominalnya tidak cocok), yang dibayar sesudah tenggat, atau yang
           dikembalikan <b>tidak ikut dijumlahkan</b>; ketiganya muncul sebagai baris terpisah
           di kartu bulannya. Angka di halaman ini adalah yang <b>ditagih dan dikonfirmasi
           DOKU</b>, bukan yang mendarat di rekening setelah potongan biaya — untuk

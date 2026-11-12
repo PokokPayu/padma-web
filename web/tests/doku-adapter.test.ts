@@ -115,6 +115,22 @@ describe("buatPembayaranDoku", () => {
     expect(JSON.stringify(r)).not.toContain("RAHASIA-FIELD-DITOLAK");
   });
 
+  it("200 TANPA response.payment.url -> ok:false dan tidak melempar (gagal tertutup)", async () => {
+    // Tautan bayar yang hilang tidak boleh lolos sebagai `ok:true` dengan url
+    // kosong: pembeli akan dialihkan ke halaman kosong dan merasa sudah bayar.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const badan of [{}, { response: {} }, { response: { payment: {} } }, { response: { payment: { url: "" } } }]) {
+      stubFetch(() => json(badan));
+      await expect(buatPembayaranDoku(permintaan)).resolves.toMatchObject({ ok: false });
+    }
+  });
+
+  it("200 dengan badan BUKAN JSON -> ok:false dan tidak melempar", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    stubFetch(() => new Response("<html>bukan json</html>", { status: 200 }));
+    await expect(buatPembayaranDoku(permintaan)).resolves.toMatchObject({ ok: false });
+  });
+
   it("lempar jaringan -> ok:false", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     stubFetch(() => {

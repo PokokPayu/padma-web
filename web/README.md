@@ -126,7 +126,7 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/produk` | Klien | Pembelian saya: produk digital yang dimiliki, pintu ke pemutar/pembaca/unduhan |
 | `/passport/produk/[slug]` | Klien | Daftar isi produk (bab & materi) milik pembeli; pratinjau bagi yang belum memiliki |
 | `/passport/produk/[slug]/[materiId]` | Klien | Penampil satu materi (video/PDF) plus tombol unduh bila diizinkan; pemilik aktif atau materi pratinjau |
-| `/passport/keranjang` | Klien | Keranjang produk digital (P2): daftar, total, bayar sekali lewat Snap, batal pesanan terbuka |
+| `/passport/keranjang` | Klien | Keranjang produk digital (P2): daftar, total, bayar sekali lewat halaman bayar DOKU (peramban dialihkan ke URL-nya), batal pesanan terbuka |
 | `/admin` | Admin, Owner | Dashboard antrean: skrining baru, permintaan jadwal, klaim pembayaran, klien belum aktif |
 | `/admin/skrining` | Admin, Owner | Inbox skrining: verifikasi jawaban, ubah tindak lanjut, konversi menjadi klien |
 | `/admin/klien` | Admin, Owner | Daftar klien: cari (nama & PADMA ID), saring aktivasi/paket, paginasi; baris menaut ke detail |
@@ -174,7 +174,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/bukti` | Klien | POST unggah bukti bayar ke bucket **privat** `bukti-bayar` dengan service role; kepemilikan pengajuan dibaca lewat sesi, status berpindah ke `menunggu_verifikasi` — tidak pernah langsung `lunas` |
 | `/api/bukti/[permintaan]` | Admin, Owner | GET bukti bayar. Bucket tanpa policy, jadi ini SATU-SATUNYA pintunya; `requireRole` di baris pertama, respons `private, no-store` |
 | `/api/cron/tenggat` | Mesin | POST pembatal pengajuan yang lewat tenggat bayar. Dijaga `CRON_SECRET`, fail-closed bila secret tidak terpasang |
-| `/api/pesanan/checkout` | Klien | POST membuat pesanan lalu menerbitkan token Snap. Rute TIPIS: RPC `buat_pesanan` dipanggil dengan SESI PEMANGGIL, tidak pernah service role — `client_id` dipilih dari `auth.uid()` di dalam RPC, harga dibekukan di sana, dan pesanan terbuka kedua ditolak unique parsial |
+| `/api/pesanan/checkout` | Klien | POST membuat pesanan lalu menerbitkan tautan bayar DOKU: rute menjawab dengan URL halaman bayar DOKU dan peramban mengalihkan ke sana (`window.location.assign`). Rute TIPIS: RPC `buat_pesanan` dipanggil dengan SESI PEMANGGIL, tidak pernah service role — `client_id` dipilih dari `auth.uid()` di dalam RPC, harga dibekukan di sana, dan pesanan terbuka kedua ditolak unique parsial |
 | `/api/pesanan/[id]/batal` | Klien | POST pembatalan mandiri pesanan sendiri yang masih `menunggu_bayar`. Ada karena satu klien hanya boleh punya satu pesanan terbuka: tanpanya, berubah pikiran soal produk berarti menunggu 24 jam |
 | `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Check Status DOKU untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_gateway` (service role). Vonisnya datang dari DOKU, tidak pernah dari badan permintaan |
 | `/api/pesanan/[id]/terbitkan-akses` | Admin, Owner | POST menerbitkan ulang akses untuk pesanan **lunas** yang aksesnya tidak pernah terbit; memanggil `terbitkan_akses_item` per item, bukan penyalur — aturan "penyalur hanya dari transisi" tetap utuh |

@@ -17,7 +17,7 @@ import { golongkan, tanggalUang, type BarisPenjualan } from "@/lib/penjualan/hit
  */
 const CATATAN: Partial<Record<ReturnType<typeof golongkan>, string>> = {
   dikembalikan: "uangnya dikembalikan",
-  ditahan: "ditahan DOKU",
+  ditahan: "ditahan — nominal tidak cocok, menunggu putusan staf",
   lewat_tenggat: "dibayar lewat tenggat",
 };
 

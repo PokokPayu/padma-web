@@ -23,7 +23,7 @@ on:
   #   - cron: "*/15 * * * *"
 
 # Satu jalan pada satu waktu. Dua sapuan yang tumpang tindih akan menanyakan
-# pesanan yang sama ke Midtrans dua kali: `orders.diperiksa_pada` dicap sebelum
+# pesanan yang sama ke DOKU dua kali: `orders.diperiksa_pada` dicap sebelum
 # bertanya, tapi cap itu tidak melindungi dari dua proses yang memilih barisnya
 # pada detik yang sama.
 concurrency:
@@ -99,7 +99,7 @@ jobs:
           # untuk keadaan yang sudah punya alarmnya sendiri (webhook, Lapis 1b).
           # Yang dituntut di sini hanyalah bahwa angkanya TERLIHAT.
           if [ "$dilewati" -gt 0 ]; then
-            echo "::warning::$dilewati pesanan terpilih tetapi tidak terjawab Midtrans."
+            echo "::warning::$dilewati pesanan terpilih tetapi tidak terjawab DOKU."
           fi
 
           {

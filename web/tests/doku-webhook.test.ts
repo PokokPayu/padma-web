@@ -340,6 +340,25 @@ describe("peta kode jawaban — satu kasus per baris", () => {
     expect(jawab.status).toBe(401);
   });
 
+  it("gagal mencatat penolakan -> tetap 401, dan penyebabnya tertulis di log server", async () => {
+    // Kegagalan `catat_notifikasi_ditolak` tidak boleh mengubah jawaban (DOKU
+    // harus tetap melihat 401), tetapi wajib terlihat: tanpa log, alarm banjir
+    // notifikasi palsu gagal dalam senyap.
+    const p = await buatPesanan();
+    const teks = JSON.stringify(badanSah(p.invoice));
+    const galat = vi.spyOn(console, "error").mockImplementation(() => {});
+    ref.paksaGalat = true;
+    try {
+      const jawab = await POST(permintaan(teks, { ...tandatangani(teks), signature: "HMACSHA256=salah" }));
+      expect(jawab.status).toBe(401);
+      const baris = galat.mock.calls.map((c) => c.join(" "));
+      expect(baris.some((b) => b.includes("gagal mencatat notifikasi ditolak") && b.includes("galat-uji"))).toBe(true);
+    } finally {
+      ref.paksaGalat = false;
+      galat.mockRestore();
+    }
+  });
+
   it("Signature pendek, tanpa awalan, atau kosong -> 401, bukan 500", async () => {
     const p = await buatPesanan();
     const teks = JSON.stringify(badanSah(p.invoice));
