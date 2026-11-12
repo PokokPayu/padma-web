@@ -45,8 +45,8 @@ const tarifTransport = (o: Partial<TarifTransportRingkas>): TarifTransportRingka
   berlakuSejak: "2026-01-01", ...o,
 });
 
-// Senin 2026-08-24 .. Minggu 2026-08-30
-const SENIN = "2026-08-24";
+// Sabtu 2026-08-22 .. Jumat 2026-08-28
+const SABTU = "2026-08-22";
 
 describe("tarifPadaTanggal", () => {
   const daftar = [
@@ -110,19 +110,39 @@ describe("tarifPadaTanggal", () => {
 });
 
 describe("hitungRekap — pengelompokan pekan", () => {
-  it("mengelompokkan sesi Senin s.d. Minggu menurut kalender Jakarta", () => {
+  it("mengelompokkan sesi Sabtu s.d. Jumat menurut kalender Jakarta", () => {
     const r = hitungRekap({
       tarif: [tarif({})],
       sesi: [
-        sesi({ id: "a", tanggal: "2026-08-24" }), // Senin
-        sesi({ id: "b", tanggal: "2026-08-30" }), // Minggu, pekan yang SAMA
-        sesi({ id: "c", tanggal: "2026-08-31" }), // Senin, pekan BERIKUTNYA
+        sesi({ id: "a", tanggal: "2026-08-22" }), // Sabtu — hari PERTAMA pekan
+        sesi({ id: "b", tanggal: "2026-08-24" }), // Senin, pekan yang SAMA
+        sesi({ id: "c", tanggal: "2026-08-28" }), // Jumat — hari TERAKHIR pekan
+        sesi({ id: "d", tanggal: "2026-08-29" }), // Sabtu, pekan BERIKUTNYA
       ],
       tanda: [],
     });
-    expect(r.map((p) => p.senin)).toEqual(["2026-08-31", "2026-08-24"]);
-    expect(r.find((p) => p.senin === SENIN)!.jumlahSesi).toBe(2);
-    expect(r.find((p) => p.senin === "2026-08-31")!.jumlahSesi).toBe(1);
+    expect(r.map((p) => p.awal)).toEqual(["2026-08-29", "2026-08-22"]);
+    expect(r.find((p) => p.awal === SABTU)!.jumlahSesi).toBe(3);
+    expect(r.find((p) => p.awal === "2026-08-29")!.jumlahSesi).toBe(1);
+  });
+
+  // Batas yang BERGESER, bukan sekadar batas yang ada. Di bawah Senin–Minggu
+  // kedua tanggal ini duduk di pekan berbeda; sekarang keduanya satu pekan.
+  // Inilah bentuk murni dari butir 3 klien: sesi Sabtu & Minggu yang lenyap
+  // dari board owner begitu Senin tiba.
+  it("Sabtu dan Minggu sesudahnya TIDAK lagi terbelah dua pekan", () => {
+    const r = hitungRekap({
+      tarif: [tarif({})],
+      sesi: [
+        sesi({ id: "a", tanggal: "2026-09-19" }), // Sabtu
+        sesi({ id: "b", tanggal: "2026-09-20" }), // Minggu
+        sesi({ id: "c", tanggal: "2026-09-21" }), // Senin
+      ],
+      tanda: [],
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].awal).toBe("2026-09-19");
+    expect(r[0].jumlahSesi).toBe(3);
   });
 
   it("pekan terbaru berada di ATAS", () => {
@@ -135,12 +155,12 @@ describe("hitungRekap — pengelompokan pekan", () => {
       ],
       tanda: [],
     });
-    expect(r.map((p) => p.senin)).toEqual(["2026-08-24", "2026-08-03", "2026-07-06"]);
+    expect(r.map((p) => p.awal)).toEqual(["2026-08-22", "2026-08-01", "2026-07-04"]);
   });
 
   it("menyertakan label rentang pekan", () => {
     const r = hitungRekap({ tarif: [tarif({})], sesi: [sesi({})], tanda: [] });
-    expect(r[0].rentang).toBe("24 – 30 Agu 2026");
+    expect(r[0].rentang).toBe("22 – 28 Agu 2026");
   });
 
   it("pekan tanpa sesi tidak muncul", () => {
@@ -194,13 +214,17 @@ describe("hitungRekap — honor memakai tarif pada TANGGAL SESI", () => {
     const r = hitungRekap({
       tarif: daftar,
       sesi: [
-        sesi({ id: "lama", tanggal: "2026-08-17" }), // pekan 17–23 Agu
-        sesi({ id: "baru", tanggal: "2026-08-26" }), // pekan 24–30 Agu
+        sesi({ id: "lama", tanggal: "2026-08-17" }), // pekan Sabtu 15–21 Agu
+        sesi({ id: "baru", tanggal: "2026-08-26" }), // pekan Sabtu 22–28 Agu
       ],
       tanda: [],
     });
-    const pekanLama = r.find((p) => p.senin === "2026-08-17")!;
-    const pekanBaru = r.find((p) => p.senin === "2026-08-24")!;
+    // Tarif mengikuti TANGGAL SESI, bukan tanggal awal pekannya — itulah yang
+    // diuji di sini, dan itu TIDAK berubah oleh pergeseran Sabtu–Jumat.
+    // Perhatikan `r-baru` berlaku sejak 2026-08-24, yang kini jatuh di TENGAH
+    // pekan 22–28: sesi 26 Agu memakainya, dan itu memang benar.
+    const pekanLama = r.find((p) => p.awal === "2026-08-15")!;
+    const pekanBaru = r.find((p) => p.awal === "2026-08-22")!;
     expect(pekanLama.totalHonor).toBe(200_000);
     expect(pekanLama.totalHarga).toBe(500_000);
     expect(pekanBaru.totalHonor).toBe(250_000);
@@ -610,7 +634,7 @@ describe("hitungRekap — tanda bayar", () => {
   it("tanda hanya menyentuh mitra & pekan yang tepat", () => {
     const r = hitungRekap({
       ...dasar,
-      tanda: [{ partnerId: "p-ananda", senin: SENIN, dibayarPada: "2026-08-29T03:00:00.000Z" }],
+      tanda: [{ partnerId: "p-ananda", awal: SABTU, dibayarPada: "2026-08-29T03:00:00.000Z" }],
     });
     const ananda = r[0].perMitra.find((m) => m.partnerId === "p-ananda")!;
     const sari = r[0].perMitra.find((m) => m.partnerId === "p-sari")!;
@@ -619,12 +643,12 @@ describe("hitungRekap — tanda bayar", () => {
     expect(sari.sudahDibayar).toBe(false);
   });
 
-  // week_start bukan-Senin baru ditolak constraint di Task 1; baris lama yang
+  // week_start bukan-Sabtu ditolak CHECK honor_marks_awal_pekan_sabtu; baris lama yang
   // terlanjur yatim tidak boleh diam-diam mewarnai pekan mana pun.
   it("tanda dengan pekan yang tidak cocok tidak menandai apa pun", () => {
     const r = hitungRekap({
       ...dasar,
-      tanda: [{ partnerId: "p-ananda", senin: "2026-08-17", dibayarPada: "2026-08-20T03:00:00.000Z" }],
+      tanda: [{ partnerId: "p-ananda", awal: "2026-08-17", dibayarPada: "2026-08-20T03:00:00.000Z" }],
     });
     expect(r[0].perMitra.every((m) => m.sudahDibayar === false)).toBe(true);
   });
@@ -632,7 +656,7 @@ describe("hitungRekap — tanda bayar", () => {
   it("tanda untuk mitra yang tidak punya sesi di pekan itu tidak melahirkan baris hantu", () => {
     const r = hitungRekap({
       ...dasar,
-      tanda: [{ partnerId: "p-entah", senin: SENIN, dibayarPada: "2026-08-29T03:00:00.000Z" }],
+      tanda: [{ partnerId: "p-entah", awal: SABTU, dibayarPada: "2026-08-29T03:00:00.000Z" }],
     });
     expect(r[0].perMitra).toHaveLength(2);
     expect(r[0].perMitra.map((m) => m.partnerId).sort()).toEqual(["p-ananda", "p-sari"]);
@@ -648,7 +672,7 @@ describe("hitungRekap — tanda bayar", () => {
         sesi({ id: "a", tanggal: "2026-08-24", selesaiPada: "2026-08-28T02:00:00.000Z" }),
         sesi({ id: "b", tanggal: "2026-08-25", selesaiPada: "2026-08-31T02:00:00.000Z" }),
       ],
-      tanda: [{ partnerId: "p-ananda", senin: SENIN, dibayarPada: "2026-08-29T03:00:00.000Z" }],
+      tanda: [{ partnerId: "p-ananda", awal: SABTU, dibayarPada: "2026-08-29T03:00:00.000Z" }],
     });
     const m = r[0].perMitra[0];
     expect(m.sudahDibayar).toBe(true);
@@ -659,7 +683,7 @@ describe("hitungRekap — tanda bayar", () => {
     const r = hitungRekap({
       tarif: [tarif({})],
       sesi: [sesi({ id: "a", tanggal: "2026-08-24", selesaiPada: "2026-08-28T02:00:00.000Z" })],
-      tanda: [{ partnerId: "p-ananda", senin: SENIN, dibayarPada: "2026-08-29T03:00:00.000Z" }],
+      tanda: [{ partnerId: "p-ananda", awal: SABTU, dibayarPada: "2026-08-29T03:00:00.000Z" }],
     });
     expect(r[0].perMitra[0].adaSesiSesudahDitandai).toBe(false);
   });
@@ -678,7 +702,7 @@ describe("hitungRekap — kemurnian & ketahanan", () => {
   it("tidak memutasi satu pun masukan", () => {
     const masukanTarif = [tarif({})];
     const masukanSesi = [sesi({ id: "b", tanggal: "2026-08-26" }), sesi({ id: "a", tanggal: "2026-08-24" })];
-    const masukanTanda: TandaBayar[] = [{ partnerId: "p-ananda", senin: SENIN, dibayarPada: "2026-08-29T03:00:00.000Z" }];
+    const masukanTanda: TandaBayar[] = [{ partnerId: "p-ananda", awal: SABTU, dibayarPada: "2026-08-29T03:00:00.000Z" }];
     const salinanTarif = JSON.parse(JSON.stringify(masukanTarif));
     const salinanSesi = JSON.parse(JSON.stringify(masukanSesi));
     const salinanTanda = JSON.parse(JSON.stringify(masukanTanda));
@@ -730,13 +754,13 @@ describe("deretPekanTerakhir — sumbu waktu tanpa lubang", async () => {
   const { awalPekan, geserHari } = await import("@/lib/owner/pekan");
 
   const HARI = "2026-09-06";
-  const SENIN = awalPekan(HARI); // 2026-08-31
+  const SABTU = awalPekan(HARI); // 2026-09-05
 
   /** Satu RekapPekan minimal — hanya medan yang dipakai grafik yang diisi. */
-  function pekan(senin: string, harga: number, honor: number): RekapPekan {
+  function pekan(awal: string, harga: number, honor: number): RekapPekan {
     return {
-      senin,
-      rentang: senin,
+      awal,
+      rentang: awal,
       jumlahSesi: 1,
       perMitra: [],
       totalHonor: honor,
@@ -747,18 +771,18 @@ describe("deretPekanTerakhir — sumbu waktu tanpa lubang", async () => {
   }
 
   it("memulangkan tepat `pekan` titik, terlama di kiri", () => {
-    const hasil = deretPekanTerakhir([pekan(SENIN, 100, 40)], HARI, 4);
+    const hasil = deretPekanTerakhir([pekan(SABTU, 100, 40)], HARI, 4);
     expect(hasil).toHaveLength(4);
-    expect(hasil[hasil.length - 1].senin).toBe(SENIN);
+    expect(hasil[hasil.length - 1].awal).toBe(SABTU);
     for (let i = 1; i < hasil.length; i++) {
-      expect(hasil[i].senin).toBe(geserHari(hasil[i - 1].senin, 7));
+      expect(hasil[i].awal).toBe(geserHari(hasil[i - 1].awal, 7));
     }
   });
 
   it("pekan tanpa data menjadi NOL, bukan lompatan", () => {
     // Melompatinya membuat tiga pekan tampil sebagai dua titik dan sumbu
     // waktunya berbohong tanpa satu angka pun yang salah.
-    const hasil = deretPekanTerakhir([pekan(SENIN, 100, 40)], HARI, 3);
+    const hasil = deretPekanTerakhir([pekan(SABTU, 100, 40)], HARI, 3);
     expect(hasil.slice(0, 2).every((p) => p.totalHarga === 0)).toBe(true);
     expect(hasil.slice(0, 2).every((p) => p.margin === 0)).toBe(true);
     expect(hasil.slice(0, 2).every((p) => p.jumlahSesi === 0)).toBe(true);
@@ -768,14 +792,14 @@ describe("deretPekanTerakhir — sumbu waktu tanpa lubang", async () => {
   });
 
   it("pekan yang ada dipakai apa adanya, tidak dihitung ulang", () => {
-    const asli = pekan(SENIN, 900, 350);
+    const asli = pekan(SABTU, 900, 350);
     const hasil = deretPekanTerakhir([asli], HARI, 2);
     expect(hasil[1]).toBe(asli);
   });
 
   it("pekan di luar jendela diabaikan", () => {
-    const jauh = pekan(geserHari(SENIN, -70), 5000, 1000);
-    const hasil = deretPekanTerakhir([jauh, pekan(SENIN, 100, 40)], HARI, 3);
+    const jauh = pekan(geserHari(SABTU, -70), 5000, 1000);
+    const hasil = deretPekanTerakhir([jauh, pekan(SABTU, 100, 40)], HARI, 3);
     expect(hasil.some((p) => p.totalHarga === 5000)).toBe(false);
   });
 

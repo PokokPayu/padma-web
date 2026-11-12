@@ -130,9 +130,9 @@ const HONOR = 150_000;
 // fixture berkas test lain (yang memakai pekan relatif terhadap hari ini) dan
 // supaya `berlaku_sejak` seed — yang lahir bertanggal `supabase db reset` —
 // tidak pernah ikut terpilih.
-const BERLAKU_LAMA = "2020-01-06"; // Senin
-const PEKAN_A = "2024-03-04"; // Senin
-const PEKAN_B = "2024-03-11"; // Senin
+const BERLAKU_LAMA = "2020-01-06"; // tanggal berlaku tarif — hari apa pun sah
+const PEKAN_A = "2024-03-02"; // Sabtu; pekannya 2–8 Mar
+const PEKAN_B = "2024-03-09"; // Sabtu; pekannya 9–15 Mar
 
 const HARI_INI = hariIniJakarta();
 const PEKAN_DEPAN = geserHari(awalPekan(HARI_INI), 7);
@@ -217,13 +217,14 @@ async function tandaMitra(partnerId: string): Promise<BarisTanda[]> {
 
 /**
  * Potongan markup satu kartu pekan. Setiap kartu membawa `data-pekan` berisi
- * Seninnya, jadi assertion nominal tidak pernah salah menempel pada kartu pekan
- * lain — termasuk kartu milik fixture berkas test yang berjalan paralel.
+ * SABTU pekannya, jadi assertion nominal tidak pernah salah menempel pada
+ * kartu pekan lain — termasuk kartu milik fixture berkas test yang berjalan
+ * paralel.
  */
-function kartuPekan(markup: string, senin: string): string {
-  const awal = markup.indexOf(`data-pekan="${senin}"`);
-  expect(awal, `kartu pekan ${senin} tidak ada di halaman`).toBeGreaterThan(-1);
-  const sisa = markup.slice(awal);
+function kartuPekan(markup: string, awal: string): string {
+  const posisi = markup.indexOf(`data-pekan="${awal}"`);
+  expect(posisi, `kartu pekan ${awal} tidak ada di halaman`).toBeGreaterThan(-1);
+  const sisa = markup.slice(posisi);
   const akhir = sisa.indexOf("</article>");
   expect(akhir, "kartu pekan tidak dibungkus <article>").toBeGreaterThan(-1);
   return sisa.slice(0, akhir);
@@ -231,9 +232,31 @@ function kartuPekan(markup: string, senin: string): string {
 
 const rp = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
+/**
+ * Nama yang dipakai BERSAMA oleh ketiga mitra fixture berkas ini. Dipakai
+ * sebagai `cari` bawaan di bawah, dan itu bukan kenyamanan melainkan PAGAR.
+ *
+ * `/owner/rekap` memaginasi delapan pekan per halaman, terbaru di atas, dan
+ * pekan uji berkas ini sengaja berada jauh di masa lalu (Maret 2024). Begitu
+ * seed & fixture berkas lain menghasilkan delapan pekan yang lebih baru, pekan
+ * Maret 2024 terdorong ke halaman dua dan SELURUH assertion kartu di berkas ini
+ * gagal dengan "kartu pekan ... tidak ada di halaman" — kegagalan yang tidak
+ * ada hubungannya dengan apa pun yang sedang diuji.
+ *
+ * Itu bukan bahaya teoretis: pergeseran pekan Senin–Minggu -> Sabtu–Jumat
+ * (butir 4) memecah satu pekan seed menjadi dua, jumlah ember naik dari
+ * delapan ke sembilan, dan berkas ini langsung memerah tanpa satu pun
+ * perilaku produksi berubah. Menyaring ke mitra milik berkas ini sendiri
+ * membuat jumlah pekan milik orang lain berhenti menjadi urusan kita.
+ */
+const CARI_MITRA_UJI = "PAD-UJI Bidan Rekap";
+
 async function renderHalaman(sp: Record<string, string> = {}): Promise<string> {
   ref.sesi = sesiOwner;
-  return renderToStaticMarkup(await RekapPage({ searchParams: Promise.resolve(sp) }));
+  // `sp` menang bila pemanggil menyebut `cari` sendiri — beberapa test memang
+  // menguji kotak carinya.
+  const param = { cari: CARI_MITRA_UJI, ...sp };
+  return renderToStaticMarkup(await RekapPage({ searchParams: Promise.resolve(param) }));
 }
 
 beforeAll(async () => {
@@ -312,13 +335,17 @@ beforeAll(async () => {
   });
 
   await admin.from("sessions").insert([
-    sesi(SESI.a1, MITRA_A, LAYANAN_BERTARIF, "2024-03-04", "selesai"),
-    sesi(SESI.a2, MITRA_A, LAYANAN_BERTARIF, "2024-03-06", "selesai"),
+    // Sengaja menyentuh KEDUA ujung pekan Sabtu–Jumat: a1 di hari pertama
+    // (Sabtu 2 Mar), a5 di hari terakhir (Jumat 8 Mar). b1 jatuh hari MINGGU
+    // 3 Mar — hari yang di bawah skema Senin–Minggu lama menutup pekan, dan
+    // kini justru hari kedua. c1 hari SABTU 9 Mar, yang membuka pekan baru.
+    sesi(SESI.a1, MITRA_A, LAYANAN_BERTARIF, "2024-03-02", "selesai"),
+    sesi(SESI.a2, MITRA_A, LAYANAN_BERTARIF, "2024-03-04", "selesai"),
     sesi(SESI.a3, MITRA_A, LAYANAN_BERTARIF, "2024-03-05", "terjadwal"),
-    sesi(SESI.a4, MITRA_A, LAYANAN_BERTARIF, "2024-03-07", "dibatalkan_padma"),
+    sesi(SESI.a4, MITRA_A, LAYANAN_BERTARIF, "2024-03-06", "dibatalkan_padma"),
     sesi(SESI.a5, MITRA_A, LAYANAN_TANPA_TARIF, "2024-03-08", "selesai"),
-    sesi(SESI.b1, MITRA_B, LAYANAN_BERTARIF, "2024-03-09", "selesai"),
-    sesi(SESI.c1, MITRA_C, LAYANAN_BERTARIF, "2024-03-11", "selesai"),
+    sesi(SESI.b1, MITRA_B, LAYANAN_BERTARIF, "2024-03-03", "selesai"),
+    sesi(SESI.c1, MITRA_C, LAYANAN_BERTARIF, "2024-03-09", "selesai"),
     sesi(SESI.c2, MITRA_C, LAYANAN_BERTARIF, "2024-03-13", "terjadwal"),
   ]);
 });
@@ -331,12 +358,12 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Agregasi: pekan Senin–Minggu, tarif pada tanggal sesi
+// Agregasi: pekan Sabtu–Jumat, tarif pada tanggal sesi
 // ---------------------------------------------------------------------------
 
-describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
+describe("rekap mengelompokkan honor per pekan Sabtu–Jumat", () => {
   it("hanya sesi SELESAI yang berhonor — terjadwal & batal tidak ikut", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_A);
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_A);
     expect(pekan, "pekan uji tidak muncul di rekap — fixture gagal").toBeDefined();
     // a1, a2, a5, b1 selesai; a3 terjadwal & a4 batal wajib tertinggal.
     expect(pekan!.jumlahSesi).toBe(4);
@@ -346,7 +373,7 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
   });
 
   it("honor dijumlahkan PER MITRA, margin dihitung per PEKAN", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_A)!;
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_A)!;
     const a = pekan.perMitra.find((m) => m.partnerId === MITRA_A)!;
     const b = pekan.perMitra.find((m) => m.partnerId === MITRA_B)!;
     expect(a.jumlahSesi).toBe(3); // termasuk satu sesi tak bertarif
@@ -357,17 +384,20 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
     expect(a).not.toHaveProperty("margin");
   });
 
-  it("sesi Sabtu & Minggu masuk ke pekan Senin yang sama, bukan pekan berikutnya", async () => {
-    // b1 bertanggal Sabtu 2024-03-09; c1 bertanggal Senin 2024-03-11.
+  it("sesi MINGGU masuk ke pekan Sabtu sebelumnya, dan Sabtu membuka pekan baru", async () => {
+    // b1 bertanggal Minggu 2024-03-03 -> pekan Sabtu 2 Mar (PEKAN_A).
+    // c1 bertanggal Sabtu 2024-03-09 -> membuka PEKAN_B, bukan menutup PEKAN_A.
+    // Inilah batas yang bergeser: di bawah Senin–Minggu, b1 justru MENUTUP
+    // pekannya dan c1 berada di pekan yang sama dengan Senin 11 Mar.
     const rekap = await ambilRekap();
-    const a = rekap.find((p) => p.senin === PEKAN_A)!;
-    const b = rekap.find((p) => p.senin === PEKAN_B)!;
+    const a = rekap.find((p) => p.awal === PEKAN_A)!;
+    const b = rekap.find((p) => p.awal === PEKAN_B)!;
     expect(a.perMitra.map((m) => m.partnerId)).toContain(MITRA_B);
     expect(b.perMitra.map((m) => m.partnerId)).toContain(MITRA_C);
   });
 
   it("sesi tak bertarif DILAPORKAN, bukan dihitung nol diam-diam", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_A)!;
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_A)!;
     const tak = pekan.sesiTakBertarif.filter((s) => s.id === SESI.a5);
     expect(tak, "sesi tak bertarif hilang dari rekap").toHaveLength(1);
     expect(tak[0].namaLayanan).toBe("PAD-UJI Rekap Layanan Tanpa Tarif");
@@ -381,7 +411,7 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
     // Sesi memang terbaca staf operasional; yang WAJIB kosong adalah uangnya.
     // Itu RLS `variant_rates` yang menjawab, bukan penyaringan di TypeScript.
     ref.sesi = sesiAdmin;
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_A);
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_A);
     expect(pekan, "sesi hilang seluruhnya — assertion di bawah jadi hampa").toBeDefined();
     expect(pekan!.totalHonor).toBe(0);
     expect(pekan!.totalHarga).toBe(0);
@@ -400,7 +430,7 @@ describe("rekap mengelompokkan honor per pekan Senin–Minggu", () => {
 // `sessions.jenjang`, bukan mengulang logika `hitungRekap()` yang sudah
 // diuji habis sebagai fungsi murni di tests/owner-rekap.test.ts.
 describe("ambilRekap() — transport (Task 9)", () => {
-  const PEKAN_T9 = "2024-03-25"; // Senin, tidak tumpang tindih PEKAN_A/PEKAN_B
+  const PEKAN_T9 = "2024-03-23"; // Sabtu, tidak tumpang tindih PEKAN_A/PEKAN_B
   const SESI_DEKAT = "66666666-6666-6666-6666-666666667a5a"; // jenjang 5_10, bertarif
   const SESI_JAUH = "66666666-6666-6666-6666-666666667a5b"; // di_atas_20, TANPA transport_khusus
   const TARIF_TRANSPORT_ID = "88888888-8888-8888-8888-888888887a5a";
@@ -460,7 +490,7 @@ describe("ambilRekap() — transport (Task 9)", () => {
   afterAll(bersihkanT9);
 
   it("honor mitra memuat komponen transport dari transport_rates, sesuai TANGGAL SESI", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9)!;
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_T9)!;
     expect(pekan, "pekan transport uji tidak muncul — fixture gagal").toBeDefined();
     const a = pekan.perMitra.find((m) => m.partnerId === MITRA_A)!;
     // SESI_DEKAT bertarif (honor varian HONOR + transport 30.000); SESI_JAUH
@@ -478,7 +508,7 @@ describe("ambilRekap() — transport (Task 9)", () => {
   // tidak punya penimpa — dan itulah satu-satunya keadaan yang masih
   // tak-bertarif sejak gelombang perbaikan akhir.
   it("sesi di_atas_20 tanpa nominal MANA PUN jatuh ke sesiTakBertarif dengan sebab 'transport'", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_T9)!;
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_T9)!;
     const tak = pekan.sesiTakBertarif.find((s) => s.id === SESI_JAUH);
     expect(tak, "sesi >20 km tanpa tarif khusus seharusnya tak-bertarif").toBeDefined();
     expect(tak!.sebab).toBe("transport");
@@ -536,7 +566,7 @@ describe("halaman rekap honor (/owner/rekap)", () => {
   });
 
   it("menampilkan rentang pekan dan jumlah sesi selesai", () => {
-    expect(kartuA).toContain("4 – 10 Mar 2024");
+    expect(kartuA).toContain("2 – 8 Mar 2024");
     expect(kartuA).toMatch(/4\s*sesi/);
   });
 
@@ -605,7 +635,10 @@ describe("halaman rekap honor (/owner/rekap)", () => {
   });
 
   it("bilah daftar menyediakan kotak cari dan chip saring honor", async () => {
-    const markup = await renderHalaman();
+    // Tanpa `cari`: tautan chip-nya dibangun DARI param yang sedang berlaku,
+    // jadi `cari` bawaan berkas ini akan ikut masuk ke href dan membuat
+    // assertion di bawah menguji alamat yang tidak pernah dilihat pengguna.
+    const markup = await renderHalaman({ cari: "" });
     expect(markup).toContain('name="cari"');
     expect(markup).toContain('href="/owner/rekap?honor=belum"');
     expect(markup).toContain('href="/owner/rekap?honor=tuntas"');
@@ -613,7 +646,7 @@ describe("halaman rekap honor (/owner/rekap)", () => {
 
   it("kartu pekan TETAP kartu — rekap laporan, bukan daftar berformulir", async () => {
     const markup = await renderHalaman();
-    // `data-pekan` membawa Senin pekannya, dan tanpa penanda itu sebuah
+    // `data-pekan` membawa Sabtu pekannya, dan tanpa penanda itu sebuah
     // assertion (atau seorang pembaca) bisa membaca angka pekan lain sebagai
     // angka pekan yang sedang dilihatnya.
     expect(markup).toContain("data-pekan=");
@@ -727,16 +760,19 @@ describe("tandaiHonorDibayar — penolakan yang bisa dibaca pemilik klinik", () 
     expect(pesan.length).toBeGreaterThan(10);
   }
 
-  it("pekan yang BUKAN hari Senin ditolak — tanda yatim tidak bisa dihapus", async () => {
-    // `honor_marks.week_start` hari ini masih menerima tanggal apa pun. Tanda
-    // bertanggal Rabu tidak akan pernah cocok dengan bucket rekap mana pun,
-    // dan DELETE sudah dicabut sehingga ia tidak bisa dibersihkan.
+  it("pekan yang BUKAN hari Sabtu ditolak — tanda yatim tidak bisa dihapus", async () => {
+    // Tanda bertanggal Rabu tidak akan pernah cocok dengan bucket rekap mana
+    // pun, dan DELETE sudah dicabut sehingga ia tidak bisa dibersihkan.
+    //
+    // 2024-03-04 adalah SENIN — hari awal pekan yang LAMA. Ia ada di daftar
+    // ini dengan sengaja: selama Senin masih diterima, pergeseran Sabtu–Jumat
+    // belum benar-benar sampai ke jalur yang menulis uang.
     const sebelum = await tandaMitra(MITRA_A);
-    for (const bukanSenin of ["2024-03-05", "2024-03-09", "2024-03-10"]) {
-      const hasil = await tandaiHonorDibayar(MITRA_A, bukanSenin);
-      expect(hasil.ok, `${bukanSenin} seharusnya ditolak`).toBe(false);
+    for (const bukanSabtu of ["2024-03-04", "2024-03-05", "2024-03-10"]) {
+      const hasil = await tandaiHonorDibayar(MITRA_A, bukanSabtu);
+      expect(hasil.ok, `${bukanSabtu} seharusnya ditolak`).toBe(false);
       if (hasil.ok) continue;
-      expect(hasil.pesan).toMatch(/senin/i);
+      expect(hasil.pesan).toMatch(/sabtu/i);
       pesanManusiawi(hasil.pesan);
     }
     expect(await tandaMitra(MITRA_A)).toEqual(sebelum);
@@ -746,7 +782,7 @@ describe("tandaiHonorDibayar — penolakan yang bisa dibaca pemilik klinik", () 
     const sebelum = await tandaMitra(MITRA_A);
     for (const tgl of ["", "05-03-2024", "2024-3-4", "besok", "2024-02-31", "2024-13-01"]) {
       const hasil = await tandaiHonorDibayar(MITRA_A, tgl);
-      expect(hasil.ok, `senin="${tgl}" seharusnya ditolak`).toBe(false);
+      expect(hasil.ok, `pekan="${tgl}" seharusnya ditolak`).toBe(false);
       if (hasil.ok) continue;
       expect(hasil.pesan).toMatch(/pekan|tanggal/i);
       pesanManusiawi(hasil.pesan);
@@ -849,7 +885,7 @@ describe("sesi susulan di bawah tanda 'sudah dibayar'", () => {
   });
 
   it("honornya memang bertambah — angka itu tidak boleh disembunyikan", async () => {
-    const pekan = (await ambilRekap()).find((p) => p.senin === PEKAN_B)!;
+    const pekan = (await ambilRekap()).find((p) => p.awal === PEKAN_B)!;
     const c = pekan.perMitra.find((m) => m.partnerId === MITRA_C)!;
     expect(c.jumlahSesi).toBe(2);
     expect(c.totalHonor).toBe(2 * HONOR);
@@ -882,7 +918,7 @@ describe("sesi susulan di bawah tanda 'sudah dibayar'", () => {
 
 describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah ditandai dibayar", () => {
   it("total honor & margin pekan 2024 persis sama sesudah tarif naik hari ini", async () => {
-    const sebelum = (await ambilRekap()).find((p) => p.senin === PEKAN_A)!;
+    const sebelum = (await ambilRekap()).find((p) => p.awal === PEKAN_A)!;
 
     // Tarif baru berlaku hari ini — jauh sesudah seluruh sesi fixture.
     const { error } = await admin.from("variant_rates").insert({
@@ -893,7 +929,7 @@ describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah ditandai dibaya
     });
     expect(error).toBeNull();
 
-    const sesudah = (await ambilRekap()).find((p) => p.senin === PEKAN_A)!;
+    const sesudah = (await ambilRekap()).find((p) => p.awal === PEKAN_A)!;
     expect(sesudah.totalHonor, "honor pekan lama bergeser").toBe(sebelum.totalHonor);
     expect(sesudah.totalHarga, "harga pekan lama bergeser").toBe(sebelum.totalHarga);
     expect(sesudah.margin, "margin pekan lama bergeser").toBe(sebelum.margin);

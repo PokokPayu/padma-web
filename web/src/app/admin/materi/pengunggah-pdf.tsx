@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserSupabase } from "@/lib/supabase/client";
-import { rasterisasiPdf } from "@/lib/materi/pdf-klien";
-import {
-  periksaBerkasPdf, MAKS_HALAMAN, KONKURENSI_UNGGAH,
-} from "@/lib/materi/rasterisasi";
-import { terbitkanUrlUnggahHalaman, catatHalamanMateri } from "./unggah";
+import { unggahPdfKeMateri, type FaseUnggah } from "./unggah-pdf-klien";
 
-const BUCKET = "materi-halaman";
+type Fase = "diam" | FaseUnggah | "selesai" | "galat";
 
-type Fase = "diam" | "membaca" | "mengunggah" | "selesai" | "galat";
-
+/**
+ * Pengunggah PDF untuk materi yang SUDAH ada ("Kelola isi").
+ *
+ * Seluruh kerja unggahnya hidup di `unggahPdfKeMateri` — modul yang sama yang
+ * dipakai formulir "Materi baru" sejak butir 6. Komponen ini tinggal fase dan
+ * kalimatnya di layar.
+ */
 export function PengunggahPdf({
   materiId,
   onSelesai,
@@ -24,93 +24,19 @@ export function PengunggahPdf({
   const [pesan, setPesan] = useState("");
 
   async function tangani(berkas: File) {
-    const periksa = periksaBerkasPdf(berkas.name, berkas.size);
-    if (!periksa.ok) { setFase("galat"); setPesan(periksa.pesan); return; }
-
-    try {
-      setFase("membaca"); setPesan("");
-      const halaman = await rasterisasiPdf(berkas, (selesai, total) =>
-        setProgres({ selesai, total }),
-      );
-      if (halaman.length > MAKS_HALAMAN) {
-        setFase("galat");
-        setPesan(`PDF maksimal ${MAKS_HALAMAN} halaman; berkas ini ${halaman.length}.`);
-        return;
-      }
-
-      const izin = await terbitkanUrlUnggahHalaman(materiId, halaman.length);
-      if (!izin.ok) { setFase("galat"); setPesan(izin.pesan); return; }
-      // Disalin ke variabel sendiri: TypeScript tidak menyempitkan tipe `izin`
-      // (union ok/gagal) ke dalam `function pekerja()` di bawah karena deklarasi
-      // fungsi di-hoist, sehingga `izin.unggahan` di dalamnya tetap dianggap
-      // mungkin tidak ada walau baris di atas sudah memastikannya.
-      const daftarUnggahan = izin.unggahan;
-
-      setFase("mengunggah");
-      setProgres({ selesai: 0, total: halaman.length });
-      const supabase = createBrowserSupabase();
-
-      // Konkurensi dibatasi: koneksi rumahan yang lambat akan saling
-      // menggagalkan unggahan bila 300 halaman dikirim sekaligus.
-      let berikutnya = 0;
-      let terunggah = 0;
-      async function pekerja() {
-        while (berikutnya < halaman.length) {
-          const i = berikutnya++;
-          const h = halaman[i];
-          const u = daftarUnggahan[i];
-          // `u.objek` berakhiran `.webp` (namaObjekHalaman) TAPI itu KONVENSI
-          // PENAMAAN, bukan jaminan isi byte: bila peramban admin tidak
-          // mendukung ekspor WebP, canvas.toBlob() di pdf-klien.ts diam-diam
-          // menghasilkan PNG (bukan gagal — lihat komentar di sana), dan
-          // `h.blob.type` mengikuti isi SUNGGUHAN itu ("image/png"), bukan
-          // ekstensi nama objek. `uploadToSignedUrl()` di bawah tidak diberi
-          // `contentType` — storage-js membaca Content-Type multipart-nya
-          // dari `Blob.type` itu sendiri.
-          //
-          // Ini BUKAN aman: bucket `materi-halaman` dibatasi
-          // `allowed_mime_types = ['image/webp','image/jpeg']` (migration
-          // `materi_halaman_pdf`), dan storage server memvalidasi MIME type
-          // ini SEBELUM byte-nya tersimpan — DIBUKTIKAN LANGSUNG lewat PUT
-          // manual berisi PNG ke path `.webp`: 400 `invalid_mime_type`
-          // ("mime type image/png is not supported"). Unggahan PNG di sini
-          // DITOLAK, bukan lewat lalu direkode belakangan — `error` di bawah
-          // berisi kegagalan itu dan seluruh proses berhenti di halaman yang
-          // gagal, materinya berakhir tidak lengkap. Rute penyaji
-          // (api/materi/[id]/halaman/[n]/route.ts) memang mendekode ulang
-          // lewat sharp() dan memaksa .webp({...}) saat membakar watermark —
-          // tapi itu hanya relevan untuk objek yang SUDAH tersimpan; PNG
-          // tidak pernah sampai ke titik itu.
-          const { error } = await supabase.storage
-            .from(BUCKET)
-            .uploadToSignedUrl(u.objek, u.token, h.blob);
-          if (error) throw new Error(`Halaman ${h.halaman} gagal diunggah.`);
-          terunggah++;
-          setProgres({ selesai: terunggah, total: halaman.length });
-        }
-      }
-      await Promise.all(
-        Array.from({ length: Math.min(KONKURENSI_UNGGAH, halaman.length) }, pekerja),
-      );
-
-      // Baru SESUDAH seluruh unggahan sukses. Gagal di tengah = tidak ada baris
-      // tercatat = materi tampak "belum ada isi", bukan setengah terisi.
-      const catat = await catatHalamanMateri(
-        materiId,
-        halaman.map((h, i) => ({
-          halaman: h.halaman, objek: daftarUnggahan[i].objek,
-          lebar: h.lebar, tinggi: h.tinggi,
-        })),
-      );
-      if (!catat.ok) { setFase("galat"); setPesan(catat.pesan); return; }
-
-      setFase("selesai");
-      setPesan(`${catat.jumlah} halaman tersimpan.`);
-      onSelesai?.();
-    } catch (e) {
+    setPesan("");
+    const hasil = await unggahPdfKeMateri(materiId, berkas, (f, selesai, total) => {
+      setFase(f);
+      setProgres({ selesai, total });
+    });
+    if (!hasil.ok) {
       setFase("galat");
-      setPesan(e instanceof Error ? e.message : "Gagal memproses PDF.");
+      setPesan(hasil.pesan);
+      return;
     }
+    setFase("selesai");
+    setPesan(`${hasil.jumlah} halaman tersimpan.`);
+    onSelesai?.();
   }
 
   const sibuk = fase === "membaca" || fase === "mengunggah";

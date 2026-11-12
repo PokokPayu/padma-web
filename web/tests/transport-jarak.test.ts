@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { haversineKm, jenjangDariJarak } from "@/lib/transport/jarak";
+import { haversineKm, jenjangDariJarak,
+  formatJarakKm,
+} from "@/lib/transport/jarak";
 
 /**
  * Aritmetika jarak diuji sebagai FUNGSI MURNI, tanpa basis data dan tanpa
@@ -78,5 +80,36 @@ describe("jenjangDariJarak — batas ditetapkan EKSPLISIT (spec T11)", () => {
 
   it("jarak negatif ditolak — itu bukan jarak", () => {
     expect(() => jenjangDariJarak(-1)).toThrow();
+  });
+});
+
+// ===========================================================================
+// formatJarakKm — satu format angka jarak untuk SELURUH layar
+// ===========================================================================
+// Butir 2 umpan balik klien 21 Sep 2026: "Jarak mitra - klien masih 1-5 km
+// semua". Jaraknya memang benar; yang tidak ada adalah ANGKANYA di layar.
+// Begitu angka itu mulai ditampilkan di lebih dari satu tempat, ia wajib
+// ditulis dengan cara yang SAMA — "6.0 km" di satu layar dan "6,0 km" di layar
+// sebelah membuat pembaca mengira keduanya besaran berbeda.
+describe("formatJarakKm", () => {
+  it("memakai koma desimal, seperti seluruh angka lain di layar Indonesia", () => {
+    expect(formatJarakKm(6.0016)).toBe("6,0 km");
+    expect(formatJarakKm(4.56)).toBe("4,6 km");
+  });
+
+  it("satu angka di belakang koma — presisi meter adalah presisi palsu", () => {
+    // Koordinatnya sendiri dibenarkan manusia lewat pin di peta, dan haversine
+    // mengukur garis lurus, bukan jalan. Menulis "4,558 km" menjanjikan
+    // ketelitian yang tidak dimiliki angkanya.
+    expect(formatJarakKm(4.5582)).toBe("4,6 km");
+    expect(formatJarakKm(0.7496)).toBe("0,7 km");
+  });
+
+  it("nol adalah jarak yang SAH dan ditulis apa adanya", () => {
+    expect(formatJarakKm(0)).toBe("0,0 km");
+  });
+
+  it("null berarti tidak diketahui, dan dikatakan — bukan diam-diam jadi nol", () => {
+    expect(formatJarakKm(null)).toBe("—");
   });
 });

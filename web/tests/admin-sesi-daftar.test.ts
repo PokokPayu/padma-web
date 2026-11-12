@@ -258,3 +258,74 @@ describe("money firewall", () => {
     }
   });
 });
+
+// ===========================================================================
+// JARAK DI DAFTAR SESI (butir 2, umpan balik klien 21 Sep 2026)
+// ===========================================================================
+// "Jarak mitra - klien masih 1-5 km semua". Daftar inilah layar tempat kalimat
+// itu lahir: satu kolom jenjang, nilai yang sama berulang ke bawah, tanpa satu
+// angka pun yang membuktikan ada yang dihitung. Jaraknya sendiri BENAR —
+// diukur di produksi 22 Sep 2026, 0,75–4,72 km, dengan seluruh mitra dalam
+// radius 7 km satu sama lain di Malang kota.
+describe("jarak di daftar sesi", () => {
+  // Mitra MILIK describe ini. `partnerId` di atas diambil dengan "mitra aktif
+  // pertama yang ditemukan", dan koordinatnya bisa saja kosong — beberapa
+  // berkas uji mengosongkan lat/lon mitra seed sebagai bagian fixture mereka,
+  // dan vitest menjalankan berkas secara paralel. Uji jarak yang bersandar
+  // pada titik milik orang lain akan hijau sendirian dan merah berjamaah.
+  const MITRA_JARAK = "33333333-3333-3333-3333-3333333333cc";
+  const LAT_MITRA = -7.96662;
+  const LON_MITRA = 112.632632;
+
+  beforeAll(async () => {
+    await admin.from("partners").upsert({
+      id: MITRA_JARAK,
+      nama: "PAD-UJI Bidan Jarak Sesi",
+      no_hp: "0811-0000-93cc",
+      lat: LAT_MITRA,
+      lon: LON_MITRA,
+      aktif: true,
+    });
+    // SESI_DEPAN dipindah ke mitra bertitik itu dan diberi alamat ~5,5 km
+    // darinya. Baris ini milik berkas ini sendiri, jadi memindahkannya tidak
+    // menyentuh fixture siapa pun.
+    await admin
+      .from("sessions")
+      .update({
+        partner_id: MITRA_JARAK,
+        alamat_lat: LAT_MITRA + 0.05,
+        alamat_lon: LON_MITRA,
+      })
+      .eq("id", SESI_DEPAN);
+  });
+
+  afterAll(async () => {
+    // Sesi DULU: FK `sessions.partner_id` menahan penghapusan mitranya.
+    await admin.from("sessions").delete().eq("id", SESI_DEPAN);
+    await admin.from("partners").delete().eq("id", MITRA_JARAK);
+  });
+
+  it("setiap baris membawa jarak km-nya, bukan hanya jenjang", async () => {
+    const { baris } = await ambilDaftarSesi(
+      { cari: "", saring: { waktu: "mendatang" }, hal: 1 }, HARI_INI);
+    const depan = baris.find((s) => s.id === SESI_DEPAN);
+    expect(depan, "SESI_DEPAN wajib ada di halaman mendatang").toBeDefined();
+    expect(depan!.jarakKm).not.toBeNull();
+    // 0,05 derajat lintang ≈ 5,5 km, ke mana pun di Bumi.
+    expect(depan!.jarakKm!).toBeGreaterThan(5);
+    expect(depan!.jarakKm!).toBeLessThan(6);
+  });
+
+  it("sesi tanpa koordinat membawa null, bukan nol", async () => {
+    const { baris } = await ambilDaftarSesi(
+      { cari: "", saring: { jenjang: "kosong" }, hal: 1 }, HARI_INI);
+    // SESI_DEPAN dikecualikan: beforeAll di atas baru saja memberinya
+    // koordinat, dan jenjangnya memang masih kosong — "jarak diketahui,
+    // jenjang belum ditetapkan" adalah keadaan yang SAH.
+    const tanpaTitik = baris.filter((s) => s.id !== SESI_DEPAN);
+    expect(tanpaTitik.length).toBeGreaterThan(0);
+    // Nol adalah jarak yang SAH. Memakainya sebagai "tidak tahu" membuat sesi
+    // tanpa titik terbaca sebagai yang paling dekat — jenjang termurah.
+    expect(tanpaTitik.every((s) => s.jarakKm === null)).toBe(true);
+  });
+});

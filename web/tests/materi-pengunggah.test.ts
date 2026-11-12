@@ -6,6 +6,23 @@ import path from "node:path";
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
 
+/**
+ * Berkas yang dipindai ketiga pagar urutan di bawah adalah
+ * `unggah-pdf-klien.ts`, BUKAN `pengunggah-pdf.tsx` seperti sebelumnya.
+ *
+ * Seluruh kerja unggahnya pindah ke sana saat formulir "Materi baru" ikut
+ * menerima PDF (butir 6 umpan balik klien 21 Sep 2026: "1 klik aja gitu mas
+ * dari board admin, langsung upload?"). Menyalin logikanya ke formulir baru
+ * akan melahirkan DUA jalur unggah — dan yang bisa menyimpang di antara
+ * keduanya persis urutan yang dijaga di bawah, yaitu urutan yang menentukan
+ * apakah materi bisa berakhir setengah terisi. Satu modul bersama, satu
+ * berkas yang dipindai.
+ *
+ * `pengunggah-pdf.tsx` kini tinggal fase & kalimat di layar; ia tetap diperiksa
+ * sebagai client component di bawah.
+ */
+const MODUL_UNGGAH = "src/app/admin/materi/unggah-pdf-klien.ts";
+
 describe("pengunggah PDF — pagar struktural", () => {
   it("rasterisasi hidup di modul klien, bukan di modul yang diimpor server", () => {
     // pdfjs-dist menyentuh DOM/canvas: mengimpornya dari modul server akan
@@ -19,8 +36,15 @@ describe("pengunggah PDF — pagar struktural", () => {
       .toMatch(/^"use client"/);
   });
 
+  it("modul unggah bersama juga client component", () => {
+    // `createBrowserSupabase` & canvas-nya hidup di peramban. Modul ini
+    // diimpor DUA komponen klien; direktifnya tetap wajib ada supaya ia tidak
+    // pernah ikut terseret ke bundel server oleh pengimpor ketiga kelak.
+    expect(baca(MODUL_UNGGAH).trimStart()).toMatch(/^"use client"/);
+  });
+
   it("batas halaman & ukuran diperiksa SEBELUM unggahan dimulai", () => {
-    const s = baca("src/app/admin/materi/pengunggah-pdf.tsx");
+    const s = baca(MODUL_UNGGAH);
     expect(s).toContain("periksaBerkasPdf");
     expect(s).toContain("MAKS_HALAMAN");
     // Kedua "toContain" di atas TIDAK CUKUP (dibuktikan lewat mutasi):
@@ -57,7 +81,7 @@ describe("pengunggah PDF — pagar struktural", () => {
   });
 
   it("pencatatan baris hanya terjadi setelah seluruh unggahan sukses", () => {
-    const s = baca("src/app/admin/materi/pengunggah-pdf.tsx");
+    const s = baca(MODUL_UNGGAH);
     const posUnggah = s.indexOf("uploadToSignedUrl");
     // Dicari MULAI DARI posUnggah, bukan dari awal berkas: "catatHalamanMateri"
     // juga muncul di baris impor di puncak berkas (sebelum kode unggahan apa
@@ -69,7 +93,7 @@ describe("pengunggah PDF — pagar struktural", () => {
   });
 
   it("unggahan dibatasi konkurensinya", () => {
-    const s = baca("src/app/admin/materi/pengunggah-pdf.tsx");
+    const s = baca(MODUL_UNGGAH);
     expect(s).toContain("KONKURENSI_UNGGAH");
     // "toContain" saja TIDAK CUKUP (dibuktikan lewat mutasi): tetap hijau
     // walau batasnya dilepas total dan seluruh halaman diunggah SEKALIGUS —
@@ -79,5 +103,23 @@ describe("pengunggah PDF — pagar struktural", () => {
     // panjang array pekerja — bukti ia benar dipakai membatasi, bukan sekadar
     // diimpor.
     expect(s).toMatch(/Math\.min\(\s*KONKURENSI_UNGGAH\s*,/);
+  });
+
+  it("hanya ADA SATU jalur unggah — formulir baru tidak menyalinnya", () => {
+    // Pagar yang lahir bersama butir 6. Dua salinan logika unggah bisa
+    // menyimpang diam-diam, dan yang menyimpang bukan kosmetik: urutan
+    // "unggah semua dulu, catat baris belakangan" adalah satu-satunya hal
+    // yang mencegah materi berakhir SETENGAH terisi — terlihat utuh di panel
+    // admin, rusak di tangan klien.
+    for (const berkas of [
+      "src/app/admin/materi/form-materi.tsx",
+      "src/app/admin/materi/pengunggah-pdf.tsx",
+    ]) {
+      const s = baca(berkas);
+      expect(s, `${berkas} memanggil unggahan sendiri`).not.toContain("uploadToSignedUrl");
+      expect(s, `${berkas} menerbitkan URL unggah sendiri`).not.toContain(
+        "terbitkanUrlUnggahHalaman",
+      );
+    }
   });
 });

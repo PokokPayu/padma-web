@@ -128,8 +128,8 @@ const HARGA_MULTI_B = 400_000;
 const HONOR_MULTI_B = 180_000;
 
 const HARI_INI = hariIniJakarta();
-const SENIN = awalPekan(HARI_INI);
-const SENIN_LALU = geserHari(SENIN, -7);
+const AWAL_PEKAN = awalPekan(HARI_INI);
+const AWAL_PEKAN_LALU = geserHari(AWAL_PEKAN, -7);
 const DEPAN_30_HARI = geserHari(HARI_INI, 30);
 
 // `berlaku_sejak` jauh sebelum seluruh tanggal sesi fixture, sehingga tarif
@@ -315,7 +315,7 @@ beforeAll(async () => {
       service_id: LAYANAN_REKAP,
       variant_id: VARIAN_REKAP,
       partner_id: MITRA,
-      tanggal: SENIN_LALU,
+      tanggal: AWAL_PEKAN_LALU,
       jam_mulai: "09:00",
       status: "selesai",
       status_bayar: "belum",
@@ -328,7 +328,7 @@ beforeAll(async () => {
       service_id: LAYANAN_REKAP,
       variant_id: VARIAN_REKAP,
       partner_id: MITRA,
-      tanggal: SENIN_LALU,
+      tanggal: AWAL_PEKAN_LALU,
       jam_mulai: "09:00",
       status: "selesai",
       status_bayar: "belum",
@@ -464,7 +464,7 @@ describe("tetapkanTarif — menetapkan tarif menyisipkan BARIS BARU", () => {
 describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah lewat", () => {
   it("total honor, harga, dan margin pekan lalu persis sama sesudah tarif naik", async () => {
     // Dua sesi selesai milik satu mitra di pekan LALU, dihargai tarif 2020.
-    const sebelum = (await ambilRekap()).find((p) => p.senin === SENIN_LALU);
+    const sebelum = (await ambilRekap()).find((p) => p.awal === AWAL_PEKAN_LALU);
     expect(sebelum, "pekan lalu tidak muncul di rekap — fixture gagal").toBeDefined();
     const barisSebelum = sebelum!.perMitra.find((m) => m.partnerId === MITRA);
     expect(barisSebelum?.jumlahSesi).toBe(2);
@@ -485,7 +485,7 @@ describe("menaikkan tarif TIDAK menggeser rekap pekan yang sudah lewat", () => {
     );
     expect(hasil.ok).toBe(true);
 
-    const sesudah = (await ambilRekap()).find((p) => p.senin === SENIN_LALU)!;
+    const sesudah = (await ambilRekap()).find((p) => p.awal === AWAL_PEKAN_LALU)!;
     expect(sesudah.totalHonor, "honor pekan lalu bergeser").toBe(honorSebelum);
     expect(sesudah.totalHarga, "harga pekan lalu bergeser").toBe(hargaSebelum);
     expect(sesudah.margin, "margin pekan lalu bergeser").toBe(marginSebelum);

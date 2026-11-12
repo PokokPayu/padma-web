@@ -2,7 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { awalPekan, geserHari, rentangPekan } from "@/lib/owner/pekan";
 
 export type TitikTren = {
-  senin: string;   // YYYY-MM-DD
+  awal: string;   // YYYY-MM-DD
   rentang: string; // label manusia, mis. "1 – 7 Sep 2026"
   jumlah: number;
 };
@@ -28,9 +28,9 @@ export async function trenSesiSelesai(
   hariIni: string,
   pekan = 8,
 ): Promise<TitikTren[]> {
-  const seninKini = awalPekan(hariIni);
-  const seninAwal = geserHari(seninKini, -7 * (pekan - 1));
-  const mingguAkhir = geserHari(seninKini, 6);
+  const awalKini = awalPekan(hariIni);
+  const awalTerlama = geserHari(awalKini, -7 * (pekan - 1));
+  const akhirTerbaru = geserHari(awalKini, 6);
 
   const supabase = await createServerSupabase();
   const { data } = await supabase
@@ -39,23 +39,23 @@ export async function trenSesiSelesai(
     // ada satu baris data kesehatan pun yang perlu melintas ke server render.
     .select("tanggal")
     .eq("status", "selesai")
-    .gte("tanggal", seninAwal)
-    .lte("tanggal", mingguAkhir)
+    .gte("tanggal", awalTerlama)
+    .lte("tanggal", akhirTerbaru)
     .returns<{ tanggal: string }[]>();
 
   const ember = new Map<string, number>();
   for (let i = 0; i < pekan; i++) {
-    ember.set(geserHari(seninAwal, i * 7), 0);
+    ember.set(geserHari(awalTerlama, i * 7), 0);
   }
   for (const baris of data ?? []) {
-    const senin = awalPekan(baris.tanggal);
-    const kini = ember.get(senin);
-    if (kini !== undefined) ember.set(senin, kini + 1);
+    const awal = awalPekan(baris.tanggal);
+    const kini = ember.get(awal);
+    if (kini !== undefined) ember.set(awal, kini + 1);
   }
 
-  return [...ember].map(([senin, jumlah]) => ({
-    senin,
-    rentang: rentangPekan(senin),
+  return [...ember].map(([awal, jumlah]) => ({
+    awal,
+    rentang: rentangPekan(awal),
     jumlah,
   }));
 }

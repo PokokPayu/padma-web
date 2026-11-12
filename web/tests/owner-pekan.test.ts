@@ -1,40 +1,63 @@
 import { describe, it, expect } from "vitest";
 import { awalPekan, rentangPekan, akhirPekan } from "@/lib/owner/pekan";
 
-// Proses berjalan TZ=UTC (vitest.config.ts). mondayOf prototipe memakai
-// getDay()/setDate() dan TERBUKTI salah di America/Los_Angeles — 2026-08-30
-// menghasilkan 2026-08-25 yang bahkan bukan Senin. Rumus di sini berbasis
-// string murni sehingga tidak bergantung zona sama sekali.
+// ===========================================================================
+// PEKAN HONOR = SABTU s.d. JUMAT (umpan balik klien 21 Sep 2026, butir 4)
+// ===========================================================================
+// Klien merumuskannya lewat hari bayar: "diganti sabtu-jumat ... karena
+// paymentnya di hari sabtu". Dengan pekan Sabtu–Jumat, Sabtu membayar pekan
+// yang baru saja TUTUP hari Jumat kemarin. Di bawah skema Senin–Minggu yang
+// lama, Sabtu jatuh di TENGAH pekannya sendiri — honor dibayarkan sebelum
+// pekannya selesai, dan sesi hari Minggu masuk pekan yang sudah dibayar.
+//
+// Proses berjalan TZ=UTC (vitest.config.ts). Rumus di pekan.ts berbasis string
+// murni, jadi tidak bergantung zona sama sekali — tes ini menghitung ulang
+// hari-dalam-pekan lewat `Date` justru supaya jalurnya BERBEDA dari
+// implementasi yang diuji.
 describe("awalPekan", () => {
-  it("Senin memetakan ke dirinya sendiri", () => {
-    expect(awalPekan("2026-08-24")).toBe("2026-08-24"); // Senin
+  it("Sabtu memetakan ke dirinya sendiri", () => {
+    expect(awalPekan("2026-08-22")).toBe("2026-08-22"); // Sabtu
   });
-  it("Minggu memetakan ke Senin sebelumnya", () => {
-    expect(awalPekan("2026-08-30")).toBe("2026-08-24"); // Minggu -> Senin
+  it("Jumat memetakan ke Sabtu enam hari sebelumnya — hari terakhir pekannya", () => {
+    expect(awalPekan("2026-08-28")).toBe("2026-08-22");
   });
-  it("Selasa memetakan ke Senin sebelumnya", () => {
-    expect(awalPekan("2026-08-25")).toBe("2026-08-24");
+  it("Senin memetakan MUNDUR ke Sabtu, bukan ke dirinya sendiri", () => {
+    expect(awalPekan("2026-08-24")).toBe("2026-08-22");
+  });
+  it("Minggu memetakan ke Sabtu kemarin lusa", () => {
+    expect(awalPekan("2026-08-30")).toBe("2026-08-29");
   });
   it("melintasi pergantian bulan", () => {
-    expect(awalPekan("2026-09-01")).toBe("2026-08-31"); // Selasa -> Senin
+    expect(awalPekan("2026-09-01")).toBe("2026-08-29"); // Selasa -> Sabtu
   });
   it("melintasi pergantian tahun", () => {
-    expect(awalPekan("2027-01-01")).toBe("2026-12-28"); // Jumat -> Senin
+    expect(awalPekan("2027-01-01")).toBe("2026-12-26"); // Jumat -> Sabtu
   });
-  it("hasilnya SELALU hari Senin", () => {
+
+  // Kasus NYATA dari board produksi klien (butir 3). Tiga sesi diselesaikan
+  // 19, 20, dan 21 Sep 2026; klien membuka board owner pada Senin 21 Sep dan
+  // hanya melihat satu. Di bawah Senin–Minggu, 19 (Sabtu) dan 20 (Minggu)
+  // jatuh ke ember pekan SEBELUMNYA tepat ketika Senin tiba. Inilah tes yang
+  // mengunci sembuhnya.
+  it("menyatukan sesi Sabtu, Minggu, dan Senin ke satu ember", () => {
+    const ember = ["2026-09-19", "2026-09-20", "2026-09-21"].map(awalPekan);
+    expect(new Set(ember).size).toBe(1);
+    expect(ember[0]).toBe("2026-09-19");
+  });
+
+  it("hasilnya SELALU hari Sabtu", () => {
     for (const t of ["2026-01-01", "2026-02-28", "2026-03-01", "2026-06-15", "2026-12-31"]) {
-      const senin = awalPekan(t);
-      // isoDow dihitung ulang secara independen dari implementasi
-      const d = new Date(`${senin}T12:00:00Z`);
-      expect(d.getUTCDay()).toBe(1);
+      const sabtu = awalPekan(t);
+      const d = new Date(`${sabtu}T12:00:00Z`);
+      expect(d.getUTCDay()).toBe(6);
     }
   });
 
-  // Pembuktian menyeluruh, bukan hanya lima tanggal contoh: dua tahun penuh
-  // ditelusuri hari demi hari. Ini menutup kelas bug tahun kabisat dan
-  // pergantian bulan sekaligus — 2024 kabisat, 2100 bukan kabisat meski
-  // habis dibagi 4.
-  it("SELALU Senin untuk setiap hari pada rentang tahun kabisat & non-kabisat", () => {
+  // Pembuktian menyeluruh, bukan hanya beberapa tanggal contoh: tiga tahun
+  // penuh ditelusuri hari demi hari. Ini menutup kelas bug tahun kabisat dan
+  // pergantian bulan sekaligus — 2024 kabisat, 2100 bukan kabisat meski habis
+  // dibagi 4.
+  it("SELALU Sabtu untuk setiap hari pada rentang tahun kabisat & non-kabisat", () => {
     let diperiksa = 0;
     for (const tahun of [2024, 2026, 2100]) {
       const mulai = Date.UTC(tahun, 0, 1, 12, 0, 0);
@@ -42,17 +65,17 @@ describe("awalPekan", () => {
       for (let ms = mulai; ms < selesai; ms += 86_400_000) {
         const d = new Date(ms);
         const tgl = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-        const senin = awalPekan(tgl);
-        expect(/^\d{4}-\d{2}-\d{2}$/.test(senin), `format ${tgl} -> ${senin}`).toBe(true);
-        // (1) hasilnya hari Senin, dihitung ulang lewat jalur yang sama sekali
+        const sabtu = awalPekan(tgl);
+        expect(/^\d{4}-\d{2}-\d{2}$/.test(sabtu), `format ${tgl} -> ${sabtu}`).toBe(true);
+        // (1) hasilnya hari Sabtu, dihitung ulang lewat jalur yang sama sekali
         //     berbeda dari implementasi;
-        expect(new Date(`${senin}T12:00:00Z`).getUTCDay(), `${tgl} -> ${senin}`).toBe(1);
+        expect(new Date(`${sabtu}T12:00:00Z`).getUTCDay(), `${tgl} -> ${sabtu}`).toBe(6);
         // (2) tidak pernah di masa depan;
-        expect(senin <= tgl, `${senin} <= ${tgl}`).toBe(true);
-        // (3) jaraknya 0..6 hari — bukan Senin pekan yang salah.
-        const jarak = (ms - new Date(`${senin}T12:00:00Z`).getTime()) / 86_400_000;
-        expect(jarak, `${tgl} -> ${senin}`).toBeGreaterThanOrEqual(0);
-        expect(jarak, `${tgl} -> ${senin}`).toBeLessThanOrEqual(6);
+        expect(sabtu <= tgl, `${sabtu} <= ${tgl}`).toBe(true);
+        // (3) jaraknya 0..6 hari — bukan Sabtu pekan yang salah.
+        const jarak = (ms - new Date(`${sabtu}T12:00:00Z`).getTime()) / 86_400_000;
+        expect(jarak, `${tgl} -> ${sabtu}`).toBeGreaterThanOrEqual(0);
+        expect(jarak, `${tgl} -> ${sabtu}`).toBeLessThanOrEqual(6);
         diperiksa++;
       }
     }
@@ -73,31 +96,36 @@ describe("awalPekan", () => {
 });
 
 describe("akhirPekan", () => {
-  it("Minggu enam hari sesudah Senin", () => {
-    expect(akhirPekan("2026-08-24")).toBe("2026-08-30");
+  it("Jumat enam hari sesudah Sabtu", () => {
+    expect(akhirPekan("2026-08-22")).toBe("2026-08-28");
   });
   it("melintasi pergantian bulan", () => {
-    expect(akhirPekan("2026-08-31")).toBe("2026-09-06");
+    expect(akhirPekan("2026-08-29")).toBe("2026-09-04");
   });
   it("melintasi pergantian tahun", () => {
-    expect(akhirPekan("2026-12-28")).toBe("2027-01-03");
+    expect(akhirPekan("2026-12-26")).toBe("2027-01-01");
   });
   it("melintasi 29 Februari tahun kabisat", () => {
-    expect(akhirPekan("2024-02-26")).toBe("2024-03-03");
+    expect(akhirPekan("2024-02-24")).toBe("2024-03-01");
+  });
+  it("selalu Jumat, dari tanggal mana pun dalam pekannya", () => {
+    for (const t of ["2026-09-19", "2026-09-20", "2026-09-21", "2026-09-25"]) {
+      expect(akhirPekan(t), t).toBe("2026-09-25");
+    }
   });
 });
 
 describe("rentangPekan", () => {
-  it("menampilkan Senin sampai Minggu dengan bulan Indonesia", () => {
-    expect(rentangPekan("2026-08-24")).toBe("24 – 30 Agu 2026");
+  it("menampilkan Sabtu sampai Jumat dengan bulan Indonesia", () => {
+    expect(rentangPekan("2026-08-22")).toBe("22 – 28 Agu 2026");
   });
   it("menampilkan kedua bulan bila pekan melintasi bulan", () => {
-    expect(rentangPekan("2026-08-31")).toBe("31 Agu – 6 Sep 2026");
+    expect(rentangPekan("2026-08-29")).toBe("29 Agu – 4 Sep 2026");
   });
   it("menampilkan kedua tahun bila pekan melintasi tahun", () => {
-    expect(rentangPekan("2026-12-28")).toBe("28 Des 2026 – 3 Jan 2027");
+    expect(rentangPekan("2026-12-26")).toBe("26 Des 2026 – 1 Jan 2027");
   });
-  it("menerima tanggal mana pun dalam pekan, bukan hanya Senin", () => {
-    expect(rentangPekan("2026-08-30")).toBe("24 – 30 Agu 2026");
+  it("menerima tanggal mana pun dalam pekan, bukan hanya Sabtu", () => {
+    expect(rentangPekan("2026-08-28")).toBe("22 – 28 Agu 2026");
   });
 });

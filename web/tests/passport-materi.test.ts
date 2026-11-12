@@ -598,3 +598,34 @@ afterAll(async () => {
   // Jaring pengaman bila sebuah test gagal di tengah blok aktif=false.
   await svc.from("materials").update({ aktif: true }).eq("id", TERBUKA_EBOOK);
 });
+
+// ===========================================================================
+// JEJAK "SUDAH DIBUKA" (butir 6, umpan balik klien 21 Sep 2026)
+// ===========================================================================
+// "Cara tahu e book sdh diterima klien gimana?"
+//
+// Pencatatannya duduk di komponen KLIEN, bukan di komponen server halaman ini.
+// Alasannya bukan gaya: `<Link>` Next melakukan PREFETCH payload RSC, jadi
+// efek samping di komponen server akan mencatat "sudah dibuka" untuk halaman
+// yang hanya dilewati kursor — bukti palsu bahwa materinya sampai ke tangan
+// klien, pada satu-satunya angka yang dibaca pemilik klinik untuk memutuskan
+// pekerjaannya selesai. useEffect hanya berjalan di peramban sungguhan yang
+// benar-benar merender readernya.
+describe("jejak dibuka", () => {
+  it("reader ebook memasang pencatat buka", async () => {
+    const m = await markupReader(TERBUKA_EBOOK);
+    expect(m).toContain("data-catat-buka");
+  });
+
+  it("reader video memasang pencatat buka juga", async () => {
+    const m = await markupReader(TERBUKA_VIDEO);
+    expect(m).toContain("data-catat-buka");
+  });
+
+  it("materi TERKUNCI tidak memasang pencatat apa pun", async () => {
+    // Mencatat "dibuka" pada layar yang justru berbunyi "materi ini belum
+    // terbuka" adalah kebalikan dari yang dicatatnya.
+    const m = await markupReader(TERKUNCI_EBOOK);
+    expect(m).not.toContain("data-catat-buka");
+  });
+});

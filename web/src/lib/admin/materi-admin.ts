@@ -78,6 +78,11 @@ type BarisMateri = {
   // Embed AGREGAT (lihat dokblok fungsi), bukan isi: selalu tepat SATU objek
   // `{ count }`, tidak pernah larik baris `material_pages` sungguhan.
   material_pages: Array<{ count: number }>;
+  // Opsional karena hanya `ambilDaftarMateri` yang memintanya —
+  // `daftarMateriAdmin` (peta layanan→materi) tidak, dan tipe yang menuntutnya
+  // di sana akan memaksa query itu menarik agregat yang tidak dipakainya.
+  material_assignments?: Array<{ count: number }>;
+  material_opens?: Array<{ count: number }>;
 };
 type BarisTautan = { material_id: string; service_id: string };
 type BarisVideo = { material_id: string; objek: string };
@@ -220,7 +225,28 @@ export const SARING_MATERI = {
  * itu MUSTAHIL secara tipe, bukan sekadar "tidak dilakukan" — pemanggil yang
  * sungguh butuh daftar id-nya wajib memanggil `ambilMateri(id)`.
  */
-export type BarisMateriDaftar = Omit<MateriKelola, "layananId"> & { jumlahLayanan: number };
+export type BarisMateriDaftar = Omit<MateriKelola, "layananId"> & {
+  jumlahLayanan: number;
+  /**
+   * Berapa klien DITUGASKAN materi ini (`material_assignments`) dan berapa
+   * yang benar-benar MEMBUKANYA (`material_opens`) — butir 6 umpan balik
+   * klien 21 Sep 2026: "Cara tahu e book sdh diterima klien gimana?"
+   *
+   * Dua angka, bukan satu persentase. "Ditugaskan 4 · dibuka 0" adalah
+   * PEKERJAAN — empat orang menunggu sesuatu yang belum mereka sentuh — dan
+   * "0%" menyembunyikan berapa orang yang terdampak. Keduanya juga bisa
+   * bernilai nol dengan arti yang berbeda: tanpa penugasan berarti belum
+   * dibagikan, dengan penugasan tetapi tanpa buka berarti belum sampai.
+   *
+   * Jalur OTOMATIS (materi terbuka karena sesi layanan selesai) TIDAK ikut
+   * terhitung di `jumlahDitugaskan` — ia bukan baris `material_assignments`.
+   * Karena itu `jumlahDibuka` BISA melebihi `jumlahDitugaskan`, dan itu bukan
+   * kekeliruan: ia berarti materinya sampai lewat layanan, bukan lewat
+   * penugasan manual.
+   */
+  jumlahDitugaskan: number;
+  jumlahDibuka: number;
+};
 
 /**
  * Satu halaman daftar materi, datar.
@@ -246,7 +272,11 @@ export async function ambilDaftarMateri(
 
   let q = supabase
     .from("materials")
-    .select("id, judul, tipe, deskripsi, aktif, material_pages(count)", { count: "exact" })
+    .select(
+      "id, judul, tipe, deskripsi, aktif, material_pages(count), " +
+        "material_assignments(count), material_opens(count)",
+      { count: "exact" },
+    )
     .order("aktif", { ascending: false })
     .order("judul");
 
@@ -282,6 +312,13 @@ export async function ambilDaftarMateri(
       objekVideo: objek,
       lengkap: m.tipe === "ebook" ? jumlahHalaman > 0 : objek !== null,
       jumlahLayanan: nLayanan.get(m.id) ?? 0,
+      // Embed agregat, pola yang sama dengan `material_pages(count)` di atas:
+      // LEFT JOIN, jadi materi tanpa satu pun baris menjawab `count: 0` dan
+      // tidak pernah larik kosong. `?? 0` tetap ada sebagai jaring — embed
+      // yang gagal karena RLS memulangkan NULL, bukan galat, dan `undefined`
+      // yang lolos ke layar tidak bisa dibedakan dari nol yang sungguhan.
+      jumlahDitugaskan: m.material_assignments?.[0]?.count ?? 0,
+      jumlahDibuka: m.material_opens?.[0]?.count ?? 0,
     };
   });
 

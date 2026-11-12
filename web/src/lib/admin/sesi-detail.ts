@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { jarakUntukSesi, koordinat } from "@/lib/transport/saran";
 import type { BarisSesiDaftar } from "@/lib/admin/sesi";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 import type { StatusSesi } from "@/app/admin/sesi/status";
@@ -38,6 +39,42 @@ export type DetailSesi = BarisSesiDaftar & {
   klienId: string;
   alamat: string;
   /**
+   * Jarak GARIS LURUS mitra ke alamat sesi, dalam km — atau `null` bila salah
+   * satu titiknya tidak ada (butir 2, umpan balik klien 21 Sep 2026).
+   *
+   * `null`, TIDAK PERNAH nol. Nol adalah jarak yang sah — mitra yang tinggal
+   * di alamat yang sama — dan memakainya sebagai "tidak tahu" akan membuat
+   * setiap sesi tanpa titik terbaca sebagai sesi paling dekat, yang berarti
+   * jenjang transport termurah dan honor mitra terkecil.
+   *
+   * KENAPA ANGKA INI DITAMPILKAN. Klien melaporkan "jarak mitra - klien masih
+   * 1-5 km semua". Diukur di basis data produksi 22 Sep 2026, jaraknya memang
+   * 0,75 / 1,84 / 2,16 / 4,56 / 4,72 km — seluruh mitra terdaftar berada dalam
+   * radius 7 km satu sama lain di Malang kota, jadi hitungannya BENAR. Yang
+   * tidak ada adalah angkanya di layar: yang terlihat hanya label jenjang yang
+   * sama berulang-ulang, dan label yang selalu sama tidak bisa dibedakan dari
+   * nilai bawaan yang macet. Menampilkan km mentah mengembalikan bedanya.
+   */
+  jarakKm: number | null;
+  /**
+   * Titik mana yang dipakai `jarakKm` — alamat sesi ini sendiri, atau alamat
+   * DEFAULT kliennya. Dibawa sampai ke layar karena keduanya bisa berbeda, dan
+   * admin yang membaca "6,0 km" berhak tahu 6,0 km dari alamat yang mana.
+   */
+  jarakDari: "sesi" | "klien" | null;
+  /**
+   * Jenjang yang DISIRATKAN `jarakKm` — sengaja terpisah dari `jenjang` yang
+   * TERSIMPAN, dan sengaja tidak menimpanya.
+   *
+   * Keduanya bisa berbeda dengan sah: jenjang tersimpan dibekukan saat sesi
+   * dijadwalkan, sementara koordinat bisa berubah sesudahnya. Bisa juga
+   * berbeda karena `jadwalkanSesi` menghitungnya dari alamat DEFAULT klien
+   * sementara sesi punya alamatnya sendiri. Apa pun sebabnya, selisihnya
+   * adalah selisih UANG — dan satu-satunya perlakuan jujur adalah
+   * menampilkan keduanya, lalu membiarkan admin yang memutuskan.
+   */
+  jenjangHitung: JenjangTransport | null;
+  /**
    * `null` berarti sesi ini tidak lahir dari pengajuan — dijadwalkan admin
    * langsung, sehingga memang tidak ada skrining yang menopangnya. Bukan
    * penanda kegagalan membaca.
@@ -57,10 +94,12 @@ type BarisDb = {
   jenjang_sumber: "otomatis" | "admin" | null;
   jadwal_ulang_terpakai: boolean;
   alamat: string;
+  alamat_lat: number | null;
+  alamat_lon: number | null;
   client_id: string;
-  clients: { nama: string; padma_id: string } | null;
+  clients: { nama: string; padma_id: string; alamat_lat: number | null; alamat_lon: number | null } | null;
   services: { nama: string } | null;
-  partners: { nama: string } | null;
+  partners: { nama: string; lat: number | null; lon: number | null } | null;
   booking_requests: {
     screenings: {
       id: string;
@@ -81,8 +120,9 @@ export async function ambilDetailSesi(id: string): Promise<DetailSesi | null> {
     .from("sessions")
     .select(
       "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, " +
-        "jenjang, jenjang_sumber, jadwal_ulang_terpakai, alamat, client_id, " +
-        "clients(nama, padma_id), services(nama), partners(nama), " +
+        "jenjang, jenjang_sumber, jadwal_ulang_terpakai, alamat, alamat_lat, alamat_lon, client_id, " +
+        "clients(nama, padma_id, alamat_lat, alamat_lon), services(nama), " +
+        "partners(nama, lat, lon), " +
         "booking_requests(screenings(id, kode, hasil, created_at, flags))",
     )
     .eq("id", id)
@@ -111,6 +151,11 @@ export async function ambilDetailSesi(id: string): Promise<DetailSesi | null> {
     jenjangSumber: data.jenjang_sumber,
     jadwalUlangTerpakai: data.jadwal_ulang_terpakai,
     alamat: data.alamat,
+    ...jarakUntukSesi({
+      mitra: koordinat(data.partners?.lat, data.partners?.lon),
+      alamatSesi: koordinat(data.alamat_lat, data.alamat_lon),
+      alamatKlien: koordinat(data.clients?.alamat_lat, data.clients?.alamat_lon),
+    }),
     skrining: s
       ? {
           id: s.id,

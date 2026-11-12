@@ -21,6 +21,7 @@ import {
   type TipeMateri,
 } from "./status";
 import { PengunggahPdf } from "./pengunggah-pdf";
+import { unggahPdfKeMateri } from "./unggah-pdf-klien";
 import { PengunggahVideo } from "./pengunggah-video";
 
 const KELAS_MEDAN =
@@ -105,6 +106,12 @@ function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
     // Video kini berupa BERKAS yang diunggah ke R2, bukan URL penyedia — jadi
     // ia mengikuti pola e-book: unggahan butuh `materiId` yang sudah ada di
     // basis data, sehingga pada formulir "materi baru" ia belum bisa muncul.
+    //
+    // E-book DI BAWAH sudah tidak begitu lagi (butir 6): PDF dipilih di
+    // formulir baru, lalu diunggah sendiri begitu id-nya lahir. Video belum
+    // ikut karena unggahannya menempuh R2 lewat multipart bertanda tangan,
+    // jalur yang berbeda sama sekali — menyamakannya adalah pekerjaan
+    // tersendiri, bukan tempelan di sini.
     if (materiId === undefined) {
       return (
         <p className="mt-3 text-[12px] text-ink-soft">
@@ -114,16 +121,44 @@ function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
     }
     return <PengunggahVideo materiId={materiId} />;
   }
-  if (!materiId) {
-    return (
-      <p className="mt-3 rounded-lg bg-black/5 px-3 py-2 text-[11.5px] leading-relaxed text-ink-soft">
-        Berkas PDF diunggah SESUDAH materi ini tersimpan — simpan dulu, lalu
-        buka &quot;Kelola isi&quot; pada baris materinya. Materi lahir
-        nonaktif sampai halamannya ada.
-      </p>
-    );
-  }
+  if (!materiId) return null; // formulir BARU merender medannya sendiri
   return <PengunggahPdf materiId={materiId} />;
+}
+
+/**
+ * Medan berkas PDF pada formulir "Materi baru".
+ *
+ * Berkasnya TIDAK ikut FormData: unggahannya butuh materiId yang baru lahir
+ * sesudah `simpanMateri`, dan byte-nya tidak boleh menumpang server (Vercel
+ * membatasi body 4,5 MB, satu ebook bisa ratusan halaman). Jadi berkas ini
+ * ditahan di state, lalu dikirim langsung ke Storage sesudah id-nya ada.
+ */
+function MedanPdfBaru({
+  berkas,
+  setBerkas,
+  disabled,
+}: {
+  berkas: File | null;
+  setBerkas: (f: File | null) => void;
+  disabled: boolean;
+}) {
+  return (
+    <label className="mt-3 block">
+      <span className={KELAS_LABEL}>Berkas PDF (opsional — bisa menyusul)</span>
+      <input
+        type="file"
+        accept="application/pdf"
+        disabled={disabled}
+        onChange={(e) => setBerkas(e.target.files?.[0] ?? null)}
+        className="mt-1.5 block w-full text-[13px]"
+      />
+      <span className="mt-1 block text-[11.5px] leading-relaxed text-ink-soft">
+        {berkas
+          ? "Materi disimpan, PDF-nya diunggah, lalu materinya diaktifkan — sekali tekan."
+          : "Tanpa berkas, materi lahir nonaktif dan menunggu isinya lewat “Kelola isi”."}
+      </span>
+    </label>
+  );
 }
 
 /**
@@ -154,21 +189,62 @@ export function FormMateriBaru({
   const [tipe, setTipe] = useState<TipeMateri>("ebook");
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
+  const [berkas, setBerkas] = useState<File | null>(null);
+  const [langkah, setLangkah] = useState<string | null>(null);
 
   return (
     <form
       action={(fd) =>
         mulai(async () => {
+          setPesan(null);
+          setLangkah(null);
           const r = await simpanMateri(fd);
-          if (r.ok) {
-            setPesan(null);
-            // Menutup panel = kembali ke alamat tanpa `?ubah`. Keadaan panel
-            // hidup di URL, jadi menutupnya adalah NAVIGASI, bukan setState —
-            // pola yang sama dengan `FormJadwalSesi` dan `FormMitra`.
-            router.push(hrefTutup);
-          } else {
+          if (!r.ok) {
             setPesan(r.pesan);
+            return;
           }
+
+          // Butir 6: satu tekan, tiga langkah. Materi tetap LAHIR NONAKTIF —
+          // urutan itu tidak diubah, dan memang tidak boleh diubah: materi
+          // aktif tanpa satu halaman pun adalah kartu terkunci di Passport
+          // klien. Yang berubah hanyalah siapa yang menjalankan dua langkah
+          // berikutnya, dan kapan.
+          if (tipe === "ebook" && berkas) {
+            setLangkah("Menyiapkan halaman…");
+            const unggah = await unggahPdfKeMateri(r.id, berkas, (fase, selesai, total) =>
+              setLangkah(
+                `${fase === "membaca" ? "Menyiapkan halaman" : "Mengunggah"} ${selesai}` +
+                  `${total > 0 ? ` dari ${total}` : ""}…`,
+              ),
+            );
+            if (!unggah.ok) {
+              // Materinya SUDAH tersimpan — dan itu dikatakan apa adanya.
+              // Kalimat "gagal" tanpa keterangan ini akan membuat admin
+              // menekan simpan lagi dan melahirkan materi kembar.
+              setLangkah(null);
+              setPesan(
+                `Materi tersimpan (nonaktif), tetapi PDF-nya gagal: ${unggah.pesan} ` +
+                  "Buka “Kelola isi” pada baris materinya untuk mengulang unggahan.",
+              );
+              router.refresh();
+              return;
+            }
+
+            setLangkah("Mengaktifkan…");
+            const aktif = await aktifkanMateri(r.id);
+            if (!aktif.ok) {
+              setLangkah(null);
+              setPesan(`PDF tersimpan, tetapi materi belum aktif: ${aktif.pesan}`);
+              router.refresh();
+              return;
+            }
+          }
+
+          setLangkah(null);
+          // Menutup panel = kembali ke alamat tanpa `?ubah`. Keadaan panel
+          // hidup di URL, jadi menutupnya adalah NAVIGASI, bukan setState —
+          // pola yang sama dengan `FormJadwalSesi` dan `FormMitra`.
+          router.push(hrefTutup);
         })
       }
     >
@@ -215,7 +291,15 @@ export function FormMateriBaru({
       </label>
 
       <MedanIsi tipe={tipe} />
+      {tipe === "ebook" && (
+        <MedanPdfBaru berkas={berkas} setBerkas={setBerkas} disabled={pending} />
+      )}
 
+      {langkah && (
+        <p role="status" aria-live="polite" className="mt-3 text-[12.5px] text-ink-soft">
+          {langkah}
+        </p>
+      )}
       {pesan && <p className="mt-3 text-[13px] font-semibold text-clay">{pesan}</p>}
 
       <div className="mt-4 flex items-center gap-2.5">
@@ -224,7 +308,11 @@ export function FormMateriBaru({
           disabled={pending}
           className="rounded-lg bg-panel-ink px-3.5 py-2 text-[12.5px] font-bold text-panel-surface disabled:opacity-60"
         >
-          {pending ? "Menyimpan…" : "Simpan materi"}
+          {pending
+            ? "Menyimpan…"
+            : tipe === "ebook" && berkas
+              ? "Simpan, unggah & aktifkan"
+              : "Simpan materi"}
         </button>
         {/* `<a>` biasa, bukan tombol ber-onClick: menutup panel adalah
             perpindahan alamat, dan jalan keluar yang bekerja tanpa JavaScript

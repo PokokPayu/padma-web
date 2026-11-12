@@ -289,7 +289,12 @@ describe("saklar paket: tidak ada kata 'paket' di layar", () => {
     vi.resetModules();
     vi.doMock("@/lib/paket-tampil", () => ({ PAKET_TAMPIL: true }));
     const { default: HalamanSesiHidup } = await import("@/app/admin/sesi/page");
-    const m = await render(HalamanSesiHidup, SP());
+    // `tab: "sesi"` WAJIB disebut. Literal " · paket" hidup di baris tabel tab
+    // SESI, sementara tab bawaan halaman ini adalah PERMINTAAN — tanpa
+    // parameter ini yang dirender adalah daftar permintaan, yang memang tidak
+    // pernah menulis kata itu, dan kontrol positif ini merah karena merender
+    // layar yang salah alih-alih karena gerbangnya rusak.
+    const m = await render(HalamanSesiHidup, SP({ tab: "sesi" }));
     vi.doUnmock("@/lib/paket-tampil");
     vi.resetModules();
 

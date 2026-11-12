@@ -72,3 +72,30 @@ export const LABEL_JENJANG: Record<JenjangTransport, string> = {
   "15_20": ">15–20 km",
   di_atas_20: ">20 km",
 };
+
+/**
+ * Satu-satunya cara menulis jarak di layar: "4,6 km", atau "—" bila tidak
+ * diketahui.
+ *
+ * KENAPA ADA. Klien melaporkan (umpan balik 21 Sep 2026, butir 2) bahwa "jarak
+ * mitra - klien masih 1-5 km semua". Diukur di basis data produksi, jaraknya
+ * memang 0,75–4,72 km: seluruh mitra terdaftar berada dalam radius 7 km satu
+ * sama lain di Malang kota, sehingga jenjang "0–5 km" yang berulang itu BENAR.
+ * Yang membuatnya terbaca sebagai kemacetan adalah ketiadaan angkanya — label
+ * jenjang yang selalu sama tidak bisa dibedakan dari nilai bawaan yang tidak
+ * pernah dihitung. Fungsi ini ada supaya angkanya muncul, dan muncul dengan
+ * cara yang sama di setiap layar yang menampilkannya.
+ *
+ * SATU desimal, bukan tiga. Koordinatnya dibenarkan manusia lewat pin di peta,
+ * dan haversine mengukur garis lurus — bukan jarak jalan. "4,558 km"
+ * menjanjikan ketelitian yang tidak dimiliki angkanya.
+ *
+ * `null` dijawab "—", TIDAK PERNAH "0,0 km". Nol adalah jarak yang sah (mitra
+ * di alamat yang sama), dan memakai nol sebagai "tidak tahu" membuat sesi
+ * tanpa titik terbaca sebagai sesi paling dekat — jenjang termurah, honor
+ * mitra terkecil.
+ */
+export function formatJarakKm(km: number | null): string {
+  if (km === null || !Number.isFinite(km)) return "—";
+  return `${km.toFixed(1).replace(".", ",")} km`;
+}

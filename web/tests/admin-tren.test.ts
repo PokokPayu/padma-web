@@ -45,10 +45,10 @@ const SESI = {
 };
 
 const HARI_INI = hariIniJakarta();
-const SENIN = awalPekan(HARI_INI);
-const SENIN_DUA_LALU = geserHari(SENIN, -14);
+const AWAL_PEKAN = awalPekan(HARI_INI);
+const AWAL_DUA_PEKAN_LALU = geserHari(AWAL_PEKAN, -14);
 // Di luar jendela 8 pekan — tidak boleh ikut terhitung.
-const JAUH_LAMPAU = geserHari(SENIN, -70);
+const JAUH_LAMPAU = geserHari(AWAL_PEKAN, -70);
 
 async function bersihkan() {
   for (const id of Object.values(SESI)) {
@@ -89,11 +89,11 @@ beforeAll(async () => {
     jam_mulai: "09:00",
   };
   await admin.from("sessions").insert([
-    { ...dasarSesi, id: SESI.pekanIni, tanggal: SENIN, status: "selesai" },
-    { ...dasarSesi, id: SESI.pekanIniDua, tanggal: SENIN, status: "selesai" },
-    { ...dasarSesi, id: SESI.duaPekanLalu, tanggal: SENIN_DUA_LALU, status: "selesai" },
+    { ...dasarSesi, id: SESI.pekanIni, tanggal: AWAL_PEKAN, status: "selesai" },
+    { ...dasarSesi, id: SESI.pekanIniDua, tanggal: AWAL_PEKAN, status: "selesai" },
+    { ...dasarSesi, id: SESI.duaPekanLalu, tanggal: AWAL_DUA_PEKAN_LALU, status: "selesai" },
     // Terjadwal, bukan selesai — tidak boleh ikut terhitung.
-    { ...dasarSesi, id: SESI.terjadwal, tanggal: SENIN, status: "terjadwal" },
+    { ...dasarSesi, id: SESI.terjadwal, tanggal: AWAL_PEKAN, status: "terjadwal" },
     { ...dasarSesi, id: SESI.jauhLampau, tanggal: JAUH_LAMPAU, status: "selesai" },
   ]);
 
@@ -106,14 +106,14 @@ describe("trenSesiSelesai", () => {
   it("selalu memulangkan delapan pekan berurutan, termasuk yang kosong", () => {
     expect(sesudah).toHaveLength(8);
     for (let i = 1; i < sesudah.length; i++) {
-      expect(sesudah[i].senin).toBe(geserHari(sesudah[i - 1].senin, 7));
+      expect(sesudah[i].awal).toBe(geserHari(sesudah[i - 1].awal, 7));
     }
   });
 
   it("pekan berjalan adalah titik TERAKHIR, bukan pertama", () => {
     // Sumbu waktu membaca kiri ke kanan; pekan terbaru di kiri akan membuat
     // setiap tren terlihat terbalik.
-    expect(sesudah[sesudah.length - 1].senin).toBe(SENIN);
+    expect(sesudah[sesudah.length - 1].awal).toBe(AWAL_PEKAN);
   });
 
   it("menghitung hanya sesi berstatus selesai", () => {
@@ -122,14 +122,14 @@ describe("trenSesiSelesai", () => {
   });
 
   it("menempatkan sesi pada pekannya sendiri", () => {
-    const i = sesudah.findIndex((t) => t.senin === SENIN_DUA_LALU);
+    const i = sesudah.findIndex((t) => t.awal === AWAL_DUA_PEKAN_LALU);
     expect(i).toBeGreaterThanOrEqual(0);
-    const iDasar = dasar.findIndex((t) => t.senin === SENIN_DUA_LALU);
+    const iDasar = dasar.findIndex((t) => t.awal === AWAL_DUA_PEKAN_LALU);
     expect(sesudah[i].jumlah).toBe(dasar[iDasar].jumlah + 1);
   });
 
   it("sesi di luar jendela tidak ikut terhitung", () => {
-    expect(sesudah.some((t) => t.senin === JAUH_LAMPAU)).toBe(false);
+    expect(sesudah.some((t) => t.awal === JAUH_LAMPAU)).toBe(false);
     const total = sesudah.reduce((a, t) => a + t.jumlah, 0);
     const totalDasar = dasar.reduce((a, t) => a + t.jumlah, 0);
     // Tiga sesi selesai disisipkan, tetapi hanya tiga di dalam jendela...
@@ -142,10 +142,10 @@ describe("trenSesiSelesai", () => {
     // "2026-08-24") juga lolos /\d/ walau rentangPekan() tidak pernah
     // dipanggil. rentangPekan() selalu menyisipkan tanda hubung "–" di antara
     // dua ujung pekan (lihat src/lib/owner/pekan.ts), jadi memeriksa itu dan
-    // memastikan hasilnya BUKAN sekadar salinan `senin` menutup celah itu.
+    // memastikan hasilnya BUKAN sekadar salinan `awal` menutup celah itu.
     expect(sesudah[0].rentang).toMatch(/\d/);
     expect(sesudah[0].rentang).toContain("–");
-    expect(sesudah[0].rentang).not.toBe(sesudah[0].senin);
+    expect(sesudah[0].rentang).not.toBe(sesudah[0].awal);
   });
 
   it("jumlah pekan bisa diatur", async () => {

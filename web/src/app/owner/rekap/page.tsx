@@ -30,7 +30,7 @@ const SARAN_LAYAR: Record<"varian" | "transport", string> = {
 /**
  * Satu kartu pekan — bentuk `.week-card` prototipe.
  *
- * `data-pekan` membawa Senin pekannya. Ia bukan hiasan: seluruh nominal di
+ * `data-pekan` membawa SABTU pekannya. Ia bukan hiasan: seluruh nominal di
  * halaman ini tampak serupa antar pekan, dan tanpa penanda itu sebuah
  * assertion (atau seorang pembaca) bisa membaca angka pekan lain sebagai angka
  * pekan yang sedang dilihatnya.
@@ -38,7 +38,7 @@ const SARAN_LAYAR: Record<"varian" | "transport", string> = {
 function KartuPekan({ pekan }: { pekan: RekapPekan }) {
   return (
     <article
-      data-pekan={pekan.senin}
+      data-pekan={pekan.awal}
       className="mb-3.5 rounded-lg border border-panel-border bg-panel-surface px-5 py-5"
     >
       <h3 className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
@@ -53,7 +53,7 @@ function KartuPekan({ pekan }: { pekan: RekapPekan }) {
       </p>
 
       {pekan.perMitra.map((m) => (
-        <BarisHonorMitra key={m.partnerId} baris={m} senin={pekan.senin} />
+        <BarisHonorMitra key={m.partnerId} baris={m} awal={pekan.awal} />
       ))}
 
       {/* Margin adalah angka PADMA — per PEKAN, bukan per mitra (spec keputusan
@@ -140,7 +140,7 @@ export default async function RekapPage({
             : "Tidak ada pekan yang cocok dengan pencarian ini."}
         </p>
       ) : (
-        baris.map((p) => <KartuPekan key={p.senin} pekan={p} />)
+        baris.map((p) => <KartuPekan key={p.awal} pekan={p} />)
       )}
 
       <Paginasi basis={BASIS} param={param} total={total} perHal={PER_HAL_REKAP} />

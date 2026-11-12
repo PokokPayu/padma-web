@@ -74,18 +74,21 @@ const OBJEK_VIDEO_UJI = `${MATERI_UJI}/pad-uji-hak-hapus.mp4`;
 
 /** Jauh di depan supaya tidak bertabrakan dengan tanggal test lain. */
 const TGL_PERMINTAAN = "2027-03-11";
-const PEKAN_HONOR = "2027-03-08";
+const PEKAN_HONOR = "2027-03-06"; // Sabtu
 /**
- * Senin yang SUDAH LEWAT, untuk tanda bayar yang disisipkan lewat peran API.
+ * Sabtu yang SUDAH LEWAT, untuk tanda bayar yang disisipkan lewat peran API.
  *
  * `PEKAN_HONOR` di atas tetap dipakai fixture service role — jalur seed memang
- * boleh menyemai pekan mana pun. Tetapi sejak migration `pengerasan_tabel_uang`,
+ * boleh menyemai pekan mana pun, KECUALI bentuk harinya: CHECK
+ * `honor_marks_awal_pekan_sabtu` berlaku untuk SEMUA peran, service role
+ * termasuk, karena tanda yatim tidak punya arti bagi siapa pun. Karena itu
+ * kedua tanggal di sini SABTU, bukan Senin seperti sebelum butir 4. Tetapi sejak migration `pengerasan_tabel_uang`,
  * peran API tidak lagi bisa menandai pekan yang belum berjalan: menyatakan
  * honor yang belum dikerjakan sudah dibayar adalah kebohongan PERMANEN, karena
  * DELETE `honor_marks` sudah dicabut. Aturannya sama persis dengan
  * `periksaPekan()` di src/app/owner/rekap/status.ts.
  */
-const PEKAN_LEWAT = "2026-01-12"; // Senin
+const PEKAN_LEWAT = "2026-01-10"; // Sabtu
 
 let permintaanUji: string;
 let VARIAN_SEED: string;

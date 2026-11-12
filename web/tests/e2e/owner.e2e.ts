@@ -23,7 +23,7 @@
  *   3. `/owner/tarif` menampilkan rate card bernominal; menetapkan tarif baru
  *      melahirkan BARIS BARU — baris lama tetap utuh (INSERT-only).
  *   4. Rekap pekan yang sudah lewat TIDAK bergeser sesudah tarif naik.
- *   5. "Tandai dibayar" melahirkan satu `honor_marks` ber-`week_start` Senin
+ *   5. "Tandai dibayar" melahirkan satu `honor_marks` ber-`week_start` SABTU
  *      dan ber-`ditandai_oleh` uid OWNER (bukan dari payload), lalu barisnya
  *      berubah menjadi "✓ Dibayar" dan tombolnya lenyap — tidak ada jalur
  *      pembatalan, dan tandanya bertahan sesudah halaman dimuat ulang.
@@ -96,13 +96,19 @@ const HONOR_BARU = 555_000;
  * Alasannya mengikat: tarif baru di langkah 3 berlaku mulai HARI INI, dan
  * pembuktian "rekap pekan lama tidak bergeser" hanya berarti bila seluruh sesi
  * fixture memang lebih tua dari tanggal berlaku itu. Bila sesinya di pekan
- * berjalan, skrip ini akan hijau pada hari Selasa–Minggu dan MERAH setiap hari
- * Senin — kelas bug zona/pekan yang sudah dibayar sekali di repo ini.
+ * berjalan, skrip ini akan hijau pada enam hari dan MERAH setiap hari pertama
+ * pekan — kelas bug zona/pekan yang sudah dibayar sekali di repo ini.
+ *
+ * Hari pertama pekan itu SABTU sejak butir 4 umpan balik klien 21 Sep 2026.
+ * Konstanta di bawah diturunkan dari `awalPekan()`, bukan ditulis mati, jadi
+ * pergeserannya tidak menuntut satu angka pun diubah di sini — hanya namanya,
+ * yang kalau dibiarkan berbunyi `SENIN_LALU` sambil berisi Sabtu akan jadi
+ * persis jenis kebohongan diam yang dipercaya pembaca berikutnya.
  */
 const HARI_INI = hariIniJakarta();
-const SENIN_LALU = geserHari(awalPekan(HARI_INI), -7);
-const TANGGAL_SESI_A = SENIN_LALU;
-const TANGGAL_SESI_B = geserHari(SENIN_LALU, 2);
+const AWAL_PEKAN_LALU = geserHari(awalPekan(HARI_INI), -7);
+const TANGGAL_SESI_A = AWAL_PEKAN_LALU;
+const TANGGAL_SESI_B = geserHari(AWAL_PEKAN_LALU, 2);
 
 /** Honor yang harus muncul di rekap: dua sesi selesai × tarif LAMA. */
 const HONOR_PEKAN = HONOR_LAMA * 2;
@@ -557,7 +563,7 @@ async function main() {
         .eq("partner_id", idMitra);
 
       const satuBaris = (tanda ?? []).length === 1;
-      const seninBenar = tanda?.[0]?.week_start === SENIN_LALU;
+      const awalPekanBenar = tanda?.[0]?.week_start === AWAL_PEKAN_LALU;
       const penandaOwner = tanda?.[0]?.ditandai_oleh === uidOwner;
 
       // Muat ulang: tandanya harus bertahan, dan tombolnya tidak boleh kembali —
@@ -575,12 +581,12 @@ async function main() {
       await ulang.close();
 
       catat(
-        "5. 'Tandai dibayar' melahirkan satu tanda Senin ber-ditandai_oleh uid OWNER",
-        satuBaris && seninBenar && penandaOwner &&
+        "5. 'Tandai dibayar' melahirkan satu tanda Sabtu ber-ditandai_oleh uid OWNER",
+        satuBaris && awalPekanBenar && penandaOwner &&
           sesudahKlik.includes("Dibayar") &&
           teksUlang.includes("Dibayar") &&
           tombolLenyap,
-        `tanda ${JSON.stringify(tanda)}; week_start diharapkan ${SENIN_LALU}; tombol lenyap: ${tombolLenyap}`,
+        `tanda ${JSON.stringify(tanda)}; week_start diharapkan ${AWAL_PEKAN_LALU}; tombol lenyap: ${tombolLenyap}`,
       );
     }
 

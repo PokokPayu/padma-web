@@ -352,7 +352,13 @@ async function main() {
     );
 
     // ================= 5. Admin menjadwalkan & menyelesaikan sesi =================
-    await kerja.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
+    // `?tab=sesi` WAJIB disebut. Tab BAWAAN `/admin/sesi` adalah PERMINTAAN
+    // (lihat `const tab = ...` di page.tsx), sementara tombol "+ Sesi baru"
+    // dan tabel sesinya hidup di tab SESI. Tanpa parameter ini, skrip
+    // menunggu tautan yang memang tidak ada di layar yang sedang dibukanya,
+    // lalu mati karena timeout 30 detik — kegagalan yang terbaca seperti
+    // kerusakan fitur padahal yang salah alamatnya.
+    await kerja.goto(`${BASE}/admin/sesi?tab=sesi`, { waitUntil: "networkidle" });
     // "+ Sesi baru" kini TAUTAN ke `?ubah=baru`: keadaan panel hidup di URL,
     // jadi tombol kembali peramban menutupnya seperti yang orang harapkan.
     await kerja.getByRole("link", { name: "+ Sesi baru", exact: true }).click();
@@ -382,7 +388,9 @@ async function main() {
       `${(sesiBaru ?? []).length} sesi, status ${sesiBaru?.[0]?.status}`,
     );
 
-    await kerja.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
+    // `?tab=sesi` — alasan yang sama dengan di atas: baris sesinya hidup di
+    // tab SESI, bukan di tab permintaan yang menjadi bawaan.
+    await kerja.goto(`${BASE}/admin/sesi?tab=sesi`, { waitUntil: "networkidle" });
     const barisSesi = kerja.locator("tr", { hasText: PADMA_ID }).first();
     // Formulir "tandai selesai" pindah dari dalam SEL TABEL ke panel geser —
     // itu inti keluhan yang memulai seluruh pekerjaan ini. Barisnya kini

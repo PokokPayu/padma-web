@@ -79,8 +79,8 @@ const HARGA_DASAR = 500_000;
 const HONOR_DASAR = 200_000;
 
 /** Senin yang sudah lewat: pekan yang sah untuk ditandai dibayar. */
-const PEKAN_LEWAT = "2026-01-05";
-const PEKAN_LEWAT_2 = "2026-01-12";
+const PEKAN_LEWAT = "2026-01-03";
+const PEKAN_LEWAT_2 = "2026-01-10";
 /** Rabu — tanda yatim yang tidak pernah cocok dengan bucket rekap mana pun. */
 const RABU = "2026-01-07";
 
@@ -490,9 +490,9 @@ describe("variant_rates: INSERT-only ditegakkan basis data, bukan hanya doktrin"
 });
 
 // ---------------------------------------------------------------------------
-// (5) TANDA BAYAR — week_start selalu Senin
+// (5) TANDA BAYAR — week_start selalu SABTU (butir 4, 21 Sep 2026)
 // ---------------------------------------------------------------------------
-describe("honor_marks: week_start wajib hari Senin", () => {
+describe("honor_marks: week_start wajib hari Sabtu", () => {
   it("week_start RABU ditolak 23514 — tanda yatim tidak bisa dihapus lagi", async () => {
     // Red team temuan B2: week_start Rabu -> HTTP 201. Tanda itu tidak pernah
     // cocok dengan bucket rekap mana pun (honornya terlihat "belum dibayar"
@@ -504,20 +504,23 @@ describe("honor_marks: week_start wajib hari Senin", () => {
     expect(await tandaMitra(MITRA_KERAS)).toHaveLength(0);
   });
 
-  it("keenam hari selain Senin semuanya ditolak 23514", async () => {
-    // 2026-01-05 adalah Senin; enam hari sesudahnya bukan.
-    for (const bukanSenin of [
+  it("keenam hari selain Sabtu semuanya ditolak 23514 — termasuk SENIN", async () => {
+    // 2026-01-03 adalah Sabtu; enam hari sesudahnya bukan. Senin
+    // (2026-01-05) sengaja ada di daftar ini: ia hari awal pekan yang LAMA,
+    // dan satu-satunya cara membuktikan pergeseran Sabtu–Jumat benar-benar
+    // sampai ke basis data adalah melihat Senin DITOLAK.
+    for (const bukanSabtu of [
+      "2026-01-04",
+      "2026-01-05",
       "2026-01-06",
       "2026-01-07",
       "2026-01-08",
       "2026-01-09",
-      "2026-01-10",
-      "2026-01-11",
     ]) {
       const { error } = await sesiOwner
         .from("honor_marks")
-        .insert({ partner_id: MITRA_KERAS, week_start: bukanSenin });
-      expect(error?.code, bukanSenin).toBe("23514");
+        .insert({ partner_id: MITRA_KERAS, week_start: bukanSabtu });
+      expect(error?.code, bukanSabtu).toBe("23514");
     }
     expect(await tandaMitra(MITRA_KERAS)).toHaveLength(0);
   });
@@ -667,9 +670,15 @@ describe("honor_marks: pekan yang BELUM berjalan tidak bisa ditandai", () => {
     // 201. Menyatakan honor yang belum dikerjakan sudah dibayar, secara
     // permanen (DELETE sudah dicabut). Validator TypeScript `periksaPekan`
     // sudah menolaknya — REST melewatinya seluruhnya.
+    //
+    // Tanggalnya digeser dari 2027-06-07 (Senin) ke 2027-06-05 (SABTU)
+    // sesudah butir 4: Senin kini melanggar CHECK bentuk hari JUGA, dan tes
+    // yang subjeknya ditolak dua pagar sekaligus berhenti membuktikan pagar
+    // mana yang sebenarnya bekerja. Sabtu bentuknya sah, jadi yang tersisa
+    // untuk menolaknya hanyalah trigger pekan-belum-berjalan.
     const { error } = await sesiOwner
       .from("honor_marks")
-      .insert({ partner_id: MITRA_KERAS, week_start: "2027-06-07" });
+      .insert({ partner_id: MITRA_KERAS, week_start: "2027-06-05" });
     expect(error?.code).toBe("42501");
     expect(await tandaMitra(MITRA_KERAS)).toHaveLength(0);
   });
@@ -677,7 +686,7 @@ describe("honor_marks: pekan yang BELUM berjalan tidak bisa ditandai", () => {
   it("KONTROL: service role tetap bisa menyemai pekan mana pun (fixture test)", async () => {
     const { error } = await admin
       .from("honor_marks")
-      .insert({ partner_id: MITRA_KERAS, week_start: "2027-06-07" });
+      .insert({ partner_id: MITRA_KERAS, week_start: "2027-06-05" });
     expect(error).toBeNull();
   });
 });
@@ -740,7 +749,7 @@ describe("STRUKTURAL: constraint & trigger tabel uang terpasang", () => {
          and k.contype in ('c','u')
        order by 1, 2`);
     expect(baris.map((b) => `${b.tabel}.${b.conname}`)).toEqual([
-      "honor_marks.honor_marks_awal_pekan_senin",
+      "honor_marks.honor_marks_awal_pekan_sabtu",
       "honor_marks.honor_marks_partner_id_week_start_key",
       "variant_rates.variant_rates_nilai_wajar",
       "variant_rates.variant_rates_unik_per_tanggal",
