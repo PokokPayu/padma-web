@@ -4,9 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
-import { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } from "@/lib/midtrans/snap-peramban";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { mintaBatal, mintaCheckout } from "@/app/produk/[slug]/tombol-beli";
+import { mintaBatal, mintaLaluAlihkan } from "@/app/produk/[slug]/tombol-beli";
 import type { ItemKeranjang, KeadaanItem } from "@/lib/keranjang/baca";
 
 /** `Record` lengkap: nilai keadaan baru memerahkan kompilator, bukan diam. */
@@ -18,26 +17,17 @@ const KALIMAT_KEADAAN: Record<KeadaanItem, string | null> = {
   diproses: "Pembayaran sedang diproses",
 };
 
-const PESAN_TIDAK_BISA_DIBUKA = "Pembayaran tidak bisa dibuka. Coba lagi sebentar lagi.";
-
 export function IsiKeranjang({
   item,
   terbuka,
-  produksi,
-  clientKey,
 }: {
   item: readonly ItemKeranjang[];
   terbuka: { id: string; kode: string } | null;
-  produksi: boolean;
-  clientKey: string;
 }) {
   const [pesan, setPesan] = useState<string | null>(null);
-  // Lihat dokblok `mintaCheckout`: sekali order_id terkirim ke Snap, setiap
+  // Lihat dokblok `mintaCheckout`: sekali invoice terkirim ke DOKU, setiap
   // percobaan berikutnya wajib `ulang: true`.
   const [orderIdTerpakai, setOrderIdTerpakai] = useState(false);
-  // Snap sudah menerbitkan instruksi bayar — pembatalan ditutup sejak detik
-  // itu (alasan yang sama dengan `pembayaranBerjalan` di tombol-beli.tsx).
-  const [pembayaranBerjalan, setPembayaranBerjalan] = useState(false);
   const [pending, mulai] = useTransition();
   const router = useRouter();
 
@@ -58,20 +48,12 @@ export function IsiKeranjang({
   function bayar() {
     mulai(async () => {
       setPesan(null);
-      if (clientKey.trim() === "") {
-        setPesan(PESAN_PEMBAYARAN_BELUM_AKTIF);
-        return;
-      }
-      try {
-        await muatSkripSnap(clientKey, produksi);
-      } catch {
-        setPesan(PESAN_TIDAK_BISA_DIBUKA);
-        return;
-      }
-
-      const { hasil, orderIdTerbakar } = await mintaCheckout(
+      // Kunci DOKU yang belum terpasang datang dari rute sebagai 503 berkalimat
+      // dan tampil lewat cabang `pesan` di bawah.
+      const { hasil, orderIdTerbakar } = await mintaLaluAlihkan(
         siap.map((i) => i.productId),
         orderIdTerpakai,
+        (url) => window.location.assign(url),
       );
       if (orderIdTerbakar) setOrderIdTerpakai(true);
 
@@ -94,28 +76,8 @@ export function IsiKeranjang({
         if (!orderIdTerbakar) router.refresh();
         return;
       }
-      if (!window.snap) {
-        setPesan(PESAN_TIDAK_BISA_DIBUKA);
-        return;
-      }
-
-      window.snap.pay(hasil.token, {
-        // Bukan sumber kebenaran pembayaran — hanya memicu pembacaan ulang.
-        // Keranjang dikosongkan trigger saat akses benar-benar terbit.
-        onSuccess: () => {
-          setPembayaranBerjalan(true);
-          router.refresh();
-        },
-        onPending: () => {
-          setPembayaranBerjalan(true);
-          router.refresh();
-        },
-        onClose: () => router.refresh(),
-        onError: () => {
-          setPesan("Pembayaran gagal. Silakan coba lagi.");
-          router.refresh();
-        },
-      });
+      // jenis "url": peramban sedang dialihkan ke halaman bayar DOKU. Keranjang
+      // dikosongkan trigger saat akses benar-benar terbit, bukan di sini.
     });
   }
 
@@ -133,7 +95,7 @@ export function IsiKeranjang({
     });
   }
 
-  if (item.length === 0 && !pembayaranBerjalan) {
+  if (item.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-black/10 bg-paper p-4 text-[13px] text-ink-soft">
         Keranjang Anda kosong. Jelajahi{" "}
@@ -147,16 +109,6 @@ export function IsiKeranjang({
 
   return (
     <div className="space-y-4">
-      {pembayaranBerjalan && (
-        <div className="rounded-xl bg-gold/10 px-4 py-3 text-[13.5px] text-night">
-          <b>Pembayaran sedang diproses.</b> Begitu diterima, produknya muncul di{" "}
-          <Link href="/passport/produk" className="font-semibold text-leaf underline">
-            Pembelian Saya
-          </Link>
-          .
-        </div>
-      )}
-
       <ul className="divide-y divide-black/10 rounded-xl border border-black/10">
         {item.map((i) => {
           const kalimat = KALIMAT_KEADAAN[i.keadaan];
@@ -185,7 +137,7 @@ export function IsiKeranjang({
         })}
       </ul>
 
-      {terbuka !== null && !pembayaranBerjalan && (
+      {terbuka !== null && (
         <div className="rounded-xl border border-black/10 bg-paper px-4 py-3">
           <p className="text-[13.5px] text-night">
             Anda masih punya pesanan <b>{terbuka.kode}</b> yang belum dibayar.

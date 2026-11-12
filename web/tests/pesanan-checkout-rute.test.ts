@@ -4,11 +4,11 @@
  * Yang dijaga di sini bukan "rutenya mengembalikan 200", melainkan lima hal
  * yang masing-masing pernah menjadi cara alur pembayaran gagal diam-diam:
  *
- *   1. `order_id` yang dikirim ke Snap = `kode.percobaan`. Midtrans menolak
- *      `order_id` kembar SELAMANYA; salah merakitnya berarti percobaan kedua
- *      mustahil dan pembeli terkunci sampai tenggatnya lewat.
- *   2. `expiry` Snap memakai konstanta yang SAMA dengan `kedaluwarsa_pada`.
- *      Dua angka yang berbeda = dua kegagalan simetris (lihat spec).
+ *   1. `invoice_number` yang dikirim ke DOKU = `kode` + digit percobaan.
+ *      `ulang: true` menaikkan percobaan, dan itulah jalan keluar bila DOKU
+ *      menolak membuat ulang invoice yang sama.
+ *   2. Jawaban sukses memuat `url` dan TIDAK memuat `token` atau `produksi`:
+ *      peramban dialihkan, tidak ada lagi popup yang butuh keduanya.
  *   3. Rute tidak pernah memakai service role. Yang memilih `client_id` adalah
  *      `auth.uid()` DI DALAM RPC — pemeriksaan yang hanya hidup di TypeScript
  *      bisa dilewati dengan satu panggilan langsung ke PostgREST.
@@ -19,14 +19,14 @@
  *      ganda yang nyata, dan sampai berkas ini lahir tidak satu pun uji
  *      menjalankannya LEWAT RUTE.
  *
- * Adapter Midtrans DI-MOCK. `tests/setup-fetch-guard.ts` tidak disunting: suite
- * ini tidak punya izin — dan tidak butuh — menembak Snap sungguhan.
+ * `fetch` ke host DOKU di-STUB dengan kunci palsu. `tests/setup-fetch-guard.ts`
+ * tidak disunting: suite ini tidak punya izin menembak DOKU sungguhan.
  *
  * Pembersihan `jejak_pesanan`/`notifikasi_pesanan` WAJIB (keduanya sengaja tanpa
  * foreign key). Tanpa itu `tests/pesanan-jejak-yatim.test.ts` merah, di berkas
  * orang lain.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signInAs } from "./helpers/as-user";
 // Klien KEDUA ber-akun auth, lahir di Tugas 4 (`tests/helpers/klien-kedua.ts`).
@@ -45,29 +45,24 @@ const svc = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-type HasilSnap = { ok: true; token: string } | { ok: false; pesan: string };
-
+const asliFetch = globalThis.fetch;
 const ref = vi.hoisted(() => ({
   sesi: null as SupabaseClient | null,
-  snap: { ok: true, token: "snap-token-uji" } as { ok: true; token: string } | { ok: false; pesan: string },
-  diterima: null as null | { orderId: string; nominal: number; judul: string; kedaluwarsaJam: number },
+  /** Badan permintaan yang sampai ke DOKU, berurutan. */
+  panggilanDoku: [] as string[],
+  jawabDoku: null as null | (() => Response),
 }));
+
+const dokuOk = (url = "https://sandbox.doku.test/bayar/abc") =>
+  new Response(JSON.stringify({ response: { payment: { url, token_id: "t" } } }), { status: 200 });
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerSupabase: async () => ref.sesi!,
 }));
-vi.mock("@/lib/midtrans/adapter", () => ({
-  terbitkanTokenSnap: async (p: { orderId: string; nominal: number; judul: string; kedaluwarsaJam: number }): Promise<HasilSnap> => {
-    ref.diterima = p;
-    return ref.snap;
-  },
-  bacaStatusTransaksi: async () => ({ ok: false, kode: 0, pesan: "tidak dipakai di berkas ini" }),
-}));
 
 const { POST: checkout } = await import("@/app/api/pesanan/checkout/route");
 const { POST: batal } = await import("@/app/api/pesanan/[id]/batal/route");
-const { POLA_KODE_PESANAN, rakitOrderId } = await import("@/lib/pesanan/order-id");
-const { JAM_TENGGAT_PESANAN } = await import("@/lib/pesanan/status");
+const { POLA_KODE_PESANAN, rakitInvoice } = await import("@/lib/pesanan/order-id");
 
 const KLIEN = "ananda@padma.test";
 /** Akun BERPROFIL tapi TANPA baris `clients` — gerbang identitas, bukan kepemilikan. */
@@ -116,10 +111,28 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  ref.snap = { ok: true, token: "snap-token-uji" };
-  ref.diterima = null;
+  ref.panggilanDoku = [];
+  ref.jawabDoku = () => dokuOk();
+  vi.stubEnv("DOKU_CLIENT_ID", "klien-uji-doku");
+  vi.stubEnv("DOKU_SECRET_KEY", "kunci-uji-doku");
+  vi.stubEnv("DOKU_PRODUKSI", "false");
+  vi.stubEnv("NEXT_PUBLIC_BASIS_URL", "https://padma.test");
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    if (/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/)/.test(url)) return asliFetch(...args);
+    if (url.startsWith("https://api-sandbox.doku.com")) {
+      ref.panggilanDoku.push(String((args[1] as RequestInit)?.body ?? ""));
+      return Promise.resolve(ref.jawabDoku!());
+    }
+    throw new Error(`[uji] host luar tak terduga: ${url}`);
+  });
   ref.sesi = await signInAs(KLIEN);
   await sapuPesanan();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 function mintaCheckout(badan: unknown): Request {
@@ -153,60 +166,80 @@ describe("POST /api/pesanan/checkout", () => {
     expect((await checkout(mintaCheckout("{bukan json"))).status).toBe(400);
   });
 
-  it("produk berbayar -> 200 dengan token, kode, pesananId, produksi", async () => {
+  it("produk berbayar -> 200 dengan url, kode, pesananId; tanpa token dan produksi", async () => {
     const jawab = await checkout(mintaCheckout({ productId: produkA }));
     expect(jawab.status).toBe(200);
-    const isi = (await jawab.json()) as { token: string; kode: string; pesananId: string; produksi: boolean };
+    const isi = (await jawab.json()) as Record<string, unknown>;
 
-    expect(isi.token).toBe("snap-token-uji");
+    expect(isi.url).toBe("https://sandbox.doku.test/bayar/abc");
     expect(isi.kode).toMatch(POLA_KODE_PESANAN);
-    expect(isi.produksi).toBe(false);
+    expect(isi).not.toHaveProperty("token");
+    expect(isi).not.toHaveProperty("produksi");
 
     const { data } = await svc
       .from("orders")
       .select("id, status, client_id, tautan_gateway, jumlah_item")
-      .eq("id", isi.pesananId)
+      .eq("id", isi.pesananId as string)
       .single<{ id: string; status: string; client_id: string; tautan_gateway: string | null; jumlah_item: number }>();
     expect(data!.status).toBe("menunggu_bayar");
     // `client_id` dipilih RPC dari auth.uid(), bukan dikirim rute.
     expect(data!.client_id).toBe(clientId);
-    expect(data!.tautan_gateway).toBe("snap-token-uji");
+    expect(data!.tautan_gateway).toBe("https://sandbox.doku.test/bayar/abc");
     expect(data!.jumlah_item).toBe(1);
   });
 
-  it("order_id yang dikirim ke Snap = kode.percobaan, dan expiry = JAM_TENGGAT_PESANAN", async () => {
-    // Dua invarian yang tidak punya bentuk lain untuk diperiksa: keduanya hidup
-    // di ARGUMEN yang dioper ke Midtrans, bukan di baris basis data mana pun.
+  it("invoice_number yang dikirim ke DOKU = kode + percobaan, dan nominalnya dari server", async () => {
     const jawab = await checkout(mintaCheckout({ productId: produkA }));
     const isi = (await jawab.json()) as { kode: string };
 
-    expect(ref.diterima).not.toBeNull();
-    expect(ref.diterima!.orderId).toBe(rakitOrderId(isi.kode, 1));
-    expect(ref.diterima!.kedaluwarsaJam).toBe(JAM_TENGGAT_PESANAN);
-    expect(ref.diterima!.nominal).toBe(150_000);
+    expect(ref.panggilanDoku).toHaveLength(1);
+    const b = JSON.parse(ref.panggilanDoku[0]);
+    expect(b.order.invoice_number).toBe(rakitInvoice(isi.kode, 1));
+    expect(b.order.amount).toBe(150_000);
   });
 
-  it("Snap menolak -> 502 dengan pesan, dan pesanannya TETAP ada untuk diulang", async () => {
-    ref.snap = { ok: false, pesan: "Pembayaran belum bisa dimulai." };
+  it("kunci DOKU kosong -> 503 berkalimat, tanpa panggilan DOKU, pesanan tetap ada", async () => {
+    vi.stubEnv("DOKU_SECRET_KEY", "");
+    const jawab = await checkout(mintaCheckout({ productId: produkA }));
+    expect(jawab.status).toBe(503);
+    expect(await jawab.json()).toEqual({ pesan: "Pembayaran belum aktif. Hubungi tim PADMA." });
+    expect(ref.panggilanDoku).toEqual([]);
+
+    const { data } = await svc.from("orders").select("id").eq("client_id", clientId);
+    expect((data ?? []).length).toBe(1);
+  });
+
+  it("DOKU menolak -> 502 dengan pesan, dan pesanannya TETAP ada untuk diulang", async () => {
+    ref.jawabDoku = () => new Response("{}", { status: 500 });
     const jawab = await checkout(mintaCheckout({ productId: produkA }));
     expect(jawab.status).toBe(502);
     expect((await jawab.json()) as { pesan: string }).toHaveProperty("pesan");
 
     // Pesanannya tidak dihapus: `ulang: true` yang menaikkan percobaan dan
-    // melahirkan order_id baru, karena order_id lama sudah terbakar di Midtrans.
+    // melahirkan invoice baru.
     const { data } = await svc.from("orders").select("id, percobaan").eq("client_id", clientId);
     expect((data ?? []).length).toBe(1);
   });
 
-  it("ulang: true menaikkan percobaan, dan order_id ikut berubah", async () => {
-    ref.snap = { ok: false, pesan: "gagal" };
+  it("ulang: true menaikkan percobaan, dan invoice_number ikut berubah", async () => {
+    ref.jawabDoku = () => new Response("{}", { status: 500 });
     await checkout(mintaCheckout({ productId: produkA }));
 
-    ref.snap = { ok: true, token: "snap-token-uji-2" };
+    ref.jawabDoku = () => dokuOk("https://sandbox.doku.test/bayar/dua");
     const jawab = await checkout(mintaCheckout({ productId: produkA, ulang: true }));
     expect(jawab.status).toBe(200);
-    const isi = (await jawab.json()) as { kode: string };
-    expect(ref.diterima!.orderId).toBe(rakitOrderId(isi.kode, 2));
+    const isi = (await jawab.json()) as { kode: string; url: string };
+    expect(isi.url).toBe("https://sandbox.doku.test/bayar/dua");
+
+    const invoice = ref.panggilanDoku.map((b) => JSON.parse(b).order?.invoice_number);
+    expect(invoice).toEqual([rakitInvoice(isi.kode, 1), rakitInvoice(isi.kode, 2)]);
+  });
+
+  it("checkout kedua atas pesanan yang sama memakai ulang tautan, tanpa memanggil DOKU lagi", async () => {
+    const a = (await (await checkout(mintaCheckout({ productId: produkA }))).json()) as { url: string };
+    const b = (await (await checkout(mintaCheckout({ productId: produkA }))).json()) as { url: string };
+    expect(b.url).toBe(a.url);
+    expect(ref.panggilanDoku).toHaveLength(1);
   });
 
   it("pesanan terbuka untuk produk LAIN -> 409 dengan kalimat yang bisa dibaca", async () => {
@@ -239,8 +272,8 @@ describe("POST /api/pesanan/checkout", () => {
  *
  * Gerbang ini DILEBARKAN oleh review akhir P1-A sesudah rencana P1-B ditulis
  * (lihat dokblok `buat_pesanan`, `20260926130000_pesanan_rpc.sql`), dan
- * pelebarannya menutup tagihan ganda yang nyata: `expire` Midtrans yang
- * disusul `settlement` TERLAMBAT meninggalkan pesanan `kedaluwarsa` dengan
+ * pelebarannya menutup tagihan ganda yang nyata: `expire` gateway yang
+ * disusul pelunasan TERLAMBAT meninggalkan pesanan `kedaluwarsa` dengan
  * uang sudah masuk dan NOL entitlement — statusnya bukan `ditahan` dan bukan
  * `lunas`, jadi gerbang lama diam dan gerbang entitlement pun diam. Klien
  * membayar produk yang sama untuk kedua kalinya.
@@ -272,9 +305,9 @@ describe("POST /api/pesanan/checkout — gerbang beli ulang (pelebaran review ak
     // Pagar terhadap 409 yang lahir SESUDAH pesanannya terlanjur ada.
     const { data } = await svc.from("orders").select("id").eq("client_id", clientId);
     expect(data ?? []).toEqual([]);
-    // Dan Snap tidak pernah disentuh: token yang terbit untuk pesanan yang
-    // tidak ada adalah popup yang bisa dibayar.
-    expect(ref.diterima).toBeNull();
+    // Dan DOKU tidak pernah disentuh: tautan untuk pesanan yang tidak ada
+    // adalah halaman yang bisa dibayar.
+    expect(ref.panggilanDoku).toEqual([]);
   });
 
   it("pesanan kedaluwarsa ber-`lunas_setelah_tutup` -> 409, pesanan kedua TIDAK lahir", async () => {
@@ -297,11 +330,11 @@ describe("POST /api/pesanan/checkout — gerbang beli ulang (pelebaran review ak
       .eq("id", isi.pesananId);
     expect(error).toBeNull();
 
-    ref.diterima = null;
+    ref.panggilanDoku = [];
     const jawab = await checkout(mintaCheckout({ productId: produkA }));
     expect(jawab.status).toBe(409);
     expect(((await jawab.json()) as { pesan: string }).pesan.length).toBeGreaterThan(10);
-    expect(ref.diterima).toBeNull();
+    expect(ref.panggilanDoku).toEqual([]);
 
     // Tetap SATU baris — yang lama, masih kedaluwarsa. Tidak ada pesanan kedua.
     const { data } = await svc

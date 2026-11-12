@@ -22,9 +22,9 @@ vi.mock("@/lib/supabase/server", () => ({
     },
   }),
 }));
-vi.mock("@/lib/midtrans/adapter", () => ({
-  terbitkanTokenSnap: async () => {
-    throw new Error("Snap tidak boleh disentuh di uji ini");
+vi.mock("@/lib/doku/tautan", () => ({
+  terbitkanTautanBayar: async () => {
+    throw new Error("DOKU tidak boleh disentuh di uji ini");
   },
 }));
 

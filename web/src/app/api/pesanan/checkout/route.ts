@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { penggunaSaatIni } from "@/lib/auth/sesi";
-import { terbitkanTokenSnap } from "@/lib/midtrans/adapter";
-import { midtransProduksi } from "@/lib/midtrans/konfig";
-import { rakitOrderId } from "@/lib/pesanan/order-id";
-import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
+import { terbitkanTautanBayar } from "@/lib/doku/tautan";
 import { statusPersetujuan } from "@/lib/persetujuan/status";
 
 /**
@@ -16,13 +13,13 @@ import { statusPersetujuan } from "@/lib/persetujuan/status";
  *   `auth.uid()`, membekukan harga, menerbitkan `kode`, dan menolak pesanan
  *   terbuka kedua lewat unique parsial.
  *
- * Yang ada di sini hanyalah tiga hal yang memang tidak bisa hidup di SQL:
- * merakit `order_id` Midtrans, memanggil Snap, dan menerjemahkan galat basis
- * data menjadi kalimat yang dibaca pembeli.
+ * Yang ada di sini hanyalah dua hal yang memang tidak bisa hidup di SQL:
+ * meminta tautan bayar DOKU (`terbitkanTautanBayar`) dan menerjemahkan galat
+ * basis data menjadi kalimat yang dibaca pembeli.
  *
- * Nol halaman `/bayar/selesai` dan nol rute balik Snap: `onSuccess` di peramban
- * hanya memicu pembacaan ulang entitlement, dan ia BUKAN sumber kebenaran
- * pembayaran. Yang memutuskan lunas hanyalah notifikasi bertanda tangan.
+ * Peramban dialihkan ke `url` yang dipulangkan. Nol halaman `/bayar/selesai`:
+ * halaman tujuan kembali tidak dipercaya dan tidak menerbitkan apa pun. Yang
+ * memutuskan lunas hanyalah notifikasi bertanda tangan.
  */
 export const runtime = "nodejs";
 
@@ -74,8 +71,8 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ pesan: "Produk tidak dikenali." }, { status: 400 });
   }
-  // `ulang` dinaikkan HANYA ketika Snap menolak menerbitkan token dan
-  // `order_id` lamanya sudah terbakar — bukan setiap kali halaman dibuka.
+  // `ulang` dinaikkan HANYA ketika DOKU menolak menerbitkan tautan dan
+  // invoice lamanya sudah terbakar — bukan setiap kali halaman dibuka.
   const ulang = isi.ulang === true;
 
   const supabase = await createServerSupabase();
@@ -100,48 +97,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ pesan: "Pesanan tidak bisa dibuat sekarang." }, { status: 409 });
   }
 
-  // `kode.percobaan` — Midtrans menolak `order_id` kembar SELAMANYA, dan sufiks
-  // percobaan itulah satu-satunya jalan keluar ketika token gagal terbit.
-  const orderId = rakitOrderId(baris.kode, baris.percobaan);
-
-  const snap = await terbitkanTokenSnap({
-    orderId,
-    nominal: baris.nominal_tagih,
-    // Snap menerima SATU baris item seharga total. Merinci per produk adalah
-    // satu tempat lagi untuk selisih jumlah, dan Midtrans menolak transaksi
-    // yang rinciannya tidak berjumlah `gross_amount`.
-    judul:
-      baris.jumlah_item > 1
-        ? `${baris.judul} + ${baris.jumlah_item - 1} produk lain`
-        : baris.judul,
-    // Satu konstanta untuk kolom `kedaluwarsa_pada` DAN `expiry` Snap.
-    kedaluwarsaJam: JAM_TENGGAT_PESANAN,
-  });
-
-  if (!snap.ok) {
-    // 502, bukan 500: yang gagal adalah pihak ketiga, dan pesanannya SENGAJA
-    // dibiarkan hidup supaya pembeli bisa mengulang dengan `ulang: true`.
-    return NextResponse.json({ pesan: snap.pesan }, { status: 502 });
-  }
-
-  const { error: eCatat } = await supabase.rpc("catat_tautan_gateway", {
-    p_pesanan_id: baris.pesanan_id,
-    p_percobaan: baris.percobaan,
-    p_tautan: snap.token,
-  });
-  if (eCatat) {
-    // SENGAJA tidak menggagalkan checkout. Tokennya sudah terbit dan pembeli
-    // sudah bisa membayar; yang hilang hanyalah catatan kita sendiri, dan
-    // `tautan_gateway` tidak pernah dipercaya sebagai bukti pembayaran oleh apa pun.
-    console.error(`[pesanan] gagal mencatat token snap ${baris.pesanan_id}: ${eCatat.message}`);
+  // Kepemilikan dibuktikan di dalam `terbitkanTautanBayar` (RLS lewat sesi
+  // pemanggil). 409/502/503 diteruskan apa adanya: pesanannya SENGAJA dibiarkan
+  // hidup supaya pembeli bisa mengulang dengan `ulang: true`.
+  const tautan = await terbitkanTautanBayar(supabase, baris.pesanan_id, "/passport/produk");
+  if (!tautan.ok) {
+    return NextResponse.json({ pesan: tautan.pesan }, { status: tautan.status });
   }
 
   return NextResponse.json({
-    token: snap.token,
+    url: tautan.url,
     kode: baris.kode,
     pesananId: baris.pesanan_id,
-    // Dibaca di SERVER dan dipulangkan, karena `MIDTRANS_PRODUKSI` tidak
-    // berprefix NEXT_PUBLIC_ dan peramban tidak bisa membacanya sendiri.
-    produksi: midtransProduksi(),
   });
 }

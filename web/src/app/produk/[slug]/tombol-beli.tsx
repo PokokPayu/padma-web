@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createBrowserSupabase } from "@/lib/supabase/client";
-import { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } from "@/lib/midtrans/snap-peramban";
 import { PESANAN_BERUANG, PESANAN_TERBUKA } from "@/lib/pesanan/status";
 import { picuPeriksaSekali } from "@/lib/pesanan/picu-periksa";
 import { BlokBuka, punyaProdukDiPeramban } from "./tombol-ambil";
@@ -30,7 +29,6 @@ export type KeadaanBeli = "belum" | "punya" | "menunggu";
 
 /** Satu kalimat, satu tempat — dipakai tiga jalur kegagalan yang berbeda. */
 const PESAN_COBA_LAGI = "Pembayaran belum bisa dimulai. Coba lagi sebentar lagi.";
-const PESAN_TIDAK_BISA_DIBUKA = "Pembayaran tidak bisa dibuka. Coba lagi sebentar lagi.";
 
 /**
  * KEPUTUSAN URUTAN LAYAR, sebagai fungsi MURNI.
@@ -164,7 +162,7 @@ export const BATAS_BARIS_PESANAN = 20;
  *     SE-PRODUK. Jadi satu pembelian lunas atas produk APA PUN membuat
  *     `tinjauan` menyala selamanya, dan pembeli yang pernah belanja — justru
  *     yang paling mungkin membeli lagi — kehilangan tombol batalnya PERMANEN.
- *     Tanpa jalan (1), popup Snap yang gagal meninggalkan mereka tanpa tombol
+ *     Tanpa jalan (1), alihan yang gagal meninggalkan mereka tanpa tombol
  *     beli DAN tanpa tombol batal sampai tenggat 24 jam lewat.
  *
  * (2) Tebakan KONSERVATIF, dipakai sesudah halaman dimuat ulang — saat id
@@ -226,7 +224,7 @@ export type HasilCheckout =
    * tidak ada cara lain mengetahui pesanan mana yang milik produk ini. Lihat
    * jalan (1) di dokblok `pesananYangBisaDibatalkan`.
    */
-  | { jenis: "token"; token: string; pesananId: string | null }
+  | { jenis: "url"; url: string; pesananId: string | null }
   | { jenis: "masuk" }
   /** Belum menyetujui S&K versi berlaku (spec 2026-10-06) → layar /persetujuan. */
   | { jenis: "persetujuan" }
@@ -236,33 +234,33 @@ export type HasilCheckout =
  * SATU percobaan checkout, sebagai fungsi murni yang menerima `fetch`-nya.
  *
  * ===== `orderIdTerbakar` ADALAH SELURUH ALASAN FUNGSI INI ADA =====
- * Midtrans menolak `order_id` kembar SELAMANYA. Begitu sebuah `order_id`
- * pernah dikirim ke Snap, satu-satunya jalan keluar adalah menaikkan
+ * DOKU dapat menolak invoice kembar. Begitu sebuah `order_id`
+ * pernah dikirim ke DOKU, satu-satunya jalan keluar adalah menaikkan
  * `percobaan` — dan itu persis yang dilakukan `buat_pesanan(p_ulang := true)`
  * (`20260926130000:210-222`, yang komentarnya sendiri berbunyi "`percobaan`
- * dinaikkan HANYA di sini: saat Snap menolak menerbitkan token dan
+ * dinaikkan HANYA di sini: saat DOKU menolak menerbitkan tautan dan
  * order_id-nya sudah terbakar").
  *
  * Tanpa pulangan ini, percobaan berikutnya mengirim `ulang: false`,
  * `buat_pesanan` memulangkan pesanan terbuka yang SAMA berikut `kode` dan
- * `percobaan` yang sama, rute merakit `order_id` yang sama, Snap menolaknya
+ * `percobaan` yang sama, rute merakit `order_id` yang sama, DOKU menolaknya
  * lagi, dan 502 itu berulang SELAMANYA. Pembeli terkunci sampai tenggat 24
  * jamnya lewat, sementara layarnya berkata "Pembayaran Anda sedang diproses"
  * — kalimat yang tidak benar untuk orang yang tidak pernah membayar.
  *
  * Yang membakar, dan kenapa masing-masing:
- *   - `200` — token terbit, jadi Snap PASTI sudah memegang `order_id` itu.
- *   - `502` — rute sudah memanggil Snap dan Snap menolak. Ia mungkin sempat
+ *   - `200` — tautan terbit, jadi DOKU PASTI sudah memegang `order_id` itu.
+ *   - `502` — rute sudah memanggil DOKU dan DOKU menolak. Ia mungkin sempat
  *     mencatat `order_id`-nya; peramban tidak punya cara tahu.
  *   - jaringan mati — tidak ada jawaban sama sekali, jadi tidak ada yang bisa
- *     disimpulkan. Pesanannya mungkin sudah lahir dan tokennya mungkin sudah
+ *     disimpulkan. Pesanannya mungkin sudah lahir dan tautannya mungkin sudah
  *     terbit.
  * Menaikkan `percobaan` pada `order_id` yang ternyata BELUM terbakar hanya
  * memakai satu dari sembilan jatah (dan percobaan kesepuluh pun sudah punya
  * jalan keluarnya sendiri di RPC). Tidak menaikkannya pada yang SUDAH terbakar
  * mengunci pembeli. Dari dua arah salah, hanya satu yang murah.
  *
- * `400`/`401`/`403`/`409` TIDAK membakar: keempatnya berhenti sebelum Snap disentuh.
+ * `400`/`401`/`403`/`409` TIDAK membakar: keempatnya berhenti sebelum DOKU disentuh.
  */
 export async function mintaCheckout(
   produk: string | readonly string[],
@@ -290,16 +288,16 @@ export async function mintaCheckout(
   }
 
   const isi = (await jawab.json().catch(() => null)) as
-    | { token?: string; pesan?: string; pesananId?: string; kode?: string }
+    | { url?: string; pesan?: string; pesananId?: string; kode?: string }
     | null;
 
-  // 403 berhenti sebelum Snap disentuh (rute memeriksa persetujuan sebelum
+  // 403 berhenti sebelum DOKU disentuh (rute memeriksa persetujuan sebelum
   // RPC), jadi TIDAK membakar. Hanya `kode` yang membedakannya dari 403 lain.
   if (jawab.status === 403 && isi?.kode === "perlu_persetujuan") {
     return { hasil: { jenis: "persetujuan" }, orderIdTerbakar: false };
   }
 
-  if (!jawab.ok || !isi?.token) {
+  if (!jawab.ok || typeof isi?.url !== "string" || isi.url === "") {
     return {
       hasil: { jenis: "pesan", pesan: isi?.pesan ?? PESAN_COBA_LAGI },
       orderIdTerbakar: jawab.status === 502,
@@ -308,12 +306,28 @@ export async function mintaCheckout(
 
   return {
     hasil: {
-      jenis: "token",
-      token: isi.token,
+      jenis: "url",
+      url: isi.url,
       pesananId: typeof isi.pesananId === "string" ? isi.pesananId : null,
     },
     orderIdTerbakar: true,
   };
+}
+
+/**
+ * Checkout lalu ALIHKAN peramban ke halaman bayar DOKU (spec §5.1). `arahkan`
+ * dioper supaya keputusan "kapan beralih" bisa diuji tanpa jsdom: hanya
+ * `jenis: "url"` yang mengalihkan; 401/403/409/502/503/jaringan mati tidak.
+ */
+export async function mintaLaluAlihkan(
+  produk: string | readonly string[],
+  ulang: boolean,
+  arahkan: (url: string) => void,
+  ambil: typeof fetch = (...argumen) => fetch(...argumen),
+): Promise<{ hasil: HasilCheckout; orderIdTerbakar: boolean }> {
+  const r = await mintaCheckout(produk, ulang, ambil);
+  if (r.hasil.jenis === "url") arahkan(r.hasil.url);
+  return r;
 }
 
 export type HasilBatal =
@@ -357,7 +371,7 @@ export async function mintaBatal(
 /**
  * Bagian yang MURNI tampilan — dipisahkan supaya ketiga keadaannya bisa diuji
  * dengan render sungguhan (`tests/produk-tombol-beli.test.tsx`), bukan lewat
- * pembacaan teks sumber. Efek, jaringan, dan popup Snap tinggal di `TombolBeli`.
+ * pembacaan teks sumber. Efek, jaringan, dan alihan tinggal di `TombolBeli`.
  */
 export function PanelBeli({
   slug,
@@ -393,7 +407,7 @@ export function PanelBeli({
           . Halaman ini tidak perlu dimuat ulang terus-menerus.
         </p>
         {/* Pesan galat dirender DI SINI juga, bukan hanya di cabang "belum".
-            `onError` Snap menulis pesannya lalu membaca ulang keadaan, dan
+            pembatalan yang gagal menulis pesannya lalu membaca ulang keadaan, dan
             pembacaan itu memindahkan panel ke sini — kalau kalimatnya hanya
             hidup di cabang "belum", ia lenyap tepat pada kejadian yang paling
             butuh dijelaskan. */}
@@ -437,22 +451,12 @@ export function PanelBeli({
   );
 }
 
-/**
- * `produksi` dan `clientKey` DIOPER dari server (`page.tsx`), tidak dibaca di
- * sini. `MIDTRANS_PRODUKSI` tidak berprefix `NEXT_PUBLIC_`; membacanya dari
- * komponen klien memberi `undefined`, yang berarti sandbox — selamanya, di
- * produksi, tanpa satu pun galat.
- */
 export function TombolBeli({
   slug,
   productId,
-  produksi,
-  clientKey,
 }: {
   slug: string;
   productId: string;
-  produksi: boolean;
-  clientKey: string;
 }) {
   const [keadaan, setKeadaan] = useState<KeadaanBeli>("belum");
   const [barisPesanan, setBarisPesanan] = useState<readonly BarisPesananSaya[]>([]);
@@ -463,18 +467,8 @@ export function TombolBeli({
    * konservatif, yang memang tidak bisa berbuat lebih baik.
    */
   const [pesananSesi, setPesananSesi] = useState<string | null>(null);
-  /**
-   * Snap sudah MENERBITKAN instruksi bayar (VA, QRIS, deeplink e-wallet) —
-   * `onPending`. Pembatalan pada detik itu mengundang pesanan yang ditutup
-   * tepat saat setorannya mendarat, yaitu `lunas_setelah_tutup`: uang masuk,
-   * akses tidak terbit, dan seorang manusia harus memutuskannya. Karena itu
-   * keadaan ini SENGAJA tidak menawarkan pembatalan — aturan yang ditegakkan
-   * di sini, bukan akibat sampingan dari daftar pesanan yang kebetulan belum
-   * dibaca ulang.
-   */
-  const [pembayaranBerjalan, setPembayaranBerjalan] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
-  // "order_id pesanan terbuka saya sudah pernah dikirim ke Snap" — lihat
+  // "order_id pesanan terbuka saya sudah pernah dikirim ke DOKU" — lihat
   // dokblok `mintaCheckout`. Sekali menyala, setiap percobaan berikutnya minta
   // nomor percobaan baru, dan itulah satu-satunya jalan keluar dari 502 yang
   // berulang.
@@ -536,7 +530,7 @@ export function TombolBeli({
     return { keadaan: hasil, baris: (baris ?? []) as BarisPesananSaya[] };
   }, [productId]);
 
-  /** Pembacaan ulang yang dipicu callback Snap, bukan oleh pemasangan komponen. */
+  /** Pembacaan ulang yang dipicu sesudah aksi (batal), bukan oleh pemasangan komponen. */
   const segarkan = useCallback(async () => {
     const { keadaan: baru, baris } = await bacaKeadaan();
     setKeadaan(baru);
@@ -560,42 +554,30 @@ export function TombolBeli({
 
   /**
    * Pesanan yang tombol batal akan matikan, dihitung saat render dari dua
-   * sumber yang sudah ada — nol pembacaan tambahan. `pembayaranBerjalan`
-   * membungkamnya lebih dulu dan dengan sengaja; sisanya diputuskan
+   * sumber yang sudah ada — nol pembacaan tambahan. Diputuskan
    * `pesananYangBisaDibatalkan`, yang dokbloknya menjelaskan kenapa id sesi
    * menang atas tebakan.
    */
-  const idBatal = pembayaranBerjalan
-    ? null
-    : pesananYangBisaDibatalkan(barisPesanan, pesananSesi);
+  const idBatal = pesananYangBisaDibatalkan(barisPesanan, pesananSesi);
 
   function klik() {
     mulai(async () => {
       setPesan(null);
 
-      // FAIL CLOSED. `muatSkripSnap` menolak kunci kosong juga (di sanalah
-      // ujinya hidup); baris ini hanya memastikan pembeli mendapat kalimat
-      // yang SAMA dengan yang dipakai adapter server untuk keadaan yang sama
-      // persis — Midtrans belum dipasang.
-      if (clientKey.trim() === "") {
-        setPesan(PESAN_PEMBAYARAN_BELUM_AKTIF);
-        return;
-      }
-
-      try {
-        await muatSkripSnap(clientKey, produksi);
-      } catch {
-        setPesan(PESAN_TIDAK_BISA_DIBUKA);
-        return;
-      }
-
-      const { hasil, orderIdTerbakar } = await mintaCheckout(productId, orderIdTerpakai);
+      // 503 "Pembayaran belum aktif" datang dari rute (kunci DOKU kosong) dan
+      // tampil lewat cabang `pesan` di bawah; tidak ada pemeriksaan kunci di
+      // peramban lagi.
+      const { hasil, orderIdTerbakar } = await mintaLaluAlihkan(
+        productId,
+        orderIdTerpakai,
+        (url) => window.location.assign(url),
+      );
       if (orderIdTerbakar) setOrderIdTerpakai(true);
-      if (hasil.jenis === "token" && hasil.pesananId !== null) {
-        // Satu-satunya saat peramban tahu PASTI pesanan mana yang milik produk
-        // ini. Disimpan sebelum popup dibuka, karena `onError`/`onClose` bisa
-        // menyala kapan saja sesudahnya.
-        setPesananSesi(hasil.pesananId);
+      if (hasil.jenis === "url") {
+        // Peramban sedang dialihkan ke halaman bayar DOKU. Id pesanan tetap
+        // disimpan untuk kasus alihan tertahan (mis. tombol kembali dari bfcache).
+        if (hasil.pesananId !== null) setPesananSesi(hasil.pesananId);
+        return;
       }
 
       if (hasil.jenis === "masuk") {
@@ -623,46 +605,6 @@ export function TombolBeli({
         setPesan(hasil.pesan);
         return;
       }
-
-      if (!window.snap) {
-        // `muatSkripSnap` selesai tanpa galat tapi `window.snap` tidak ada:
-        // skrip diblokir pemblokir iklan, atau gagal memasang dirinya.
-        // `window.snap?.pay(...)` di sini akan menjadi no-op SENYAP — popup
-        // tidak terbuka, tidak ada pesan, tidak ada yang berubah, dan pembeli
-        // menekan tombol yang sudah terlanjur melahirkan pesanan.
-        setPesan(PESAN_TIDAK_BISA_DIBUKA);
-        return;
-      }
-
-      window.snap.pay(hasil.token, {
-        // `onSuccess` BUKAN sumber kebenaran pembayaran — yang memutuskan lunas
-        // hanyalah notifikasi bertanda tangan. Ia hanya memicu pembacaan ulang.
-        // Pada metode yang membawa pengguna keluar aplikasi (deeplink e-wallet)
-        // ia bisa tidak pernah menyala sama sekali, dan itu diterima sadar:
-        // pembeli menemukan produknya di Pembelian Saya saat ia kembali.
-        onSuccess: () => {
-          void segarkan();
-          router.refresh();
-        },
-        onPending: () => {
-          setKeadaan("menunggu");
-          // Lihat dokblok `pembayaranBerjalan`: instruksi bayar sudah terbit,
-          // jadi pembatalan ditutup SECARA EKSPLISIT sampai halaman dimuat
-          // ulang — bukan dibiarkan hilang sendiri karena daftar pesanannya
-          // kebetulan belum dibaca ulang.
-          setPembayaranBerjalan(true);
-        },
-        onClose: () => void segarkan(),
-        onError: () => {
-          setPesan("Pembayaran gagal. Silakan coba lagi.");
-          // Membaca ulang seperti `onClose`. Tanpa ini panel tetap "belum"
-          // dengan tombol beli yang hidup, dan menekannya memakai pesanan
-          // terbuka yang sama — `order_id` yang sudah terbakar, 502, selamanya.
-          // Sesudah pembacaan ini panel pindah ke "menunggu", kalimat di atas
-          // ikut terbawa, dan tombol batal memberi jalan keluar.
-          void segarkan();
-        },
-      });
     });
   }
 
