@@ -146,8 +146,8 @@ function Banding({
   kelas: string;
 }) {
   return (
-    <div className={`flex overflow-hidden rounded-[14px] ${kelas}`}>
-      <Image src={gambar} alt="" width={200} height={150} className="w-24 shrink-0 object-cover sm:w-40 xl:w-[200px]" />
+    <div className={`flex items-center overflow-hidden rounded-[14px] ${kelas}`}>
+      <Image src={gambar} alt="" width={160} height={160} className="my-4 ml-4 size-20 shrink-0 sm:my-6 sm:ml-6 sm:size-28 xl:size-36" />
       <div className="flex flex-col justify-center gap-3 p-4 sm:p-6">
         <h3 className="font-garamond text-[23px] leading-tight font-bold text-situs-judul sm:text-[26px]">{judul}</h3>
         <ul className="flex flex-col gap-2">

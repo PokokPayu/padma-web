@@ -121,13 +121,13 @@ function Isi({ waHref }: { waHref: string }) {
             </ul>
           </div>
           <Image
-            src="/situs/hero-ibu-bayi.png"
-            alt="Ibu menggendong bayi baru lahir"
+            src="/situs/hero-beranda.png"
+            alt="Ilustrasi perempuan dalam empat fase hidup, dari persiapan kehamilan hingga menopause"
             width={520}
-            height={446}
+            height={520}
             loading="eager"
             fetchPriority="high"
-            className="situs-lengkung self-center aspect-[520/446] w-full max-w-[400px] shrink-0 rounded-t-[999px] rounded-b-3xl object-cover sm:max-w-[460px] lg:w-[440px] lg:max-w-[520px] xl:w-[520px]"
+            className="situs-lengkung self-center aspect-square w-full max-w-[400px] shrink-0 sm:max-w-[460px] lg:w-[440px] lg:max-w-[520px] xl:w-[520px]"
           />
         </Wadah>
       </section>
@@ -145,8 +145,8 @@ function Isi({ waHref }: { waHref: string }) {
             className="-mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-5 px-5 pb-1 [scrollbar-width:none] focus-visible:outline-2 focus-visible:outline-situs-emas-pucat md:mx-0 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0 md:pb-0 [&::-webkit-scrollbar]:hidden"
           >
             {ALASAN.map((a) => (
-              <div key={a.judul} className="flex w-[80%] shrink-0 snap-start flex-col items-center overflow-hidden rounded-[14px] bg-situs-kartu pb-6 text-center md:w-auto">
-                <Image src={a.gambar} alt="" width={370} height={150} className="h-[150px] w-full object-cover" />
+              <div key={a.judul} className="flex w-[80%] shrink-0 snap-start flex-col items-center overflow-hidden rounded-[14px] bg-situs-kartu py-6 text-center md:w-auto">
+                <Image src={a.gambar} alt="" width={160} height={160} className="size-[136px] lg:size-[160px]" />
                 <h3 className="mt-3.5 mb-1.5 px-4 font-garamond text-2xl leading-tight font-bold text-situs-judul lg:text-[27px]">
                   {a.judul}
                 </h3>
@@ -186,9 +186,9 @@ function Isi({ waHref }: { waHref: string }) {
                   <Image
                     src={f.gambar}
                     alt=""
-                    width={150}
+                    width={128}
                     height={128}
-                    className="relative h-[75px] w-[88px] shrink-0 bg-situs-krem object-contain transition-transform duration-300 group-hover:-translate-y-1 md:h-[128px] md:w-[150px]"
+                    className="relative size-[88px] shrink-0 rounded-full bg-situs-krem transition-transform duration-300 group-hover:-translate-y-1 md:size-[128px]"
                   />
                   <div className="flex flex-col items-start gap-1.5 md:items-center md:gap-2.5">
                   <h3
@@ -232,8 +232,8 @@ function Isi({ waHref }: { waHref: string }) {
                   src={f.gambar}
                   alt=""
                   width={110}
-                  height={124}
-                  className="h-[100px] w-[88px] shrink-0 rounded-[10px] object-cover lg:h-[124px] lg:w-[110px]"
+                  height={110}
+                  className="size-[88px] shrink-0 lg:size-[110px]"
                 />
                 <div className="flex flex-col gap-2">
                   <h3 className="font-garamond text-2xl leading-tight font-bold text-situs-judul lg:text-[26px]">{f.judul}</h3>

@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from "vitest";
 import type React from "react";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as modBeranda from "@/app/page";
@@ -194,6 +194,16 @@ describe("situs publik — tata letak & batas", () => {
   it("gambar situs dilayani lewat next/image dari /situs", () => {
     for (const rute of semuaRute) {
       expect(markup[rute]).not.toMatch(/<img[^>]*src="\/situs\//);
+    }
+  });
+
+  it("setiap gambar /situs yang dirujuk sumber ada di public/situs", () => {
+    // next/image tidak gagal saat build bila berkasnya tidak ada — salah
+    // ketik nama hanya muncul sebagai gambar rusak di produksi.
+    const rujukan = new Set([...semuaSumber.matchAll(/"\/situs\/([^"]+)"/g)].map((x) => x[1]));
+    expect(rujukan.size).toBeGreaterThan(0);
+    for (const berkas of rujukan) {
+      expect(existsSync(path.join(AKAR, "public/situs", berkas)), berkas).toBe(true);
     }
   });
 });
