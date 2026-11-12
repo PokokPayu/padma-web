@@ -198,6 +198,37 @@ describe("invarian satu pesanan terbuka", () => {
   });
 });
 
+describe("definisi buat_pesanan_keranjang (penjaga deterministik)", () => {
+  async function badan(): Promise<string> {
+    const r = await querySql<{ d: string }>(
+      `select pg_get_functiondef('public.buat_pesanan_keranjang(uuid[], boolean)'::regprocedure) as d`,
+    );
+    return r[0].d;
+  }
+
+  it("handler unique_violation mengenal nama kendala baru, bukan yang lama", async () => {
+    // Balapan di bawah hanya bukti perilaku dan tidak selalu menyentuh
+    // handler; yang deterministik adalah isi fungsi yang hidup.
+    const d = await badan();
+    expect(d).toContain("v_kendala = 'pesanan_produk_terbuka_satu_per_klien'");
+    expect(d).not.toContain("'pesanan_terbuka_satu_per_klien'");
+  });
+
+  it("KEDUA pemilihan pesanan terbuka (awal dan di handler) memikul filter produk", async () => {
+    // Dua klausa `from public.orders o where client_id + menunggu_bayar`
+    // persis; masing-masing wajib langsung disusul `o.jenis = 'produk_digital'`.
+    const d = await badan();
+    const semua = d.match(
+      /from public\.orders o\s+where o\.client_id = v_client_id and o\.status = 'menunggu_bayar'/g,
+    );
+    const berfilter = d.match(
+      /from public\.orders o\s+where o\.client_id = v_client_id and o\.status = 'menunggu_bayar'\s+and o\.jenis = 'produk_digital'/g,
+    );
+    expect(semua).toHaveLength(2);
+    expect(berfilter).toHaveLength(2);
+  });
+});
+
 describe("balapan checkout produk", () => {
   it("panggilan paralel yang kalah balapan lewat indeks baru dipulangkan ke pesanan yang menang, tanpa galat", async () => {
     // Pemilihan pesanan terbuka tidak mengunci baris yang belum ada, jadi
