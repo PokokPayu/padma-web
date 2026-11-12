@@ -180,10 +180,10 @@ export function stempelJakarta(iso: string): string {
  * "26 Des 2026 – 1 Jan 2027".
  */
 export function rentangPekan(tgl: string): string {
-  const senin = awalPekan(tgl);
-  const minggu = akhirPekan(senin);
-  const a = bagian(senin);
-  const b = bagian(minggu);
+  const awal = awalPekan(tgl);
+  const akhir = akhirPekan(awal);
+  const a = bagian(awal);
+  const b = bagian(akhir);
 
   const kanan = `${b.hari} ${b.bulan} ${b.tahun}`;
   if (a.tahun !== b.tahun) return `${a.hari} ${a.bulan} ${a.tahun} – ${kanan}`;
