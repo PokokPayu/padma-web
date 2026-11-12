@@ -101,8 +101,14 @@ const POLA_DIGIT_TELANJANG = /(?<![\w.:-])\d{4,}(?![\w-])/;
  * kartu yang dicurigai). Assignment KETIGA (`:414`, di dalam cabang
  * refund/chargeback/asing) sudah `return` di `:426` sebelum baris `:548`
  * tercapai — tidak pernah ikut. Kedua nilai inilah, dan HANYA itu.
+ *
+ * `terapkan_notifikasi_gateway` (`20261113130100`, tugas A4) menambah satu:
+ * `lunas_setelah_tutup` kini menulis `ditagih %s, diterima %s` juga, karena
+ * staf yang memutuskan uang pada pesanan tertutup butuh kedua angkanya. Penulis
+ * angka di fungsi itu: `lunas_setelah_tutup`, `selisih_status` (pesanan
+ * ditahan), dan `selisih_nominal` (pesanan lunas & transisi ke ditahan).
  */
-const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status"]);
+const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status", "lunas_setelah_tutup"]);
 
 const svc = createAdminSupabase();
 
