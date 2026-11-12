@@ -421,6 +421,25 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     },
   );
 
+  it("403 perlu_persetujuan → jenis persetujuan, TIDAK membakar order_id", async () => {
+    const ambil = fetchPalsu({ status: 403, isi: { kode: "perlu_persetujuan", pesan: "Setujui dulu." } });
+    const hasil = await mintaCheckout("produk-1", false, ambil);
+    expect(hasil).toEqual({ hasil: { jenis: "persetujuan" }, orderIdTerbakar: false });
+  });
+
+  it("403 TANPA kode persetujuan tetap jadi pesan biasa", async () => {
+    const ambil = fetchPalsu({ status: 403, isi: { pesan: "Ditolak." } });
+    const hasil = await mintaCheckout("produk-1", false, ambil);
+    expect(hasil).toEqual({ hasil: { jenis: "pesan", pesan: "Ditolak." }, orderIdTerbakar: false });
+  });
+
+  it("tombol beli dan keranjang sama-sama membawa pembeli ke /persetujuan", () => {
+    const tombol = readFileSync(path.resolve(__dirname, "../src/app/produk/[slug]/tombol-beli.tsx"), "utf8");
+    const keranjang = readFileSync(path.resolve(__dirname, "../src/app/passport/keranjang/isi-keranjang.tsx"), "utf8");
+    expect(tombol).toMatch(/hasil\.jenis === "persetujuan"[\s\S]{0,400}\/persetujuan\?lanjut=/);
+    expect(keranjang).toMatch(/hasil\.jenis === "persetujuan"[\s\S]{0,200}"\/persetujuan"/);
+  });
+
   it("401 memulangkan 'masuk', dan tidak membakar apa pun", async () => {
     const ambil = fetchPalsu({ status: 401, isi: { pesan: "Silakan masuk dulu." } });
     const hasil = await mintaCheckout("produk-1", false, ambil);

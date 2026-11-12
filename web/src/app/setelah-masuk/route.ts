@@ -5,6 +5,8 @@ import { COOKIE_UNDANGAN } from "@/lib/auth/link-client";
 import { pastikanKlien } from "@/lib/auth/pastikan-klien";
 import { COOKIE_KLAIM, klaimSkrining } from "@/lib/skrining/klaim";
 import { COOKIE_LANJUT, tujuanProdukAman } from "@/lib/auth/tujuan-produk";
+import { COOKIE_SETUJU } from "@/lib/persetujuan/cookie";
+import { catatPersetujuanDariCookie } from "@/lib/persetujuan/catat";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -16,15 +18,31 @@ export async function GET(request: Request) {
     .from("profiles").select("role").eq("id", user.id).single();
   const role = profile?.role ?? "klien";
 
-  if (role === "owner") return NextResponse.redirect(new URL("/owner", url.origin));
-  if (role === "admin") return NextResponse.redirect(new URL("/admin", url.origin));
+  const jar = await cookies();
+
+  if (role === "owner" || role === "admin") {
+    const staf = NextResponse.redirect(new URL(role === "owner" ? "/owner" : "/admin", url.origin));
+    // Staf tidak menyetujui dokumen klien, tetapi sisa cookie pendaftaran di
+    // peramban bersama tetap dibuang — jangan biarkan ia menunggu klien
+    // berikutnya (temuan review akhir #1).
+    if (jar.get(COOKIE_SETUJU)) staf.cookies.delete(COOKIE_SETUJU);
+    return staf;
+  }
+
+  // PERSETUJUAN DARI FORM /daftar (spec 2026-10-06 S&K).
+  //
+  // Dicatat SEBELUM penautan, dengan sesi klien sendiri: persetujuan milik
+  // AKUN, bukan baris klien. `catatPersetujuanDariCookie` tidak pernah melempar
+  // dan menolak cookie berversi lama — gagal mencatat TIDAK menggagalkan login;
+  // gerbang di layout /passport menangkap klien yang tidak tercatat di sini.
+  const nilaiSetuju = jar.get(COOKIE_SETUJU)?.value;
+  if (nilaiSetuju) await catatPersetujuanDariCookie(supabase, user, nilaiSetuju);
 
   // Klien. Seluruh keputusan penautan — termasuk urutannya, yang justru
   // merupakan keamanannya — hidup di SATU tempat: `pastikanKlien`. Rute ini
   // sengaja tidak menyimpan cabang keamanannya sendiri; aturan yang disalin ke
   // dua tempat adalah aturan yang bisa berpisah diam-diam, dan begitulah kedua
   // celah penautan terdahulu lahir (lihat src/lib/auth/link-client.ts).
-  const jar = await cookies();
   const token = jar.get(COOKIE_UNDANGAN)?.value ?? "";
 
   const tujuan = await pastikanKlien(user, token);
@@ -79,5 +97,7 @@ export async function GET(request: Request) {
   // Dihapus apa pun hasilnya: tujuan yang tidak dipakai sekarang tidak boleh
   // membajak login berikutnya satu jam kemudian.
   if (jar.get(COOKIE_LANJUT)) response.cookies.delete(COOKIE_LANJUT);
+  // Sekali pakai, apa pun hasilnya — seperti token undangan di atas.
+  if (nilaiSetuju) response.cookies.delete(COOKIE_SETUJU);
   return response;
 }

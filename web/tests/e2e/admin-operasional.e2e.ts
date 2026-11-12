@@ -41,6 +41,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
 
 config({ path: [".env.local", ".env"] });
 
@@ -303,6 +304,7 @@ async function main() {
       user_metadata: { full_name: NAMA_KLIEN },
     });
     if (userErr) throw userErr;
+    await setujuiDokumenUntukUji(admin, userBaru.user!.id);
 
     const ctxKlien = await browser.newContext();
     const halamanKlien = await ctxKlien.newPage();

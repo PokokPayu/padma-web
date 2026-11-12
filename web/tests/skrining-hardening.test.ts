@@ -31,7 +31,12 @@ function req(body: unknown, hopKlien = `203.0.113.${++nomor}`, hopProxy = HOP_PR
   return new Request("http://localhost/api/skrining", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": `${hopKlien}, ${hopProxy}` },
-    body: JSON.stringify(body),
+    // Persetujuan wajib sejak spec 2026-10-06. Disisipkan di sini supaya setiap
+    // kasus lama tetap menguji hal yang memang ia uji; kasus yang menguji
+    // ketiadaan persetujuan menulis Request-nya sendiri.
+    body: JSON.stringify(
+      body && typeof body === "object" && !Array.isArray(body) ? { setuju_privasi: true, ...body } : body,
+    ),
   });
 }
 

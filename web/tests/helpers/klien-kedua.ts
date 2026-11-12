@@ -1,4 +1,5 @@
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { setujuiDokumenUntukUji } from "./persetujuan";
 
 /**
  * KLIEN KEDUA BER-AKUN AUTH — fixture yang dibuat sendiri, bukan seed.
@@ -60,6 +61,10 @@ export async function siapkanKlienKedua(): Promise<string> {
   });
   if (eKlien) throw eKlien;
 
+  // Tanpa ini checkout klien kedua dijawab 403 `perlu_persetujuan`
+  // (spec 2026-10-06) dan uji pesanan menguji gerbang yang salah.
+  await setujuiDokumenUntukUji(svc, data.user!.id);
+
   return KLIEN_KEDUA_ID;
 }
 
@@ -89,6 +94,8 @@ export async function bongkarKlienKedua(): Promise<void> {
   const { data } = await svc.auth.admin.listUsers({ perPage: 1000 });
   for (const u of data?.users ?? []) {
     if (u.email?.toLowerCase() === EMAIL_KLIEN_KEDUA) {
+      // Tanpa FK (sengaja, spec 2026-10-06) — jadi dibersihkan manual.
+      await svc.from("persetujuan_akun").delete().eq("user_id", u.id);
       await svc.auth.admin.deleteUser(u.id);
     }
   }

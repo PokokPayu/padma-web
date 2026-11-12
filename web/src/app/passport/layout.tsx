@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { ambilKlien } from "@/lib/passport/data";
+import { statusPersetujuan } from "@/lib/persetujuan/status";
 import { HeaderMobile } from "./header-mobile";
 import { NavPassport } from "./nav";
 
@@ -13,12 +14,20 @@ export default async function PassportLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole(["klien"]);
+  const { userId } = await requireRole(["klien"]);
 
   // User berperan klien yang belum tertaut ke baris clients bukan error —
   // arahkan ke halaman ramah, jangan biarkan query meledak PGRST116.
   const klien = await ambilKlien();
   if (!klien) redirect("/akun-belum-terhubung");
+
+  // GERBANG PERSETUJUAN (spec 2026-10-06). Sesudah resolusi klien: akun yang
+  // belum tertaut tetap ke /akun-belum-terhubung lebih dulu. Ini PENCATAT
+  // persetujuan, bukan batas keamanan — rute API di bawah /passport sengaja
+  // tidak memeriksanya; satu-satunya pengecualian adalah checkout, karena ia
+  // bisa dicapai tanpa pernah membuka /passport. Pembacaannya gagal-terbuka
+  // (lihat lib/persetujuan/status.ts).
+  if (!(await statusPersetujuan(userId)).sudahSetuju) redirect("/persetujuan");
 
   return (
     <div className="min-h-screen bg-paper">

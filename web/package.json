@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:murni": "vitest run --config vitest.murni.config.ts",
     "test:e2e": "tsx tests/e2e/access-matrix.e2e.ts",
     "test:e2e:daftar": "tsx tests/e2e/daftar-mandiri.e2e.ts",
     "test:e2e:funnel": "tsx tests/e2e/funnel-skrining.e2e.ts",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { InputSandi } from "@/app/_auth/input-sandi";
 import { periksaPendaftaran } from "@/lib/auth/daftar";
+import { buangPersetujuanDiPeramban, titipPersetujuanDiPeramban } from "@/lib/persetujuan/cookie";
 
 export function FormDaftar() {
   const [nama, setNama] = useState("");
@@ -12,11 +13,16 @@ export function FormDaftar() {
   const [sandi, setSandi] = useState("");
   const [pesan, setPesan] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
+  const [setuju, setSetuju] = useState(false);
   const supabase = createBrowserSupabase();
 
   async function daftarEmail(e: React.FormEvent) {
     e.preventDefault();
     setPesan(null);
+    if (!setuju) {
+      setPesan("Centang persetujuan Syarat & Ketentuan dan Kebijakan Privasi lebih dulu.");
+      return;
+    }
 
     const hasil = periksaPendaftaran({ nama, email, noHp, sandi });
     if (!hasil.ok) {
@@ -25,6 +31,10 @@ export function FormDaftar() {
     }
 
     setSibuk(true);
+    // Dititipkan SEBELUM signUp: `/setelah-masuk` mencatatnya saat tautan
+    // konfirmasi dibuka di peramban ini (spec 2026-10-06). Dibuka di perangkat
+    // lain → cookie tidak ikut → gerbang /persetujuan yang menangkap.
+    titipPersetujuanDiPeramban();
     const { error } = await supabase.auth.signUp({
       email: hasil.nilai.email,
       password: sandi,
@@ -45,6 +55,9 @@ export function FormDaftar() {
       // menebak siapa saja yang sudah jadi klien PADMA. JANGAN "perbaiki"
       // ini jadi pesan spesifik meski terasa lebih ramah pengguna.
       setPesan("Pendaftaran belum berhasil. Periksa kembali data Anda, atau coba masuk bila sudah punya akun.");
+      // Tidak ada akun yang lahir — cookie persetujuan tidak boleh tertinggal
+      // untuk login berikutnya di peramban ini (temuan review akhir #1).
+      buangPersetujuanDiPeramban();
       setSibuk(false);
       return;
     }
@@ -53,6 +66,8 @@ export function FormDaftar() {
   }
 
   async function daftarGoogle() {
+    if (!setuju) return;
+    titipPersetujuanDiPeramban();
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/auth/callback` },
@@ -86,16 +101,34 @@ export function FormDaftar() {
         />
       </label>
       <InputSandi label="Kata sandi" value={sandi} onChange={setSandi} />
+      <label className="flex gap-3 text-sm text-ink-soft">
+        <input
+          type="checkbox" checked={setuju}
+          onChange={(e) => setSetuju(e.target.checked)}
+          className="mt-0.5 h-[18px] w-[18px] shrink-0"
+        />
+        <span>
+          Saya menyetujui{" "}
+          <a href="/syarat-ketentuan" target="_blank" rel="noopener noreferrer" className="font-semibold text-leaf underline">
+            Syarat & Ketentuan
+          </a>{" "}
+          dan{" "}
+          <a href="/kebijakan-privasi" target="_blank" rel="noopener noreferrer" className="font-semibold text-leaf underline">
+            Kebijakan Privasi
+          </a>
+          .
+        </span>
+      </label>
       {pesan && <p className="text-sm text-clay">{pesan}</p>}
       <button
-        type="submit" disabled={sibuk}
+        type="submit" disabled={sibuk || !setuju}
         className="w-full rounded-lg bg-night py-3 font-bold text-gold-pale disabled:opacity-50"
       >
         {sibuk ? "Memproses..." : "Daftar"}
       </button>
       <button
-        type="button" onClick={daftarGoogle}
-        className="w-full rounded-lg border border-black/15 bg-white py-3 font-bold"
+        type="button" onClick={daftarGoogle} disabled={!setuju}
+        className="w-full rounded-lg border border-black/15 bg-white py-3 font-bold disabled:opacity-50"
       >
         Daftar dengan Google
       </button>

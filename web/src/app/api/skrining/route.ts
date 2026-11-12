@@ -6,6 +6,7 @@ import { buatKodeSkrining } from "@/lib/skrining/kode";
 import { SkemaSkriningPublik } from "@/lib/skrining/skema";
 import { kunciPembatas, terlaluSering } from "@/lib/skrining/pembatas";
 import { terbitkanTokenKlaim, COOKIE_KLAIM, KLAIM_TTL_JAM } from "@/lib/skrining/klaim";
+import { capPersetujuanSkrining } from "@/lib/persetujuan/skrining";
 
 // Rute ini PUBLIK (tanpa auth) tetapi menulis dengan SERVICE ROLE. Karena itu
 // urutan pemeriksaan penting: yang paling murah dan paling membatasi dulu.
@@ -107,6 +108,9 @@ export async function POST(request: Request) {
         jawaban: { ...jawabanBersih, dihentikan_pada: penilaian.dihentikanPada },
         hasil: penilaian.hasil,
         flags: penilaian.flags,
+        // Versi dicap SERVER, bukan dari body (spec 2026-10-06). Skema sudah
+        // menolak kiriman tanpa `setuju_privasi: true`.
+        ...capPersetujuanSkrining(),
       })
       .select("id")
       .single<{ id: string }>();

@@ -55,6 +55,7 @@ import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
 import { varianBaku } from "../helpers/varian";
 import { PAKET_TAMPIL } from "@/lib/paket-tampil";
 
@@ -295,6 +296,7 @@ async function main() {
     });
     if (eUser) throw eUser;
     const UID_KLIEN = userBaru.user!.id;
+    await setujuiDokumenUntukUji(admin, UID_KLIEN);
 
     const { data: klienUji, error: eKlien } = await admin
       .from("clients")

@@ -5,6 +5,7 @@ import { terbitkanTokenSnap } from "@/lib/midtrans/adapter";
 import { midtransProduksi } from "@/lib/midtrans/konfig";
 import { rakitOrderId } from "@/lib/pesanan/order-id";
 import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
+import { statusPersetujuan } from "@/lib/persetujuan/status";
 
 /**
  * CHECKOUT — rute TIPIS. Satu kalimat arsitektur, supaya tiga penyebutan tidak
@@ -39,6 +40,18 @@ type BarisPesanan = {
 export async function POST(request: Request) {
   const user = await penggunaSaatIni();
   if (!user) return NextResponse.json({ pesan: "Silakan masuk dulu." }, { status: 401 });
+
+  // PERSETUJUAN S&K (spec 2026-10-06). Tombol beli di /produk/[slug] bisa
+  // dicapai tanpa pernah membuka /passport, jadi gerbang layout tidak pernah
+  // melihat pembeli ini. 403 + `kode`, BUKAN 409: 409 sudah berarti "pesanan
+  // terbuka" dan "gagal membuat pesanan" di rute ini, dan `mintaCheckout`
+  // harus bisa membedakannya.
+  if (!(await statusPersetujuan(user.id)).sudahSetuju) {
+    return NextResponse.json(
+      { kode: "perlu_persetujuan", pesan: "Setujui Syarat & Ketentuan lebih dulu." },
+      { status: 403 },
+    );
+  }
 
   let badan: unknown;
   try {

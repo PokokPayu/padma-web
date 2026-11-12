@@ -22,7 +22,8 @@ export function SitusShell({
   pengaturan,
   children,
 }: {
-  aktif: HalamanSitus;
+  /** Kosong untuk halaman di luar menu (mis. dokumen hukum): tidak ada item nav yang menyala. */
+  aktif?: HalamanSitus;
   pengaturan: Pengaturan;
   children: ReactNode;
 }) {

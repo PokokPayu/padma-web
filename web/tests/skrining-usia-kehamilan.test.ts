@@ -74,7 +74,9 @@ describe("usia kehamilan — batas trimester", () => {
 });
 
 describe("skema skrining — usia kehamilan", () => {
-  const dasar = { nama: "Sinta", no_hp: "081234567890", jawaban: { fever: false } };
+  // `setuju_privasi` wajib sejak spec 2026-10-06; tanpanya setiap kasus di
+  // bawah gagal karena alasan yang bukan usia kehamilan.
+  const dasar = { nama: "Sinta", no_hp: "081234567890", jawaban: { fever: false }, setuju_privasi: true as const };
   const hamil = { ...dasar, fase: "kehamilan" as const };
 
   it("skrining tanpa usia kehamilan tetap sah — medannya opsional", () => {

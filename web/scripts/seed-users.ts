@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { createClientInvite } from "../src/lib/auth/link-client";
 import { namaObjekHalaman } from "../src/lib/materi/rasterisasi";
+import { VERSI_DOKUMEN } from "../src/lib/persetujuan/versi";
 
 // Kredensial dev ada di .env.local (lihat vitest.config.ts yang memakai
 // DOTENV_CONFIG_PATH=".env.local"); .env dipakai sebagai cadangan.
@@ -295,6 +296,19 @@ export async function seedUsers() {
     { onConflict: "padma_id" },
   );
   if (cErr) throw cErr;
+
+  // Ananda dianggap SUDAH menyetujui S&K + Kebijakan Privasi versi berlaku
+  // (spec 2026-10-06), supaya demo dev, uji vitest, dan e2e yang memakainya
+  // tidak dibelokkan ke /persetujuan. Gerbang itu sendiri diuji e2e passport
+  // dengan MENGHAPUS baris ini lebih dulu. Upsert: aman diulang, dan versi
+  // baru otomatis tersemai begitu VERSI_DOKUMEN dinaikkan.
+  const { error: pErr } = await admin
+    .from("persetujuan_akun")
+    .upsert(
+      { user_id: ananda.id, versi: VERSI_DOKUMEN, jalur: "gerbang" },
+      { onConflict: "user_id,versi", ignoreDuplicates: true },
+    );
+  if (pErr) throw pErr;
 
   // Dijalankan SESUDAH upsert di atas, bukan sebelumnya: upsert itulah yang
   // melepas `clients.user_id` Rina, dan `clients.user_id -> auth.users(id)`

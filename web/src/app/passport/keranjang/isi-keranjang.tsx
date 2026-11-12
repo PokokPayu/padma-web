@@ -79,6 +79,12 @@ export function IsiKeranjang({
         router.push("/masuk");
         return;
       }
+      if (hasil.jenis === "persetujuan") {
+        // Halaman keranjang yang terbuka sejak sebelum dokumen diperbarui —
+        // layout tidak dirender ulang, jadi rutenya yang menangkap.
+        router.push("/persetujuan");
+        return;
+      }
       if (hasil.jenis === "pesan") {
         setPesan(hasil.pesan);
         // 409 (ditolak gerbang, mis. pesanan terbuka lain) → baca ulang supaya

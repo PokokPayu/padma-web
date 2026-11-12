@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { POST } from "@/app/api/skrining/route";
+import { VERSI_DOKUMEN } from "@/lib/persetujuan/versi";
 
 const admin = createAdminSupabase();
 const dibuat: string[] = [];
@@ -15,7 +16,12 @@ function req(body: unknown, ip = `203.0.113.${++nomorIp}`) {
   return new Request("http://localhost/api/skrining", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": ip },
-    body: JSON.stringify(body),
+    // Persetujuan wajib sejak spec 2026-10-06. Disisipkan di sini supaya setiap
+    // kasus lama tetap menguji hal yang memang ia uji; kasus yang menguji
+    // ketiadaan persetujuan menulis Request-nya sendiri.
+    body: JSON.stringify(
+      body && typeof body === "object" && !Array.isArray(body) ? { setuju_privasi: true, ...body } : body,
+    ),
   });
 }
 
@@ -102,6 +108,37 @@ describe("POST /api/skrining", () => {
     const lain = await POST(req(payload, "198.51.100.8"));
     expect(lain.status).toBe(201);
     dibuat.push((await lain.json()).kode);
+  });
+
+  it("menolak kiriman TANPA persetujuan data kesehatan (400), tanpa menyimpan apa pun", async () => {
+    const res = await POST(new Request("http://localhost/api/skrining", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++nomorIp}` },
+      body: JSON.stringify({ nama: "Uji Tanpa Setuju", no_hp: "0812-0000-0099", fase: "menopause", jawaban: {} }),
+    }));
+    expect(res.status).toBe(400);
+    const { count } = await admin
+      .from("screenings")
+      .select("id", { count: "exact", head: true })
+      .eq("nama", "Uji Tanpa Setuju");
+    expect(count).toBe(0);
+  });
+
+  it("versi persetujuan DICAP SERVER — versi kiriman peramban diabaikan", async () => {
+    const res = await POST(req({
+      nama: "Uji Cap Versi", no_hp: "0812-0000-0098", fase: "menopause", jawaban: {},
+      persetujuan_versi: "1999-01-01", // peramban mencoba menentukan versinya sendiri
+    }));
+    expect(res.status).toBe(201);
+    const { kode } = await res.json();
+    dibuat.push(kode);
+    const { data } = await admin
+      .from("screenings")
+      .select("persetujuan_versi, persetujuan_pada")
+      .eq("kode", kode)
+      .single();
+    expect(data!.persetujuan_versi).toBe(VERSI_DOKUMEN);
+    expect(data!.persetujuan_pada).toBeTruthy();
   });
 
   it("anon TIDAK bisa insert langsung ke tabel (harus lewat endpoint)", async () => {
