@@ -656,12 +656,15 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
   // tidak akan pernah dipanggil siapa pun untuk sesi yang lahir dari sini.
   // Alamat SESI ini sendiri belum ada (jalur langsung tidak mengumpulkannya),
   // jadi alamat DEFAULT klien dipakai sebagai perkiraan — persis keputusan
-  // yang sama dipakai pratinjau di form-sesi.tsx.
+  // yang sama dipakai pratinjau di form-sesi.tsx. Alamat itu juga DISALIN ke
+  // baris sesi di bawah: tanpanya Passport menampilkan "Tempat: —" dan jenjang
+  // tersimpan tanpa alamat yang menjelaskannya. Jalur konfirmasi permintaan
+  // menyalin alamat dari baris permintaannya dengan cara yang sama.
   const [{ data: klien }, { data: layanan }, { data: varian }, { data: mitra }] =
     await Promise.all([
       supabase
         .from("clients")
-        .select("id, alamat_lat, alamat_lon")
+        .select("id, alamat, alamat_lat, alamat_lon")
         .eq("id", clientId)
         .maybeSingle(),
       supabase
@@ -760,6 +763,9 @@ export async function jadwalkanSesi(formData: FormData): Promise<Berhasil | Gaga
     partner_id: partnerId,
     tanggal,
     jam_mulai: jam,
+    alamat: klien.alamat,
+    alamat_lat: klien.alamat_lat,
+    alamat_lon: klien.alamat_lon,
     status: "terjadwal",
     catatan: "",
     rekomendasi: "",
