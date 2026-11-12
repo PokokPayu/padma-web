@@ -25,10 +25,14 @@ export function IsiKeranjang({
   terbuka: { id: string; kode: string } | null;
 }) {
   const [pesan, setPesan] = useState<string | null>(null);
-  // Lihat dokblok `mintaCheckout`: sekali invoice terkirim ke DOKU, setiap
-  // percobaan berikutnya wajib `ulang: true`.
+  // Lihat dokblok `mintaCheckout`: tautan yang masih berlaku dipakai ulang;
+  // `ulang: true` hanya sesudah pembuatan tautan gagal atau ambigu (502/jaringan).
   const [orderIdTerpakai, setOrderIdTerpakai] = useState(false);
-  const [pending, mulai] = useTransition();
+  const [pendingTrans, mulai] = useTransition();
+  // Tetap true sesudah alihan dimulai: `pendingTrans` kembali false begitu
+  // `assign` selesai, padahal peramban masih memuat DOKU.
+  const [dialihkan, setDialihkan] = useState(false);
+  const pending = pendingTrans || dialihkan;
   const router = useRouter();
 
   const siap = item.filter((i) => i.keadaan === "siap");
@@ -56,6 +60,11 @@ export function IsiKeranjang({
         (url) => window.location.assign(url),
       );
       if (orderIdTerbakar) setOrderIdTerpakai(true);
+      if (hasil.jenis === "url") {
+        setOrderIdTerpakai(false);
+        setDialihkan(true);
+        return;
+      }
 
       if (hasil.jenis === "masuk") {
         router.push("/masuk");

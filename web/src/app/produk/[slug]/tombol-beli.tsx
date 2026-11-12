@@ -233,34 +233,27 @@ export type HasilCheckout =
 /**
  * SATU percobaan checkout, sebagai fungsi murni yang menerima `fetch`-nya.
  *
- * ===== `orderIdTerbakar` ADALAH SELURUH ALASAN FUNGSI INI ADA =====
- * DOKU dapat menolak invoice kembar. Begitu sebuah `order_id`
- * pernah dikirim ke DOKU, satu-satunya jalan keluar adalah menaikkan
- * `percobaan` — dan itu persis yang dilakukan `buat_pesanan(p_ulang := true)`
- * (`20260926130000:210-222`, yang komentarnya sendiri berbunyi "`percobaan`
- * dinaikkan HANYA di sini: saat DOKU menolak menerbitkan tautan dan
- * order_id-nya sudah terbakar").
+ * ===== `orderIdTerbakar`: KAPAN INVOICE BARU BOLEH LAHIR =====
+ * Tautan DOKU yang masih berlaku DIPAKAI ULANG oleh server
+ * (`terbitkanTautanBayar`): `ulang: false` dua kali berturut-turut memberi
+ * URL yang sama dan satu panggilan DOKU. `ulang: true` menaikkan `percobaan`
+ * dan mengosongkan `tautan_gateway` (`buat_pesanan(p_ulang := true)`), jadi
+ * DOKU menerbitkan invoice BARU sementara yang lama masih bisa dibayar —
+ * dua tagihan terbayar untuk satu pesanan, dan refund manual (spec §5.3).
+ * Karena itu invoice baru hanya boleh lahir bila pembuatan tautan GAGAL atau
+ * jawabannya AMBIGU:
+ *   - `502` — rute sudah memanggil DOKU dan gagal. Invoice itu mungkin sudah
+ *     tercatat di DOKU; peramban tidak punya cara tahu. Membakar.
+ *   - jaringan mati — tidak ada jawaban, tidak ada yang bisa disimpulkan.
+ *     Membakar.
+ *   - `200` — tautan terbit dan akan dipakai ulang. TIDAK membakar: tekan
+ *     kedua (klik ganda saat peramban memuat DOKU, atau Kembali lewat
+ *     bfcache) harus memakai tautan yang sama.
+ * Menaikkan `percobaan` pada invoice yang ternyata BELUM terbakar hanya memakai
+ * satu dari sembilan jatah; tidak menaikkannya pada yang SUDAH gagal mengunci
+ * pembeli pada 502 yang berulang.
  *
- * Tanpa pulangan ini, percobaan berikutnya mengirim `ulang: false`,
- * `buat_pesanan` memulangkan pesanan terbuka yang SAMA berikut `kode` dan
- * `percobaan` yang sama, rute merakit `order_id` yang sama, DOKU menolaknya
- * lagi, dan 502 itu berulang SELAMANYA. Pembeli terkunci sampai tenggat 24
- * jamnya lewat, sementara layarnya berkata "Pembayaran Anda sedang diproses"
- * — kalimat yang tidak benar untuk orang yang tidak pernah membayar.
- *
- * Yang membakar, dan kenapa masing-masing:
- *   - `200` — tautan terbit, jadi DOKU PASTI sudah memegang `order_id` itu.
- *   - `502` — rute sudah memanggil DOKU dan DOKU menolak. Ia mungkin sempat
- *     mencatat `order_id`-nya; peramban tidak punya cara tahu.
- *   - jaringan mati — tidak ada jawaban sama sekali, jadi tidak ada yang bisa
- *     disimpulkan. Pesanannya mungkin sudah lahir dan tautannya mungkin sudah
- *     terbit.
- * Menaikkan `percobaan` pada `order_id` yang ternyata BELUM terbakar hanya
- * memakai satu dari sembilan jatah (dan percobaan kesepuluh pun sudah punya
- * jalan keluarnya sendiri di RPC). Tidak menaikkannya pada yang SUDAH terbakar
- * mengunci pembeli. Dari dua arah salah, hanya satu yang murah.
- *
- * `400`/`401`/`403`/`409` TIDAK membakar: keempatnya berhenti sebelum DOKU disentuh.
+ * `400`/`401`/`403`/`409`/`503` TIDAK membakar: kelimanya berhenti sebelum DOKU disentuh.
  */
 export async function mintaCheckout(
   produk: string | readonly string[],
@@ -310,7 +303,7 @@ export async function mintaCheckout(
       url: isi.url,
       pesananId: typeof isi.pesananId === "string" ? isi.pesananId : null,
     },
-    orderIdTerbakar: true,
+    orderIdTerbakar: false,
   };
 }
 
@@ -473,7 +466,11 @@ export function TombolBeli({
   // nomor percobaan baru, dan itulah satu-satunya jalan keluar dari 502 yang
   // berulang.
   const [orderIdTerpakai, setOrderIdTerpakai] = useState(false);
-  const [pending, mulai] = useTransition();
+  const [pendingTrans, mulai] = useTransition();
+  // Tetap true sesudah alihan dimulai: `pendingTrans` kembali false begitu
+  // `assign` selesai, padahal peramban masih memuat DOKU.
+  const [dialihkan, setDialihkan] = useState(false);
+  const pending = pendingTrans || dialihkan;
   const router = useRouter();
 
   // LAPIS 1b DI HALAMAN PUBLIK (spec "Rekonsiliasi").
@@ -574,6 +571,10 @@ export function TombolBeli({
       );
       if (orderIdTerbakar) setOrderIdTerpakai(true);
       if (hasil.jenis === "url") {
+        // Sukses: kegagalan lama sudah teratasi, tekan berikutnya memakai
+        // tautan yang sama. Tombol dikunci sampai halaman ditinggalkan.
+        setOrderIdTerpakai(false);
+        setDialihkan(true);
         // Peramban sedang dialihkan ke halaman bayar DOKU. Id pesanan tetap
         // disimpan untuk kasus alihan tertahan (mis. tombol kembali dari bfcache).
         if (hasil.pesananId !== null) setPesananSesi(hasil.pesananId);

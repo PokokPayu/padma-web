@@ -363,9 +363,37 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     expect(kedua.hasil).toEqual({ jenis: "url", url: "https://sandbox.doku.test/bayar/dua", pesananId: null });
   });
 
-  it("tautan terbit juga membakar order_id — DOKU sudah memegangnya", async () => {
-    const ambil = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
-    expect((await mintaCheckout("produk-1", false, ambil)).orderIdTerbakar).toBe(true);
+  it("200 TIDAK membakar order_id; 502 dan jaringan mati membakar", async () => {
+    const ok = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
+    expect((await mintaCheckout("produk-1", false, ok)).orderIdTerbakar).toBe(false);
+    expect((await mintaCheckout("produk-1", false, fetchPalsu({ status: 502, isi: {} }))).orderIdTerbakar).toBe(true);
+    expect((await mintaCheckout("produk-1", false, fetchPalsu("tolak"))).orderIdTerbakar).toBe(true);
+  });
+
+  it("sesudah 200, permintaan berikutnya mengirim ulang: false (tautan dipakai ulang)", async () => {
+    const pertama = await mintaCheckout(
+      "produk-1",
+      false,
+      fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } }),
+    );
+    const lagi = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
+    await mintaCheckout("produk-1", pertama.orderIdTerbakar, lagi);
+    expect(lagi.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: false });
+  });
+
+  it("503 dan 409 tidak membakar", async () => {
+    for (const status of [503, 409]) {
+      const r = await mintaCheckout("produk-1", false, fetchPalsu({ status, isi: { pesan: "x" } }));
+      expect(r.orderIdTerbakar).toBe(false);
+    }
+  });
+
+  it("kedua komponen mengunci tombol sesudah alihan dimulai", () => {
+    for (const rel of ["src/app/produk/[slug]/tombol-beli.tsx", "src/app/passport/keranjang/isi-keranjang.tsx"]) {
+      const isi = baca(rel);
+      expect(isi).toContain("setDialihkan(true)");
+      expect(isi).toContain("pendingTrans || dialihkan");
+    }
   });
 
   it("pesananId dari rute DISIMPAN, bukan dibuang", async () => {
