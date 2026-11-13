@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hapusObjekBukti } from "@/lib/bukti/hapus";
-import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
 
 /**
  * Jalur tulis admin untuk tagihan PENGAJUAN (spec C2 P3, P4).
@@ -24,26 +23,30 @@ type Berhasil = { ok: true };
  * dengan yang asli.
  *
  * Memakai SESI PENGGUNA, bukan service role: di bawah service role `auth.uid()`
- * NULL dan jejak audit mencatat aktor kosong — tepat kebalikan dari alasan
- * tabel jejak itu dibuat.
+ * NULL dan `user_role()` 'klien', jadi gerbang staf RPC-nya menolak.
+ *
+ * Sejak P3/B4 lewat RPC `verifikasi_bukti_warisan`, bukan UPDATE REST: trigger
+ * `guard_status_bayar_permintaan` menolak setiap tulisan `status_bayar` dari
+ * peran API (§6.7). RPC itu KHUSUS baris warisan QRIS — `menunggu_bayar`,
+ * `menunggu_verifikasi`, dan tanpa satu pun pesanan (§7); pengajuan yang
+ * dibayar lewat DOKU ditolak dengan kalimatnya sendiri.
  */
 export async function verifikasiPengajuan(permintaanId: string): Promise<Berhasil | Gagal> {
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
-  const { data } = await supabase
-    .from("booking_requests")
-    .update({ status_bayar: "lunas" })
-    .eq("id", permintaanId)
-    .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
-    // Hanya dari `menunggu_verifikasi`: menandai lunas sesuatu yang buktinya
-    // belum pernah masuk berarti melewati langkah yang seluruh rantai ini ada
-    // untuk menegakkannya.
-    .eq("status_bayar", "menunggu_verifikasi")
-    .select("id");
+  const { error } = await supabase.rpc("verifikasi_bukti_warisan", {
+    p_permintaan_id: permintaanId,
+  });
 
-  if ((data ?? []).length === 0) {
-    return { ok: false, pesan: "Tagihan ini tidak sedang menunggu verifikasi." };
+  if (error) {
+    // P0001 adalah kalimat manusia yang ditulis RPC itu sendiri ("tidak
+    // sedang menunggu verifikasi", "dibayar lewat DOKU"). Selain itu tidak
+    // ada pesan Postgres mentah yang diteruskan.
+    return {
+      ok: false,
+      pesan: error.code === "P0001" ? error.message : "Gagal memverifikasi pembayaran. Coba lagi.",
+    };
   }
 
   revalidatePath("/admin/bayar");

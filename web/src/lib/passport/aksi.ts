@@ -11,11 +11,7 @@ import { periksaAlamat } from "./status";
 import { hariIniJakarta } from "./waktu";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
-import {
-  PERMINTAAN_AWAL,
-  PERMINTAAN_DIBATALKAN_KLIEN,
-  STATUS_ANTRE,
-} from "@/lib/jadwal/status";
+import { PERMINTAAN_AWAL, STATUS_ANTRE } from "@/lib/jadwal/status";
 
 /**
  * SATU-SATUNYA jalur tulis milik klien.
@@ -338,37 +334,59 @@ export async function ajukanJadwal(formData: FormData): Promise<Berhasil | Gagal
  * `BATAS_PERMINTAAN_MENUNGGU` penuh, dan tidak seorang pun punya cara
  * membereskannya. Kendali atas antrean berpindah ke pemiliknya.
  *
- * Penegaknya ada di basis data — policy "booking: klien membatalkan miliknya"
- * plus tiga trigger yang mempersempitnya ke "barisnya sendiri, dari keadaan
- * antrean, tanpa menyentuh medan apa pun". Yang dilakukan di sini hanyalah
- * memulangkan KALIMAT yang bisa dibaca manusia; ia bukan pagar.
+ * Sejak P3/B4 penegaknya RPC `batalkan_pengajuan_saya` (migrasi
+ * `20261113140400`), bukan UPDATE langsung. Pengajuan `menunggu_bayar` kini
+ * punya pesanan sesi, dan pembatalannya menutup pesanan itu di transaksi yang
+ * sama (§6.3). RPC mengunci PESANAN lebih dulu lalu pengajuan — urutan yang
+ * sama dengan webhook DOKU — sehingga pembatalan yang berbalapan dengan
+ * pelunasan tidak berakhir deadlock; UPDATE REST tidak bisa mengunci pesanan
+ * lebih dulu (Ruling 7). Baris dipilih dari `auth.uid()` di dalam RPC; policy
+ * "booking: klien membatalkan miliknya" dan tiga triggernya tetap menjaga
+ * jalur REST lama.
+ *
+ * Yang dilakukan di sini hanyalah memulangkan KALIMAT yang bisa dibaca
+ * manusia; ia bukan pagar.
  */
 export async function batalkanPengajuan(permintaanId: string): Promise<Berhasil | Gagal> {
   const clientId = await klienSaatIni();
   if (!clientId) return { ok: false, pesan: "Akun belum terhubung." };
 
   const supabase = await createServerSupabase();
-  const { data, error } = await supabase
-    .from("booking_requests")
-    .update({ status: PERMINTAAN_DIBATALKAN_KLIEN })
-    .eq("id", permintaanId)
-    .eq("client_id", clientId) // pagar kedua; yang pertama policy RLS
-    .in("status", STATUS_ANTRE)
-    .select("id");
+  const { error } = await supabase.rpc("batalkan_pengajuan_saya", {
+    p_permintaan_id: permintaanId,
+  });
 
-  if (error) return { ok: false, pesan: "Gagal membatalkan. Coba lagi." };
-  // UPDATE yang tertahan menghasilkan 0 baris TANPA error — jangan melaporkan
-  // "berhasil" tanpa memeriksa jumlah barisnya.
-  if ((data ?? []).length === 0) {
-    return {
-      ok: false,
-      pesan: "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.",
-    };
+  if (error) {
+    // Hanya P0001 YANG DIKENAL yang diterjemahkan; galat lain (jaringan,
+    // deadlock, penjaga peran) tidak pernah sampai ke layar klien mentah.
+    const kalimat =
+      error.code === "P0001" && Object.hasOwn(KALIMAT_BATAL_KLIEN, error.message)
+        ? KALIMAT_BATAL_KLIEN[error.message]
+        : null;
+    return { ok: false, pesan: kalimat ?? "Gagal membatalkan. Coba lagi." };
   }
 
   revalidatePath("/passport");
+  revalidatePath("/passport/bayar");
   return { ok: true };
 }
+
+/**
+ * Kalimat P0001 `batalkan_pengajuan_saya` -> kalimat layar klien. Kuncinya
+ * VERBATIM dari migrasi `20261113140400`; kalimat yang bergeser di SQL jatuh ke
+ * "Gagal membatalkan" dan memerahkan tests/penjaga-pengajuan-db.test.ts.
+ *
+ * Kalimat "uang sudah masuk" (Review Focus 3) ditulis ulang untuk klien: yang
+ * ia perlu tahu adalah uangnya aman dan siapa yang bergerak berikutnya, bukan
+ * bahwa ada penjaga yang menolak.
+ */
+const KALIMAT_BATAL_KLIEN: Record<string, string> = {
+  "Pembayaran pengajuan ini sudah masuk dan sedang diperiksa admin.":
+    "Pembayaran Anda untuk pengajuan ini sudah kami terima dan sedang diperiksa admin, " +
+    "jadi pengajuan tidak bisa dibatalkan dari sini. Admin PADMA akan menghubungi Anda.",
+  "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.":
+    "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.",
+};
 
 /**
  * Klien menilai satu sesi yang sudah selesai (spec C1 J10).

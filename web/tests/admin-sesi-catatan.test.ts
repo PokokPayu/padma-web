@@ -1297,6 +1297,45 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Bentuk berkas aksi-tagihan.ts (P3/B4)
+// ---------------------------------------------------------------------------
+
+describe("bentuk berkas aksi-tagihan.ts (pembatalan, ganti bidan, kabari bidan)", () => {
+  const sumberAksiTagihan = baca("src/app/admin/sesi/aksi-tagihan.ts");
+
+  it("berkas 'use server' yang hanya mengekspor fungsi async", () => {
+    expect(sumberAksiTagihan.trimStart().startsWith('"use server"')).toBe(true);
+    const ekspor = [...sumberAksiTagihan.matchAll(/^export\s+(?!type\b)(\w+)/gm)].map((m) => m[1]);
+    expect([...new Set(ekspor)]).toEqual(["async"]);
+  });
+
+  it("SETIAP action memanggil requireRole(['admin','owner']) di dalam dirinya", () => {
+    // Dihitung PER FUNGSI, bukan total: badan setiap ekspor (sampai ekspor
+    // berikutnya) harus memuat penjaganya sendiri. Angkanya tepat: action
+    // baru tanpa penjaga harus memerahkan berkas ini.
+    const potongan = sumberAksiTagihan.split(/^(?=export\s+async\s+function\s+)/m).slice(1);
+    const nama = potongan.map((p) => /^export\s+async\s+function\s+(\w+)/.exec(p)![1]);
+    expect(nama).toEqual(["batalkanPengajuanStaf", "gantiBidanMenungguBayar", "tandaiSudahDikabari"]);
+    for (const [i, badan] of potongan.entries()) {
+      expect(badan, `${nama[i]} tanpa requireRole`).toMatch(
+        /await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/,
+      );
+    }
+  });
+
+  it("memakai sesi pengguna, bukan service role", () => {
+    expect(sumberAksiTagihan).not.toContain("createAdminSupabase");
+    expect(sumberAksiTagihan).not.toContain("SERVICE_ROLE");
+    expect(sumberAksiTagihan).toContain("createServerSupabase");
+  });
+
+  it("tidak mencatat ke log dan tidak menghitung tanggal dengan Date", () => {
+    expect(sumberAksiTagihan).not.toContain("console.");
+    expect(sumberAksiTagihan).not.toContain("toISOString");
+  });
+});
+
 // ===========================================================================
 // JARAK DI KOLOM JENJANG (butir 2, umpan balik klien 21 Sep 2026)
 // ===========================================================================

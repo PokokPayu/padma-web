@@ -60,6 +60,11 @@ const MESIN_TERTUTUP = [
   "sisipkan_sesi_dari_permintaan",
   "terapkan_notifikasi_gateway",
   "terbitkan_akses_item",
+  // B4: penutup pesanan terbuka saat pengajuan dilepas atau masukan harganya
+  // berubah. Fungsi TRIGGER (tidak pernah dipanggil langsung), security
+  // definer karena menulis `orders` dan `jejak_pesanan` atas nama tulisan
+  // pengajuan dari peran mana pun.
+  "tutup_pesanan_sesi_terbuka",
   // Bukan penulis (B2, Ruling 1): predikat "uang sudah masuk" yang dipakai
   // fungsi definer lain (terbit ulang B2, penjaga batal B4, tombol Bayar B6).
   // Dikunci di sini supaya membukanya — memberi tahu siapa pun pengajuan mana
@@ -86,6 +91,10 @@ const TERBUKA_SADAR = {
   // Memilih `client_id`-nya sendiri dari sesi, alih-alih memercayai payload.
   ambil_produk_gratis: "auth.uid",
   baca_keranjang: "auth.uid",
+  // B4 (Ruling 7): pembatalan pengajuan oleh klien. Badannya tidak menulis
+  // tabel pesanan, tetapi UPDATE-nya memicu `tutup_pesanan_sesi_terbuka` yang
+  // menulis `orders` dan `jejak_pesanan` — jadi gerbangnya disebut di sini.
+  batalkan_pengajuan_saya: "auth.uid",
   batalkan_pesanan_saya: "auth.uid",
   buat_pesanan: "auth.uid",
   buat_pesanan_keranjang: "auth.uid",
@@ -101,6 +110,13 @@ const TERBUKA_SADAR = {
   rincian_tagihan_permintaan: "user_role",
   terbitkan_tagihan_sesi: "user_role",
   tutup_tinjauan: "user_role",
+  // B4: pembatalan dan ganti bidan oleh staf menulis tabel pesanan LEWAT
+  // trigger `tutup_pesanan_sesi_terbuka`; verifikasi bukti warisan menulis
+  // `booking_requests.status_bayar`, keadaan uang yang tidak lagi boleh
+  // ditulis peran API. Ketiganya hanya menerima id; gerbangnya peran staf.
+  batalkan_pengajuan_staf: "user_role",
+  ganti_bidan_permintaan: "user_role",
+  verifikasi_bukti_warisan: "user_role",
 } as const;
 
 type Gerbang = (typeof TERBUKA_SADAR)[keyof typeof TERBUKA_SADAR];

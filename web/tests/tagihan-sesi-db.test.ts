@@ -359,6 +359,35 @@ async function tandaiPesanan(pesananId: string, ubah: Record<string, unknown>): 
   await wajib(svc.from("orders").update(ubah).eq("id", pesananId));
 }
 
+/**
+ * Keadaan pengajuan yang TIDAK BISA lagi dicapai lewat jalur sah sejak B4
+ * (`guard_batal_permintaan_beruang` menolak `menunggu_bayar -> mencari_mitra`
+ * begitu uang sudah masuk), padahal pemeriksaan uang di
+ * `terbitkan_tagihan_sesi` tetap harus tahan terhadapnya sebagai lapis kedua.
+ * Dibangun dengan trigger dimatikan untuk SATU pernyataan saja
+ * (`session_replication_role = replica`, lokal transaksi) — pola yang sama
+ * dengan `paksaPengajuan` di tests/penyalur-sesi-db.test.ts.
+ */
+async function paksaPengajuan(id: string, set: string, nilai: unknown[] = []): Promise<void> {
+  const k = new Client({ connectionString: dbUrl() });
+  await k.connect();
+  try {
+    await k.query("begin");
+    await k.query("set local session_replication_role = replica");
+    const hasil = await k.query(`update public.booking_requests set ${set} where id = $1`, [
+      id,
+      ...nilai,
+    ]);
+    if (hasil.rowCount !== 1) throw new Error(`paksaPengajuan mengenai ${hasil.rowCount} baris`);
+    await k.query("commit");
+  } catch (e) {
+    await k.query("rollback").catch(() => {});
+    throw e;
+  } finally {
+    await k.end();
+  }
+}
+
 /** SUCCESS dari DOKU lewat `terapkan_notifikasi_gateway` sungguhan (service role, seperti webhook). */
 async function suksesGateway(pesananId: string): Promise<string> {
   const [p] = await querySql<{ kode: string; percobaan: number; total: number }>(
@@ -889,14 +918,16 @@ describe("terbit ulang dari menunggu_bayar", () => {
   });
 
   it("kunci uang juga berlaku dari mitra_siap: pengajuan lunas yang diputar ulang lewat ganti bidan tidak ditagih dua kali", async () => {
-    // menunggu_bayar -> mencari_mitra -> mitra_siap adalah jalan SAH (ganti
-    // bidan). Tanpa pemeriksaan di status asal mana pun, "Terbitkan tagihan"
-    // berikutnya menerbitkan tagihan kedua untuk uang yang sudah masuk.
+    // menunggu_bayar -> mencari_mitra -> mitra_siap dulu jalan SAH (ganti
+    // bidan). Sejak B4 langkah pertamanya DITOLAK bila uang sudah masuk
+    // (tests/penjaga-pengajuan-db.test.ts), jadi keadaan ini dipaksa; yang
+    // dijaga di sini adalah lapis KEDUA: tanpa pemeriksaan di status asal mana
+    // pun, "Terbitkan tagihan" berikutnya menerbitkan tagihan kedua untuk uang
+    // yang sudah masuk.
     const id = await pengajuanSiap();
     const { data: p1 } = await terbit(id);
     await tandaiPesanan(p1 as string, { status: "lunas", ditutup_pada: new Date().toISOString() });
-    await ubahPengajuan(id, { status: "mencari_mitra", partner_id: null, tenggat: null });
-    await ubahPengajuan(id, { status: "mitra_siap", partner_id: MITRA });
+    await paksaPengajuan(id, "status = 'mitra_siap', tenggat = null");
 
     const { error } = await terbit(id);
     expect(galatSebab(error)).toEqual({ code: "P0001", message: "uang_sudah_masuk", hint: "sebab_tagihan" });

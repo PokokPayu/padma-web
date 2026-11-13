@@ -6,7 +6,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { koordinatDariFormData } from "@/lib/transport/koordinat-form";
 import { geocodeAlamat } from "@/lib/transport/geocode";
 import { normalkanAlamat } from "@/lib/transport/alamat";
-import { STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
+import { STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/jadwal/status";
 import { bacaPengaturan } from "@/lib/settings";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { POLA_TANGGAL } from "@/lib/jadwal/jam";
@@ -77,7 +77,7 @@ export async function perbaruiPermintaan(
     .from("booking_requests")
     .select("alamat, alamat_lat, alamat_lon, tanggal")
     .eq("id", permintaanId)
-    .in("status", [...STATUS_UBAH_PERMINTAAN])
+    .in("status", [...STATUS_UBAH_PERMINTAAN_STAF])
     .maybeSingle<BarisSebelum>();
 
   if (errorBaca) {
@@ -88,7 +88,7 @@ export async function perbaruiPermintaan(
     return {
       ok: false,
       pesan:
-        "Permintaan ini tidak bisa diubah lagi — tagihannya mungkin sudah terbit, atau sudah ditangani.",
+        "Permintaan ini tidak bisa diubah lagi — sudah dikonfirmasi atau sudah dibatalkan.",
     };
   }
 
@@ -132,6 +132,20 @@ export async function perbaruiPermintaan(
 
   const koordinat = pin ?? (alamatBerubah ? await geocodeAlamat(alamat) : koordinatLama);
 
+  // ===== `menunggu_bayar` BOLEH DIUBAH (P3/B4) =====
+  // Tanggal, jam, dan titik alamat adalah MASUKAN HARGA pesanan sesi yang
+  // sudah terbit. Bila salah satunya berubah, trigger
+  // `tutup_pesanan_sesi_terbuka` menutup pesanan terbuka di transaksi UPDATE
+  // ini juga, dan admin wajib menerbitkan ulang — harga beku yang basi tidak
+  // pernah bisa dibayar. Pesanan yang sudah LUNAS (pengajuan tertahan) tidak
+  // disentuh: mengubah jadwal di sana adalah jalan pemulihan sebelum "Buat
+  // sesi". Teks alamat saja tidak menutup apa pun.
+  //
+  // Jalur ini UPDATE REST, jadi urutan kuncinya pengajuan -> pesanan,
+  // kebalikan webhook. Bila keduanya bertabrakan tepat bersamaan, Postgres
+  // mendeteksi deadlock dan menggagalkan salah satunya dengan bersih; di sisi
+  // ini admin membaca "coba lagi" di bawah.
+
   const { data, error } = await supabase
     .from("booking_requests")
     .update({
@@ -142,7 +156,7 @@ export async function perbaruiPermintaan(
       alamat_lon: koordinat?.lon ?? null,
     })
     .eq("id", permintaanId)
-    .in("status", [...STATUS_UBAH_PERMINTAAN])
+    .in("status", [...STATUS_UBAH_PERMINTAAN_STAF])
     .select("id");
 
   // 23505 = indeks `booking_requests_antrean_unik`
@@ -163,5 +177,9 @@ export async function perbaruiPermintaan(
   }
 
   revalidatePath("/admin/sesi");
+  // Pesanan terbuka bisa saja baru ditutup trigger: layar pesanan dan
+  // Passport klien ikut basi.
+  revalidatePath("/admin/pesanan");
+  revalidatePath("/passport");
   return { ok: true };
 }

@@ -38,6 +38,8 @@ import { signInAs } from "./helpers/as-user";
 import { varianBaku } from "./helpers/varian";
 import { skriningHijau } from "./helpers/skrining";
 import { nominalDalam } from "./helpers/nominal";
+import { dbUrl } from "./helpers/db";
+import { Client } from "pg";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -398,10 +400,26 @@ describe("konfirmasi permintaan jadwal", () => {
     // di `src/lib/jadwal/status.ts`). `dibatalkan_klien` adalah keadaan akhir
     // yang sungguh dituju sekarang, dan `menunggu_bayar -> dibatalkan_klien`
     // sah (fixture describe ini sudah dinaikkan ke 'menunggu_bayar' + lunas).
-    await admin
-      .from("booking_requests")
-      .update({ status: "dibatalkan_klien" })
-      .eq("id", permintaanId);
+    //
+    // Sejak P3/B4 pembatalan pengajuan yang `status_bayar`-nya bukan 'belum'
+    // DITOLAK untuk semua peran (`guard_batal_permintaan_beruang`: uang sudah
+    // masuk), jadi baris "batal TAPI lunas" tidak lagi bisa dibuat lewat jalur
+    // tulis mana pun. Ia dipaksa dengan trigger dimatikan untuk satu
+    // pernyataan, supaya yang diuji tetap SATU-SATUNYA syarat yang gagal:
+    // statusnya — bukan status_bayar.
+    const k = new Client({ connectionString: dbUrl() });
+    await k.connect();
+    try {
+      await k.query("begin");
+      await k.query("set local session_replication_role = replica");
+      await k.query(
+        "update public.booking_requests set status = 'dibatalkan_klien' where id = $1",
+        [permintaanId],
+      );
+      await k.query("commit");
+    } finally {
+      await k.end();
+    }
 
     const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(false);
