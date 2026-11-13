@@ -1,7 +1,8 @@
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 import { TombolPermintaan, FormUbahPermintaan, type MitraPilihan } from "./aksi-permintaan";
 import type { BarisPermintaanDaftar } from "@/lib/admin/permintaan";
-import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/jadwal/status";
+import { LABEL_PERMINTAAN } from "@/lib/jadwal/status";
+import { bolehUbahJadwal } from "@/lib/tagihan/keadaan";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 
 /**
@@ -49,8 +50,11 @@ export function PanelPermintaan({
   // `menunggu_bayar` IKUT, termasuk pengajuan TERTAHAN (pesanan lunas, sesi
   // belum lahir): memindahkan jam yang sudah lewat lalu "Buat sesi" adalah
   // jalan pemulihannya, dan tanpa form ini ia hanya ada di sisi server.
-  const bisaDiubah = STATUS_UBAH_PERMINTAAN_STAF.includes(permintaan.status);
+  // Digerbang `bolehUbahJadwal` (keadaan.ts), sumber yang sama dengan tombol:
+  // form dan kalimat "Ganti bidan" tidak ditawarkan di keadaan yang akan
+  // ditolak basis data (perlu_ditinjau, warisan lunas/verifikasi).
   const keadaan = permintaan.keadaanTagihan;
+  const bisaDiubah = bolehUbahJadwal(permintaan.status, keadaan.kode);
   // Jam permintaan ini SEKARANG, dibaca lewat `jamDariDb` (bukan `slice(0,5)`
   // sendiri) — lihat dokblok fungsi itu untuk kenapa keduanya harus dibedakan.
   const jamSekarang = jamDariDb(permintaan.jamMulai);
@@ -230,7 +234,7 @@ export function PanelPermintaan({
               : ""}
           </p>
         )}
-        {(keadaan.kode === "terbuka" || keadaan.kode === "warisan_belum") && (
+        {keadaan.kode === "terbuka" && (
           <p className="mt-1 text-[11.5px] text-panel-muted">
             {emailTerkirim
               ? "Email tagihan sudah terkirim ke klien."

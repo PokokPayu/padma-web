@@ -10,7 +10,7 @@ import { PERMINTAAN_MENUNGGU_BAYAR, STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/ja
 import { bacaPengaturan } from "@/lib/settings";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { POLA_TANGGAL } from "@/lib/jadwal/jam";
-import { adaTagihanTerbuka, KALIMAT_TAGIHAN_DITUTUP } from "@/lib/tagihan/terbuka";
+import { adaTagihanTerbuka, kabarTagihanDitutup } from "@/lib/tagihan/terbuka";
 
 /**
  * Mengubah alamat, tanggal, dan jam sebuah PERMINTAAN — satu aksi, satu
@@ -207,8 +207,6 @@ export async function perbaruiPermintaan(
   // Passport klien ikut basi.
   revalidatePath("/admin/pesanan");
   revalidatePath("/passport");
-  if (terbukaSebelum && !(await adaTagihanTerbuka(supabase, permintaanId))) {
-    return { ok: true, pesan: KALIMAT_TAGIHAN_DITUTUP };
-  }
-  return { ok: true };
+  const pesan = await kabarTagihanDitutup(supabase, permintaanId, terbukaSebelum);
+  return pesan ? { ok: true, pesan } : { ok: true };
 }

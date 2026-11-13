@@ -217,7 +217,17 @@ export function TombolPermintaan({
             <button
               type="button"
               disabled={pending}
-              onClick={() => jalankan(() => batalkanPengajuanStaf(permintaanId))}
+              onClick={() => {
+                // TIDAK BISA DIURUNGKAN: pesanan terbuka ditutup dan skrining
+                // dilepas. Pola konfirmasi admin yang sama dengan artikel/editor.
+                if (
+                  !confirm(
+                    "Batalkan pengajuan ini? Tagihan yang sedang terbuka ditutup dan skrining klien dilepas. Tindakan ini tidak bisa dibatalkan.",
+                  )
+                )
+                  return;
+                jalankan(() => batalkanPengajuanStaf(permintaanId));
+              }}
               className={KELAS_KEDUA}
             >
               Batalkan pengajuan

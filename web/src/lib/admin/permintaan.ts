@@ -122,46 +122,14 @@ type BarisMentah = {
   partners: { nama: string } | null;
 };
 
-export async function ambilDaftarPermintaan(
-  param: ParamDaftar,
-): Promise<{ baris: BarisPermintaanDaftar[]; total: number }> {
-  const supabase = await createServerSupabase();
-  const { dari, sampai } = hitungRentang(param.hal);
+type Klien = Awaited<ReturnType<typeof createServerSupabase>>;
 
-  // `clients!inner` karena kata cari menyaring NAMA KLIEN, dan menyaring kolom
-  // tabel tertanam menuntut join dalam. Aman: `client_id` NOT NULL sejak skema
-  // awal, jadi join dalam tidak membuang satu baris pun.
-  let q = supabase
-    .from("booking_requests")
-    .select(
-      "id, tanggal, jam_mulai, preferensi_waktu, catatan, alamat, alamat_lat, alamat_lon, " +
-        "status, status_bayar, tenggat, email_tagihan_pada, " +
-        "clients!inner ( nama, padma_id, no_hp ), services ( nama ), " +
-        "service_variants ( label ), partners ( nama )",
-      { count: "exact" },
-    )
-    // Disalin ke array biasa: `.in()` menolak `readonly string[]`.
-    .in("status", [...statusUntukSaring(param.saring.status ?? "")])
-    // Yang paling dekat tanggalnya paling mendesak dijawab.
-    .order("tanggal", { ascending: true })
-    .order("created_at", { ascending: true });
-
-  if (param.cari !== "") {
-    // `%` dan `_` yang diketik manusia dicari sebagai HURUF, bukan wildcard.
-    const aman = param.cari.replace(/[%_\\]/g, (c) => `\\${c}`);
-    q = q.ilike("clients.nama", `%${aman}%`);
-  }
-
-  // GALAT DIBACA, BUKAN DIBUANG. Query yang ditolak PostgREST memulangkan
-  // `data: null`, dan `data ?? []` mengubahnya menjadi layar kosong yang
-  // tidak bisa dibedakan dari "memang belum ada permintaan hari ini". Persis
-  // itu yang terjadi saat embed `service_variants` menyebutkan kolom yang salah:
-  // 42703 menolak SELURUH query, dan tab bawaan panel ini akan kosong bagi
-  // setiap admin tanpa satu pun tanda. Layar 500 yang berisik lebih jujur
-  // daripada daftar kosong yang berbohong.
-  const { data, count, error } = await q.range(dari, sampai).returns<BarisMentah[]>();
-  if (error) throw error;
-
+/**
+ * Memetakan baris mentah menjadi `BarisPermintaanDaftar`, termasuk KEADAAN
+ * TAGIHAN. Dipakai dua jalur — daftar dan pembukaan satu baris lewat id —
+ * supaya keduanya tidak pernah menghitung keadaan dengan dua cara.
+ */
+async function petakanBaris(supabase: Klien, data: BarisMentah[]): Promise<BarisPermintaanDaftar[]> {
   // Keadaan tagihan hanya bermakna untuk `menunggu_bayar`: pesanan dan sesinya
   // dibaca SATU kali untuk seluruh halaman (bukan per baris), dan nol kueri
   // bila tidak ada baris `menunggu_bayar`. Sesi pengguna — policy
@@ -210,8 +178,7 @@ export async function ambilDaftarPermintaan(
     for (const s of sesi.data ?? []) adaSesi.add(s.booking_request_id);
   }
 
-  return {
-    baris: (data ?? []).map((p) => ({
+  return data.map((p) => ({
       id: p.id,
       // Embed yang tertahan RLS pulang sebagai NULL, bukan galat — jadi setiap
       // nama tertanam punya jalan mundur yang terbaca manusia. Tanpa itu,
@@ -240,7 +207,77 @@ export async function ambilDaftarPermintaan(
         pesanan: pesananPer.get(p.id) ?? [],
         adaSesi: adaSesi.has(p.id),
       }),
-    })),
-    total: count ?? 0,
-  };
+    }))
+}
+
+const POLA_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * SATU permintaan menurut id, tanpa saringan status maupun halaman.
+ *
+ * Tautan `?lihat=<id>` dari /admin/pesanan harus membuka panelnya apa pun
+ * keadaan barisnya: baris di luar `STATUS_ANTRE` (mis. `dibatalkan_tenggat`
+ * dengan tinjauan `lunas_setelah_tutup`, kasus refund) atau di halaman ke-2
+ * daftar tidak pernah ada di daftar halaman aktif. Id yang bukan uuid dijawab
+ * `undefined`, bukan galat PostgREST 22P02.
+ */
+export async function ambilPermintaanPerId(id: string): Promise<BarisPermintaanDaftar | undefined> {
+  if (!POLA_UUID.test(id)) return undefined;
+  const supabase = await createServerSupabase();
+  const { data, error } = await supabase
+    .from("booking_requests")
+    .select(
+      "id, tanggal, jam_mulai, preferensi_waktu, catatan, alamat, alamat_lat, alamat_lon, " +
+        "status, status_bayar, tenggat, email_tagihan_pada, " +
+        "clients!inner ( nama, padma_id, no_hp ), services ( nama ), " +
+        "service_variants ( label ), partners ( nama )",
+    )
+    .eq("id", id)
+    .maybeSingle<BarisMentah>();
+  if (error) throw error;
+  if (!data) return undefined;
+  return (await petakanBaris(supabase, [data]))[0];
+}
+
+export async function ambilDaftarPermintaan(
+  param: ParamDaftar,
+): Promise<{ baris: BarisPermintaanDaftar[]; total: number }> {
+  const supabase = await createServerSupabase();
+  const { dari, sampai } = hitungRentang(param.hal);
+
+  // `clients!inner` karena kata cari menyaring NAMA KLIEN, dan menyaring kolom
+  // tabel tertanam menuntut join dalam. Aman: `client_id` NOT NULL sejak skema
+  // awal, jadi join dalam tidak membuang satu baris pun.
+  let q = supabase
+    .from("booking_requests")
+    .select(
+      "id, tanggal, jam_mulai, preferensi_waktu, catatan, alamat, alamat_lat, alamat_lon, " +
+        "status, status_bayar, tenggat, email_tagihan_pada, " +
+        "clients!inner ( nama, padma_id, no_hp ), services ( nama ), " +
+        "service_variants ( label ), partners ( nama )",
+      { count: "exact" },
+    )
+    // Disalin ke array biasa: `.in()` menolak `readonly string[]`.
+    .in("status", [...statusUntukSaring(param.saring.status ?? "")])
+    // Yang paling dekat tanggalnya paling mendesak dijawab.
+    .order("tanggal", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (param.cari !== "") {
+    // `%` dan `_` yang diketik manusia dicari sebagai HURUF, bukan wildcard.
+    const aman = param.cari.replace(/[%_\\]/g, (c) => `\\${c}`);
+    q = q.ilike("clients.nama", `%${aman}%`);
+  }
+
+  // GALAT DIBACA, BUKAN DIBUANG. Query yang ditolak PostgREST memulangkan
+  // `data: null`, dan `data ?? []` mengubahnya menjadi layar kosong yang
+  // tidak bisa dibedakan dari "memang belum ada permintaan hari ini". Persis
+  // itu yang terjadi saat embed `service_variants` menyebutkan kolom yang salah:
+  // 42703 menolak SELURUH query, dan tab bawaan panel ini akan kosong bagi
+  // setiap admin tanpa satu pun tanda. Layar 500 yang berisik lebih jujur
+  // daripada daftar kosong yang berbohong.
+  const { data, count, error } = await q.range(dari, sampai).returns<BarisMentah[]>();
+  if (error) throw error;
+
+  return { baris: await petakanBaris(supabase, data ?? []), total: count ?? 0 };
 }

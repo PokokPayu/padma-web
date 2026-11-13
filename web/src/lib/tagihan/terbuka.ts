@@ -28,3 +28,26 @@ export async function adaTagihanTerbuka(
   if (error) throw error;
   return (count ?? 0) > 0;
 }
+
+/**
+ * Kabar penutupan tagihan SESUDAH tulisan berhasil, atau `undefined`.
+ *
+ * Bacaan sesudah tulisan ini hanya pelengkap kabar. Kalau ia melempar
+ * (jaringan, PostgREST), perubahan SUDAH tersimpan: melaporkannya sebagai galat
+ * membuat admin mengulang tulisan yang sudah berlaku. Maka galatnya dicatat
+ * (objek galat saja, tanpa medan klien) dan hasilnya jatuh ke `{ ok: true }`
+ * polos.
+ */
+export async function kabarTagihanDitutup(
+  supabase: SupabaseClient,
+  permintaanId: string,
+  terbukaSebelum: boolean,
+): Promise<string | undefined> {
+  if (!terbukaSebelum) return undefined;
+  try {
+    return (await adaTagihanTerbuka(supabase, permintaanId)) ? undefined : KALIMAT_TAGIHAN_DITUTUP;
+  } catch (e) {
+    console.error("[tagihan] gagal membaca pesanan terbuka sesudah tulisan:", e);
+    return undefined;
+  }
+}

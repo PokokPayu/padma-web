@@ -1,6 +1,10 @@
 import { PESANAN_BERUANG, PESANAN_TERBUKA, type StatusPesanan } from "@/lib/pesanan/status";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
-import { PERMINTAAN_MENUNGGU_BAYAR, type StatusPermintaan } from "@/lib/jadwal/status";
+import {
+  PERMINTAAN_MENUNGGU_BAYAR,
+  STATUS_UBAH_PERMINTAAN,
+  type StatusPermintaan,
+} from "@/lib/jadwal/status";
 
 /**
  * KEADAAN TAGIHAN SATU PENGAJUAN, sebagai KATA — nol rupiah (P3/B5, spec §6.5).
@@ -183,7 +187,11 @@ export function tombolUntuk(kode: KodeKeadaanTagihan): TombolPengajuan {
     case "ditutup":
       return { ...tak, terbitUlang: true, batalkan: true, gantiBidan: true };
     case "warisan_belum":
-      return { ...tak, wa: true, terbitUlang: true, batalkan: true, gantiBidan: true };
+      // TANPA WA dan email: keduanya berbunyi "Tagihan Anda sudah terbit, bayar
+      // di Digital Passport", dan untuk baris warisan QRIS itu tidak benar.
+      // Tindakannya (§7) "Terbitkan ulang" — klien baru melihatnya sebagai
+      // tagihan DOKU sesudah itu.
+      return { ...tak, terbitUlang: true, batalkan: true, gantiBidan: true };
     case "warisan_lunas":
       return { ...tak, konfirmasi: true };
     case "tertahan":
@@ -191,4 +199,17 @@ export function tombolUntuk(kode: KodeKeadaanTagihan): TombolPengajuan {
     default:
       return tak;
   }
+}
+
+/**
+ * Apakah layar boleh menawarkan form ubah jadwal/alamat (dan kalimat "tekan
+ * Ganti bidan") untuk pengajuan ini? SATU sumber gerbang yang sama dengan
+ * `tombolUntuk`: sebelum tagihan terbit semua boleh; pada `menunggu_bayar`
+ * hanya di keadaan yang tidak ditolak basis data (uang warisan sudah masuk,
+ * atau pembayaran perlu ditinjau, menolak perubahan masukan harga).
+ */
+export function bolehUbahJadwal(status: StatusPermintaan, kode: KodeKeadaanTagihan): boolean {
+  if (STATUS_UBAH_PERMINTAAN.includes(status)) return true;
+  if (status !== PERMINTAAN_MENUNGGU_BAYAR) return false;
+  return tombolUntuk(kode).gantiBidan;
 }

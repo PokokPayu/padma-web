@@ -85,7 +85,7 @@ export function emailTagihan(input: {
     `Mohon selesaikan pembayaran paling lambat ${tenggatAbsolut}.`,
     `Bayar di Digital Passport: ${tautanBayar}`,
     "",
-    "Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain — tapi Anda tetap bisa mengajukan ulang kapan saja.",
+    "Bila lewat dari batas itu, tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan.",
     "",
     "Terima kasih,",
     "Tim PADMA Wellness",
@@ -109,7 +109,7 @@ export function emailTagihan(input: {
   </table>
   <p>Mohon selesaikan pembayaran paling lambat <b>${escapeHtml(tenggatAbsolut)}</b>.</p>
   <p><a href="${escapeHtml(tautanBayar)}" style="display:inline-block;background:#C9A227;color:#2A2013;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Bayar di Digital Passport</a></p>
-  <p style="color:#5A6B62;font-size:13px">Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain, tapi Anda tetap bisa mengajukan ulang kapan saja.</p>
+  <p style="color:#5A6B62;font-size:13px">Bila lewat dari batas itu, tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan.</p>
   <p style="color:#5A6B62;font-size:13px">Terima kasih,<br>Tim PADMA Wellness</p>
 </div>`;
 

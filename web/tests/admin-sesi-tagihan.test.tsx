@@ -241,6 +241,17 @@ async function tertahan(): Promise<{ id: string; pesananId: string }> {
 }
 
 /** Baris warisan QRIS: menunggu_bayar tanpa pesanan. */
+async function warisanBelum(): Promise<string> {
+  const id = await pengajuanSiap();
+  await wajib(
+    svc
+      .from("booking_requests")
+      .update({ status: "menunggu_bayar", tenggat: new Date(Date.now() + 24 * 3_600_000).toISOString() })
+      .eq("id", id),
+  );
+  return id;
+}
+
 async function warisanLunas(): Promise<string> {
   const id = await pengajuanSiap();
   await wajib(
@@ -275,6 +286,11 @@ async function render(sp: Record<string, string>): Promise<string> {
   return renderToStaticMarkup(
     await SesiPage({ searchParams: Promise.resolve({ cari: NAMA_KLIEN, ...sp }) }),
   );
+}
+
+/** TANPA `cari`: persis tautan dari /admin/pesanan. */
+async function renderTanpaCari(sp: Record<string, string>): Promise<string> {
+  return renderToStaticMarkup(await SesiPage({ searchParams: Promise.resolve(sp) }));
 }
 
 const lihat = (id: string) => render({ tab: "permintaan", lihat: id });
@@ -313,7 +329,9 @@ describe("/admin/sesi?lihat= NOL RUPIAH (D3)", () => {
     const html = await lihat(id);
     expect(html).toContain("Pembayaran diterima — sesi tertahan");
     expect(nominalDalam(html)).toEqual([]);
-    expect(hrefWa(html)).not.toMatch(/rp/i);
+    // Pengajuan tertahan TIDAK menawarkan WA tagihan (uangnya sudah masuk).
+    expect(hrefWa(html)).toBe("");
+    expect(html).not.toContain("Kirim tagihan via WA");
   });
 
   it("tenggat lewat: nol rupiah", async () => {
@@ -580,6 +598,9 @@ describe("email tagihan (D2)", () => {
       expect(isi).toContain(formatRupiah(total));
       expect(isi).toContain(`https://padma.test/passport/bayar/${id}`);
       expect(isi).not.toMatch(/unggah|qris/i);
+      // Ruling 11: kebijakan sebenarnya, bukan pelepasan otomatis.
+      expect(isi).toContain("tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan");
+      expect(isi).not.toMatch(/lepas untuk klien lain/);
     }
     expect(e.teks).toContain(formatRupiah(HARGA_LAYANAN));
     const [b] = await querySql<{ email_tagihan_pada: Date | null }>(
@@ -627,12 +648,156 @@ describe("kalimat total_nol dan bentuk berkas", () => {
   it("total_nol tidak mengirim admin ke menu owner-only: Owner menetapkan tarif", async () => {
     const { KALIMAT_SEBAB_ADMIN } = await import("@/lib/tagihan/pengajuan");
     expect(KALIMAT_SEBAB_ADMIN.total_nol).toBe(
-      "Total tagihan Rp0 — Owner menetapkan tarif varian dan transport di menu Tarif/Transport.",
+      "Total tagihan nol — Owner menetapkan tarif varian dan transport di menu Tarif/Transport.",
     );
+    // Kalimat ini sampai ke /admin/sesi (nol rupiah): tidak satu pun boleh cocok pola nominal.
+    for (const [sebab, kalimat] of Object.entries(KALIMAT_SEBAB_ADMIN)) {
+      expect(nominalDalam(kalimat), sebab).toEqual([]);
+    }
   });
 
   it("migrasi view menambah booking_request_id DI UJUNG", () => {
     const m = baca("supabase/migrations/20261113140500_item_staf_pengajuan.sql");
     expect(m).toMatch(/i\.product_id,\s*i\.booking_request_id\s+from public\.order_items/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1
+// ---------------------------------------------------------------------------
+
+describe("I1: ?lihat= membuka panel walau baris tidak ada di halaman daftar", () => {
+  it("pengajuan tertahan, tanpa cari", async () => {
+    const { id } = await tertahan();
+    const html = await renderTanpaCari({ tab: "permintaan", lihat: id });
+    expect(html).toContain(`Permintaan — ${NAMA_KLIEN}`);
+    expect(html).toContain("Pembayaran diterima — sesi tertahan");
+    expect(nominalDalam(html)).toEqual([]);
+  });
+
+  it("status DI LUAR antrean (dibatalkan_tenggat + tinjauan lunas_setelah_tutup), tanpa cari", async () => {
+    const { id, pesananId } = await bertagihan();
+    await paksa("booking_requests", "status = 'dibatalkan_tenggat'", id);
+    await paksa("orders", "butuh_tinjauan_pada = now(), sebab_tinjauan = 'lunas_setelah_tutup'", pesananId);
+    const html = await renderTanpaCari({ tab: "permintaan", lihat: id });
+    expect(html).toContain(`Permintaan — ${NAMA_KLIEN}`);
+    // Dan memang BUKAN baris daftar aktif: itulah yang membuat jalur id diperlukan.
+    expect(html).not.toContain(`data-permintaan="${id}"`);
+  });
+
+  it("baris jatuh di HALAMAN KE-2 daftar antrean (>25 baris lebih awal), tanpa cari", async () => {
+    const { id } = await bertagihan();
+    await paksa("booking_requests", `tanggal = '${geserHari(hariIniJakarta(), 400)}'`, id);
+    for (let i = 0; i < 26; i++) {
+      const skrining = await skriningHijau(svc, KLIEN);
+      await wajib(
+        svc.from("booking_requests").insert({
+          client_id: KLIEN,
+          service_id: SVC_B5,
+          variant_id: VARIAN,
+          tanggal: geserHari(hariIniJakarta(), 4 + i),
+          jam_mulai: "09:00",
+          preferensi_waktu: "pagi",
+          alamat: ALAMAT.teks,
+          alamat_lat: ALAMAT.lat,
+          alamat_lon: ALAMAT.lon,
+          status: "diminta",
+          screening_id: skrining,
+        }),
+      );
+    }
+    const html = await renderTanpaCari({ tab: "permintaan", lihat: id });
+    expect(html).not.toContain(`data-permintaan="${id}"`);
+    expect(html).toContain(`Permintaan — ${NAMA_KLIEN}`);
+    expect(html).toContain("Menunggu pembayaran, tenggat");
+  });
+
+  it("id sembarang atau bukan uuid TIDAK membuka panel dan tidak melempar", async () => {
+    for (const lihatNilai of ["bukan-uuid", "00000000-0000-0000-0000-000000000000"]) {
+      const html = await renderTanpaCari({ tab: "permintaan", lihat: lihatNilai });
+      expect(html).not.toContain("Permintaan — ");
+    }
+  });
+});
+
+describe("I2: baris warisan belum dibayar", () => {
+  it("hanya Terbitkan ulang / Batalkan / Ganti bidan: tanpa WA 'sudah terbit' dan tanpa kalimat email", async () => {
+    const id = await warisanBelum();
+    const html = await lihat(id);
+    expect(html).toContain("Belum dibayar (tagihan lama)");
+    for (const t of ["Terbitkan ulang", "Batalkan pengajuan", "Ganti bidan"]) expect(html, t).toContain(t);
+    expect(html).not.toContain("Kirim tagihan via WA");
+    expect(hrefWa(html)).toBe("");
+    expect(html).not.toMatch(/Kirim (ulang )?email|kirim manual dengan tombol/i);
+  });
+});
+
+describe("Ruling 11", () => {
+  it("'Batalkan pengajuan' dijaga confirm() di sumber komponen klien", () => {
+    const s = baca("src/app/admin/sesi/aksi-permintaan.tsx");
+    const i = s.indexOf("batalkanPengajuanStaf(permintaanId)");
+    expect(i).toBeGreaterThan(0);
+    const sebelum = s.slice(Math.max(0, i - 600), i);
+    expect(sebelum).toMatch(/if\s*\(\s*!confirm\(/);
+    expect(sebelum).toMatch(/return;/);
+  });
+
+  it("form ubah dan kalimat 'Ganti bidan' TIDAK tampil di keadaan yang akan menolaknya", async () => {
+    // perlu_ditinjau
+    const a = await bertagihan();
+    await paksa("orders", "butuh_tinjauan_pada = now(), sebab_tinjauan = 'selisih_status'", a.pesananId);
+    const htmlA = await lihat(a.id);
+    expect(htmlA).toContain("Pembayaran perlu ditinjau");
+    expect(htmlA).not.toContain("Simpan perubahan");
+    expect(htmlA).not.toMatch(/tekan\s+(“|&quot;|")?Ganti bidan/);
+    expect(htmlA).not.toContain("ditetapkan untuk jadwal");
+    await bersihkan();
+    // warisan lunas
+    const w = await warisanLunas();
+    const htmlW = await lihat(w);
+    expect(htmlW).not.toContain("Simpan perubahan");
+    expect(htmlW).not.toContain("ditetapkan untuk jadwal");
+  });
+
+  it("form ubah + kalimat tetap tampil bila boleh (tagihan terbuka)", async () => {
+    const { id } = await bertagihan();
+    const html = await lihat(id);
+    expect(html).toContain("Simpan perubahan");
+    expect(html).toContain("ditetapkan untuk jadwal");
+  });
+
+  it("bacaan SESUDAH tulisan yang gagal tidak mengubah hasil menjadi galat: perubahan tersimpan, {ok:true}", async () => {
+    const { id } = await bertagihan();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    let panggilanOrders = 0;
+    const palsu: Record<string, unknown> = {
+      select: () => palsu,
+      eq: () => palsu,
+      in: () => palsu,
+      then: (res: (v: unknown) => unknown) => res({ count: null, error: { message: "gagal baca uji" } }),
+    };
+    ref.sesi = new Proxy(sesiAdmin, {
+      get(target, prop, penerima) {
+        if (prop === "from") {
+          return (tabel: string) => {
+            if (tabel === "orders" && ++panggilanOrders > 1) return palsu;
+            return target.from(tabel);
+          };
+        }
+        const nilai = Reflect.get(target, prop, penerima);
+        return typeof nilai === "function" ? nilai.bind(target) : nilai;
+      },
+    });
+    try {
+      const r = await perbaruiPermintaan(id, formUbah({ alamat: ALAMAT.teks, tanggal: TGL_KUNJUNGAN, jam: "10:00" }));
+      expect(r).toEqual({ ok: true });
+      expect(panggilanOrders).toBeGreaterThan(1);
+      expect(log).toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+      ref.sesi = sesiAdmin;
+    }
+    const [b] = await querySql<{ jam_mulai: string }>(`select jam_mulai::text from public.booking_requests where id = $1`, [id]);
+    expect(b.jam_mulai).toBe("10:00:00");
   });
 });

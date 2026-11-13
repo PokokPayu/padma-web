@@ -34,10 +34,11 @@ describe("pesan tagihan memuat unsur wajib, TANPA angka (D3)", () => {
     expect(p).not.toMatch(/qris|unggah|transfer/i);
   });
 
-  it("menyebut apa yang terjadi bila lewat, dan bahwa itu bukan akhir", () => {
+  it("menyebut apa yang terjadi bila lewat SESUAI kebijakan: admin menghubungi, tanpa pelepasan otomatis", () => {
+    // Spec §6.5 mencabut pembatalan otomatis; S&K berkata admin menghubungi klien.
     const p = pesanTagihan(CONTOH);
-    expect(p).toMatch(/lepas untuk klien lain/);
-    expect(p).toMatch(/mengajukan ulang/);
+    expect(p).toContain("tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan");
+    expect(p).not.toMatch(/lepas untuk klien lain/);
   });
 });
 

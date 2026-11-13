@@ -16,6 +16,7 @@ import type { MitraPilihan as MitraPilihanPanel } from "./aksi-permintaan";
 import {
   type BarisPermintaanDaftar,
   ambilDaftarPermintaan,
+  ambilPermintaanPerId,
   SARING_PERMINTAAN,
   SARING_MENUNGGU,
   SARING_RIWAYAT,
@@ -129,7 +130,13 @@ export default async function SesiPage({
   // KESAHIHAN `lihat` DIBUKTIKAN DENGAN MENEMUKAN BARISNYA, bukan dengan
   // mempercayai URL — persis pola `ubah` di atas.
   const lihat = typeof sp.lihat === "string" ? sp.lihat : "";
-  const barisLihat = daftarPermintaan.baris.find((p) => p.id === lihat);
+  // Bila barisnya TIDAK ada di halaman daftar aktif (halaman ke-2, atau status di
+  // luar antrean seperti `dibatalkan_tenggat` dengan tinjauan refund), diambil
+  // menurut id lewat pemetaan yang sama. Tautan "Sesi" dari /admin/pesanan
+  // bergantung padanya; tanpa ini panelnya diam-diam tidak terbuka.
+  const barisLihat =
+    daftarPermintaan.baris.find((p) => p.id === lihat) ??
+    (tab === "permintaan" && lihat !== "" ? await ambilPermintaanPerId(lihat) : undefined);
 
   // Bidan diurutkan terhadap alamat PERMINTAAN INI. Daftar bersama untuk
   // seluruh antrean akan benar untuk paling banyak satu baris. Diurutkan &

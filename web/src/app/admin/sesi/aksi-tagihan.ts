@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
-import { adaTagihanTerbuka, KALIMAT_TAGIHAN_DITUTUP } from "@/lib/tagihan/terbuka";
+import { adaTagihanTerbuka, kabarTagihanDitutup } from "@/lib/tagihan/terbuka";
 
 /**
  * Aksi admin atas pengajuan yang tagihannya pesanan sesi DOKU (P3/B4, spec
@@ -103,10 +103,8 @@ export async function gantiBidanMenungguBayar(
   }
 
   segarkanLayar();
-  if (terbukaSebelum && !(await adaTagihanTerbuka(supabase, permintaanId))) {
-    return { ok: true, pesan: KALIMAT_TAGIHAN_DITUTUP };
-  }
-  return { ok: true };
+  const pesan = await kabarTagihanDitutup(supabase, permintaanId, terbukaSebelum);
+  return pesan ? { ok: true, pesan } : { ok: true };
 }
 
 /**

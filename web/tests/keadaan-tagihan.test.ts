@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { keadaanTagihan, tombolUntuk, type PesananRingkas } from "@/lib/tagihan/keadaan";
+import { bolehUbahJadwal, keadaanTagihan, tombolUntuk, type PesananRingkas } from "@/lib/tagihan/keadaan";
 
 const SEKARANG = new Date("2026-11-20T03:00:00Z");
 const MASA_DEPAN = "2026-11-21T03:00:00Z";
@@ -123,5 +123,20 @@ describe("tombolUntuk: tombol per keadaan", () => {
     expect(tombolUntuk("terbuka").email).toBe(true);
     expect(tombolUntuk("ditutup").wa).toBe(false);
     expect(tombolUntuk("tenggat_lewat").email).toBe(false);
+    // Baris warisan QRIS: WA/email berbunyi "tagihan sudah terbit di Passport", dan itu tidak benar.
+    expect(tombolUntuk("warisan_belum").wa).toBe(false);
+    expect(tombolUntuk("warisan_belum").email).toBe(false);
+    expect(tombolUntuk("warisan_belum")).toMatchObject({ terbitUlang: true, batalkan: true, gantiBidan: true });
+  });
+
+  it("bolehUbahJadwal: bebas sebelum tagihan; pada menunggu_bayar hanya di keadaan yang tidak ditolak basis data", () => {
+    expect(bolehUbahJadwal("mitra_siap", "tidak_berlaku")).toBe(true);
+    for (const k of ["terbuka", "tenggat_lewat", "ditutup", "tertahan", "warisan_belum"] as const) {
+      expect(bolehUbahJadwal("menunggu_bayar", k), k).toBe(true);
+    }
+    for (const k of ["perlu_ditinjau", "warisan_verifikasi", "warisan_lunas", "diterima"] as const) {
+      expect(bolehUbahJadwal("menunggu_bayar", k), k).toBe(false);
+    }
+    expect(bolehUbahJadwal("dikonfirmasi", "tidak_berlaku")).toBe(false);
   });
 });

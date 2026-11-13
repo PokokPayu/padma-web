@@ -47,7 +47,7 @@ export function pesanTagihan(input: {
     `Tagihan Anda sudah terbit. Bayar di Digital Passport: ${tautanPassport}`,
     `Mohon selesaikan pembayaran dalam ${sisaWaktu}.`,
     "",
-    "Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain — tapi Anda tetap bisa mengajukan ulang kapan saja.",
+    "Bila lewat dari batas itu, tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan.",
   ].join("\n");
 }
 
