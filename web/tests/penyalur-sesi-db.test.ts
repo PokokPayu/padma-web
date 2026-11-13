@@ -458,6 +458,62 @@ describe("SUCCESS DOKU melahirkan sesi lewat penyalur", () => {
     expect(hasil.data).toBe("diterapkan");
     expect(await sesiUntuk(id)).toHaveLength(1);
   });
+
+  it("URUTAN KUNCI pesanan -> pengajuan: penyalur yang menunggu baris pengajuan SUDAH memegang pesanannya", async () => {
+    // Ruling 4: `terbitkan_tagihan_sesi` memegang pesanan-pesanan pengajuan
+    // lalu menunggu baris pengajuannya. Penyalur yang mengunci pengajuan
+    // LEBIH DULU lalu pesanan membalik urutan itu: deadlock. Uji kunci di atas
+    // hanya membuktikan pengajuan dikunci FOR UPDATE; yang ini membuktikan
+    // URUTANNYA. A memegang baris pengajuan (seperti `terbitkan_tagihan_sesi`
+    // di tengah jalan), B menjalankan penyalur dan harus tertahan di sana —
+    // dan saat tertahan, pesanannya sudah ia kunci.
+    const { id, pesananId } = await pengajuanBertagihan();
+    const a = new Client({ connectionString: dbUrl() });
+    const b = new Client({ connectionString: dbUrl() });
+    await a.connect();
+    await b.connect();
+    let janjiB: Promise<unknown> | null = null;
+    try {
+      await a.query("begin");
+      await a.query(`select 1 from public.booking_requests where id = $1 for update`, [id]);
+
+      const pidB = (await b.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0].pid;
+      await b.query("begin");
+      janjiB = b.query(`select public.salurkan_sesi($1) as hasil`, [pesananId]);
+      janjiB.catch(() => {});
+
+      // B benar-benar MENUNGGU kunci (bukan sekadar belum sempat berjalan).
+      // Dibaca lewat koneksi baru: pg_stat_activity dibekukan per transaksi.
+      let menunggu = false;
+      for (let i = 0; i < 100 && !menunggu; i++) {
+        const [s] = await querySql<{ w: string | null }>(
+          `select wait_event_type as w from pg_stat_activity where pid = $1`,
+          [pidB],
+        );
+        menunggu = s?.w === "Lock";
+        if (!menunggu) await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(menunggu).toBe(true);
+
+      await a.query("savepoint coba");
+      const galat = await a
+        .query(`select 1 from public.orders where id = $1 for update nowait`, [pesananId])
+        .then(
+          () => null,
+          (e: { code?: string }) => e,
+        );
+      // 55P03 lock_not_available: baris pesanan dipegang B, yang sedang
+      // menunggu pengajuan — pesanan dikunci lebih dulu.
+      expect(galat?.code).toBe("55P03");
+      await a.query("rollback to savepoint coba");
+    } finally {
+      await a.query("rollback").catch(() => {});
+      await a.end();
+      if (janjiB) await janjiB.catch(() => {});
+      await b.query("rollback").catch(() => {});
+      await b.end();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -497,6 +553,34 @@ describe("syarat §6.4 gagal: sesi_tertahan + tinjauan, RPC tetap diterapkan", (
     expect(await keteranganTertahan(pesananId)).toEqual([expect.stringMatching(/^galat: .*tanpa mitra/)]);
     expect(await sesiUntuk(id)).toEqual([]);
     // Subtransaksi digulung utuh: tidak ada setengah konfirmasi yang tertinggal.
+    expect(await pengajuan(id)).toEqual({ status: "menunggu_bayar", status_bayar: "belum" });
+  });
+
+  it("galat SESUDAH pengajuan diperbarui (sisipan sesi ditolak FK varian): pembaruan pengajuan ikut digulung, uang tetap tercatat", async () => {
+    // Uji di atas gagal SEBELUM satu tulisan pun, jadi ia tidak bisa
+    // membuktikan penggulungan. Di sini keempat syarat lolos, pengajuan sudah
+    // dipindah ke `dikonfirmasi`/`lunas`, lalu sisipan `sessions` ditolak FK
+    // `sessions_varian_milik_layanan` (varian pengajuan dibuat tidak ada;
+    // FK pengajuan sendiri dilewati mode replika). Yang tidak boleh tertinggal:
+    // pengajuan `dikonfirmasi` tanpa sesi — keadaan yang membuat penyalur
+    // berikutnya menolak dengan "tidak lagi menunggu pembayaran".
+    const { id, pesananId } = await pengajuanBertagihan();
+    await paksaPengajuan(id, "variant_id = $2", [randomUUID()]);
+
+    const { data, error } = await lunasi(pesananId);
+    expect(error).toBeNull();
+    expect(data).toBe("diterapkan");
+
+    const o = await pesanan(pesananId);
+    expect(o.status).toBe("lunas");
+    expect(await uangTercatat(pesananId)).toBe(true);
+    expect(o.butuh_tinjauan_pada).not.toBeNull();
+    expect(o.sebab_tinjauan).toBe("sesi_tertahan");
+    // Galatnya dari SISIPAN, bukan dari pemeriksaan syarat.
+    expect(await keteranganTertahan(pesananId)).toEqual([
+      expect.stringMatching(/^galat: .*sessions_varian_milik_layanan/),
+    ]);
+    expect(await sesiUntuk(id)).toEqual([]);
     expect(await pengajuan(id)).toEqual({ status: "menunggu_bayar", status_bayar: "belum" });
   });
 
