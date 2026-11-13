@@ -259,6 +259,26 @@ async function naikkanKeMenungguBayarLunas() {
   if (error) throw error;
 }
 
+/**
+ * Mengubah masukan harga (titik alamat) fixture yang SUDAH dinaikkan ke
+ * 'menunggu_bayar' + lunas — baris warisan QRIS tanpa pesanan.
+ *
+ * Sejak P3/B4 (Ruling 8) `guard_masukan_harga_warisan` menolak perubahan
+ * bidan, jadwal, atau titik alamat pada pengajuan tanpa pesanan yang uangnya
+ * sudah masuk, untuk SEMUA peran: titiknya menentukan jenjang yang dihitung
+ * konfirmasi dari uang yang sudah dibayar. Di dunia nyata titik itu ditetapkan
+ * SEBELUM klien membayar; fixture mengikuti urutan yang sama — status_bayar
+ * dikembalikan ke 'belum', titik ditulis, lalu 'lunas' lagi (service role,
+ * yang tidak ditahan penjaga status_bayar). Setiap langkah diperiksa galatnya:
+ * tulisan yang ditolak diam-diam membuat uji di bawah menguji koordinat lama.
+ */
+async function ubahSebelumUangMasuk(ubah: Record<string, unknown>) {
+  for (const langkah of [{ status_bayar: "belum" }, ubah, { status_bayar: "lunas" }]) {
+    const { error } = await admin.from("booking_requests").update(langkah).eq("id", permintaanId);
+    if (error) throw error;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // konfirmasiPermintaan
 // ---------------------------------------------------------------------------
@@ -291,10 +311,11 @@ describe("konfirmasi permintaan jadwal", () => {
     // ulang dari `clients` alih-alih menyalin dari baris permintaan, sesi
     // akan berakhir dengan alamat kosong — bukan alamat yang sebenarnya
     // dipesan klien untuk kunjungan ini.
-    await admin
-      .from("booking_requests")
-      .update({ alamat: "Jl. Alamat Permintaan Ini No. 9", alamat_lat: -6.9, alamat_lon: 107.6 })
-      .eq("id", permintaanId);
+    await ubahSebelumUangMasuk({
+      alamat: "Jl. Alamat Permintaan Ini No. 9",
+      alamat_lat: -6.9,
+      alamat_lon: 107.6,
+    });
 
     const r = await konfirmasiPermintaan(permintaanId);
     expect(r.ok).toBe(true);
@@ -489,10 +510,7 @@ describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => 
   });
 
   it("menyimpan jenjang OTOMATIS dari koordinat permintaan & mitra", async () => {
-    await admin
-      .from("booking_requests")
-      .update({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon })
-      .eq("id", permintaanId);
+    await ubahSebelumUangMasuk({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon });
     await admin.from("partners").update({ lat: KOORD_SAMA.lat, lon: KOORD_SAMA.lon }).eq("id", MITRA);
 
     const r = await konfirmasiPermintaan(permintaanId);
@@ -509,10 +527,7 @@ describe("konfirmasiPermintaan menghitung & menyimpan jenjang transport", () => 
   });
 
   it("jenjang tetap NULL bila koordinat mitra belum ada — bukan galat", async () => {
-    await admin
-      .from("booking_requests")
-      .update({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon })
-      .eq("id", permintaanId);
+    await ubahSebelumUangMasuk({ alamat_lat: KOORD_SAMA.lat, alamat_lon: KOORD_SAMA.lon });
     // MITRA sengaja TIDAK diberi koordinat (default seed: NULL).
 
     const r = await konfirmasiPermintaan(permintaanId);

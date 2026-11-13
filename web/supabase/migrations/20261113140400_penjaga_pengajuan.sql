@@ -4,11 +4,14 @@
 -- Isi:
 --   (1) permintaan_melepas_tagihan     SATU daftar status yang melepas tagihan
 --                                       pengajuan (dipakai kedua trigger di bawah)
+--   (1b) masukan_harga_berubah         SATU daftar masukan harga (dipakai (3) dan (3b))
 --   (2) guard_batal_permintaan_beruang  BEFORE UPDATE OF status: menolak
 --                                       pelepasan bila uang sudah masuk
 --   (3) tutup_pesanan_sesi_terbuka      AFTER UPDATE: menutup pesanan terbuka
 --                                       saat pengajuan dilepas atau masukan
 --                                       harganya berubah
+--   (3b) guard_masukan_harga_warisan   BEFORE UPDATE: baris warisan QRIS yang uangnya
+--                                       sudah masuk tidak boleh diubah masukan harganya
 --   (4) guard_status_bayar_permintaan   status_bayar tidak lagi ditulis peran API
 --   (5) batalkan_pengajuan_saya         RPC klien (auth.uid)
 --   (6) batalkan_pengajuan_staf         RPC staf: menunggu_bayar -> dibatalkan_tenggat
@@ -66,6 +69,45 @@ revoke all on function public.permintaan_melepas_tagihan(public.booking_status)
   from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
+-- (1b) masukan_harga_berubah
+-- ---------------------------------------------------------------------------
+-- Kolom pengajuan yang menentukan HARGA tagihan sesi: bidan dan titik alamat
+-- (jenjang jarak), layanan dan varian (tarif), tanggal (tarif berlaku per
+-- tanggal sesi), dan jam (tenggat = least(24 jam, jam kunjungan)). Memulangkan
+-- nama manusia dari yang berubah, kosong bila tidak ada.
+--
+-- SATU daftar untuk dua trigger yang wajib sepakat: penutup pesanan terbuka
+-- (3) dan penjaga baris warisan (3b). Kolom yang dikenal satu tetapi tidak
+-- dikenal yang lain berarti harga yang bergeser diam-diam di salah satu jalur.
+-- Teks `alamat` sengaja TIDAK masuk: harga dihitung dari titiknya.
+create or replace function public.masukan_harga_berubah(
+  p_lama public.booking_requests,
+  p_baru public.booking_requests
+)
+returns text[]
+language sql
+immutable
+set search_path = public
+as $$
+  select array_remove(array[
+    case when p_baru.partner_id is distinct from p_lama.partner_id then 'bidan' end,
+    case when p_baru.service_id is distinct from p_lama.service_id then 'layanan' end,
+    case when p_baru.variant_id is distinct from p_lama.variant_id then 'varian' end,
+    case when p_baru.tanggal    is distinct from p_lama.tanggal    then 'tanggal' end,
+    case when p_baru.jam_mulai  is distinct from p_lama.jam_mulai  then 'jam' end,
+    case when p_baru.alamat_lat is distinct from p_lama.alamat_lat then 'titik alamat (lat)' end,
+    case when p_baru.alamat_lon is distinct from p_lama.alamat_lon then 'titik alamat (lon)' end
+  ], null);
+$$;
+
+comment on function public.masukan_harga_berubah(public.booking_requests, public.booking_requests) is
+  'Masukan harga pengajuan yang berubah (bidan, layanan, varian, tanggal, jam, titik '
+  'alamat). Satu daftar untuk tutup_pesanan_sesi_terbuka dan guard_masukan_harga_warisan.';
+
+revoke all on function public.masukan_harga_berubah(public.booking_requests, public.booking_requests)
+  from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
 -- (2) guard_batal_permintaan_beruang
 -- ---------------------------------------------------------------------------
 -- BERLAKU UNTUK SEMUA PERAN — sengaja tanpa `current_user in (...)`, berbeda
@@ -120,8 +162,13 @@ create trigger trg_guard_batal_permintaan_beruang
 -- terbuka, dan admin wajib menerbitkan ulang (§6.5: "tidak ada jalan mengubah
 -- masukan harga sementara pesanan lama masih bisa dibayar"). Jam masuk daftar
 -- karena tenggat pesanan = least(24 jam, jam kunjungan): jam yang bergeser
--- membuat tenggat beku itu salah. Teks alamat TIDAK masuk: harga dihitung dari
--- titiknya, dan membetulkan salah ketik tidak boleh membatalkan tagihan.
+-- membuat tenggat beku itu salah. Daftarnya hidup di `masukan_harga_berubah`.
+-- Teks alamat TIDAK masuk: harga dihitung dari titiknya, dan membetulkan salah
+-- ketik tidak boleh membatalkan tagihan. Agar itu benar juga di layar,
+-- `perbaruiPermintaan` TIDAK menggeocode ulang selama `menunggu_bayar`
+-- (koordinat lama dipertahankan kecuali admin menyentuh pin di peta); tanpa
+-- itu salah ketik yang dibetulkan menggeser atau mengosongkan titiknya lewat
+-- Nominatim, dan pesanan terbuka tertutup lewat cabang titik alamat di sini.
 --
 -- Ditegakkan sebagai TRIGGER supaya berlaku untuk SETIAP jalur tulis: RPC di
 -- berkas ini, `perbaruiPermintaan` (REST staf), REST langsung, service role.
@@ -155,15 +202,7 @@ begin
       else format('pengajuan berpindah ke %s', new.status)
     end;
   else
-    v_ubah := array_remove(array[
-      case when new.partner_id is distinct from old.partner_id then 'bidan' end,
-      case when new.service_id is distinct from old.service_id then 'layanan' end,
-      case when new.variant_id is distinct from old.variant_id then 'varian' end,
-      case when new.tanggal    is distinct from old.tanggal    then 'tanggal' end,
-      case when new.jam_mulai  is distinct from old.jam_mulai  then 'jam' end,
-      case when new.alamat_lat is distinct from old.alamat_lat then 'titik alamat (lat)' end,
-      case when new.alamat_lon is distinct from old.alamat_lon then 'titik alamat (lon)' end
-    ], null);
+    v_ubah := public.masukan_harga_berubah(old, new);
     if coalesce(cardinality(v_ubah), 0) = 0 then
       return null;
     end if;
@@ -212,6 +251,53 @@ drop trigger if exists trg_tutup_pesanan_sesi_terbuka on public.booking_requests
 create trigger trg_tutup_pesanan_sesi_terbuka
   after update on public.booking_requests
   for each row execute function public.tutup_pesanan_sesi_terbuka();
+
+-- ---------------------------------------------------------------------------
+-- (3b) guard_masukan_harga_warisan
+-- ---------------------------------------------------------------------------
+-- Ruling 8. Baris WARISAN QRIS (§7) — pengajuan tanpa satu pun pesanan — yang
+-- uangnya sudah masuk (`status_bayar` menunggu_verifikasi/lunas) tidak punya
+-- harga beku: angka yang admin cocokkan dengan mutasi rekening, dan jenjang
+-- transport yang kelak dihitung `konfirmasi_permintaan`, DITURUNKAN dari bidan,
+-- varian, tanggal, dan titik alamat saat ini. Mengubahnya diam-diam membuat
+-- transfer yang sudah dibayar klien tidak lagi cocok dengan tagihannya, atau
+-- sesi lahir dengan jenjang yang bukan yang dibayar. Jalan yang benar:
+-- konfirmasi jadwalnya dulu (sesi lahir dari angka yang dibayar), lalu jadwal
+-- ulang dari sesinya.
+--
+-- Berlaku untuk SEMUA peran, alasan yang sama dengan penjaga (2): yang dijaga
+-- uang orang, bukan wewenang pemanggil. Pengajuan BERPESANAN tidak disentuh:
+-- harganya beku di `order_items`, dan pengajuan tertahan (pesanan lunas, sesi
+-- belum lahir) WAJIB tetap bisa dipulihkan lewat ganti bidan atau ubah jadwal.
+-- "Uang sudah masuk" dibaca dari predikat tunggal (Ruling 1), tidak ditulis
+-- ulang di sini. Security definer karena predikat itu tertutup bagi peran API.
+create or replace function public.guard_masukan_harga_warisan()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if coalesce(cardinality(public.masukan_harga_berubah(old, new)), 0) > 0
+     and not exists (select 1 from public.orders o where o.booking_request_id = new.id)
+     and public.uang_sudah_masuk_permintaan(new.id) then
+    raise exception 'Pembayaran QRIS pengajuan ini sudah masuk. Konfirmasi jadwalnya dulu, lalu jadwal ulang dari sesi.'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.guard_masukan_harga_warisan() is
+  'Menolak perubahan masukan harga (masukan_harga_berubah) pada pengajuan TANPA pesanan '
+  'yang uangnya sudah masuk (bukti QRIS warisan). Berlaku untuk SEMUA peran.';
+
+revoke all on function public.guard_masukan_harga_warisan() from public, anon, authenticated;
+
+drop trigger if exists trg_guard_masukan_harga_warisan on public.booking_requests;
+create trigger trg_guard_masukan_harga_warisan
+  before update on public.booking_requests
+  for each row execute function public.guard_masukan_harga_warisan();
 
 -- ---------------------------------------------------------------------------
 -- (4) guard_status_bayar_permintaan

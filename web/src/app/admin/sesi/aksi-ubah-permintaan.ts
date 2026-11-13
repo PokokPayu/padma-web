@@ -6,7 +6,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import { koordinatDariFormData } from "@/lib/transport/koordinat-form";
 import { geocodeAlamat } from "@/lib/transport/geocode";
 import { normalkanAlamat } from "@/lib/transport/alamat";
-import { STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/jadwal/status";
+import { PERMINTAAN_MENUNGGU_BAYAR, STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/jadwal/status";
 import { bacaPengaturan } from "@/lib/settings";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { POLA_TANGGAL } from "@/lib/jadwal/jam";
@@ -25,6 +25,7 @@ type Gagal = { ok: false; pesan: string };
 type Berhasil = { ok: true };
 
 type BarisSebelum = {
+  status: string;
   alamat: string;
   alamat_lat: number | null;
   alamat_lon: number | null;
@@ -75,7 +76,7 @@ export async function perbaruiPermintaan(
   // bukan untuk permintaan yang gagal dibaca dan berhak dicoba ulang.
   const { data: sebelum, error: errorBaca } = await supabase
     .from("booking_requests")
-    .select("alamat, alamat_lat, alamat_lon, tanggal")
+    .select("status, alamat, alamat_lat, alamat_lon, tanggal")
     .eq("id", permintaanId)
     .in("status", [...STATUS_UBAH_PERMINTAAN_STAF])
     .maybeSingle<BarisSebelum>();
@@ -130,16 +131,28 @@ export async function perbaruiPermintaan(
       ? { lat: sebelum.alamat_lat, lon: sebelum.alamat_lon }
       : null;
 
-  const koordinat = pin ?? (alamatBerubah ? await geocodeAlamat(alamat) : koordinatLama);
+  // ===== `menunggu_bayar`: TANPA GEOCODE ULANG (Ruling 9, P3/B4) =====
+  // Begitu tagihan terbit, titik alamat adalah MASUKAN HARGA (jenjang
+  // transport). Formulir sungguhan mengirim `pin_disentuh` kosong selama peta
+  // tidak disentuh, jadi membetulkan salah ketik di teks alamat akan
+  // menggeocode ulang: titiknya bergeser atau menjadi NULL bila Nominatim
+  // gagal, dan pesanan terbuka ikut ditutup tanpa admin pernah memutuskan
+  // memindahkan titiknya. Di keadaan ini koordinat lama karena itu DIPERTAHANKAN;
+  // admin yang memang ingin memindahkan titik menjatuhkan pin di peta.
+  const bolehGeocode = sebelum.status !== PERMINTAAN_MENUNGGU_BAYAR;
+  const koordinat =
+    pin ?? (alamatBerubah && bolehGeocode ? await geocodeAlamat(alamat) : koordinatLama);
 
   // ===== `menunggu_bayar` BOLEH DIUBAH (P3/B4) =====
-  // Tanggal, jam, dan titik alamat adalah MASUKAN HARGA pesanan sesi yang
-  // sudah terbit. Bila salah satunya berubah, trigger
-  // `tutup_pesanan_sesi_terbuka` menutup pesanan terbuka di transaksi UPDATE
-  // ini juga, dan admin wajib menerbitkan ulang — harga beku yang basi tidak
-  // pernah bisa dibayar. Pesanan yang sudah LUNAS (pengajuan tertahan) tidak
-  // disentuh: mengubah jadwal di sana adalah jalan pemulihan sebelum "Buat
-  // sesi". Teks alamat saja tidak menutup apa pun.
+  // Tanggal, jam, dan titik alamat (hanya lewat pin, lihat atas) adalah
+  // MASUKAN HARGA pesanan sesi yang sudah terbit. Bila salah satunya berubah,
+  // trigger `tutup_pesanan_sesi_terbuka` menutup pesanan terbuka di transaksi
+  // UPDATE ini juga, dan admin wajib menerbitkan ulang — harga beku yang basi
+  // tidak pernah bisa dibayar. Pesanan yang sudah LUNAS (pengajuan tertahan)
+  // tidak disentuh: mengubah jadwal di sana adalah jalan pemulihan sebelum
+  // "Buat sesi". Teks alamat saja tidak menutup apa pun. Baris WARISAN QRIS
+  // yang uangnya sudah masuk menolak perubahan masukan harga
+  // (`guard_masukan_harga_warisan`, P0001 di bawah).
   //
   // Jalur ini UPDATE REST, jadi urutan kuncinya pengajuan -> pesanan,
   // kebalikan webhook. Bila keduanya bertabrakan tepat bersamaan, Postgres
@@ -168,6 +181,13 @@ export async function perbaruiPermintaan(
       ok: false,
       pesan: "Klien ini sudah punya permintaan lain untuk layanan dan tanggal yang sama.",
     };
+  }
+
+  // P0001 = kalimat manusia dari penjaga basis data, mis. baris warisan QRIS
+  // yang uangnya sudah masuk (`guard_masukan_harga_warisan`). Kode lain tidak
+  // pernah diteruskan mentah.
+  if (error?.code === "P0001") {
+    return { ok: false, pesan: error.message };
   }
 
   // UPDATE yang tertahan RLS dijawab PostgREST dengan 200 + [] — melaporkan

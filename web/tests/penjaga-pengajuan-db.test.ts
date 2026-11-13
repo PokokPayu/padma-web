@@ -39,6 +39,7 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import { geserHari } from "@/lib/owner/pekan";
 import { rakitInvoice } from "@/lib/pesanan/order-id";
 import { STATUS_ANTRE, STATUS_PERMINTAAN } from "@/lib/jadwal/status";
+import { normalkanAlamat } from "@/lib/transport/alamat";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ref.sesi! }));
@@ -76,6 +77,9 @@ const ALAMAT = { teks: "Jl. Uji Penjaga Pengajuan No. 4", lat: -7.9666, lon: 112
 /** Kalimat P0001 penjaga beruang — VERBATIM dari brief B4. */
 const KALIMAT_UANG_MASUK_SQL = "Pembayaran pengajuan ini sudah masuk dan sedang diperiksa admin.";
 /** Kalimat yang klien baca di Passport saat pembatalannya ditolak karena uang sudah masuk. */
+/** Kalimat P0001 penjaga masukan harga baris warisan QRIS (Ruling 8). */
+const KALIMAT_WARISAN_BERUANG =
+  "Pembayaran QRIS pengajuan ini sudah masuk. Konfirmasi jadwalnya dulu, lalu jadwal ulang dari sesi.";
 const KALIMAT_UANG_MASUK_KLIEN =
   "Pembayaran Anda untuk pengajuan ini sudah kami terima dan sedang diperiksa admin, " +
   "jadi pengajuan tidak bisa dibatalkan dari sini. Admin PADMA akan menghubungi Anda.";
@@ -285,12 +289,14 @@ type BarisPengajuan = {
   tanggal: string;
   jam_mulai: string;
   alamat: string;
+  alamat_lat: number | null;
+  alamat_lon: number | null;
 };
 
 async function pengajuan(id: string): Promise<BarisPengajuan> {
   const [b] = await querySql<BarisPengajuan>(
     `select status::text, status_bayar::text, screening_id, partner_id, tanggal::text,
-            jam_mulai::text, alamat
+            jam_mulai::text, alamat, alamat_lat, alamat_lon
        from public.booking_requests where id = $1`,
     [id],
   );
@@ -368,6 +374,28 @@ function formUbah(isi: Record<string, string>): FormData {
   const f = new FormData();
   for (const [k, v] of Object.entries(isi)) f.set(k, v);
   return f;
+}
+
+/**
+ * Nominatim palsu (pola tests/admin-klien.test.ts): hanya URL Nominatim yang
+ * dijawab; Supabase lokal diteruskan ke `fetch` terpagar. Jawabannya titik
+ * yang JAUH dari alamat fixture, sehingga geocode yang terjadi diam-diam
+ * pasti menggeser koordinat — dan menutup pesanan terbuka.
+ */
+function stubNominatim() {
+  const asli = globalThis.fetch;
+  const palsu = vi.fn(
+    async () =>
+      new Response(JSON.stringify([{ lat: "-7.9123", lon: "112.6012", addresstype: "road" }]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  );
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => {
+    const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+    return url.includes("nominatim") ? palsu() : asli(...args);
+  });
+  return palsu;
 }
 
 // ---------------------------------------------------------------------------
@@ -647,23 +675,38 @@ describe("masukan harga berubah saat pesanan masih terbuka -> pesanan itu ditutu
     await harusTertutup(pesananId, /bidan/);
   });
 
-  it("mengubah alamat (TEKS) saja, pin tetap -> pesanan TETAP terbuka", async () => {
-    const { id, pesananId } = await bertagihan();
-    const r = await perbaruiPermintaan(
-      id,
-      formUbah({
-        alamat: "Jl. Uji Penjaga Pengajuan No. 4, RT 02 (pagar hijau)",
-        tanggal: TGL_KUNJUNGAN,
-        jam: "09:00",
-        pin_disentuh: "1",
-        lat: String(ALAMAT.lat),
-        lon: String(ALAMAT.lon),
-      }),
-    );
-    expect(r).toEqual({ ok: true });
-    expect((await pengajuan(id)).alamat).toMatch(/pagar hijau/);
-    expect((await pesanan(pesananId)).status).toBe("menunggu_bayar");
-    expect(await sebabDibatalkan(pesananId)).toEqual([]);
+  it("membetulkan TEKS alamat lewat formulir sungguhan (peta tidak disentuh) -> TANPA geocode, titik tetap, pesanan TETAP terbuka", async () => {
+    // Formulir sungguhan: `PemilihLokasi` menyemai lat/lon dari titik
+    // tersimpan dan mengirim `pin_disentuh` KOSONG selama peta tidak disentuh.
+    // Geocode ulang di sini akan menggeser (atau mengosongkan) titiknya dan
+    // menutup tagihan tanpa admin pernah memutuskan memindahkan titik.
+    const teksBaru = "Jl. Uji Penjaga Pengajuan No. 4, RT 02 (pagar hijau)";
+    await svc.from("geocode_cache").delete().eq("alamat_normal", normalkanAlamat(teksBaru));
+    const nominatim = stubNominatim();
+    try {
+      const { id, pesananId } = await bertagihan();
+      const r = await perbaruiPermintaan(
+        id,
+        formUbah({
+          alamat: teksBaru,
+          tanggal: TGL_KUNJUNGAN,
+          jam: "09:00",
+          pin_disentuh: "",
+          lat: String(ALAMAT.lat),
+          lon: String(ALAMAT.lon),
+        }),
+      );
+      expect(r).toEqual({ ok: true });
+      const b = await pengajuan(id);
+      expect(b.alamat).toBe(teksBaru);
+      expect({ lat: b.alamat_lat, lon: b.alamat_lon }).toEqual({ lat: ALAMAT.lat, lon: ALAMAT.lon });
+      expect(nominatim).not.toHaveBeenCalled();
+      expect((await pesanan(pesananId)).status).toBe("menunggu_bayar");
+      expect(await sebabDibatalkan(pesananId)).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      await svc.from("geocode_cache").delete().eq("alamat_normal", normalkanAlamat(teksBaru));
+    }
   });
 
   it.each([
@@ -703,6 +746,76 @@ describe("masukan harga berubah saat pesanan masih terbuka -> pesanan itu ditutu
     );
     expect((await pengajuan(id)).status).toBe("mencari_mitra");
     await harusTertutup(pesananId, /bidan pengajuan dilepas/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Baris WARISAN QRIS yang uangnya sudah masuk (Ruling 8)
+// ---------------------------------------------------------------------------
+
+describe("baris warisan QRIS tanpa pesanan: masukan harga terkunci begitu uangnya masuk", () => {
+  // Tanpa pesanan, tidak ada harga beku: angka yang admin cocokkan dengan
+  // mutasi rekening dan jenjang yang dihitung konfirmasi_permintaan diturunkan
+  // dari baris ini SAAT INI. Mengubah bidan/jadwal/titik diam-diam mengubah
+  // tagihan yang sudah dibayar.
+  it.each(["menunggu_verifikasi", "lunas"] as const)(
+    "status_bayar %s: perbaruiPermintaan (jam) ditolak berkalimat, jam tetap",
+    async (sb) => {
+      const id = await warisan(sb);
+      const r = await perbaruiPermintaan(
+        id,
+        formUbah({ alamat: ALAMAT.teks, tanggal: TGL_KUNJUNGAN, jam: "10:00" }),
+      );
+      expect(r).toEqual({ ok: false, pesan: KALIMAT_WARISAN_BERUANG });
+      expect((await pengajuan(id)).jam_mulai).toBe("09:00:00");
+    },
+  );
+
+  it.each(["menunggu_verifikasi", "lunas"] as const)(
+    "status_bayar %s: gantiBidanMenungguBayar ditolak berkalimat, bidan tetap",
+    async (sb) => {
+      const id = await warisan(sb);
+      const { gantiBidanMenungguBayar } = await aksiTagihan();
+      expect(await gantiBidanMenungguBayar(id, MITRA_B)).toEqual({
+        ok: false,
+        pesan: KALIMAT_WARISAN_BERUANG,
+      });
+      expect((await pengajuan(id)).partner_id).toBe(MITRA);
+    },
+  );
+
+  it("service role pun ditolak (SEMUA peran), titik alamat tetap", async () => {
+    const id = await warisan("lunas");
+    const { error } = await svc
+      .from("booking_requests")
+      .update({ alamat_lat: -7.95 })
+      .eq("id", id)
+      .select("id");
+    expect(error?.code).toBe("P0001");
+    expect(error?.message).toBe(KALIMAT_WARISAN_BERUANG);
+    expect((await pengajuan(id)).alamat_lat).toBe(ALAMAT.lat);
+  });
+
+  it("teks alamat (bukan masukan harga) pada warisan lunas tetap boleh dibetulkan", async () => {
+    const id = await warisan("lunas");
+    const r = await perbaruiPermintaan(
+      id,
+      formUbah({ alamat: "Jl. Uji Penjaga Pengajuan No. 4A", tanggal: TGL_KUNJUNGAN, jam: "09:00", pin_disentuh: "" }),
+    );
+    expect(r).toEqual({ ok: true });
+    expect((await pengajuan(id)).alamat).toBe("Jl. Uji Penjaga Pengajuan No. 4A");
+  });
+
+  it("status_bayar belum (uang belum masuk): jam dan bidan BOLEH diubah", async () => {
+    const id = await warisan("belum");
+    const r = await perbaruiPermintaan(
+      id,
+      formUbah({ alamat: ALAMAT.teks, tanggal: TGL_KUNJUNGAN, jam: "10:00" }),
+    );
+    expect(r).toEqual({ ok: true });
+    const { gantiBidanMenungguBayar } = await aksiTagihan();
+    expect(await gantiBidanMenungguBayar(id, MITRA_B)).toEqual({ ok: true });
+    expect(await pengajuan(id)).toMatchObject({ jam_mulai: "10:00:00", partner_id: MITRA_B });
   });
 });
 
