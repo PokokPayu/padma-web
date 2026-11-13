@@ -828,7 +828,7 @@ describe("terapkan_notifikasi_gateway — jantung mesin", () => {
 });
 
 describe("view pesanan_item_staf", () => {
-  it("staf melihat TUJUH kolom BERNOMINAL; klien tidak melihat baris apa pun", async () => {
+  it("staf melihat DELAPAN kolom, satu BERNOMINAL; klien tidak melihat baris apa pun", async () => {
     const produk = await semaiProduk("view-staf", 120_000);
     const p = await semaiPesanan({
       produkId: produk,
@@ -844,7 +844,11 @@ describe("view pesanan_item_staf", () => {
       .eq("pesanan_id", p.pesananId);
     expect(error).toBeNull();
     expect((data ?? []).length).toBe(1);
+    // B5 (20261113140500) menambah `booking_request_id` di ujung: penaut item
+    // sesi ke pengajuannya, bukan uang. `harga_beku` tetap satu-satunya kolom
+    // bernominal (tests/money-firewall-struktural.test.ts).
     expect(Object.keys(data![0]).sort()).toEqual([
+      "booking_request_id",
       "harga_beku",
       "jenis",
       "judul_beku",

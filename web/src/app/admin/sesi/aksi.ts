@@ -8,7 +8,6 @@ import { saranJenjang } from "@/lib/transport/saran";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
 import type { JenjangTransport } from "@/lib/transport/jarak";
-import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 import { KALIMAT_SEBAB_ADMIN, sebabTagihanDitolak } from "@/lib/tagihan/pengajuan";
 import {
   PERMINTAAN_AWAL,
@@ -20,6 +19,9 @@ import {
 import { kirimEmail } from "@/lib/email/kirim";
 import { emailTagihan, subjekTagihan } from "@/lib/tagihan/email-tagihan";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
+import { formatRupiah } from "@/lib/rupiah-publik";
+import { formatTanggalID } from "@/lib/passport/waktu";
+import { PESANAN_TERBUKA } from "@/lib/pesanan/status";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -219,8 +221,7 @@ export async function terbitkanTagihan(permintaanId: string): Promise<Berhasil |
  * pastikan RESEND_API_KEY & domain pengirim sudah terpasang." Kalimat itu benar
  * untuk dua dari ENAM jalan keluar `false` di fungsi ini, dan menyesatkan untuk
  * empat sisanya — termasuk gerbang `NEXT_PUBLIC_BASIS_URL` yang lahir belakangan
- * dan tidak pernah disebut siapa pun, serta `total === null` yang sudah punya
- * kalimatnya sendiri di `KALIMAT_SEBAB_ADMIN`. Admin yang menekan "kirim ulang"
+ * dan tidak pernah disebut siapa pun, serta tagihan tanpa pesanan terbuka. Admin yang menekan "kirim ulang"
  * lalu memeriksa alamat email klien yang sebenarnya sudah benar, berulang kali,
  * untuk kegagalan yang letaknya di environment server.
  *
@@ -234,9 +235,8 @@ type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
  * TIDAK PERNAH MELEMPAR dan TIDAK PERNAH menggagalkan pemanggilnya. Berbeda
  * dari `kirimEmail()` (yang murni HTTP dan gagalnya memang selalu berbentuk
  * nilai balik), badan fungsi INI memanggil beberapa hal yang BISA melempar:
- * `daftarTagihanPengajuanAdmin` menyentuh klien service role di modulnya
- * sendiri (melempar bila kunci layanannya hilang dari environment) dan dua
- * pemanggilan RPC tarif, `formatJam` melempar untuk jam tak sah, dan
+ * pembacaan pesanan terbuka dan item bekunya (`pesanan_item_staf`) melempar
+ * bila PostgREST menolaknya, `formatJam` melempar untuk jam tak sah, dan
  * `Intl.DateTimeFormat().format` melempar `RangeError` untuk tanggal tak sah.
  * Tanpa `try/catch` di sini, lemparan itu terjadi SESUDAH `terbitkanTagihan()`
  * sudah memindahkan status
@@ -246,9 +246,7 @@ type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
  * senyap.
  *
  * PAGAR STATUS: bacaan `booking_requests` DIKUNCI ke `menunggu_bayar`.
- * `daftarTagihanPengajuanAdmin({ permintaanId })` sengaja mengabaikan status
- * (dulu dipakai gerbang `terbitkanTagihan()` yang membaca SEBELUM transisi;
- * gerbang itu kini hidup di `terbitkan_tagihan_sesi`), tetapi
+ * Pesanan terbuka pun dibaca tanpa melihat status pengajuan, tetapi
  * fungsi ini punya DUA pemanggil: `terbitkanTagihan()` sendiri (baris sudah
  * `menunggu_bayar` pada titik ini) dan server action `kirimUlangEmailTagihan`
  * — endpoint POST tersendiri (aturan #1 dokblok atas berkas ini) yang bisa
@@ -291,43 +289,62 @@ async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail>
       };
     }
 
-    const daftar = await daftarTagihanPengajuanAdmin({ permintaanId });
-    const t = daftar[0];
-    if (!t) {
+    const supabase = await createServerSupabase();
+
+    // ANGKA = HARGA BEKU pesanan terbuka, dibaca dari `pesanan_item_staf`
+    // dengan sesi staf (P3/B5, D2). Bukan hitung ulang tarif: tarif bisa
+    // berubah sesudah tagihan terbit, dan email yang menyebut angka berbeda
+    // dari yang ditagih Passport adalah email yang membuat klien membayar dua
+    // kali atau tidak sama sekali.
+    const { data: terbuka, error: galatPesanan } = await supabase
+      .from("orders")
+      .select("id, kedaluwarsa_pada")
+      .eq("booking_request_id", permintaanId)
+      .in("status", [...PESANAN_TERBUKA])
+      .maybeSingle<{ id: string; kedaluwarsa_pada: string }>();
+    if (galatPesanan) throw galatPesanan;
+    if (!terbuka) {
       return {
         ok: false,
         pesan:
-          "Email tidak dikirim: baris permintaannya tidak terbaca. Muat ulang " +
-          "halaman — kemungkinan besar tagihan ini sudah tidak berstatus menunggu bayar.",
-      };
-    }
-    // `total === null` PUNYA kalimatnya sendiri, dan kalimat itu menyebut layar
-    // yang memperbaikinya (`KALIMAT_SEBAB_ADMIN`) — sama persis dengan yang
-    // dipakai gerbang `terbitkanTagihan()` di atas. Memakainya ulang di sini
-    // menjaga satu keadaan tidak dijelaskan dengan dua kalimat berbeda
-    // tergantung tombol mana yang ditekan admin.
-    if (t.total === null || t.hargaLayanan === null || t.hargaTransport === null) {
-      return {
-        ok: false,
-        pesan: `Email tidak dikirim: tagihannya belum bernominal. ${
-          t.sebab ? KALIMAT_SEBAB_ADMIN[t.sebab] : "Totalnya belum bisa dihitung."
-        }`,
+          "Email tidak dikirim: tidak ada tagihan terbuka untuk pengajuan ini. " +
+          "Terbitkan (ulang) tagihannya lebih dulu.",
       };
     }
 
-    const supabase = await createServerSupabase();
+    const { data: item, error: galatItem } = await supabase
+      .from("pesanan_item_staf")
+      .select("harga_beku, urutan")
+      .eq("pesanan_id", terbuka.id)
+      .eq("booking_request_id", permintaanId)
+      .order("urutan", { ascending: true })
+      .returns<{ harga_beku: number; urutan: number }[]>();
+    if (galatItem) throw galatItem;
+    const hargaLayanan = (item ?? []).find((i) => i.urutan === 1)?.harga_beku;
+    if (hargaLayanan === undefined) {
+      return {
+        ok: false,
+        pesan:
+          "Email tidak dikirim: rincian harga tagihan tidak terbaca. Muat ulang " +
+          "halaman; bila tetap begini, laporkan ke teknis.",
+      };
+    }
+    const hargaTransport = (item ?? []).find((i) => i.urutan === 2)?.harga_beku ?? null;
+    const total = (item ?? []).reduce((n, i) => n + Number(i.harga_beku), 0);
+
     const { data: baris } = await supabase
       .from("booking_requests")
-      .select("tenggat, jam_mulai, clients ( nama, email )")
+      .select("tanggal, jam_mulai, clients ( nama, email ), services ( nama )")
       .eq("id", permintaanId)
       // Lihat dokblok: mengunci bacaan ini ke `menunggu_bayar` melindungi
       // KEDUA jalur pemanggil (`terbitkanTagihan` dan `kirimUlangEmailTagihan`)
       // sekaligus.
       .eq("status", PERMINTAAN_MENUNGGU_BAYAR)
       .maybeSingle<{
-        tenggat: string | null;
+        tanggal: string;
         jam_mulai: string;
         clients: { nama: string; email: string } | null;
+        services: { nama: string } | null;
       }>();
 
     if (!baris) {
@@ -347,22 +364,23 @@ async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail>
       };
     }
 
+    const namaLayanan = baris.services?.nama ?? "Layanan";
+    const tanggal = formatTanggalID(baris.tanggal);
     const { html, teks } = emailTagihan({
-      namaKlien: baris.clients?.nama ?? t.namaKlien,
-      namaLayanan: t.namaLayanan,
-      tanggal: t.tanggal,
+      namaKlien: baris.clients?.nama ?? "Klien",
+      namaLayanan,
+      tanggal,
       jam: formatJam(jamDariDb(baris.jam_mulai)),
-      hargaLayanan: t.hargaLayanan,
-      hargaTransport: t.hargaTransport,
-      labelJenjang: t.labelJenjang ?? "",
-      total: t.total,
-      tenggatAbsolut: formatTenggatAbsolut(baris.tenggat),
-      tautanBayar: `${basisUrl}/passport/bayar`,
+      hargaLayanan: formatRupiah(hargaLayanan),
+      hargaTransport: hargaTransport === null ? null : formatRupiah(hargaTransport),
+      total: formatRupiah(total),
+      tenggatAbsolut: formatTenggatAbsolut(terbuka.kedaluwarsa_pada),
+      tautanBayar: `${basisUrl}/passport/bayar/${permintaanId}`,
     });
 
     const hasil = await kirimEmail({
       ke: email,
-      subjek: subjekTagihan({ namaLayanan: t.namaLayanan, tanggal: t.tanggal }),
+      subjek: subjekTagihan({ namaLayanan, tanggal }),
       html,
       teks,
     });

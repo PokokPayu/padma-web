@@ -430,6 +430,8 @@ describe("TabelPesanan", () => {
     kanal: "bank_transfer",
     transaksiId: "trx-9999",
     statusGateway: "settlement",
+    jenis: "produk_digital" as const,
+    bookingRequestId: null,
     items: [
       {
         pesananId: "11111111-1111-1111-1111-111111111111",

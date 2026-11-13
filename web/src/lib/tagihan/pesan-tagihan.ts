@@ -1,5 +1,5 @@
 /**
- * PESAN TAGIHAN SIAP-SALIN UNTUK WHATSAPP (spec C2 P7).
+ * PESAN TAGIHAN SIAP-SALIN UNTUK WHATSAPP (spec C2 P7, diubah P3/B5 D3).
  *
  * Berkas ini sengaja MURNI — tanpa satu pun impor. Kartu antrean di panel admin
  * adalah komponen `"use client"`, dan modul yang menyentuh Supabase memuat
@@ -8,22 +8,20 @@
  * `lib/auth/pesan-undangan.ts`, dan alasannya juga sama: ia sudah pernah
  * menjatuhkan Tahap B.
  *
+ * ===== TANPA ANGKA (D3) =====
+ * `/admin/sesi` nol rupiah, dan pesan ini dirakit di sana. Rinciannya milik
+ * Digital Passport klien dan email tagihan; WhatsApp hanya mengantar klien ke
+ * sana. Tidak ada angka, tidak ada QRIS: pembayaran lewat DOKU di Passport.
+ *
  * ===== KENAPA SIAP-SALIN, BUKAN TERKIRIM OTOMATIS =====
  * PADMA belum punya jalur kirim WhatsApp otomatis, dan menambahkannya berarti
  * satu penyedia baru beserta jalur kegagalannya. Admin menekan tombol, pesannya
  * tersalin, ia menempelkannya di percakapan yang sudah berjalan dengan klien
  * itu. Cara ini juga membuat nada pesannya tetap milik manusia.
  *
- * Lima unsur WAJIB ada, dan itu diuji: nama, layanan, kapan, berapa, dan sampai
+ * Unsur WAJIB, dan itu diuji: nama, layanan, kapan, tautan bayar, dan sampai
  * kapan. Pesan tagihan tanpa batas waktu adalah pesan yang membuat orang
  * kehilangan slotnya tanpa pernah tahu ada tenggatnya.
- *
- * "Berapa" sekarang berarti RINCIAN, bukan satu angka. Klien yang hanya
- * menerima total tidak punya cara memeriksa apa pun, dan pertanyaan "kok
- * segini?" berakhir sebagai percakapan WhatsApp yang dijawab admin satu per
- * satu — jadi layanan dan transport ditulis sebagai baris terpisah, dengan
- * label jenjang menyertai transport supaya klien tahu itu berubah menurut
- * jarak bidan ke alamatnya, bukan harga layanan yang naik.
  */
 
 export function pesanTagihan(input: {
@@ -33,50 +31,21 @@ export function pesanTagihan(input: {
   tanggal: string;
   /** Sudah diformat, mis. "09.00 WIB". */
   jam: string;
-  /** Sudah diformat, mis. "Rp 395.000". `null` bila tarifnya belum ada. */
-  hargaLayanan: string | null;
-  /** Sudah diformat, mis. "Rp 25.000". `null` bila jenjangnya belum diketahui. */
-  hargaTransport: string | null;
-  /** Mis. ">10–15 km". `null` bila jenjangnya belum diketahui. */
-  labelJenjang: string | null;
-  /** Sudah diformat, mis. "Rp 420.000". `null` bila totalnya belum lengkap. */
-  total: string | null;
+  /** URL penuh, mis. "https://…/passport/bayar/<id pengajuan>". */
+  tautanPassport: string;
   /** Sudah diformat, mis. "24 jam lagi". */
   sisaWaktu: string;
 }): string {
-  const {
-    namaKlien,
-    namaLayanan,
-    tanggal,
-    jam,
-    hargaLayanan,
-    hargaTransport,
-    labelJenjang,
-    total,
-    sisaWaktu,
-  } = input;
-
-  // RINCIAN, bukan satu angka. Klien yang hanya menerima total tidak punya
-  // cara memeriksa apa pun, dan pertanyaan "kok segini?" berakhir sebagai
-  // percakapan WhatsApp yang dijawab admin satu per satu. Transport khususnya
-  // WAJIB terlihat terpisah: ia berubah menurut jarak bidan ke alamat, dan
-  // klien yang tidak tahu itu membacanya sebagai harga layanan yang naik.
-  const baris: string[] = [];
-  if (hargaLayanan) baris.push(`• Layanan: ${hargaLayanan}`);
-  if (hargaTransport) {
-    baris.push(`• Transport${labelJenjang ? ` (${labelJenjang})` : ""}: ${hargaTransport}`);
-  }
+  const { namaKlien, namaLayanan, tanggal, jam, tautanPassport, sisaWaktu } = input;
 
   return [
     `Halo ${namaKlien}, bidan untuk sesi Anda sudah siap 🌸`,
     "",
     `Layanan: ${namaLayanan}`,
     `Jadwal: ${tanggal}, ${jam}`,
-    ...(baris.length > 0 ? ["", ...baris] : []),
-    total ? `Total: ${total}` : "Total: menyusul dari tim",
     "",
-    `Mohon selesaikan pembayaran dalam ${sisaWaktu}, lalu unggah bukti transfernya di menu Bayar pada Passport Anda.`,
-    "QRIS-nya ada di halaman yang sama — nominalnya diketik sendiri sesuai total di atas.",
+    `Tagihan Anda sudah terbit. Bayar di Digital Passport: ${tautanPassport}`,
+    `Mohon selesaikan pembayaran dalam ${sisaWaktu}.`,
     "",
     "Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain — tapi Anda tetap bisa mengajukan ulang kapan saja.",
   ].join("\n");

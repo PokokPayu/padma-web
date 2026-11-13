@@ -10,6 +10,7 @@ import { PERMINTAAN_MENUNGGU_BAYAR, STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/ja
 import { bacaPengaturan } from "@/lib/settings";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { POLA_TANGGAL } from "@/lib/jadwal/jam";
+import { adaTagihanTerbuka, KALIMAT_TAGIHAN_DITUTUP } from "@/lib/tagihan/terbuka";
 
 /**
  * Mengubah alamat, tanggal, dan jam sebuah PERMINTAAN — satu aksi, satu
@@ -22,7 +23,7 @@ import { POLA_TANGGAL } from "@/lib/jadwal/jam";
  * Berkas `"use server"` hanya boleh mengekspor fungsi async.
  */
 type Gagal = { ok: false; pesan: string };
-type Berhasil = { ok: true };
+type Berhasil = { ok: true; pesan?: string };
 
 type BarisSebelum = {
   status: string;
@@ -159,6 +160,11 @@ export async function perbaruiPermintaan(
   // mendeteksi deadlock dan menggagalkan salah satunya dengan bersih; di sisi
   // ini admin membaca "coba lagi" di bawah.
 
+  // Tagihan terbuka SEBELUM tulisan, supaya penutupannya oleh trigger bisa
+  // dikabarkan ke admin (Ruling 10.2). Hanya bermakna di `menunggu_bayar`.
+  const terbukaSebelum =
+    sebelum.status === PERMINTAAN_MENUNGGU_BAYAR && (await adaTagihanTerbuka(supabase, permintaanId));
+
   const { data, error } = await supabase
     .from("booking_requests")
     .update({
@@ -201,5 +207,8 @@ export async function perbaruiPermintaan(
   // Passport klien ikut basi.
   revalidatePath("/admin/pesanan");
   revalidatePath("/passport");
+  if (terbukaSebelum && !(await adaTagihanTerbuka(supabase, permintaanId))) {
+    return { ok: true, pesan: KALIMAT_TAGIHAN_DITUTUP };
+  }
   return { ok: true };
 }

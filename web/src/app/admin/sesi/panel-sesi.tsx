@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { selesaikanSesi, tetapkanJenjang } from "./aksi";
+import { tandaiSudahDikabari } from "./aksi-tagihan";
+import { sesiBatal } from "@/lib/jadwal/status";
 import { PanelPembatalan } from "./panel-pembatalan";
 import { JENJANG_SAH, LABEL_STATUS_SESI } from "./status";
 import { LABEL_JENJANG } from "@/lib/transport/jarak";
@@ -53,6 +55,10 @@ export function PanelSesi({
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [pesanJenjang, setPesanJenjang] = useState<string | null>(null);
+  const [pesanKabar, setPesanKabar] = useState<string | null>(null);
+  // Sesi batal tidak ditandai: bidan tidak perlu dikabari soal sesi yang
+  // sudah tidak terjadi.
+  const perluDikabari = sesi.kabariBidanSejak !== null && !sesiBatal(sesi.status);
 
   const adaCatatan = sesi.catatan.trim().length > 0;
   const labelJenjang = sesi.jenjang
@@ -81,6 +87,29 @@ export function PanelSesi({
         </p>
         <p className="text-[12px] text-panel-muted">Jenjang: {labelJenjang}</p>
       </section>
+
+      {perluDikabari && (
+        <section className="rounded-lg bg-gold/15 px-3 py-2.5">
+          <p className="text-[12.5px] font-extrabold text-[#8A6A16]">Baru — kabari bidan</p>
+          <p className="mt-0.5 text-[12px] text-panel-ink">
+            Sesi ini lahir otomatis dari pembayaran klien. Beri tahu {sesi.namaMitra} lalu tandai.
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              mulai(async () => {
+                const r = await tandaiSudahDikabari(sesi.id);
+                setPesanKabar(r.ok ? null : r.pesan);
+              })
+            }
+            className={`mt-2 ${KELAS_UTAMA}`}
+          >
+            {pending ? "Menyimpan…" : "Sudah dikabari"}
+          </button>
+          {pesanKabar && <p className="mt-1 text-[12px] font-semibold text-clay">{pesanKabar}</p>}
+        </section>
+      )}
 
       {sesi.status === "terjadwal" && (
         <form

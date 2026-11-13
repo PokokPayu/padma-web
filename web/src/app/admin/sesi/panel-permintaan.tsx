@@ -1,10 +1,8 @@
 import { PemilihLokasi } from "@/app/_shell/pemilih-lokasi";
 import { TombolPermintaan, FormUbahPermintaan, type MitraPilihan } from "./aksi-permintaan";
 import type { BarisPermintaanDaftar } from "@/lib/admin/permintaan";
-import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN } from "@/lib/jadwal/status";
+import { LABEL_PERMINTAAN, STATUS_UBAH_PERMINTAAN_STAF } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
-import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
-import type { BarisTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
 
 /**
  * Isi panel geser untuk SATU permintaan.
@@ -24,13 +22,11 @@ export function PanelPermintaan({
   tanggal,
   jam,
   waktu,
-  labelBayar,
-  lunas,
   tautanWa,
+  kalimatTanpaWa,
   tautanWaKosong,
   jamPilihan,
   tanggalIso,
-  tagihan,
   emailTerkirim,
 }: {
   permintaan: BarisPermintaanDaftar;
@@ -39,26 +35,22 @@ export function PanelPermintaan({
   tanggal: string;
   jam: string;
   waktu: string;
-  labelBayar: string;
-  lunas: boolean;
   tautanWa: string;
+  /** Kenapa tombol WA tagihan tidak ada. */
+  kalimatTanpaWa: string;
   tautanWaKosong: string;
   jamPilihan: string[];
   /** Nilai `YYYY-MM-DD` mentah, untuk `<input type="date">`. */
   tanggalIso: string;
-  /**
-   * Rincian tagihan permintaan ini, `null` bila belum ada (mis. tab Sesi, atau
-   * status yang belum menuntutnya). Nominal memang tampil di berkas ini: ia
-   * sudah lewat halaman induknya sejak C2 untuk merakit pesan WhatsApp, dan
-   * larangan `formatRupiah` yang dijaga uji menyasar `src/app/_shell/panel/**`
-   * serta dasbor/agenda/tren — bukan berkas ini.
-   */
-  tagihan: BarisTagihanPengajuanAdmin | null;
   /** `email_tagihan_pada != null` — apakah email tagihan sudah pernah terkirim. */
   emailTerkirim: boolean;
 }) {
   const berkoordinat = permintaan.alamatLat !== null && permintaan.alamatLon !== null;
-  const bisaDiubah = STATUS_UBAH_PERMINTAAN.includes(permintaan.status);
+  // `menunggu_bayar` IKUT, termasuk pengajuan TERTAHAN (pesanan lunas, sesi
+  // belum lahir): memindahkan jam yang sudah lewat lalu "Buat sesi" adalah
+  // jalan pemulihannya, dan tanpa form ini ia hanya ada di sisi server.
+  const bisaDiubah = STATUS_UBAH_PERMINTAAN_STAF.includes(permintaan.status);
+  const keadaan = permintaan.keadaanTagihan;
   // Jam permintaan ini SEKARANG, dibaca lewat `jamDariDb` (bukan `slice(0,5)`
   // sendiri) — lihat dokblok fungsi itu untuk kenapa keduanya harus dibedakan.
   const jamSekarang = jamDariDb(permintaan.jamMulai);
@@ -222,45 +214,28 @@ export function PanelPermintaan({
 
       <section>
         <p className="text-[12.5px] font-bold text-panel-muted">Pembayaran</p>
-        <p className="mt-1 text-[12.5px] text-panel-ink">{labelBayar}</p>
-
-        {tagihan && (
-          <div className="mt-2 rounded-lg border border-panel-border px-3 py-2">
-            {tagihan.total === null ? (
-              /* SEBABNYA, bukan sekadar ketiadaannya. Tanpa kalimat ini admin
-                 menerbitkan tagihan, menyalin pesan WhatsApp, mengirimnya, lalu
-                 baru sadar nominalnya hilang — sesudah pesannya sampai. Itulah
-                 bentuk kegagalan yang membuat fitur ini terlihat "selalu rusak"
-                 padahal yang kurang hanya satu pin di peta. */
-              <p className="text-[12px] font-semibold text-clay">
-                {tagihan.sebab
-                  ? KALIMAT_SEBAB_ADMIN[tagihan.sebab]
-                  : "Totalnya belum bisa dihitung."}
-              </p>
-            ) : (
-              <dl className="text-[12.5px]">
-                <div className="flex justify-between">
-                  <dt className="text-panel-muted">Layanan</dt>
-                  <dd className="text-panel-ink">{tagihan.hargaLayanan}</dd>
-                </div>
-                <div className="mt-0.5 flex justify-between">
-                  <dt className="text-panel-muted">
-                    Transport{tagihan.labelJenjang ? ` · ${tagihan.labelJenjang}` : ""}
-                  </dt>
-                  <dd className="text-panel-ink">{tagihan.hargaTransport}</dd>
-                </div>
-                <div className="mt-1.5 flex justify-between border-t border-panel-border pt-1.5">
-                  <dt className="font-bold text-panel-ink">Total</dt>
-                  <dd className="font-bold text-panel-ink">{tagihan.total}</dd>
-                </div>
-              </dl>
-            )}
-            <p className="mt-1.5 text-[11.5px] text-panel-muted">
-              {emailTerkirim
-                ? "Email tagihan sudah terkirim ke klien."
-                : "Email tagihan belum pernah terkirim — kirim manual dengan tombol di bawah."}
-            </p>
-          </div>
+        {/* KATA, bukan angka: /admin/sesi nol rupiah (money firewall). Nominal
+            dan rinciannya milik /admin/pesanan, tempat kode pesanan menaut. */}
+        <p className="mt-1 text-[12.5px] text-panel-ink" data-keadaan-tagihan={keadaan.kode}>
+          {keadaan.kalimat}
+        </p>
+        {keadaan.kodePesanan && (
+          <p className="mt-1 text-[11.5px] text-panel-muted">
+            Pesanan{" "}
+            <a href="/admin/pesanan" className="font-mono font-bold text-panel-ink underline">
+              {keadaan.kodePesanan}
+            </a>
+            {keadaan.kode === "perlu_ditinjau" || keadaan.kode === "tertahan"
+              ? " — putuskan atau terbitkan sesinya di menu Pesanan."
+              : ""}
+          </p>
+        )}
+        {(keadaan.kode === "terbuka" || keadaan.kode === "warisan_belum") && (
+          <p className="mt-1 text-[11.5px] text-panel-muted">
+            {emailTerkirim
+              ? "Email tagihan sudah terkirim ke klien."
+              : "Email tagihan belum pernah terkirim — kirim manual dengan tombol di bawah."}
+          </p>
         )}
       </section>
 
@@ -269,8 +244,9 @@ export function PanelPermintaan({
         status={permintaan.status}
         namaMitra={permintaan.namaMitra}
         mitra={mitra}
-        lunas={lunas}
+        keadaan={keadaan.kode}
         tautanWa={tautanWa}
+        kalimatTanpaWa={kalimatTanpaWa}
         emailTerkirim={emailTerkirim}
       />
     </div>

@@ -40,6 +40,7 @@ import { geserHari } from "@/lib/owner/pekan";
 import { rakitInvoice } from "@/lib/pesanan/order-id";
 import { STATUS_ANTRE, STATUS_PERMINTAAN } from "@/lib/jadwal/status";
 import { normalkanAlamat } from "@/lib/transport/alamat";
+import { KALIMAT_TAGIHAN_DITUTUP } from "@/lib/tagihan/terbuka";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ref.sesi! }));
@@ -662,7 +663,8 @@ describe("masukan harga berubah saat pesanan masih terbuka -> pesanan itu ditutu
       id,
       formUbah({ alamat: ALAMAT.teks, tanggal: TGL_KUNJUNGAN, jam: "10:00" }),
     );
-    expect(r).toEqual({ ok: true });
+    // B5 (Ruling 10.2): penutupan tagihan terbuka DIKABARKAN ke admin.
+    expect(r).toEqual({ ok: true, pesan: KALIMAT_TAGIHAN_DITUTUP });
     expect(await pengajuan(id)).toMatchObject({ status: "menunggu_bayar", jam_mulai: "10:00:00" });
     await harusTertutup(pesananId, /jam/);
   });
@@ -670,7 +672,10 @@ describe("masukan harga berubah saat pesanan masih terbuka -> pesanan itu ditutu
   it("gantiBidanMenungguBayar -> bidan berganti, pesanan terbuka dibatalkan", async () => {
     const { id, pesananId } = await bertagihan();
     const { gantiBidanMenungguBayar } = await aksiTagihan();
-    expect(await gantiBidanMenungguBayar(id, MITRA_B)).toEqual({ ok: true });
+    expect(await gantiBidanMenungguBayar(id, MITRA_B)).toEqual({
+      ok: true,
+      pesan: KALIMAT_TAGIHAN_DITUTUP,
+    });
     expect(await pengajuan(id)).toMatchObject({ status: "menunggu_bayar", partner_id: MITRA_B });
     await harusTertutup(pesananId, /bidan/);
   });

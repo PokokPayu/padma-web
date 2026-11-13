@@ -85,7 +85,7 @@ export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanDitolak, string> = {
   permintaan_tidak_siap:
     "Permintaan sudah ditangani atau tidak ditemukan. Muat ulang halaman.",
   total_nol:
-    "Total tagihan Rp0 — periksa tarif varian dan transport di menu Tarif/Transport. Tagihan Rp0 tidak bisa dibayar lewat DOKU.",
+    "Total tagihan Rp0 — Owner menetapkan tarif varian dan transport di menu Tarif/Transport.",
 };
 
 /**

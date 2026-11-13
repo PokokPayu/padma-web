@@ -71,7 +71,7 @@ export default async function AdminPage() {
           bila semua angka merah, tidak ada yang berarti merah. */}
       <section
         aria-label="Antrean klinik"
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-7"
       >
         <StatTile
           label="Skrining baru"
@@ -139,6 +139,15 @@ export default async function AdminPage() {
           // tujuan adalah keduanya, bukan salah satu.
           href="/admin/sesi?tab=sesi&status=selesai&jenjang=kosong"
           menuntut={antrean.menungguJenjangTransport > 0}
+        />
+        {/* Sesi yang lahir otomatis dari pesanan lunas: bidannya belum
+            dikabari. Angka saja, nol nominal. */}
+        <StatTile
+          label="Sesi baru — kabari bidan"
+          nilai={String(antrean.kabariBidan)}
+          keterangan="Lahir dari pembayaran klien, bidan belum dikabari"
+          href="/admin/sesi?tab=sesi"
+          menuntut={antrean.kabariBidan > 0}
         />
       </section>
 

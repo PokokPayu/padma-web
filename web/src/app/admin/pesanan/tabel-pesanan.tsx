@@ -73,6 +73,17 @@ export function TabelPesanan({ baris }: { baris: BarisPesanan[] }) {
                       {p.padmaId}
                     </span>
                   )}
+                  {p.jenis === "sesi" && p.bookingRequestId !== null && (
+                    // Pesanan SESI = tagihan sebuah pengajuan jadwal. Tautannya
+                    // membuka panel pengajuan itu (tempat "Ganti bidan" dan
+                    // ubah jadwal untuk pengajuan tertahan), bukan daftar kosong.
+                    <a
+                      href={`/admin/sesi?tab=permintaan&lihat=${p.bookingRequestId}`}
+                      className="mt-1 inline-block rounded-full bg-leaf-soft px-2 py-0.5 text-[11px] font-extrabold text-leaf underline-offset-2 hover:underline"
+                    >
+                      Sesi
+                    </a>
+                  )}
                   {p.percobaan > 1 && (
                     <span className="mt-0.5 block text-[11px] text-panel-muted">
                       Percobaan ke-{p.percobaan}

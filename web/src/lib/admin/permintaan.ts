@@ -6,6 +6,9 @@ import {
   type StatusPermintaan,
 } from "@/lib/jadwal/status";
 import type { PreferensiWaktu } from "@/app/admin/sesi/status";
+import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
+import { keadaanTagihan, type KeadaanTagihan, type PesananRingkas } from "@/lib/tagihan/keadaan";
+import type { StatusPesanan } from "@/lib/pesanan/status";
 
 /**
  * Lapisan data daftar PERMINTAAN (tab pertama `/admin/sesi`).
@@ -92,6 +95,12 @@ export type BarisPermintaanDaftar = {
   tenggat: string | null;
   /** Kapan email tagihan terakhir BERHASIL terkirim. `null` = belum pernah. */
   emailTagihanPada: string | null;
+  /**
+   * Keadaan tagihan sebagai KATA, diturunkan dari `orders` (status,
+   * kedaluwarsa, tanda tinjauan) dan keberadaan sesi — nol nominal (money
+   * firewall `/admin/sesi`).
+   */
+  keadaanTagihan: KeadaanTagihan;
 };
 
 type BarisMentah = {
@@ -153,6 +162,54 @@ export async function ambilDaftarPermintaan(
   const { data, count, error } = await q.range(dari, sampai).returns<BarisMentah[]>();
   if (error) throw error;
 
+  // Keadaan tagihan hanya bermakna untuk `menunggu_bayar`: pesanan dan sesinya
+  // dibaca SATU kali untuk seluruh halaman (bukan per baris), dan nol kueri
+  // bila tidak ada baris `menunggu_bayar`. Sesi pengguna — policy
+  // `pesanan: staf baca` dan `sessions: staf`. Galatnya dilempar: keadaan yang
+  // gagal dibaca tidak boleh menyamar sebagai "tagihan ditutup".
+  const idBayar = (data ?? []).filter((p) => p.status === PERMINTAAN_MENUNGGU_BAYAR).map((p) => p.id);
+  const pesananPer = new Map<string, PesananRingkas[]>();
+  const adaSesi = new Set<string>();
+  if (idBayar.length > 0) {
+    const [pesanan, sesi] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, kode, status, dibuat_pada, kedaluwarsa_pada, butuh_tinjauan_pada, booking_request_id")
+        .in("booking_request_id", idBayar)
+        .returns<
+          {
+            id: string;
+            kode: string;
+            status: StatusPesanan;
+            dibuat_pada: string;
+            kedaluwarsa_pada: string;
+            butuh_tinjauan_pada: string | null;
+            booking_request_id: string;
+          }[]
+        >(),
+      supabase
+        .from("sessions")
+        .select("booking_request_id")
+        .in("booking_request_id", idBayar)
+        .returns<{ booking_request_id: string }[]>(),
+    ]);
+    if (pesanan.error) throw pesanan.error;
+    if (sesi.error) throw sesi.error;
+    for (const o of pesanan.data ?? []) {
+      const daftar = pesananPer.get(o.booking_request_id) ?? [];
+      daftar.push({
+        id: o.id,
+        kode: o.kode,
+        status: o.status,
+        dibuatPada: o.dibuat_pada,
+        kedaluwarsaPada: o.kedaluwarsa_pada,
+        butuhTinjauanPada: o.butuh_tinjauan_pada,
+      });
+      pesananPer.set(o.booking_request_id, daftar);
+    }
+    for (const s of sesi.data ?? []) adaSesi.add(s.booking_request_id);
+  }
+
   return {
     baris: (data ?? []).map((p) => ({
       id: p.id,
@@ -176,6 +233,13 @@ export async function ambilDaftarPermintaan(
       statusBayar: p.status_bayar,
       tenggat: p.tenggat,
       emailTagihanPada: p.email_tagihan_pada,
+      keadaanTagihan: keadaanTagihan({
+        status: p.status,
+        statusBayar: p.status_bayar,
+        tenggat: p.tenggat,
+        pesanan: pesananPer.get(p.id) ?? [],
+        adaSesi: adaSesi.has(p.id),
+      }),
     })),
     total: count ?? 0,
   };

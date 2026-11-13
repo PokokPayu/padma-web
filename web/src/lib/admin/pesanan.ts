@@ -48,6 +48,10 @@ export type BarisPesanan = {
   transaksiId: string | null;
   statusGateway: string | null;
   items: ItemPesanan[];
+  /** 'sesi' = tagihan pengajuan jadwal (B3/B5); 'produk_digital' = produk. */
+  jenis: SumberItemPesanan;
+  /** Pengajuan asal pesanan jenis sesi; `null` untuk produk. */
+  bookingRequestId: string | null;
   /**
    * null = ITEMNYA TIDAK TERBACA, bukan "totalnya nol".
    *
@@ -314,6 +318,8 @@ export async function bacaPesananStaf(): Promise<{
       transaksiId: b.transaksi_id,
       statusGateway: b.status_gateway,
       items,
+      jenis: b.jenis,
+      bookingRequestId: b.booking_request_id,
       // Dijumlahkan dari `harga_beku`, karena `orders` memang lahir NOL kolom
       // nominal (spec "Bentuk data / orders").
       //

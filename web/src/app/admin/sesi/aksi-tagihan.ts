@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
+import { adaTagihanTerbuka, KALIMAT_TAGIHAN_DITUTUP } from "@/lib/tagihan/terbuka";
 
 /**
  * Aksi admin atas pengajuan yang tagihannya pesanan sesi DOKU (P3/B4, spec
@@ -29,7 +30,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
  * Berkas `"use server"` hanya boleh mengekspor fungsi async.
  */
 type Gagal = { ok: false; pesan: string };
-type Berhasil = { ok: true };
+type Berhasil = { ok: true; pesan?: string };
 
 /**
  * Galat RPC -> kalimat admin. P0001 adalah kalimat manusia yang ditulis
@@ -89,6 +90,10 @@ export async function gantiBidanMenungguBayar(
   await requireRole(["admin", "owner"]);
   const supabase = await createServerSupabase();
 
+  // Dibaca sebelum RPC: pesanan terbuka ditutup di dalamnya, dan admin harus
+  // TAHU tagihannya perlu diterbitkan ulang (Ruling 10.2).
+  const terbukaSebelum = await adaTagihanTerbuka(supabase, permintaanId);
+
   const { error } = await supabase.rpc("ganti_bidan_permintaan", {
     p_permintaan_id: permintaanId,
     p_partner_id: partnerId,
@@ -98,6 +103,9 @@ export async function gantiBidanMenungguBayar(
   }
 
   segarkanLayar();
+  if (terbukaSebelum && !(await adaTagihanTerbuka(supabase, permintaanId))) {
+    return { ok: true, pesan: KALIMAT_TAGIHAN_DITUTUP };
+  }
   return { ok: true };
 }
 
