@@ -51,6 +51,13 @@ import { querySql } from "./helpers/db";
 const MESIN_TERTUTUP = [
   "perpindahan_pesanan_sah",
   "salurkan_pesanan",
+  // B3: penyalur sesi (menulis jejak & tanda tinjauan pesanan) dan sisipan
+  // sesinya. Keduanya hanya dipanggil fungsi definer lain (`salurkan_pesanan`,
+  // `konfirmasi_permintaan`) dan rute pemulihan bersevice role. Sisipan bukan
+  // penulis tabel pesanan, tetapi membukanya berarti siapa pun yang login
+  // bisa melahirkan sesi LUNAS dari id pengajuan mana saja.
+  "salurkan_sesi",
+  "sisipkan_sesi_dari_permintaan",
   "terapkan_notifikasi_gateway",
   "terbitkan_akses_item",
   // Bukan penulis (B2, Ruling 1): predikat "uang sudah masuk" yang dipakai

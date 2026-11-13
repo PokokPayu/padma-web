@@ -469,7 +469,9 @@ describe("TabelPesanan", () => {
       <TabelPesanan baris={[{ ...dasar, status: "lunas" as const, nominalDiterima: null }]} />,
     );
     expect(m).toContain("Tutup tinjauan");
-    expect(m).toContain("Terbitkan akses");
+    // Satu tombol untuk dua jenis pesanan (B3): produk menerbitkan akses,
+    // sesi menjalankan ulang penyalur sesi.
+    expect(m).toContain("Terbitkan akses / Buat sesi");
   });
 
   it("nominal yang tidak terbaca dirender sebagai KEGAGALAN, bukan sebagai Rp 0", () => {
@@ -513,7 +515,9 @@ describe('"Putuskan lunas" menyuruh langkah berikutnya', () => {
   it("putusan lunas memulangkan kalimat yang menyebut tombol berikutnya", () => {
     const kalimat = panduanSesudah("putuskan", { putusan: "lunas" });
     expect(kalimat).toBeTruthy();
-    expect(kalimat).toContain("Terbitkan akses");
+    // Nama tombol PERSIS seperti yang dirender: sejak B3 putusan lunas atas
+    // pesanan SESI juga tidak menyalurkan, dan sesinya lahir dari tombol ini.
+    expect(kalimat).toContain("Terbitkan akses / Buat sesi");
   });
 
   it("putusan BATAL tidak menyuruh menerbitkan apa pun", () => {
@@ -651,8 +655,12 @@ describe("POST /api/pesanan/[id]/terbitkan-akses", () => {
     const id = idPesanan.get(K_LUNAS_TANPA_AKSES)!;
     const r = await terbitkanAkses(permintaan("terbitkan-akses"), param(id));
     expect(r.status).toBe(200);
-    const isi = (await r.json()) as { terbit: string[] };
+    const isi = (await r.json()) as { terbit: string[]; belumAdaPenangan: number[]; sesi: unknown };
     expect(isi.terbit).toEqual(["akses_terbit"]);
+    // Pesanan produk tidak punya item sesi: `sesi` ADA di jawaban dan bernilai
+    // null (bukan hilang), supaya tombol tidak perlu menebak bentuknya.
+    expect(isi.sesi).toBeNull();
+    expect(isi.belumAdaPenangan).toEqual([]);
 
     const { data } = await admin
       .from("digital_entitlements")

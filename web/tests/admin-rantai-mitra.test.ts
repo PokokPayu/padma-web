@@ -393,6 +393,43 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
     else expect(sesi[0].jenjang_sumber).toBeNull();
   });
 
+  it("MENOLAK pengajuan yang punya pesanan (P0001): sesinya hanya lahir lewat penyalur", async () => {
+    // Sejak B3 (spec §6.4) pengajuan yang tagihannya pesanan DOKU tidak pernah
+    // dikonfirmasi tangan: lunas melahirkan sesinya sendiri. Fixture ini
+    // memenuhi SELURUH syarat klaim lama (menunggu_bayar + status_bayar
+    // lunas), jadi yang menolaknya hanya pemeriksaan pesanan.
+    await admin.from("partners").update({ lat: -7.96662, lon: 112.632632 }).eq("id", MITRA);
+    const id = await permintaanPada("mitra_siap", MITRA, {
+      alamat_lat: -7.9666,
+      alamat_lon: 112.6966,
+    });
+    expect(await terbitkanTagihan(id)).toEqual({ ok: true });
+    const { error: eb } = await admin
+      .from("booking_requests")
+      .update({ status_bayar: "lunas" })
+      .eq("id", id);
+    expect(eb).toBeNull();
+
+    const { data, error } = await sesiAdmin.rpc("konfirmasi_permintaan", { permintaan_id: id });
+    expect(data).toBeNull();
+    expect(error?.code).toBe("P0001");
+    expect(error?.message).toBe("Pengajuan ini dibayar lewat DOKU; sesinya lahir otomatis.");
+    expect(await statusPermintaan(id)).toBe("menunggu_bayar");
+    expect(await sesiDari(id)).toEqual([]);
+  });
+
+  it("baris WARISAN (tanpa pesanan, status_bayar lunas) tetap dikonfirmasi — sesinya lahir TANPA penanda kabari bidan", async () => {
+    // Penanda "Baru — kabari bidan" milik sesi yang lahir otomatis; sesi
+    // warisan dikonfirmasi admin dengan tangannya sendiri.
+    const id = await permintaanSiapKonfirmasi();
+    expect(await konfirmasiPermintaan(id)).toEqual({ ok: true });
+    const sesi = await querySql<{ kabari_bidan_sejak: Date | null }>(
+      `select kabari_bidan_sejak from public.sessions where booking_request_id = $1`,
+      [id],
+    );
+    expect(sesi).toEqual([{ kabari_bidan_sejak: null }]);
+  });
+
   it("memulangkan NULL — bukan galat — ketika permintaannya sudah tidak menunggu_bayar", async () => {
     const id = await permintaanPada("diminta");
     const { data, error } = await sesiAdmin.rpc("konfirmasi_permintaan", {

@@ -72,6 +72,10 @@ const PUTUSAN_BATAL = "dibatalkan" satisfies StatusPesanan;
  * `ditahan -> lunas`) ada di RPC milik P1-A dan di luar lingkup permukaan ini;
  * yang bisa dilakukan di sini adalah berhenti diam.
  *
+ * Sejak B3 hal yang sama berlaku untuk pesanan SESI: putusan "lunas" tidak
+ * menjalankan penyalur sesi (keputusan P1 yang dipertahankan, spec §6.4), jadi
+ * sesinya lahir dari tombol yang sama — karena itu labelnya menyebut keduanya.
+ *
  * ===== KENAPA FUNGSI MURNI, BUKAN KALIMAT DI DALAM `kirim()` =====
  * Selama ia tinggal di dalam handler, tidak satu pun uji di repo ini bisa
  * menjalankannya: `renderToStaticMarkup` tidak menjalankan handler dan repo
@@ -82,7 +86,7 @@ const PUTUSAN_BATAL = "dibatalkan" satisfies StatusPesanan;
 export function panduanSesudah(jalur: string, badan?: unknown): string | null {
   const putusan = (badan as { putusan?: unknown } | undefined)?.putusan;
   if (jalur === JALUR_PUTUSKAN && putusan === PUTUSAN_LUNAS) {
-    return 'Ditandai lunas. Sekarang tekan "Terbitkan akses" supaya kliennya menerima produknya.';
+    return 'Ditandai lunas. Sekarang tekan "Terbitkan akses / Buat sesi" supaya kliennya menerima produk atau sesinya.';
   }
   return null;
 }
@@ -180,7 +184,7 @@ export function TombolPesanan({
         )}
         {TOMBOL_BERUANG[status] === "akses" && (
           <button type="button" disabled={mati} className={kelas} onClick={() => void kirim("terbitkan-akses")}>
-            Terbitkan akses
+            Terbitkan akses / Buat sesi
           </button>
         )}
         {TOMBOL_BERUANG[status] === "putusan" && (

@@ -76,13 +76,15 @@ type BarisOrders = {
   kanal: string | null;
   transaksi_id: string | null;
   status_gateway: string | null;
+  jenis: SumberItemPesanan;
+  booking_request_id: string | null;
   clients: { padma_id: string } | null;
 };
 
 const KOLOM =
   "id, kode, status, percobaan, jumlah_item, dibuat_pada, kedaluwarsa_pada, lunas_pada, " +
   "diperiksa_pada, butuh_tinjauan_pada, sebab_tinjauan, kanal, transaksi_id, status_gateway, " +
-  "clients ( padma_id )";
+  "jenis, booking_request_id, clients ( padma_id )";
 
 /**
  * Status yang selalu ikut dibaca, apa pun penanda tinjauannya — DITURUNKAN
@@ -115,6 +117,16 @@ const STATUS_DIPANTAU: StatusPesanan[] = [...PESANAN_TERBUKA, ...PESANAN_BERUANG
  * persis dijaga uji "lunas yang aksesnya sudah terbit TIDAK ikut".
  */
 const KEJADIAN_AKSES: KejadianPesanan[] = ["akses_terbit", "akses_sudah_ada"];
+
+/**
+ * Pesanan SESI (B3) tidak punya akses untuk diterbitkan: yang diserahkan adalah
+ * sesinya. Padanan "akses sudah terbit" untuknya adalah ADA baris `sessions`
+ * untuk `booking_request_id`-nya — barisnya sendiri, bukan jejak
+ * `sesi_terkonfirmasi`, karena penyalur yang menjawab `sudah_ada` tidak
+ * menulis jejak apa pun. Nilai yang diperiksa kompilator, alasan yang sama
+ * dengan `KEJADIAN_AKSES`.
+ */
+const JENIS_SESI = "sesi" satisfies SumberItemPesanan;
 
 /**
  * Batas baris per kueri — DIEKSPOR karena layarnya menyebut angkanya.
@@ -184,7 +196,15 @@ export async function bacaPesananStaf(): Promise<{
   const ids = [...perId.keys()];
   if (ids.length === 0) return { butuhPerhatian: [], terbuka: [] };
 
-  const [item, notifikasi, jejak] = await Promise.all([
+  const idPengajuan = [
+    ...new Set(
+      [...perId.values()]
+        .filter((b) => b.jenis === JENIS_SESI && b.booking_request_id !== null)
+        .map((b) => b.booking_request_id as string),
+    ),
+  ];
+
+  const [item, notifikasi, jejak, sesi] = await Promise.all([
     sb
       .from("pesanan_item_staf")
       .select("pesanan_id, kode, jenis, judul_beku, harga_beku, urutan")
@@ -219,10 +239,21 @@ export async function bacaPesananStaf(): Promise<{
       .select("pesanan_id, kejadian")
       .in("pesanan_id", ids)
       .in("kejadian", KEJADIAN_AKSES),
+    // Dibaca dengan sesi pemanggil (policy `sessions: staf`), dan galatnya
+    // dilempar seperti tiga kueri lain: sesi yang tidak terbaca tidak boleh
+    // menyamar jadi "sesi belum ada", apalagi "sesi sudah ada".
+    idPengajuan.length === 0
+      ? Promise.resolve({ data: [] as { booking_request_id: string }[], error: null })
+      : sb
+          .from("sessions")
+          .select("booking_request_id")
+          .in("booking_request_id", idPengajuan)
+          .returns<{ booking_request_id: string }[]>(),
   ]);
   if (item.error) throw item.error;
   if (notifikasi.error) throw notifikasi.error;
   if (jejak.error) throw jejak.error;
+  if (sesi.error) throw sesi.error;
 
   const itemPer = new Map<string, ItemPesanan[]>();
   for (const r of item.data ?? []) {
@@ -248,6 +279,18 @@ export async function bacaPesananStaf(): Promise<{
   }
 
   const punyaAkses = new Set((jejak.data ?? []).map((r) => r.pesanan_id as string));
+  const pengajuanBersesi = new Set((sesi.data ?? []).map((r) => r.booking_request_id));
+
+  /** Barangnya sudah keluar: akses tercatat terbit (produk) atau sesinya ada (sesi). */
+  const sudahDiserahkan = new Set(
+    [...perId.values()]
+      .filter((b) =>
+        b.jenis === JENIS_SESI
+          ? b.booking_request_id !== null && pengajuanBersesi.has(b.booking_request_id)
+          : punyaAkses.has(b.id),
+      )
+      .map((b) => b.id),
+  );
 
   const semua: BarisPesanan[] = [...perId.values()].map((b) => {
     const items = itemPer.get(b.id) ?? [];
@@ -315,7 +358,12 @@ export async function bacaPesananStaf(): Promise<{
       // keenam yang kelak diklasifikasikan "beruang" ikut terlihat di sini
       // tanpa satu baris pun disunting, sementara dua literal akan
       // menghilangkannya dari layar diam-diam.
-      (PESANAN_BERUANG.includes(p.status) && !punyaAkses.has(p.id)),
+      //
+      // Untuk pesanan SESI "akses" berarti sesinya (B3): pesanan sesi lunas
+      // yang sesinya belum lahir — tertahan, atau diputuskan lunas oleh staf
+      // yang tidak menyalurkan — tetap di sini sampai tombol "Terbitkan akses /
+      // Buat sesi" melahirkannya, walau tanda tinjauannya sudah ditutup.
+      (PESANAN_BERUANG.includes(p.status) && !sudahDiserahkan.has(p.id)),
   );
 
   // Satu pesanan boleh muncul di KEDUA blok (mis. `menunggu_bayar` yang

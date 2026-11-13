@@ -75,9 +75,12 @@ describe("enum pesanan lahir utuh di basis data", () => {
     expect(await nilaiEnum("order_item_source")).toEqual([...SUMBER_ITEM_PESANAN]);
   });
 
-  it("order_event berisi PERSIS enam belas nilai, urut sama dengan daftar TS", async () => {
+  it("order_event berisi PERSIS delapan belas nilai, urut sama dengan daftar TS", async () => {
+    // 16 nilai P1 + `sesi_terkonfirmasi` & `sesi_tertahan` (B3, penyalur sesi),
+    // DI EKOR: `alter type … add value` selalu menambah di akhir, jadi urutan
+    // TS yang menyelipkan keduanya di tengah memerahkan baris di bawah.
     const nilai = await nilaiEnum("order_event");
-    expect(nilai).toHaveLength(16);
+    expect(nilai).toHaveLength(18);
     expect(nilai).toEqual([...KEJADIAN_PESANAN_SAH]);
   });
 
@@ -119,7 +122,7 @@ describe("himpunan status — partisi yang tidak boleh bocor", () => {
     }
   });
 
-  it("kelima kejadian penanda tinjauan adalah anggota sah order_event", () => {
+  it("keenam kejadian penanda tinjauan adalah anggota sah order_event", () => {
     for (const k of KEJADIAN_BUTUH_TINJAUAN) {
       expect(KEJADIAN_PESANAN_SAH, `kejadian ${k} bukan anggota order_event`).toContain(k);
     }
@@ -129,6 +132,8 @@ describe("himpunan status — partisi yang tidak boleh bocor", () => {
       "lunas_setelah_tutup",
       "akses_tertahan",
       "penangan_belum_ada",
+      // B3: penyalur sesi yang tidak bisa melahirkan sesi memanggil manusia.
+      "sesi_tertahan",
     ]);
   });
 

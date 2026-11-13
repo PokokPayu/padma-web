@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
-import type { KejadianPesanan, StatusPesanan } from "@/lib/pesanan/status";
+import type { KejadianPesanan, StatusPesanan, SumberItemPesanan } from "@/lib/pesanan/status";
 
 export const runtime = "nodejs";
 
@@ -54,7 +54,38 @@ const KALIMAT_HASIL = {
 } satisfies Partial<Record<KejadianPesanan, string>>;
 
 /**
- * TERBITKAN ULANG AKSES (Lapis 2).
+ * Jenis item, sebagai nilai yang DIPERIKSA KOMPILATOR — alasan yang sama
+ * dengan `STATUS_BOLEH_TERBIT` di atas.
+ */
+const JENIS_PRODUK = "produk_digital" satisfies SumberItemPesanan;
+const JENIS_SESI = "sesi" satisfies SumberItemPesanan;
+
+/**
+ * Ketiga nilai balik `salurkan_sesi` (B3), sebagai kalimat operator.
+ *
+ * `tertahan` bukan galat rute: penyalur tidak pernah melempar, jadi syarat
+ * yang gagal (bidan nonaktif, jam kunjungan lewat, pengajuan berubah) pulang
+ * sebagai jawaban 200 yang harus DIBACA staf, bukan sebagai kotak merah.
+ * Alasan rincinya ada di jejak pesanan.
+ */
+const KALIMAT_SESI: Record<string, string | undefined> = {
+  terkonfirmasi: "sesi lahir dan pengajuannya dikonfirmasi — kabari bidannya",
+  sudah_ada: "sesi untuk pengajuan ini sudah ada — tidak ada yang dibuat ulang",
+  tertahan:
+    "sesi DITAHAN — syaratnya belum terpenuhi (mis. bidan nonaktif atau jam kunjungan lewat); alasannya di jejak pesanan, dan pesanan ini ditandai butuh tinjauan",
+};
+
+/**
+ * TERBITKAN ULANG AKSES / BUAT SESI (Lapis 2).
+ *
+ * ===== ITEM SESI (B3) =====
+ * Pesanan sesi tidak punya akses untuk diterbitkan; yang diserahkan adalah
+ * SESI-nya. Untuk item sesi rute ini menjalankan ulang penyalur sesi
+ * (`salurkan_sesi`) SEKALI per pesanan, bukan sekali per item: pesanan sesi
+ * membawa dua item (layanan + transport) untuk satu pengajuan, dan penyalurnya
+ * bekerja per pengajuan. Kalimat "di-key pada transisi" di bawah tetap benar:
+ * yang dipanggil di sini penyalur SESI yang idempoten (`sudah_ada`), bukan
+ * `salurkan_pesanan`.
  *
  * ===== KENAPA terbitkan_akses_item, BUKAN salurkan_pesanan =====
  * Penyalur di-key pada TRANSISI, bukan pada niat: ia hanya dipanggil dari
@@ -125,11 +156,17 @@ export async function POST(
 
   const terbit: string[] = [];
   const belumAdaPenangan: number[] = [];
+  let adaItemSesi = false;
   for (const b of item) {
-    // Jenis selain `produk_digital` belum punya penangan di P1 (spec:
-    // penyaluran sesi lahir di P3). Dilaporkan, bukan ditebak — menebaknya
-    // berarti menerbitkan akses produk untuk item yang bukan produk.
-    if (b.jenis !== "produk_digital") {
+    if (b.jenis === JENIS_SESI) {
+      // Dicatat saja; penyalurnya dipanggil SEKALI sesudah loop.
+      adaItemSesi = true;
+      continue;
+    }
+    // Jenis ketiga yang kelak lahir belum punya penangan. Dilaporkan, bukan
+    // ditebak — menebaknya berarti menerbitkan akses produk untuk item yang
+    // bukan produk.
+    if (b.jenis !== JENIS_PRODUK) {
       belumAdaPenangan.push(b.urutan);
       continue;
     }
@@ -140,7 +177,23 @@ export async function POST(
     terbit.push(String(data));
   }
 
-  return NextResponse.json({ terbit, belumAdaPenangan, pesan: rangkum(terbit, belumAdaPenangan) });
+  // `null` = pesanan ini tidak membawa item sesi. Selalu ADA di jawaban,
+  // supaya pembacanya tidak perlu membedakan "tidak ada" dari "lupa dikirim".
+  let sesi: string | null = null;
+  if (adaItemSesi) {
+    const { data, error } = await admin.rpc("salurkan_sesi", { p_pesanan_id: id });
+    if (error) {
+      return NextResponse.json({ pesan: "Pembuatan sesi gagal." }, { status: 500 });
+    }
+    sesi = String(data);
+  }
+
+  return NextResponse.json({
+    terbit,
+    belumAdaPenangan,
+    sesi,
+    pesan: rangkum(terbit, belumAdaPenangan, sesi),
+  });
 }
 
 /**
@@ -152,12 +205,13 @@ export async function POST(
  * melaporkan keberhasilan untuk sesuatu yang belum pernah ditafsirkan siapa
  * pun.
  */
-function rangkum(terbit: string[], belumAdaPenangan: number[]): string {
+function rangkum(terbit: string[], belumAdaPenangan: number[], sesi: string | null): string {
   const hitung = new Map<string, number>();
   for (const h of terbit) hitung.set(h, (hitung.get(h) ?? 0) + 1);
 
   const kamus: Record<string, string | undefined> = KALIMAT_HASIL;
   const bagian = [...hitung].map(([hasil, n]) => `${n} item: ${kamus[hasil] ?? hasil}`);
+  if (sesi !== null) bagian.push(KALIMAT_SESI[sesi] ?? `sesi: ${sesi}`);
   if (belumAdaPenangan.length > 0) {
     bagian.push(
       `item urutan ${belumAdaPenangan.join(", ")} dilewati — jenisnya belum punya penangan`,

@@ -62,11 +62,16 @@ export const SUMBER_ITEM_PESANAN = ["produk_digital", "sesi"] as const;
 export type SumberItemPesanan = (typeof SUMBER_ITEM_PESANAN)[number];
 
 /**
- * Enum `order_event` — 16 nilai, urut sama dengan `pg_enum`.
+ * Enum `order_event` — 18 nilai, urut sama dengan `pg_enum`.
  *
  * Tidak ada kejadian "tinjauan dibuka": yang membukanya SELALU salah satu dari
- * kelima kejadian di `KEJADIAN_BUTUH_TINJAUAN`, dan nilai enum yang tidak punya
+ * keenam kejadian di `KEJADIAN_BUTUH_TINJAUAN`, dan nilai enum yang tidak punya
  * penulis adalah nilai yang pasti salah dibaca kelak.
+ *
+ * Dua nilai terakhir milik penyalur sesi (B3, migrasi 20261113140200), di
+ * EKOR karena `alter type … add value` selalu menambah di akhir.
+ * `penangan_belum_ada` sejak itu tidak punya penulis baru; nilainya tetap ada
+ * karena nilai enum tidak bisa dicabut dan jejak lama boleh memuatnya.
  */
 export const KEJADIAN_PESANAN_SAH = [
   "dibuat",
@@ -85,6 +90,8 @@ export const KEJADIAN_PESANAN_SAH = [
   "penangan_belum_ada",
   "diperiksa_ulang",
   "tinjauan_ditutup",
+  "sesi_terkonfirmasi",
+  "sesi_tertahan",
 ] as const;
 
 export type KejadianPesanan = (typeof KEJADIAN_PESANAN_SAH)[number];
@@ -131,6 +138,9 @@ export const KEJADIAN_BUTUH_TINJAUAN: readonly KejadianPesanan[] = [
   "lunas_setelah_tutup",
   "akses_tertahan",
   "penangan_belum_ada",
+  // Pesanan sesi lunas yang sesinya tidak bisa lahir (bidan nonaktif, jam
+  // kunjungan lewat, pengajuan berubah, atau galat): uang masuk, sesi belum.
+  "sesi_tertahan",
 ];
 
 /**
