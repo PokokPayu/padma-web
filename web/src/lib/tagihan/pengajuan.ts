@@ -51,7 +51,7 @@ export type SebabTagihanTakLengkap =
 
 /**
  * Sebab `terbitkan_tagihan_sesi` MENOLAK menerbitkan tagihan (B2). Empat sebab
- * tagihan-tak-lengkap di atas, ditambah empat keadaan yang hanya diketahui
+ * tagihan-tak-lengkap di atas, ditambah lima keadaan yang hanya diketahui
  * fungsi SQL itu saat ia mengunci barisnya.
  *
  * Fungsi SQL melempar `message` = salah satu kunci ini dengan
@@ -63,7 +63,8 @@ export type SebabTagihanDitolak =
   | "jam_kunjungan_lewat"
   | "bidan_nonaktif"
   | "uang_sudah_masuk"
-  | "permintaan_tidak_siap";
+  | "permintaan_tidak_siap"
+  | "total_nol";
 
 /** Kalimat untuk ADMIN: menyebut akibat DAN layar yang memperbaikinya. */
 export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanDitolak, string> = {
@@ -83,6 +84,8 @@ export const KALIMAT_SEBAB_ADMIN: Record<SebabTagihanDitolak, string> = {
     "Pembayaran untuk permintaan ini sudah masuk atau sedang diperiksa. Selesaikan dulu di menu Pesanan; tagihan kedua tidak diterbitkan.",
   permintaan_tidak_siap:
     "Permintaan sudah ditangani atau tidak ditemukan. Muat ulang halaman.",
+  total_nol:
+    "Total tagihan Rp0 — periksa tarif varian dan transport di menu Tarif/Transport. Tagihan Rp0 tidak bisa dibayar lewat DOKU.",
 };
 
 /**

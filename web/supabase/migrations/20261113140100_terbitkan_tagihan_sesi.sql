@@ -37,13 +37,30 @@ as $$
          and o.status = any (array['lunas','ditahan']::public.order_status[])
     )
     -- (2) Uang mendarat di pesanan yang sudah kita tutup, dan staf belum
-    --     menyelesaikannya (refund manual lalu tutup_tinjauan).
+    --     menyelesaikannya (refund manual lalu tutup_tinjauan, yang
+    --     mengosongkan butuh_tinjauan_pada dan melepas kunci ini).
+    --     Sebab tinjauan SAJA tidak cukup: terapkan_notifikasi_gateway
+    --     mempertahankan sebab PERTAMA (`coalesce`), jadi pesanan tertutup yang
+    --     sudah bertinjauan `selisih_status` lalu kemasukan SUCCESS tetap
+    --     bersebab `selisih_status`. Yang pasti tercatat adalah jejak
+    --     `lunas_setelah_tutup`; ia dihitung hanya bila lahir DALAM tinjauan
+    --     yang masih terbuka (dibuat_pada >= butuh_tinjauan_pada), supaya
+    --     jejak dari tinjauan lama yang sudah diselesaikan tidak mengunci lagi.
     or exists (
       select 1
         from public.orders o
        where o.booking_request_id = p_permintaan_id
-         and o.sebab_tinjauan = 'lunas_setelah_tutup'
          and o.butuh_tinjauan_pada is not null
+         and (
+           o.sebab_tinjauan = 'lunas_setelah_tutup'
+           or exists (
+             select 1
+               from public.jejak_pesanan j
+              where j.pesanan_id = o.id
+                and j.kejadian = 'lunas_setelah_tutup'
+                and j.dibuat_pada >= o.butuh_tinjauan_pada
+           )
+         )
     )
     -- (3) Sisa alur QRIS lama: bukti sudah diunggah atau sudah ditandai lunas.
     or exists (
@@ -186,12 +203,36 @@ begin
     raise exception 'Hanya staf yang boleh menerbitkan tagihan.' using errcode = '42501';
   end if;
 
-  -- KUNCI BARIS PENGAJUAN. Dua klik "Terbitkan tagihan" (atau dua tab) masuk
-  -- berurutan: yang kedua menunggu yang pertama selesai, lalu membaca status
-  -- dan pesanan TERBARU dan menjadi terbit ulang yang sah. Tanpa kunci ini
-  -- yang kedua membaca keadaan basi, tidak melihat pesanan pertama, dan
-  -- menabrak indeks pesanan_sesi_terbuka_satu_per_pengajuan sebagai galat
-  -- mentah. Indeks itu tetap jaring terakhir, bukan mekanisme utamanya.
+  -- URUTAN KUNCI: SEMUA pesanan pengajuan ini dulu, baru baris pengajuan.
+  --
+  -- (1) Pesanan, apa pun statusnya, diurutkan menurut id. Urutannya SAMA
+  --     dengan jalur webhook: terapkan_notifikasi_gateway mengunci pesanannya
+  --     lebih dulu, dan penyalur sesi rencana B baru kemudian mengunci
+  --     pengajuannya. Webhook yang sedang melunasi pesanan lama karena itu
+  --     membuat fungsi ini MENUNGGU, lalu predikat uang di bawah membaca
+  --     hasilnya yang sudah commit. Bila predikat dibaca sebelum kunci ini,
+  --     pelunasan yang sedang berjalan tidak terlihat, pesanan lama dilewati
+  --     sebagai "bukan menunggu_bayar lagi", dan klien yang sudah membayar
+  --     menerima tagihan KEDUA.
+  -- (2) Baris pengajuan. Dua klik "Terbitkan tagihan" (atau dua tab) masuk
+  --     berurutan: yang kedua menunggu yang pertama selesai, lalu membaca
+  --     status dan pesanan TERBARU dan menjadi terbit ulang yang sah. Tanpa
+  --     kunci ini yang kedua membaca keadaan basi, tidak melihat pesanan
+  --     pertama, dan menabrak indeks pesanan_sesi_terbuka_satu_per_pengajuan
+  --     sebagai galat mentah. Indeks itu tetap jaring terakhir.
+  --
+  -- Sisa celah yang sempit: pesanan yang lahir SESUDAH langkah (1) (terbitan
+  -- lain yang commit selagi kita menunggu baris pengajuan) baru terkunci di
+  -- loop penutupan, jadi urutannya terbalik untuk pesanan itu. Bila webhook
+  -- tepat memegang pesanan itu dan menunggu pengajuan, Postgres mendeteksi
+  -- deadlock dan menggagalkan salah satu transaksi dengan bersih (40P01);
+  -- tidak ada yang tertulis setengah, dan admin cukup menekan ulang.
+  perform 1
+     from public.orders o
+    where o.booking_request_id = p_permintaan_id
+    order by o.id
+    for update;
+
   select b.status, b.client_id, b.partner_id, b.tanggal, b.jam_mulai, c.padma_id
     into v_status, v_client_id, v_partner_id, v_tanggal, v_jam_mulai, v_padma_id
     from public.booking_requests b
@@ -232,9 +273,18 @@ begin
   if v_sebab is not null then
     raise exception '%', v_sebab using errcode = 'P0001', hint = 'sebab_tagihan';
   end if;
+  -- Rp0 tidak bisa ditagih DOKU, dan pesanan Rp0 tidak punya jalan ke
+  -- `lunas`: ia hanya akan kedaluwarsa. Diperiksa di sini, bukan di rincian,
+  -- karena rincian adalah rumus (setara dengan rumus TS lama, D1), sedangkan
+  -- ini aturan penerbitan.
+  if v_layanan + v_transport = 0 then
+    raise exception 'total_nol' using errcode = 'P0001', hint = 'sebab_tagihan';
+  end if;
 
-  -- Tutup pesanan yang masih terbuka (terbit ulang, §6.5). Uang yang tetap
-  -- mendarat di pesanan lama tertangkap sebagai lunas_setelah_tutup dan
+  -- Tutup pesanan yang masih terbuka (terbit ulang, §6.5), di bawah kunci
+  -- pesanan yang sudah dipegang sejak awal fungsi. `for update` di sini hanya
+  -- menambah pesanan yang lahir sesudah langkah kunci (lihat atas). Uang yang
+  -- tetap mendarat di pesanan lama tertangkap sebagai lunas_setelah_tutup dan
   -- mengunci terbit ulang berikutnya lewat uang_sudah_masuk_permintaan.
   for v_lama in
     select o.id
@@ -315,9 +365,12 @@ begin
 
   -- tenggat = kedaluwarsa_pada PERSIS (satu variabel), supaya layar staf,
   -- Passport, dan mesin pembayaran tidak pernah berselisih satu detik pun.
+  -- email_tagihan_pada dikosongkan: tanda "email terkirim" di panel harus
+  -- tentang tagihan INI, bukan tagihan sebelumnya yang baru saja ditutup.
   update public.booking_requests b
      set tenggat = v_tenggat,
          status_bayar = 'belum',
+         email_tagihan_pada = null,
          status = case when b.status = 'mitra_siap'
                        then 'menunggu_bayar'::public.booking_status
                        else b.status end

@@ -32,6 +32,7 @@ import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
 import { formatRupiah } from "@/lib/rupiah-publik";
 import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
 import { hitungTagihanPengajuan, KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: async () => ref.sesi! }));
@@ -56,6 +57,8 @@ const PADMA_ID = "PAD-UJI-02B2";
 const SVC_B2 = "11111111-1111-1111-1111-1111111112b2";
 const VARIAN = "77777777-7777-7777-7777-7777777772b2";
 const VARIAN_TANPA_TARIF = "77777777-7777-7777-7777-7777777772b3";
+// Tarif layanan Rp0: dengan transport 0 totalnya Rp0, yang tidak bisa ditagih.
+const VARIAN_GRATIS = "77777777-7777-7777-7777-7777777772b4";
 const MITRA = "33333333-3333-3333-3333-3333333332b2";
 const MITRA_TANPA_TITIK = "33333333-3333-3333-3333-3333333332b3";
 const MITRA_NONAKTIF = "33333333-3333-3333-3333-3333333332b4";
@@ -149,7 +152,7 @@ beforeAll(async () => {
   ADMIN_UID = admin.id;
 
   await bersihkan();
-  await svc.from("variant_rates").delete().in("variant_id", [VARIAN, VARIAN_TANPA_TARIF]);
+  await svc.from("variant_rates").delete().in("variant_id", [VARIAN, VARIAN_TANPA_TARIF, VARIAN_GRATIS]);
   await svc.from("service_variants").delete().eq("service_id", SVC_B2);
   await svc.from("services").delete().eq("id", SVC_B2);
   await svc.from("partners").delete().in("id", [MITRA, MITRA_TANPA_TITIK, MITRA_NONAKTIF]);
@@ -180,12 +183,14 @@ beforeAll(async () => {
     svc.from("service_variants").insert([
       { id: VARIAN, service_id: SVC_B2, label: "Uji B2", urutan: 90 },
       { id: VARIAN_TANPA_TARIF, service_id: SVC_B2, label: "Uji B2 tanpa tarif", urutan: 91 },
+      { id: VARIAN_GRATIS, service_id: SVC_B2, label: "Uji B2 gratis", urutan: 92 },
     ]),
   );
   await wajib(
     svc.from("variant_rates").insert([
       { variant_id: VARIAN, harga_klien: HARGA_LAMA, honor_mitra: 100_000, berlaku_sejak: "2026-01-01" },
       { variant_id: VARIAN, harga_klien: HARGA_BARU, honor_mitra: 100_000, berlaku_sejak: TGL_TARIF_BARU },
+      { variant_id: VARIAN_GRATIS, harga_klien: 0, honor_mitra: 0, berlaku_sejak: "2026-01-01" },
     ]),
   );
   await wajib(
@@ -210,7 +215,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await bersihkan();
-  await svc.from("variant_rates").delete().in("variant_id", [VARIAN, VARIAN_TANPA_TARIF]);
+  await svc.from("variant_rates").delete().in("variant_id", [VARIAN, VARIAN_TANPA_TARIF, VARIAN_GRATIS]);
   await svc.from("service_variants").delete().eq("service_id", SVC_B2);
   await svc.from("services").delete().eq("id", SVC_B2);
   await svc.from("partners").delete().in("id", [MITRA, MITRA_TANPA_TITIK, MITRA_NONAKTIF]);
@@ -264,8 +269,13 @@ async function ubahPengajuan(id: string, ubah: Record<string, unknown>): Promise
 }
 
 async function pengajuan(id: string) {
-  const [b] = await querySql<{ status: string; status_bayar: string; tenggat: Date | null }>(
-    `select status, status_bayar, tenggat from public.booking_requests where id = $1`,
+  const [b] = await querySql<{
+    status: string;
+    status_bayar: string;
+    tenggat: Date | null;
+    email_tagihan_pada: Date | null;
+  }>(
+    `select status, status_bayar, tenggat, email_tagihan_pada from public.booking_requests where id = $1`,
     [id],
   );
   return b;
@@ -349,6 +359,34 @@ async function tandaiPesanan(pesananId: string, ubah: Record<string, unknown>): 
   await wajib(svc.from("orders").update(ubah).eq("id", pesananId));
 }
 
+/** SUCCESS dari DOKU lewat `terapkan_notifikasi_gateway` sungguhan (service role, seperti webhook). */
+async function suksesGateway(pesananId: string): Promise<string> {
+  const [p] = await querySql<{ kode: string; percobaan: number; total: number }>(
+    `select o.kode, o.percobaan,
+            (select coalesce(sum(i.harga_beku), 0)::int from public.order_items i where i.pesanan_id = o.id) as total
+       from public.orders o where o.id = $1`,
+    [pesananId],
+  );
+  const { data, error } = await svc.rpc("terapkan_notifikasi_gateway", {
+    p_invoice: rakitInvoice(p.kode, p.percobaan),
+    p_status: "SUCCESS",
+    p_transaksi_id: `trx-uji-${randomUUID()}`,
+    p_kanal: "VIRTUAL_ACCOUNT_BCA",
+    p_nominal: p.total,
+    p_sidik: randomUUID(),
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Tinjauan bersebab lain dibuka DENGAN jam basis data (bukan jam mesin uji). */
+async function bukaTinjauan(pesananId: string, sebab: string): Promise<void> {
+  await querySql(
+    `update public.orders set sebab_tinjauan = $2, butuh_tinjauan_pada = now() where id = $1`,
+    [pesananId, sebab],
+  );
+}
+
 async function uangSudahMasuk(id: string): Promise<boolean> {
   const [b] = await querySql<{ v: boolean }>(
     `select public.uang_sudah_masuk_permintaan($1) as v`,
@@ -417,6 +455,48 @@ describe("uang_sudah_masuk_permintaan", () => {
     });
     expect(await uangSudahMasuk(id)).toBe(true);
     await tandaiPesanan(p, { butuh_tinjauan_pada: null });
+    expect(await uangSudahMasuk(id)).toBe(false);
+  });
+
+  it("syarat 2 lewat JEJAK: SUCCESS mendarat di pesanan tertutup yang sudah bertinjauan selisih_status -> true; terbit ulang ditolak; sesudah tutup_tinjauan -> false", async () => {
+    // terapkan_notifikasi_gateway mempertahankan sebab PERTAMA (coalesce):
+    // pesanan ini tetap bersebab `selisih_status` walau uangnya sudah masuk.
+    const id = await pengajuanSiap();
+    const { data: p1 } = await terbit(id);
+    const { data: p2 } = await terbit(id);
+    await bukaTinjauan(p1 as string, "selisih_status");
+    expect(await uangSudahMasuk(id)).toBe(false);
+
+    expect(await suksesGateway(p1 as string)).toBe("tanpa_efek");
+    const [o1] = await querySql<{ status: string; sebab_tinjauan: string }>(
+      `select status::text, sebab_tinjauan from public.orders where id = $1`,
+      [p1],
+    );
+    expect(o1).toEqual({ status: "dibatalkan", sebab_tinjauan: "selisih_status" });
+    expect((await jejakUntuk(p1 as string)).map((j) => j.kejadian)).toContain("lunas_setelah_tutup");
+
+    expect(await uangSudahMasuk(id)).toBe(true);
+    const { error } = await terbit(id);
+    expect(galatSebab(error)).toEqual({ code: "P0001", message: "uang_sudah_masuk", hint: "sebab_tagihan" });
+    expect((await pesananUntuk(id)).filter((p) => p.status === "menunggu_bayar").map((p) => p.id)).toEqual([p2]);
+
+    expect((await sesiAdmin.rpc("tutup_tinjauan", { p_pesanan_id: p1 })).error).toBeNull();
+    expect(await uangSudahMasuk(id)).toBe(false);
+    expect((await terbit(id)).error).toBeNull();
+  });
+
+  it("jejak lunas_setelah_tutup dari tinjauan yang SUDAH ditutup tidak mengunci tinjauan baru bersebab lain", async () => {
+    const id = await pengajuanSiap();
+    const { data: p1 } = await terbit(id);
+    await terbit(id);
+    expect(await suksesGateway(p1 as string)).toBe("tanpa_efek");
+    expect(await uangSudahMasuk(id)).toBe(true);
+    expect((await sesiAdmin.rpc("tutup_tinjauan", { p_pesanan_id: p1 })).error).toBeNull();
+    expect(await uangSudahMasuk(id)).toBe(false);
+
+    // Tinjauan BARU yang tidak ada hubungannya dengan uang: jejak lama lahir
+    // sebelum tinjauan ini dibuka, jadi tidak dihitung.
+    await bukaTinjauan(p1 as string, "selisih_status");
     expect(await uangSudahMasuk(id)).toBe(false);
   });
 
@@ -510,6 +590,18 @@ describe("terbitkan_tagihan_sesi — terbit pertama", () => {
     expect(b.status).toBe("menunggu_bayar");
     expect(b.status_bayar).toBe("belum");
     expect(await tenggatSamaDenganPesanan(id, p.id)).toBe(true);
+  });
+
+  it("setiap terbit dan terbit ulang mengosongkan email_tagihan_pada", async () => {
+    // Tanda "email terkirim" di panel harus tentang tagihan INI.
+    const id = await pengajuanSiap();
+    await ubahPengajuan(id, { email_tagihan_pada: new Date().toISOString() });
+    expect((await terbit(id)).error).toBeNull();
+    expect((await pengajuan(id)).email_tagihan_pada).toBeNull();
+
+    await ubahPengajuan(id, { email_tagihan_pada: new Date().toISOString() });
+    expect((await terbit(id)).error).toBeNull();
+    expect((await pengajuan(id)).email_tagihan_pada).toBeNull();
   });
 
   it("transport 0 -> SATU item, jumlah_item 1", async () => {
@@ -629,6 +721,26 @@ describe("tagihan tidak lengkap -> galat ber-hint sebab_tagihan dan nol pesanan"
     const id = await pengajuanSiap({ varian: VARIAN_TANPA_TARIF, lon: LON_ALAMAT["15_20"] });
     const r = await tanpaTarifTransport15_20(() => rincian(id));
     expect(r).toEqual({ layanan: null, transport: null, jenjang: "15_20", sebab: "tarif_varian_kosong" });
+  });
+
+  it("total Rp0 -> total_nol, nol pesanan", async () => {
+    // DOKU tidak bisa menagih Rp0, dan pesanan Rp0 tidak punya jalan ke lunas.
+    const id = await pengajuanSiap({ varian: VARIAN_GRATIS, lon: LON_ALAMAT["0_5"] });
+    expect(await rincian(id)).toEqual({ layanan: 0, transport: 0, jenjang: "0_5", sebab: null });
+    const { error } = await terbit(id);
+    expect(galatSebab(error)).toEqual({ code: "P0001", message: "total_nol", hint: "sebab_tagihan" });
+    expect(await pesananUntuk(id)).toEqual([]);
+    expect((await pengajuan(id)).status).toBe("mitra_siap");
+  });
+
+  it("layanan Rp0 dengan transport berbayar tetap terbit — yang ditolak TOTAL nol", async () => {
+    const id = await pengajuanSiap({ varian: VARIAN_GRATIS });
+    const r = await rincian(id);
+    expect(r.layanan).toBe(0);
+    expect(r.transport).toBeGreaterThan(0);
+    expect((await terbit(id)).error).toBeNull();
+    const [p] = await pesananUntuk(id);
+    expect((await itemUntuk(p.id)).map((i) => i.harga_beku)).toEqual([0, r.transport]);
   });
 
   it("bidan nonaktif -> bidan_nonaktif", async () => {
@@ -824,6 +936,43 @@ describe("dua panggilan bersamaan", () => {
     const hasil = await Promise.all([terbit(id), terbit(id)]);
     expect(hasil.map((h) => h.error)).toEqual([null, null]);
     expect(await periksaSatuTerbuka(id)).toHaveLength(2);
+  });
+
+  it("webhook yang sedang melunasi pesanan lama membuat terbit ulang MENUNGGU, lalu menolak dengan uang_sudah_masuk", async () => {
+    // Urutan kunci pesanan -> pengajuan. Bila predikat uang dibaca sebelum
+    // pesanan terkunci, pelunasan yang belum commit tidak terlihat, pesanan
+    // lama dilewati karena sudah bukan menunggu_bayar, dan tagihan KEDUA
+    // terbit untuk klien yang sudah membayar.
+    const id = await pengajuanSiap();
+    const { data: p1 } = await terbit(id);
+    const webhook = new Client({ connectionString: dbUrl() });
+    await webhook.connect();
+    try {
+      await webhook.query("begin");
+      await webhook.query("select id from public.orders where id = $1 for update", [p1]);
+      await webhook.query(
+        `update public.orders set status = 'lunas', lunas_pada = now(), ditutup_pada = now() where id = $1`,
+        [p1],
+      );
+
+      let selesai = false;
+      const ulang = terbit(id).then((h) => {
+        selesai = true;
+        return h;
+      });
+      await new Promise((r) => setTimeout(r, 750));
+      expect(selesai).toBe(false);
+
+      await webhook.query("commit");
+      const { error } = await ulang;
+      expect(galatSebab(error)).toEqual({ code: "P0001", message: "uang_sudah_masuk", hint: "sebab_tagihan" });
+      const ps = await pesananUntuk(id);
+      expect(ps.map((p) => [p.id, p.status])).toEqual([[p1, "lunas"]]);
+      expect(ps.filter((p) => p.status === "menunggu_bayar")).toEqual([]);
+    } finally {
+      await webhook.query("rollback").catch(() => {});
+      await webhook.end();
+    }
   });
 
   it("kunci baris: panggilan kedua MENUNGGU transaksi pertama, lalu menjadi terbit ulang yang sah", async () => {
@@ -1037,6 +1186,7 @@ describe("terbitkanTagihan memanggil terbitkan_tagihan_sesi", () => {
   it.each([
     ["alamat_tanpa_pin", { lon: null }],
     ["bidan_nonaktif", { mitra: MITRA_NONAKTIF }],
+    ["total_nol", { varian: VARIAN_GRATIS, lon: LON_ALAMAT["0_5"] }],
   ] as Array<[keyof typeof KALIMAT_SEBAB_ADMIN, OpsiPengajuan]>)(
     "galat ber-hint '%s' menjadi kalimat admin, bukan kode Postgres",
     async (sebab, opsi) => {
