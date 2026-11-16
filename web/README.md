@@ -442,7 +442,34 @@ kebetulan membuka halamannya lagi (Lapis 1b). Sumbernya spec DOKU §8
    SEBELUM menerapkan apa pun: yang membuktikan backup berhasil adalah
    memulihkannya ke tempat lain, bukan melihat berkasnya ada. Sesudahnya,
    periksa `supabase_migrations.schema_migrations`.
-6. **Peralihan** (§7 spec). Dikerjakan admin pada hari rilis.
+6. **Peralihan** (§7 spec). Dikerjakan admin pada hari rilis. Produksi masih
+   menerima unggahan bukti sampai detik deploy, jadi antrean tidak bisa
+   dikosongkan lebih dulu. Kode menyediakan jalur warisan yang sempit untuk
+   pengajuan `menunggu_bayar` yang **tidak punya satu pun pesanan**:
+
+   | `status_bayar` baris warisan | Sisi admin | Sisi klien (Passport) |
+   |---|---|---|
+   | `belum` (tagihan QRIS belum dibayar) | "Terbitkan ulang" lewat DOKU | "Tagihan Anda sedang dialihkan ke pembayaran baru; admin akan mengirimkannya." Tanpa QRIS, tanpa unggah |
+   | `menunggu_verifikasi` (bukti sudah diunggah) | Penampil bukti + verifikasi lama, khusus baris ini | "Bukti Anda sedang diperiksa admin" |
+   | `lunas` (sudah diverifikasi, belum dikonfirmasi) | "Konfirmasi jadwal" lama, khusus baris ini | Seperti sekarang |
+
+   Aturan pendamping:
+   - Unggah bukti baru dimatikan sejak rilis, untuk semua baris.
+   - "Terbitkan ulang" ditolak bila `status_bayar <> 'belum'`, sehingga klien
+     yang sudah membayar QRIS tidak pernah ditagih dua kali.
+   - Klien yang sudah mentransfer QRIS tetapi belum mengunggah bukti ditangani
+     admin secara manual, di luar aplikasi.
+   - Tumpukan tagihan lewat tenggat sejak September (cron tenggat tidak pernah
+     dijadwalkan) adalah baris warisan. Admin memutuskannya **satu per satu**:
+     terbitkan ulang lewat DOKU bila klien masih ingin, atau batalkan untuk
+     melepas skriningnya. **Tidak ada pembatalan massal**; itu keputusan yang
+     sama yang membuat cron tenggat dilarang.
+   - Jumlah baris warisan diukur dengan query agregat produksi, hanya sesudah
+     izin pemilik repo.
+   - Tidak ada migrasi data yang membuat pesanan otomatis.
+   - Sesudah tidak ada baris warisan di produksi, jalur warisan (tab verifikasi,
+     tombol konfirmasi lama, `konfirmasi_permintaan`) dihapus sebagai langkah
+     terpisah.
 7. **Penjadwal:** pasang `CRON_SECRET` yang sama sebagai GitHub Secret, buka
    komentar blok `schedule:` di `.github/workflows/rekonsiliasi-pesanan.yml`,
    lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di

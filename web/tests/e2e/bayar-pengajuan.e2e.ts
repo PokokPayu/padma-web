@@ -1,49 +1,57 @@
 /**
- * E2E PEMBAYARAN SEBAGAI SYARAT KONFIRMASI (spec C2).
+ * E2E TAGIHAN SESI LEWAT DOKU (plan B, tugas B8).
  *
- * Ini satu-satunya uji yang menjalankan SELURUH corong C2 lewat browser
- * sungguhan, dari klien mengajukan sampai jadwalnya terkunci:
+ * Menjalankan alur baru lewat browser sungguhan:
  *
  *   klien mengajukan → admin cari & tetapkan bidan → admin terbitkan tagihan
- *   → klien melihat nominal & tenggat → klien unggah bukti
- *   → admin melihat bukti → admin tandai lunas → admin konfirmasi jadwal
+ *   → klien membuka /passport/bayar/<id> (rincian beku + tombol Bayar)
+ *   → klien menekan Bayar → peramban dialihkan ke tautan DOKU
+ *   → notifikasi SUCCESS bertanda tangan (disimulasikan) → sesi lahir
+ *   → Passport "Lunas" + tautan jadwal; /admin/sesi "Baru — kabari bidan"
  *
- * Yang dijaga, dan hanya bisa dijaga dari sini:
+ * DOKU TIDAK PERNAH dihubungi. Dua pagar:
+ *  - Pesanan diberi `tautan_gateway` palsu (host `*.doku.test`) lewat service
+ *    role sebelum klik, sehingga rute `/api/pesanan/sesi/<id>/bayar` memakai
+ *    ULANG tautan itu (jalur pakai-ulang `terbitkanTautanBayar`) tanpa memanggil
+ *    API DOKU. Peramban dicegat di `page.route` dan tidak keluar dari mesin.
+ *  - Notifikasi ditandatangani dengan kunci PALSU yang sama dengan yang dipasang
+ *    pada dev server lewat env proses. Kunci sandbox di `.env.local` tidak
+ *    dipakai di sini.
  *
- *  1. **Tombol "Konfirmasi jadwal" TIDAK ADA sebelum pembayaran lunas.** Uji
- *     basis data sudah membuktikan `konfirmasi_permintaan()` menolak baris
- *     yang belum lunas; yang belum pernah dibuktikan adalah bahwa ADMIN tidak
- *     ditawari tombolnya. Tombol yang pasti ditolak basis data adalah cara
- *     tercepat membuat admin berhenti memercayai layarnya.
- *  2. **Total yang dilihat klien = harga layanan + tarif transport**, dan itu
- *     diturunkan pada saat render — tidak ada kolom `total_tagihan` di mana
- *     pun (money firewall). Di sini angkanya dibaca dari LAYAR lalu
- *     dibandingkan dengan tarif di basis data.
- *  3. **Unggahan bukti benar-benar melewati peramban** — termasuk pengecilan
- *     gambar di kanvas, yang tidak pernah berjalan di vitest karena tidak ada
- *     `createImageBitmap` di sana. Yang gagal senyap di jalur itu akan tampak
- *     sebagai bukti yang tidak pernah sampai.
- *  4. **Bukti hanya terbuka lewat rute bertanda.** Bucketnya tanpa policy;
- *     yang dibuktikan di sini adalah sisi lainnya: staf yang berhak MEMANG
- *     bisa membukanya, bukan hanya semua orang tertolak.
+ * Prasyarat: `npx supabase start`, `npm run seed:users`, dan dev server yang
+ * dijalankan dengan kunci palsu yang sama:
  *
- * Prasyarat: `npx supabase start`, `npm run seed:users`, `npm run dev`.
- * Jalankan: `npm run test:e2e:bayar`.
- * Sengaja BUKAN file *.test.ts agar `npm test` (vitest) tetap bisa jalan tanpa
- * server dev & browser.
+ *   DOKU_CLIENT_ID=klien-uji-doku DOKU_SECRET_KEY=kunci-uji-doku \
+ *   DOKU_PRODUKSI=false NEXT_PUBLIC_BASIS_URL=http://localhost:3000 \
+ *   npm run dev -- -p 3000
  *
- * Skrip ini IDEMPOTEN: seluruh yang disentuhnya — pengajuan, sesi, skrining,
- * objek bukti, koordinat mitra & klien — dikembalikan di awal DAN di akhir.
+ * Jalankan: `npm run test:e2e:bayar`. Sengaja BUKAN *.test.ts agar vitest tetap
+ * bisa jalan tanpa server dev & browser.
+ *
+ * Skrip ini IDEMPOTEN: pengajuan, pesanan, sesi, skrining, dan koordinat yang
+ * disentuhnya dikembalikan di awal DAN di akhir.
  */
 import { config } from "dotenv";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 import { tungguIsi } from "./_tunggu";
+import { setujuiDokumenUntukUji } from "../helpers/persetujuan";
+import {
+  hitungDigest,
+  hitungTandaTangan,
+  rakitKomponenTandaTangan,
+} from "../../src/lib/doku/tanda-tangan";
+import { rakitInvoice } from "../../src/lib/pesanan/order-id";
 
 config({ path: [".env.local", ".env"] });
 
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const PASSWORD = "padma-dev-123";
+
+/** Kunci PALSU; harus identik dengan env dev server (lihat dokblok atas). */
+const CLIENT_ID_UJI = "klien-uji-doku";
+const SECRET_KEY_UJI = "kunci-uji-doku";
+const TAUTAN_PALSU = "https://checkout-uji.doku.test/jalur-pakai-ulang";
 
 const KLIEN = "44444444-4444-4444-4444-444444444401"; // Ananda Putri
 const MITRA = "33333333-3333-3333-3333-333333333301"; // Bidan Sri Wahyuni
@@ -153,6 +161,20 @@ async function bersihkan() {
     await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
   }
   await admin.from("sessions").delete().eq("tanggal", TANGGAL);
+  // Pesanan sesi fixture (item ikut lewat cascade/eksplisit) sebelum pengajuan:
+  // `orders.booking_request_id` menahan penghapusan pengajuannya.
+  const idPengajuan = (pengajuan ?? []).map((p) => p.id as string);
+  if (idPengajuan.length > 0) {
+    const { data: pesananLama } = await admin
+      .from("orders")
+      .select("id")
+      .in("booking_request_id", idPengajuan);
+    const idPesanan = (pesananLama ?? []).map((o) => o.id as string);
+    if (idPesanan.length > 0) {
+      await admin.from("order_items").delete().in("pesanan_id", idPesanan);
+      await admin.from("orders").delete().in("id", idPesanan);
+    }
+  }
   // Pengajuan sebelum skrining: `booking_requests.screening_id` menahan
   // penghapusan skrining yang menopangnya.
   await admin.from("booking_requests").delete().eq("client_id", KLIEN);
@@ -167,6 +189,7 @@ async function bersihkan() {
 
 async function keadaanAwal() {
   await bersihkan();
+  await setujuiDokumenUntukUji(admin, KLIEN);
   // Skrining hijau: setiap pengajuan berdiri di atas satu skrining hijau milik
   // pemesannya (spec C1-b J3). Ditulis service role — klien sengaja tidak punya
   // hak INSERT atas `screenings`.
@@ -210,6 +233,9 @@ async function main() {
 
     // ---- 1. Klien mengajukan jadwal ----
     await klien.goto(`${BASE}/passport/ajukan`, { waitUntil: "networkidle" });
+    // Formulir dua langkah: katalog dulu, lalu "Isi data". Varian bawaan
+    // dipakai apa adanya; yang diuji di sini penagihannya, bukan katalognya.
+    await klien.getByRole("button", { name: "Isi data", exact: true }).click();
     await klien.locator('input[name="tanggal"]').fill(TANGGAL);
     // Alamat TIDAK disentuh: medannya sudah terisi dari profil, dan justru
     // itulah jalur yang mewariskan koordinat profil ke pengajuan.
@@ -222,9 +248,7 @@ async function main() {
     await klien.getByRole("button", { name: "sore", exact: true }).click();
     await klien.getByRole("button", { name: /Kirim Permintaan Jadwal/i }).click();
     const terkirim = await klien
-      .locator("[data-pengajuan-terkirim]")
-      .first()
-      .waitFor({ state: "visible", timeout: 20_000 })
+      .waitForURL("**/passport/ajukan/terkirim", { timeout: 20_000 })
       .then(() => true, () => false);
 
     const p1 = await bacaPengajuan();
@@ -253,14 +277,15 @@ async function main() {
     // ---- 2. Admin: cari & tetapkan bidan ----
     const ctxAdmin = await login(browser, "admin@padma.test");
     const staf = await ctxAdmin.newPage();
-    const kartu = staf.locator(`[data-permintaan="${idPermintaan}"]`);
+    // Panel admin kini terbuka lewat `?lihat=<id>` (bukan kartu di daftar).
+    const kartu = staf.locator("main");
 
-    await staf.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
+    await staf.goto(`${BASE}/admin/sesi?lihat=${idPermintaan}`, { waitUntil: "networkidle" });
     await kartu.getByRole("button", { name: "Cari bidan" }).click();
     await kartu
-      .locator("select")
+      .locator(`#mitra-${idPermintaan}`)
       .waitFor({ state: "visible", timeout: 20_000 });
-    await kartu.locator("select").selectOption(MITRA);
+    await kartu.locator(`#mitra-${idPermintaan}`).selectOption(MITRA);
     await kartu.getByRole("button", { name: "Tetapkan bidan" }).click();
     await kartu
       .getByRole("button", { name: "Terbitkan tagihan" })
@@ -337,185 +362,173 @@ async function main() {
       `nomor klinik=${waKlinik}`,
     );
 
-    // ---- 4. Klien melihat nominal & tenggat ----
-    //
-    // DUA layar sejak halaman bayar dipecah: `/passport/bayar` adalah DAFTAR
-    // yang menaut, dan nominal + tenggat + unggahan hidup di halaman satu
-    // tagihan. Ketukan di bawah karena itu bagian dari yang diuji — bukan
-    // sekadar navigasi: kartu yang tidak menaut membuat tagihannya tidak bisa
-    // dibayar sama sekali.
-    await klien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
-    const kartuDaftar = klien.locator(`[data-tagihan="${idPermintaan}"]`);
-    await kartuDaftar.waitFor({ state: "visible", timeout: 20_000 });
-    await kartuDaftar.click();
-    await klien.waitForURL(`**/passport/bayar/${idPermintaan}`, { timeout: 20_000 });
-
-    // Sesudah berpindah, kartu ringkas di halaman tagihan membawa penanda yang
-    // sama — nominal dan tenggatnya ada di dalamnya.
-    const kartuTagihan = klien.locator(`[data-tagihan="${idPermintaan}"]`);
-    await kartuTagihan.locator("[data-total]").waitFor({ state: "visible", timeout: 20_000 });
-
-    // Total yang benar dihitung dari tarif di basis data, bukan diketik di sini:
-    // angka yang di-hardcode akan merah setiap kali seed-nya disetel, dan yang
-    // sedang diuji adalah PENJUMLAHANNYA, bukan besaran tarifnya.
-    const { data: tarif } = await admin
-      .from("variant_rates")
-      .select("harga_klien, berlaku_sejak")
-      .eq("variant_id", p2!.variant_id as string)
-      .lte("berlaku_sejak", TANGGAL)
-      .order("berlaku_sejak", { ascending: false })
-      .limit(1);
-    const { data: tarifTransport } = await admin
-      .from("transport_rates")
-      .select("tarif_klien")
-      .eq("jenjang", JENJANG_HARAPAN)
-      .lte("berlaku_sejak", TANGGAL)
-      .order("berlaku_sejak", { ascending: false })
-      .limit(1);
-    const harapanTotal =
-      Number(tarif?.[0]?.harga_klien ?? NaN) + Number(tarifTransport?.[0]?.tarif_klien ?? NaN);
-
-    const totalTampil = rupiahKeAngka(await kartuTagihan.locator("[data-total]").innerText());
+    // ---- 4. Klien membuka halaman tagihan ----
+    const { data: pesanan } = await admin
+      .from("orders")
+      .select("id, kode, percobaan, status, jenis")
+      .eq("booking_request_id", idPermintaan)
+      .single<{ id: string; kode: string; percobaan: number; status: string; jenis: string }>();
+    const { data: butir } = await admin
+      .from("order_items")
+      .select("judul_beku, harga_beku")
+      .eq("pesanan_id", pesanan!.id);
+    const nominal = (butir ?? []).reduce((n, b) => n + (b.harga_beku as number), 0);
     catat(
-      "4a. total di layar klien = harga layanan + tarif transport (diturunkan, tidak disimpan)",
-      totalTampil === harapanTotal,
-      `layar=${totalTampil} harapan=${harapanTotal} (layanan ${tarif?.[0]?.harga_klien} + transport ${tarifTransport?.[0]?.tarif_klien})`,
+      "4a. tagihan terbit sebagai pesanan jenis `sesi` berstatus `menunggu_bayar`",
+      pesanan?.jenis === "sesi" && pesanan?.status === "menunggu_bayar" && nominal > 0,
+      `jenis=${pesanan?.jenis} status=${pesanan?.status} nominal=${nominal}`,
     );
 
-    const teksKartu = (await kartuTagihan.innerText()).replace(/\s+/g, " ");
+    await klien.goto(`${BASE}/passport/bayar/${idPermintaan}`, { waitUntil: "networkidle" });
+    await tungguIsi(klien);
+    const totalTampil = rupiahKeAngka(await klien.locator("[data-total]").innerText());
     catat(
-      "4b. tenggat & akibatnya tertulis di kartu, bukan hanya di basis data",
-      /Bayar dalam .* jam lagi/.test(teksKartu) && teksKartu.includes("slotnya dilepas"),
-      `isi kartu: ${teksKartu.slice(0, 160)}`,
+      "4b. total di layar klien = jumlah harga beku pesanan",
+      totalTampil === nominal,
+      `layar=${totalTampil} pesanan=${nominal}`,
     );
     catat(
       "4c. honor mitra tidak pernah muncul di layar klien",
       !/honor/i.test(await teksTerlihat(klien)),
       "kata 'honor' tidak ada di halaman",
     );
+    const tombolBayar = klien.getByRole("button", { name: /Bayar sekarang/i });
+    catat(
+      "4d. tombol Bayar ada",
+      (await tombolBayar.count()) === 1,
+      "tombol 'Bayar sekarang' dirender",
+    );
 
-    // ---- 5. Klien mengunggah bukti ----
-    // Medan berkas hidup di seksi "Kirim bukti", di luar kartu ringkas — jadi
-    // dicari pada halaman, bukan di dalam kartu. Ia `sr-only` (tetap fokusabel,
-    // hanya tidak terlihat), dan `setInputFiles` memang tidak menuntut
-    // visibilitas.
-    await klien.locator('input[type="file"]').setInputFiles({
-      name: "bukti.png",
-      mimeType: "image/png",
-      buffer: PNG_1X1,
+    // ---- 5. Klien menekan Bayar ----
+    // Tautan palsu dipasang lewat service role: rute memakai ulang tautan yang
+    // masih berlaku, jadi API DOKU tidak dipanggil. Peramban dicegat sebelum
+    // keluar dari mesin; yang diperiksa hanya URL tujuannya.
+    await admin
+      .from("orders")
+      .update({ tautan_gateway: TAUTAN_PALSU, tautan_terbit_pada: new Date().toISOString() })
+      .eq("id", pesanan!.id);
+
+    const hostDipanggil: string[] = [];
+    await klien.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.hostname.endsWith("doku.test") || url.hostname.endsWith("doku.com")) {
+        hostDipanggil.push(url.href);
+        await route.fulfill({ status: 200, contentType: "text/html", body: "<html><body>DOKU palsu</body></html>" });
+        return;
+      }
+      await route.continue();
     });
-    // Kartu berganti kalimat begitu `router.refresh()` selesai — itu penanda
-    // unggahannya benar-benar diterima server, bukan sekadar berkasnya dipilih.
-    await klien
-      .getByText("Bukti diterima")
-      .first()
-      .waitFor({ state: "visible", timeout: 20_000 });
-
-    const p3 = await bacaPengajuan();
+    await Promise.all([
+      klien.waitForURL((u) => u.hostname.endsWith("doku.test"), { timeout: 20_000 }),
+      tombolBayar.click(),
+    ]);
     catat(
-      "5a. status bayar menjadi `menunggu_verifikasi` — BUKAN langsung lunas",
-      p3?.status_bayar === "menunggu_verifikasi",
-      `status_bayar=${p3?.status_bayar}`,
+      "5a. peramban dialihkan ke tautan pesanan (jalur pakai-ulang, tanpa memanggil DOKU)",
+      klien.url() === TAUTAN_PALSU && hostDipanggil.every((h) => h.startsWith(TAUTAN_PALSU)),
+      `url=${klien.url()}`,
     );
+    const { data: sesudahKlik } = await admin
+      .from("orders")
+      .select("tautan_gateway, percobaan")
+      .eq("id", pesanan!.id)
+      .single();
     catat(
-      "5b. objek bukti tercatat pada barisnya, berkunci turunan id pengajuan",
-      p3?.bukti_objek === `${idPermintaan}/bukti.jpg`,
-      `bukti_objek=${p3?.bukti_objek}`,
-    );
-    // Gambar dikecilkan & di-JPEG-kan di peramban sebelum dikirim. Yang
-    // dibuktikan di sini: byte yang sampai ke bucket memang JPEG, jadi jalur
-    // kanvas sungguhan berjalan dan tidak diam-diam jatuh ke berkas aslinya
-    // (PNG) lewat blok `catch`.
-    const { data: objek } = await admin.storage
-      .from("bukti-bayar")
-      .download(p3!.bukti_objek as string);
-    const kepala = objek ? new Uint8Array(await objek.arrayBuffer()).slice(0, 3) : new Uint8Array();
-    catat(
-      "5c. berkas di bucket sudah JPEG — pengecilan di peramban sungguh berjalan",
-      kepala[0] === 0xff && kepala[1] === 0xd8 && kepala[2] === 0xff,
-      `3 byte pertama: ${[...kepala].map((b) => b.toString(16)).join(" ")}`,
+      "5b. rute tidak menerbitkan invoice baru (percobaan & tautan tetap)",
+      sesudahKlik?.tautan_gateway === TAUTAN_PALSU && sesudahKlik?.percobaan === pesanan!.percobaan,
+      `percobaan=${sesudahKlik?.percobaan}`,
     );
 
-    // GERBANG KETIGA: bukti sudah ada, tetapi belum diverifikasi manusia.
-    await staf.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
+    // ---- 6. Notifikasi SUCCESS bertanda tangan ----
+    const invoice = rakitInvoice(pesanan!.kode, pesanan!.percobaan);
+    const badan = JSON.stringify({
+      order: { invoice_number: invoice, amount: nominal },
+      transaction: { status: "SUCCESS" },
+    });
+    function kirimNotifikasi(clientId: string, rahasia: string) {
+      const requestId = `uji-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const requestTimestamp = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+      const komponen = rakitKomponenTandaTangan({
+        clientId,
+        requestId,
+        requestTimestamp,
+        requestTarget: "/api/pembayaran/doku",
+        digest: hitungDigest(badan),
+      });
+      return fetch(`${BASE}/api/pembayaran/doku`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Client-Id": clientId,
+          "Request-Id": requestId,
+          "Request-Timestamp": requestTimestamp,
+          Signature: hitungTandaTangan(komponen, rahasia),
+        },
+        body: badan,
+      });
+    }
+
+    // Tanda tangan SALAH dulu: membuktikan dev server memang memverifikasi
+    // dengan kunci uji, bukan menerima apa saja (dan bukan memakai kunci lain).
+    const resSalah = await kirimNotifikasi(CLIENT_ID_UJI, "kunci-salah");
     catat(
-      "5d. bukti terkirim TAPI belum diverifikasi: masih TIDAK ada tombol Konfirmasi jadwal",
-      (await staf.getByRole("button", { name: "Konfirmasi jadwal" }).count()) === 0,
-      "tombol konfirmasi tidak dirender",
+      "6a. notifikasi bertanda tangan SALAH ditolak 401 (server memverifikasi)",
+      resSalah.status === 401,
+      `status=${resSalah.status}`,
+    );
+    const resOk = await kirimNotifikasi(CLIENT_ID_UJI, SECRET_KEY_UJI);
+    const jawab = (await resOk.json().catch(() => ({}))) as { hasil?: string };
+    catat(
+      "6b. notifikasi SUCCESS bertanda tangan benar diterapkan (200)",
+      resOk.status === 200 && jawab.hasil === "diterapkan",
+      `status=${resOk.status} hasil=${jawab.hasil}`,
     );
 
-    // ---- 6. Admin melihat bukti & menandai lunas ----
-    await staf.goto(`${BASE}/admin/bayar`, { waitUntil: "networkidle" });
-    const baris = staf.locator(`[data-tagihan-pengajuan="${idPermintaan}"]`);
-    await baris.waitFor({ state: "visible", timeout: 20_000 });
-    catat(
-      "6a. barisnya bertanda `menahan jadwal` — dibedakan dari tagihan sesi biasa",
-      (await baris.innerText()).includes("menahan jadwal"),
-      "penanda tampil",
-    );
-
-    // Rute bertanda dipanggil dengan KUKI ADMIN. Sisi tertolaknya (anon &
-    // klien) sudah dibuktikan uji unit; yang ini sisi sebaliknya — staf yang
-    // berhak memang bisa membukanya.
-    const resBukti = await ctxAdmin.request.get(`${BASE}/api/bukti/${idPermintaan}`);
-    catat(
-      "6b. staf bisa membuka bukti lewat rute bertanda, dengan tajuk private & no-store",
-      resBukti.status() === 200 &&
-        (resBukti.headers()["content-type"] ?? "").startsWith("image/") &&
-        (resBukti.headers()["cache-control"] ?? "").includes("no-store"),
-      `status=${resBukti.status()} type=${resBukti.headers()["content-type"]} cache=${resBukti.headers()["cache-control"]}`,
-    );
-
-    await baris.getByRole("button", { name: "Tandai lunas" }).click();
-    await staf.waitForTimeout(1500);
-    const p4 = await bacaPengajuan();
-    catat(
-      "6c. status bayar menjadi `lunas` sesudah admin memutuskan",
-      p4?.status_bayar === "lunas",
-      `status_bayar=${p4?.status_bayar}`,
-    );
-    catat(
-      "6d. melunasi TIDAK ikut memindahkan status permintaan — konfirmasi tetap langkah tersendiri",
-      p4?.status === "menunggu_bayar",
-      `status=${p4?.status}`,
-    );
-
-    // ---- 7. Baru sekarang jadwal boleh dikunci ----
-    await staf.goto(`${BASE}/admin/sesi`, { waitUntil: "networkidle" });
-    const tombolKonfirmasi = kartu.getByRole("button", { name: "Konfirmasi jadwal" });
-    await tombolKonfirmasi.waitFor({ state: "visible", timeout: 20_000 });
-    catat("7a. lunas: tombol Konfirmasi jadwal MUNCUL", true, "tombol tampil");
-
-    await tombolKonfirmasi.click();
-    await staf.waitForTimeout(2000);
-
-    const p5 = await bacaPengajuan();
+    const { data: pesananLunas } = await admin
+      .from("orders")
+      .select("status")
+      .eq("id", pesanan!.id)
+      .single();
     const { data: sesi } = await admin
       .from("sessions")
-      .select("id, status, status_bayar, partner_id, tanggal")
+      .select("id, status_bayar, partner_id, tanggal, kabari_bidan_sejak")
       .eq("booking_request_id", idPermintaan);
+    const p5 = await bacaPengajuan();
     catat(
-      "7b. permintaan menjadi `dikonfirmasi` dan sesinya lahir — satu transaksi",
-      p5?.status === "dikonfirmasi" && (sesi ?? []).length === 1,
-      `status=${p5?.status} jumlah sesi=${(sesi ?? []).length}`,
+      "6c. pesanan `lunas`, permintaan `dikonfirmasi`, tepat satu sesi lahir",
+      pesananLunas?.status === "lunas" && p5?.status === "dikonfirmasi" && (sesi ?? []).length === 1,
+      `pesanan=${pesananLunas?.status} permintaan=${p5?.status} sesi=${(sesi ?? []).length}`,
     );
     catat(
-      "7c. sesi lahir sudah LUNAS — uangnya diterima sebelum jadwalnya ada",
-      sesi?.[0]?.status_bayar === "lunas",
-      `status_bayar sesi=${sesi?.[0]?.status_bayar}`,
-    );
-    catat(
-      "7d. sesi memakai bidan & tanggal dari permintaannya",
-      sesi?.[0]?.partner_id === MITRA && sesi?.[0]?.tanggal === TANGGAL,
-      `partner=${sesi?.[0]?.partner_id} tanggal=${sesi?.[0]?.tanggal}`,
+      "6d. sesi lahir LUNAS, memakai bidan & tanggal permintaan, bertanda kabari bidan",
+      sesi?.[0]?.status_bayar === "lunas" &&
+        sesi?.[0]?.partner_id === MITRA &&
+        sesi?.[0]?.tanggal === TANGGAL &&
+        sesi?.[0]?.kabari_bidan_sejak != null,
+      `status_bayar=${sesi?.[0]?.status_bayar} partner=${sesi?.[0]?.partner_id} kabari=${sesi?.[0]?.kabari_bidan_sejak}`,
     );
 
-    // ---- 8. Klien melihat hasilnya ----
-    await klien.goto(`${BASE}/passport/bayar`, { waitUntil: "networkidle" });
+    // ---- 7. Klien & admin melihat hasilnya ----
+    await klien.unroute("**/*");
+    await klien.goto(`${BASE}/passport/bayar/${idPermintaan}`, { waitUntil: "networkidle" });
+    await tungguIsi(klien);
+    const teksLunas = await teksTerlihat(klien);
+    const tautJadwal = klien.getByRole("link", { name: "Lihat jadwal Anda" });
     catat(
-      "8a. tagihan pengajuan hilang dari halaman klien sesudah jadwalnya terkunci",
-      (await klien.locator(`[data-tagihan="${idPermintaan}"]`).count()) === 0,
-      "kartu tagihan tidak lagi dirender",
+      "7a. halaman tagihan menampilkan Lunas, tanpa tombol Bayar, dengan tautan jadwal",
+      /lunas/i.test(teksLunas) &&
+        (await klien.getByRole("button", { name: /Bayar|Lanjutkan pembayaran/i }).count()) === 0 &&
+        (await tautJadwal.count()) === 1 &&
+        ((await tautJadwal.getAttribute("href")) ?? "") === `/passport/sesi/${sesi?.[0]?.id}`,
+      `href=${await tautJadwal.getAttribute("href").catch(() => null)}`,
+    );
+
+    // Penanda hidup di panel sesi (`/admin/sesi/<id>`), bukan di daftar.
+    await staf.goto(`${BASE}/admin/sesi/${sesi?.[0]?.id}`, { waitUntil: "networkidle" });
+    await tungguIsi(staf);
+    catat(
+      "7b. panel sesi admin menampilkan \"Baru — kabari bidan\"",
+      (await teksTerlihat(staf)).includes("Baru — kabari bidan"),
+      "penanda tampil",
     );
   } finally {
     await browser.close();
