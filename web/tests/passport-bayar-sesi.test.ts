@@ -43,6 +43,12 @@ import { hariIniJakarta } from "@/lib/passport/waktu";
 import { geserHari } from "@/lib/owner/pekan";
 import { rakitInvoice } from "@/lib/pesanan/order-id";
 import { formatRupiah } from "@/lib/rupiah-publik";
+import {
+  PESANAN_BERUANG,
+  PESANAN_TERBUKA,
+  STATUS_PESANAN_SAH,
+  type StatusPesanan,
+} from "@/lib/pesanan/status";
 
 const asliFetch = globalThis.fetch;
 const ref = vi.hoisted(() => ({
@@ -560,6 +566,30 @@ describe("keadaanTagihanKlien (tabel §6.3 dan §7)", () => {
   });
   it("hanya bayar dan diproses yang bisa dibayar", () => {
     expect([...KEADAAN_BISA_DIBAYAR].sort()).toEqual(["bayar", "diproses"]);
+  });
+  it("status pesanan yang TIDAK dikenal -> diperiksa (tanpa tombol), bukan jatuh ke 'dialihkan'", () => {
+    // Pelajaran "status adalah himpunan": nilai enum baru yang belum dikenal
+    // TS dulu jatuh ke cabang tangkap-semua `warisan_dialihkan` — kalimat
+    // "admin akan mengirimkan tagihan baru" untuk pesanan yang mungkin sudah
+    // beruang. Yang aman untuk status tak dikenal adalah keadaan tanpa
+    // tombol yang memanggil manusia.
+    expect(k({ statusPesanan: "status_baru" as unknown as StatusPesanan })).toBe("diperiksa");
+  });
+  it("terikat ke himpunan bernama: hanya PESANAN_TERBUKA yang bisa ditawari Bayar", () => {
+    // Untuk SETIAP status, dengan dan tanpa tautan baru, sebelum tenggat.
+    for (const st of STATUS_PESANAN_SAH) {
+      for (const ubah of [{}, { tautanBaru: true }] as Partial<TagihanPengajuan>[]) {
+        const h = k({ statusPesanan: st, ...ubah });
+        if (!PESANAN_TERBUKA.includes(st)) expect(KEADAAN_BISA_DIBAYAR, `${st}`).not.toContain(h);
+        // Uang di pesanan INI: tidak pernah "kedaluwarsa"/"dialihkan".
+        if (PESANAN_BERUANG.includes(st)) {
+          expect(["lunas_sesi", "lunas_tertahan", "diperiksa"], `${st}`).toContain(h);
+        }
+      }
+      // Uang yang sudah masuk lewat pesanan lain menyembunyikan tombol Bayar.
+      expect(KEADAAN_BISA_DIBAYAR, `${st}`).not.toContain(k({ statusPesanan: st, uangSudahMasuk: true }));
+    }
+    expect(KEADAAN_BISA_DIBAYAR).toContain(k({ statusPesanan: PESANAN_TERBUKA[0] }));
   });
 });
 

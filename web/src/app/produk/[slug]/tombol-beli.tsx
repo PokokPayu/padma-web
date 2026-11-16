@@ -11,6 +11,7 @@ import { BlokBuka, punyaProdukDiPeramban } from "./tombol-ambil";
 import { periksaPesananSaya } from "./periksa";
 import { titipTujuanDiPeramban } from "@/lib/auth/tujuan-produk";
 import { TombolKeranjang } from "./tombol-keranjang";
+import { pasangPemulihBfcache } from "@/lib/doku/pulih-bfcache";
 
 /**
  * Keadaan tombol produk BERBAYAR, dari sudut pandang pengunjung. Urutan
@@ -472,6 +473,10 @@ export function TombolBeli({
   const [dialihkan, setDialihkan] = useState(false);
   const pending = pendingTrans || dialihkan;
   const router = useRouter();
+
+  // Back dari halaman DOKU memulihkan halaman ini dari bfcache dengan
+  // `dialihkan` masih true — tombolnya macet. Lihat `pasangPemulihBfcache`.
+  useEffect(() => pasangPemulihBfcache(window, () => setDialihkan(false)), []);
 
   // LAPIS 1b DI HALAMAN PUBLIK (spec "Rekonsiliasi").
   //

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabase } from "@/lib/supabase/client";
 import { formatRupiah } from "@/lib/rupiah-publik";
 import { mintaBatal, mintaLaluAlihkan } from "@/app/produk/[slug]/tombol-beli";
 import type { ItemKeranjang, KeadaanItem } from "@/lib/keranjang/baca";
+import { pasangPemulihBfcache } from "@/lib/doku/pulih-bfcache";
 
 /** `Record` lengkap: nilai keadaan baru memerahkan kompilator, bukan diam. */
 const KALIMAT_KEADAAN: Record<KeadaanItem, string | null> = {
@@ -34,6 +35,10 @@ export function IsiKeranjang({
   const [dialihkan, setDialihkan] = useState(false);
   const pending = pendingTrans || dialihkan;
   const router = useRouter();
+
+  // Back dari halaman DOKU memulihkan halaman ini dari bfcache dengan
+  // `dialihkan` masih true — tombolnya macet. Lihat `pasangPemulihBfcache`.
+  useEffect(() => pasangPemulihBfcache(window, () => setDialihkan(false)), []);
 
   const siap = item.filter((i) => i.keadaan === "siap");
   const total = siap.reduce((s, i) => s + (i.harga ?? 0), 0);

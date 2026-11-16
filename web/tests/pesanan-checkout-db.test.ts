@@ -525,7 +525,7 @@ describe("buat_pesanan", () => {
     const token = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: pertama.pesanan_id,
       p_percobaan: 1,
-      p_tautan: "token-snap-lama",
+      p_tautan: "https://checkout-uji.doku.test/lama",
     });
     expect(token.error).toBeNull();
 
@@ -583,7 +583,7 @@ describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
     const { error } = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
       p_percobaan: 1,
-      p_tautan: "snap-token-abc",
+      p_tautan: "https://checkout-uji.doku.test/abc",
     });
     expect(error).toBeNull();
 
@@ -592,7 +592,7 @@ describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
       .select("tautan_gateway, tautan_terbit_pada")
       .eq("id", pesanan.pesanan_id)
       .single();
-    expect(baris!.tautan_gateway).toBe("snap-token-abc");
+    expect(baris!.tautan_gateway).toBe("https://checkout-uji.doku.test/abc");
     expect(baris!.tautan_terbit_pada).not.toBeNull();
 
     const { data: jejak } = await svc
@@ -616,7 +616,7 @@ describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
     const { error } = await admin.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
       p_percobaan: 1,
-      p_tautan: "token-orang-lain",
+      p_tautan: "https://checkout-uji.doku.test/orang-lain",
     });
     expect(error?.code).toBe("42501");
     expect(error!.message).toContain("belum tertaut ke rekam klien");
@@ -641,7 +641,7 @@ describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
     const { error } = await lain.rpc("catat_tautan_gateway", {
       p_pesanan_id: pesanan.pesanan_id,
       p_percobaan: 1,
-      p_tautan: "token-klien-lain",
+      p_tautan: "https://checkout-uji.doku.test/klien-lain",
     });
     // P0002, bukan 42501: ia PUNYA rekam klien, hanya bukan pemilik barisnya.
     // Dan pesanan orang lain tidak boleh bisa dibedakan dari pesanan yang
@@ -688,7 +688,7 @@ describe("catat_tautan_gateway & batalkan_pesanan_saya", () => {
     const { error } = await klien.rpc("catat_tautan_gateway", {
       p_pesanan_id: "00000000-0000-0000-0000-0000000000bb",
       p_percobaan: 1,
-      p_tautan: "token-hantu",
+      p_tautan: "https://checkout-uji.doku.test/hantu",
     });
     expect(error?.code).toBe("P0002");
   });
@@ -886,6 +886,9 @@ describe("putuskan_pesanan_ditahan", () => {
     // memakai pola yang benar di tempat lain ("gratis", "Selesaikan dulu
     // pesanan"); ketidak-konsistenannya yang jadi lubang.
     expect(error!.message).toContain("belum punya catatan nominal");
+    // Kalimat ini dibaca staf. Gateway-nya kini DOKU; nama gateway lama di
+    // layar staf menyuruh orang mencari di Back Office yang salah.
+    expect(error!.message).not.toMatch(/midtrans/i);
   });
 
   it("memindahkan ditahan -> lunas, mencatat pemutusnya, dan TIDAK menyalurkan akses", async () => {

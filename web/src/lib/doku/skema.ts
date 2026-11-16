@@ -15,6 +15,12 @@ import { z } from "zod";
  *
  * `channel` dan `service` opsional, begitu pula `original_request_id`
  * (QRIS tidak membawanya) dan `date`.
+ *
+ * Opsional berarti `.nullish()`, bukan `.optional()`: medan yang DIKIRIM
+ * bernilai `null` sama tidak berisinya dengan medan yang tidak dikirim, dan
+ * `.optional()` menolaknya dengan 400 — "jangan kirim lagi" untuk notifikasi
+ * sah yang uangnya sudah masuk. `channel.id`/`service.id` ikut nullish karena
+ * rute hanya memakainya sebagai label kanal (`?.id ?? ""`).
  */
 export const SkemaNotifikasiDoku = z.object({
   order: z.object({
@@ -23,11 +29,11 @@ export const SkemaNotifikasiDoku = z.object({
   }),
   transaction: z.object({
     status: z.string(),
-    original_request_id: z.string().optional(),
-    date: z.string().optional(),
+    original_request_id: z.string().nullish(),
+    date: z.string().nullish(),
   }),
-  channel: z.object({ id: z.string() }).optional(),
-  service: z.object({ id: z.string() }).optional(),
+  channel: z.object({ id: z.string().nullish() }).nullish(),
+  service: z.object({ id: z.string().nullish() }).nullish(),
 });
 
 export type NotifikasiDoku = z.infer<typeof SkemaNotifikasiDoku>;

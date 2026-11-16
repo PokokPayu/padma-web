@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { pasangPemulihBfcache } from "@/lib/doku/pulih-bfcache";
 
 /**
  * TOMBOL BAYAR TAGIHAN SESI (P3/B6, spec §6.3).
@@ -17,7 +18,8 @@ import { useRouter } from "next/navigation";
  *     baru — berbeda dengan checkout produk, di sini tidak ada `ulang`.
  *   - Tombol tetap TERKUNCI sesudah alihan berhasil, bukan hanya selama
  *     permintaan: `useTransition` kembali tidak sibuk begitu `assign`
- *     dipanggil, padahal peramban masih memuat DOKU.
+ *     dipanggil, padahal peramban masih memuat DOKU. Kuncinya dilepas lagi
+ *     bila pembeli kembali lewat Back (`pageshow` dari bfcache).
  *
  * Keputusan "kapan beralih" hidup di fungsi murni yang menerima `fetch` dan
  * `arahkan`, supaya bisa dijalankan suite tanpa jsdom.
@@ -75,6 +77,10 @@ export function TombolBayar({ permintaanId, label }: { permintaanId: string; lab
   const [dialihkan, setDialihkan] = useState(false);
   const terkunci = sibuk || dialihkan;
   const router = useRouter();
+
+  // Back dari halaman DOKU memulihkan halaman ini dari bfcache dengan
+  // `dialihkan` masih true — tombolnya macet. Lihat `pasangPemulihBfcache`.
+  useEffect(() => pasangPemulihBfcache(window, () => setDialihkan(false)), []);
   const halamanIni = `/passport/bayar/${permintaanId}`;
 
   function klik() {

@@ -313,6 +313,31 @@ describe("peta kode jawaban — satu kasus per baris", () => {
     expect(status).toBe(200);
   });
 
+  it("medan opsional bernilai null -> 200 diterapkan, bukan 400", async () => {
+    // 400 berarti "jangan kirim lagi". Notifikasi sah yang membawa `null` pada
+    // medan opsional (bukan sekadar tidak ada) mengunci pesanan yang uangnya
+    // sudah masuk bila skemanya hanya menerima `undefined`.
+    const p = await buatPesanan();
+    const b = {
+      order: { invoice_number: p.invoice, amount: 150000 },
+      transaction: { status: "SUCCESS", original_request_id: null, date: null },
+      channel: null,
+      service: null,
+    };
+    expect(await kirim(JSON.stringify(b))).toEqual({ status: 200, hasil: "diterapkan" });
+  });
+
+  it("channel.id / service.id bernilai null -> 200 diterapkan", async () => {
+    const q = await buatPesanan();
+    const c = {
+      order: { invoice_number: q.invoice, amount: 150000 },
+      transaction: { status: "SUCCESS" },
+      channel: { id: null },
+      service: { id: null },
+    };
+    expect(await kirim(JSON.stringify(c))).toEqual({ status: 200, hasil: "diterapkan" });
+  });
+
   it("invoice berbentuk Midtrans -> 400, dan NOL sentuhan basis data", async () => {
     const sebelum = await jumlahDitolakHariIni();
     const sebelumTak = await jumlahTakDikenalHariIni();

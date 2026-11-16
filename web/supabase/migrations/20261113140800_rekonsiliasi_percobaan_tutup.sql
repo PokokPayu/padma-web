@@ -15,6 +15,10 @@
 --   (2) orders.rekonsiliasi_tutup_pada + indeks sapuan          F2b: penanda
 --       "pesanan tertutup ini sudah ditanyakan ke DOKU sesudah tautannya
 --       pasti mati" untuk sapuan Lapis 3 (`sapuPesananTertutup`)
+--   (3) putuskan_pesanan_ditahan                                F3.4: kalimat
+--       P0001 netral-gateway (dulu menyebut Midtrans di layar staf)
+--   (4) catat_tautan_gateway                                    F3.4: tautan
+--       yang tidak diawali https:// ditolak
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
@@ -433,3 +437,152 @@ comment on column public.orders.rekonsiliasi_tutup_pada is
 create index if not exists orders_sapuan_tutup_idx
   on public.orders (diperiksa_pada nulls first)
   where status = 'dibatalkan' and rekonsiliasi_tutup_pada is null;
+
+-- ---------------------------------------------------------------------------
+-- (3) putuskan_pesanan_ditahan — salinan 20260926130000 (md5 badan = yang
+--     terpasang), hanya kalimat P0001 "belum punya catatan nominal" dan satu
+--     komentar yang tidak lagi menyebut Midtrans. Kalimat itu dibaca staf di
+--     /admin/pesanan; nama gateway lama menyuruh orang mencari di Back Office
+--     yang salah. Hak (revoke public/anon, grant authenticated) dipertahankan
+--     `create or replace`.
+-- ---------------------------------------------------------------------------
+create or replace function public.putuskan_pesanan_ditahan(
+  p_pesanan_id uuid,
+  p_putusan text
+) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_pemutus text;
+  v_tujuan public.order_status;
+  v_padma_id text;
+  v_status public.order_status;
+  v_kena uuid;
+begin
+  if public.user_role() not in ('admin', 'owner') then
+    raise exception 'Hanya staf yang boleh memutuskan pesanan yang ditahan.'
+      using errcode = '42501';
+  end if;
+
+  if p_putusan not in ('lunas', 'dibatalkan') then
+    raise exception 'Putusan harus "lunas" atau "dibatalkan", bukan "%".', p_putusan
+      using errcode = 'P0001';
+  end if;
+  v_tujuan := p_putusan::public.order_status;
+
+  if not coalesce(
+    public.perpindahan_pesanan_sah('ditahan'::public.order_status, v_tujuan), false) then
+    raise exception 'Mesin status menolak perpindahan ditahan -> %.', p_putusan
+      using errcode = 'P0001';
+  end if;
+
+  -- KEADAAN BARIS diperiksa SEBELUM catatan nominal: pesanan yang belum
+  -- pernah `ditahan` juga belum pernah punya notifikasi ber-nominal, jadi
+  -- urutan terbalik membuat pesan "belum punya catatan nominal" muncul untuk
+  -- pesanan yang sebenarnya belum pernah disentuh gateway sama sekali —
+  -- pesan yang benar untuk sebab yang salah. `is distinct from` juga menutup
+  -- pesanan_id asing (v_status null) dengan pesan yang sama: keduanya sama-
+  -- sama "tidak ada yang bisa diputuskan di sini sekarang".
+  select o.status into v_status from public.orders o where o.id = p_pesanan_id;
+  if v_status is distinct from 'ditahan' then
+    raise exception 'Pesanan itu tidak sedang ditahan.' using errcode = 'P0001';
+  end if;
+
+  -- Uangnya harus pernah TERCATAT masuk, bukan sekadar diklaim admin.
+  if not exists (
+    select 1 from public.notifikasi_pesanan n
+     where n.pesanan_id = p_pesanan_id and n.nominal_diterima is not null
+  ) then
+    raise exception
+      'Pesanan ini belum punya catatan nominal yang diterima gateway pembayaran; tidak ada yang bisa diputuskan.'
+      using errcode = 'P0001';
+  end if;
+
+  select p.nama into v_pemutus from public.profiles p where p.id = auth.uid();
+
+  select c.padma_id into v_padma_id
+    from public.orders o
+    join public.clients c on c.id = o.client_id
+   where o.id = p_pesanan_id;
+
+  update public.orders o
+     set status = v_tujuan,
+         lunas_pada = case when v_tujuan = 'lunas' then now() else o.lunas_pada end,
+         -- `ditahan` sudah bercap tutup; capnya dipertahankan, bukan ditimpa.
+         ditutup_pada = coalesce(o.ditutup_pada, now())
+   where o.id = p_pesanan_id
+     and o.status = any (array['ditahan']::public.order_status[])
+  returning o.id into v_kena;
+
+  if v_kena is null then
+    raise exception 'Pesanan itu tidak sedang ditahan.' using errcode = 'P0001';
+  end if;
+
+  -- `padma_id` tetap milik KLIEN pesanan (itulah gunanya kolom itu
+  -- didenormalisasi: pelanggan kejadian tidak perlu hak baca `clients`).
+  -- Identitas PEMUTUS dicatat di keterangan — staf tidak punya padma_id.
+  insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+  values (p_pesanan_id, v_padma_id, v_tujuan::text::public.order_event,
+          format('putusan staf: %s — oleh %s', p_putusan, coalesce(v_pemutus, 'staf tanpa nama')));
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- (4) catat_tautan_gateway — salinan 20261113130000 (md5 badan = yang
+--     terpasang) ditambah satu saringan: tautan harus diawali https://.
+-- ---------------------------------------------------------------------------
+create or replace function public.catat_tautan_gateway(
+  p_pesanan_id uuid,
+  p_percobaan smallint,
+  p_tautan text
+) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_client_id uuid;
+  v_padma_id text;
+  v_kena uuid;
+begin
+  select c.id, c.padma_id into v_client_id, v_padma_id
+    from public.clients c
+   where c.user_id = auth.uid();
+  if v_client_id is null then
+    raise exception 'Akun ini belum tertaut ke rekam klien.' using errcode = '42501';
+  end if;
+
+  -- BARU (20261113140800). Tautan ini dikirim balik ke peramban pembeli lewat
+  -- `window.location.assign` (jalur pakai-ulang `terbitkanTautanBayar`), dan
+  -- RPC ini terbuka bagi `authenticated`: tanpa saringan, klien bisa
+  -- menyimpan `javascript:` atau alamat http apa pun di barisnya sendiri.
+  -- Halaman bayar DOKU selalu https. Diperiksa SESUDAH gerbang identitas
+  -- (urutan 42501 lebih dulu dipertahankan) dan SEBELUM baris dicari, jadi
+  -- kalimatnya tidak membocorkan apa pun tentang pesanan siapa pun.
+  if coalesce(p_tautan, '') !~ '^https://' then
+    raise exception 'Tautan pembayaran harus diawali https://.' using errcode = 'P0001';
+  end if;
+
+  update public.orders o
+     set tautan_gateway = p_tautan,
+         tautan_terbit_pada = now()
+   where o.id = p_pesanan_id
+     and o.client_id = v_client_id
+     and o.percobaan = p_percobaan
+     and o.status = any (array['menunggu_bayar']::public.order_status[])
+  returning o.id into v_kena;
+
+  if v_kena is null then
+    -- P0002 ("no data found"), bukan 42501: pemanggil tidak boleh bisa
+    -- membedakan "bukan milik saya" dari "sudah tidak terbuka" atau
+    -- "percobaan sudah berganti".
+    raise exception 'Pesanan terbuka itu tidak ada pada akun ini.' using errcode = 'P0002';
+  end if;
+
+  insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
+  values (p_pesanan_id, v_padma_id, 'token_terbit', 'tautan gateway dicatat');
+end;
+$$;
+
+comment on function public.catat_tautan_gateway(uuid, smallint, text) is
+  'Mencatat tautan gateway (https://) pada pesanan MILIK PEMANGGIL yang masih '
+  'menunggu bayar pada percobaan yang sama. Tautan bukan bukti pembayaran; yang '
+  'dijaga hanya kepemilikan barisnya dan bentuk alamatnya.';

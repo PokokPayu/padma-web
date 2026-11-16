@@ -134,51 +134,79 @@ const PNG_1X1 = Buffer.from(
   "base64",
 );
 
-/** Membuang seluruh jejak skrip ini dan memulangkan data seed ke keadaannya. */
+/** Awalan `screenings.kode` milik skrip ini — satu-satunya pengenal fixture. */
+const AWALAN_SKRINING = "E2E-BYR-";
+
+/**
+ * Membuang seluruh jejak skrip ini dan memulangkan data seed ke keadaannya.
+ *
+ * ===== HANYA BARIS MILIK FIXTURE =====
+ * Versi B8 menghapus `sessions` berdasarkan TANGGAL saja dan `booking_requests`
+ * berdasarkan `client_id` klien SEED — dua kunci yang juga cocok dengan baris
+ * milik uji lain atau sesi lain di Supabase lokal yang sama. Kini akarnya
+ * adalah skrining fixture (`kode` berawalan `E2E-BYR-`, dibuat
+ * `keadaanAwal()`): pengajuan yang skrip ini lahirkan berdiri di atas skrining
+ * itu (yang TERBARU dan belum dipakai, `lib/passport/aksi.ts`), dan setiap
+ * baris lain diturunkan dari id pengajuan itu, yang DIBACA SEBELUM apa pun
+ * dihapus.
+ */
 async function bersihkan() {
-  const { data: pengajuan } = await admin
-    .from("booking_requests")
-    .select("id, bukti_objek")
-    .eq("client_id", KLIEN);
+  const { data: skrining } = await admin
+    .from("screenings")
+    .select("id")
+    .like("kode", `${AWALAN_SKRINING}%`);
+  const idSkrining = (skrining ?? []).map((s) => s.id as string);
+
+  const { data: pengajuan } = idSkrining.length
+    ? await admin.from("booking_requests").select("id, bukti_objek").in("screening_id", idSkrining)
+    : { data: [] as { id: string; bukti_objek: string | null }[] };
+  const idPengajuan = (pengajuan ?? []).map((p) => p.id as string);
 
   for (const p of pengajuan ?? []) {
     if (p.bukti_objek) await admin.storage.from("bukti-bayar").remove([p.bukti_objek as string]);
   }
 
-  // Sesi DULU: `sessions.booking_request_id` menahan penghapusan permintaan yang
-  // melahirkannya.
-  //
-  // JEJAK AUDITNYA ikut disapu, dan itu wajib. Sesi C2 lahir langsung berstatus
-  // `lunas`, jadi trigger pencatat menulis satu baris `jejak_status_bayar`
-  // untuk setiap sesi yang lahir di sini. Tabel jejak SENGAJA tanpa foreign
-  // key — cascade akan menghapus tepat bukti yang menjelaskan penghapusan —
-  // sehingga menghapus sesinya saja meninggalkan baris yatim yang menumpuk
-  // satu per jalannya skrip ini, dan `tests/jejak-yatim.test.ts` akan merah di
-  // suite yang sama sekali tidak menyentuh pembayaran.
-  const { data: sesiLama } = await admin.from("sessions").select("id").eq("tanggal", TANGGAL);
-  const idSesi = (sesiLama ?? []).map((s) => s.id as string);
-  if (idSesi.length > 0) {
-    await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
-  }
-  await admin.from("sessions").delete().eq("tanggal", TANGGAL);
-  // Pesanan sesi fixture (item ikut lewat cascade/eksplisit) sebelum pengajuan:
-  // `orders.booking_request_id` menahan penghapusan pengajuannya.
-  const idPengajuan = (pengajuan ?? []).map((p) => p.id as string);
   if (idPengajuan.length > 0) {
+    // Sesi DULU: `sessions.booking_request_id` menahan penghapusan permintaan
+    // yang melahirkannya.
+    //
+    // JEJAK AUDITNYA ikut disapu, dan itu wajib. Sesi lahir berstatus `lunas`,
+    // jadi trigger pencatat menulis satu baris `jejak_status_bayar` untuk
+    // setiap sesi yang lahir di sini. Tabel jejak SENGAJA tanpa foreign key —
+    // cascade akan menghapus tepat bukti yang menjelaskan penghapusan —
+    // sehingga menghapus sesinya saja meninggalkan baris yatim yang menumpuk
+    // satu per jalannya skrip ini, dan `tests/jejak-yatim.test.ts` akan merah
+    // di suite yang sama sekali tidak menyentuh pembayaran.
+    const { data: sesiLama } = await admin
+      .from("sessions")
+      .select("id")
+      .in("booking_request_id", idPengajuan);
+    const idSesi = (sesiLama ?? []).map((s) => s.id as string);
+    if (idSesi.length > 0) {
+      await admin.from("jejak_status_bayar").delete().in("sesi_id", idSesi);
+      await admin.from("sessions").delete().in("id", idSesi);
+    }
+
+    // Pesanan sesi fixture sebelum pengajuan: `orders.booking_request_id`
+    // menahan penghapusan pengajuannya. Jejak & notifikasi pesanan juga tanpa
+    // foreign key (`tests/pesanan-jejak-yatim.test.ts`), jadi disapu sendiri.
     const { data: pesananLama } = await admin
       .from("orders")
       .select("id")
       .in("booking_request_id", idPengajuan);
     const idPesanan = (pesananLama ?? []).map((o) => o.id as string);
     if (idPesanan.length > 0) {
+      await admin.from("jejak_pesanan").delete().in("pesanan_id", idPesanan);
+      await admin.from("notifikasi_pesanan").delete().in("pesanan_id", idPesanan);
       await admin.from("order_items").delete().in("pesanan_id", idPesanan);
       await admin.from("orders").delete().in("id", idPesanan);
     }
+
+    // Pengajuan sebelum skrining: `booking_requests.screening_id` menahan
+    // penghapusan skrining yang menopangnya. Per id fixture, BUKAN per klien.
+    await admin.from("booking_requests").delete().in("id", idPengajuan);
   }
-  // Pengajuan sebelum skrining: `booking_requests.screening_id` menahan
-  // penghapusan skrining yang menopangnya.
-  await admin.from("booking_requests").delete().eq("client_id", KLIEN);
-  await admin.from("screenings").delete().like("kode", "E2E-BYR-%");
+  if (idSkrining.length > 0) await admin.from("screenings").delete().in("id", idSkrining);
 
   // Koordinat dipulangkan ke NULL — keadaan seed. Meninggalkannya berarti uji
   // lain yang mengasersikan "mitra tanpa koordinat" akan merah tanpa satu baris
@@ -194,7 +222,7 @@ async function keadaanAwal() {
   // pemesannya (spec C1-b J3). Ditulis service role — klien sengaja tidak punya
   // hak INSERT atas `screenings`.
   const { error: eSkrining } = await admin.from("screenings").insert({
-    kode: `E2E-BYR-${Date.now().toString(36)}`.toUpperCase(),
+    kode: `${AWALAN_SKRINING}${Date.now().toString(36)}`.toUpperCase(),
     nama: "Uji E2E Bayar",
     no_hp: "0800-0000-0000",
     fase: "prekonsepsi",

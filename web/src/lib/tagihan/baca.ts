@@ -173,6 +173,18 @@ export const KEADAAN_BISA_DIBAYAR: readonly KeadaanTagihanKlien[] = ["bayar", "d
  *      ulang (B4/B5). Kalimat yang benar untuk klien persis kalimat baris
  *      warisan `belum`: tagihannya dialihkan ke pembayaran baru yang akan
  *      dikirim admin. Karena itu ia memakai keadaan yang sama.
+ *
+ * ===== TANPA CABANG TANGKAP-SEMUA =====
+ * Versi B6 berakhir dengan `return "warisan_dialihkan"` untuk apa pun yang
+ * tersisa — termasuk nilai enum `order_status` yang kelak lahir. Pelajaran
+ * "status adalah himpunan": nilai baru membuat cabang tunggal salah DIAM-DIAM,
+ * dan di sini salahnya berbentuk kalimat "admin akan mengirim tagihan baru"
+ * untuk pesanan yang mungkin sudah beruang. Kini `switch` per status dengan
+ * `never` di `default`: nilai baru di `STATUS_PESANAN_SAH` memerahkan
+ * kompilator. Nilai yang tetap datang dari basis data tanpa dikenal TS
+ * (migrasi lebih dulu dari deploy) jatuh ke `diperiksa` — tanpa tombol,
+ * memanggil manusia. Keterikatan dengan `PESANAN_TERBUKA`/`PESANAN_BERUANG`
+ * diuji per status di `tests/passport-bayar-sesi.test.ts`.
  */
 export function keadaanTagihanKlien(
   t: TagihanPengajuan,
@@ -184,20 +196,40 @@ export function keadaanTagihanKlien(
     return "warisan_dialihkan";
   }
 
-  if (t.statusPesanan === "lunas") return t.sesiId ? "lunas_sesi" : "lunas_tertahan";
+  // Uang atau tinjauan di LUAR status pesanan terkini (pesanan lama yang
+  // tertutup, `status_bayar` warisan, tanda tinjauan): menang atas setiap
+  // status yang sendirinya tidak beruang.
+  const perluDiperiksa = t.butuhTinjauan || t.uangSudahMasuk;
 
-  if (t.statusPesanan === "ditahan" || t.butuhTinjauan || t.uangSudahMasuk) return "diperiksa";
+  const status = t.statusPesanan;
+  switch (status) {
+    // PESANAN_BERUANG — uang masuk di pesanan INI.
+    case "lunas":
+      return t.sesiId ? "lunas_sesi" : "lunas_tertahan";
+    case "ditahan":
+      return "diperiksa";
 
-  if (t.statusPesanan === "menunggu_bayar") {
-    const tenggat = t.kedaluwarsaPada === null ? Number.NaN : Date.parse(t.kedaluwarsaPada);
-    // Cap waktu yang tidak terurai tidak pernah dianggap masih bisa dibayar.
-    if (!Number.isFinite(tenggat) || tenggat <= sekarang.getTime()) return "kedaluwarsa";
-    return t.tautanBaru ? "diproses" : "bayar";
+    // PESANAN_TERBUKA — satu-satunya yang bisa ditawari tombol Bayar.
+    case "menunggu_bayar": {
+      if (perluDiperiksa) return "diperiksa";
+      const tenggat = t.kedaluwarsaPada === null ? Number.NaN : Date.parse(t.kedaluwarsaPada);
+      // Cap waktu yang tidak terurai tidak pernah dianggap masih bisa dibayar.
+      if (!Number.isFinite(tenggat) || tenggat <= sekarang.getTime()) return "kedaluwarsa";
+      return t.tautanBaru ? "diproses" : "bayar";
+    }
+
+    // PESANAN_MATI — tanpa uang di pesanan ini.
+    case "kedaluwarsa":
+      return perluDiperiksa ? "diperiksa" : "kedaluwarsa";
+    case "dibatalkan":
+      return perluDiperiksa ? "diperiksa" : "warisan_dialihkan";
+
+    default: {
+      const takDikenal: never = status;
+      void takDikenal;
+      return "diperiksa";
+    }
   }
-
-  if (t.statusPesanan === "kedaluwarsa") return "kedaluwarsa";
-
-  return "warisan_dialihkan";
 }
 
 /**

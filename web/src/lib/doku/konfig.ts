@@ -47,9 +47,13 @@ export function pathStatusDoku(invoice: string): string {
 /**
  * URL absolut tujuan kembali pembeli. `null` bila `NEXT_PUBLIC_BASIS_URL`
  * kosong atau hanya spasi — penelepon yang memutuskan, bukan menebak host.
+ *
+ * Garis miring akhir dibuang: `https://padma.id/` + `/passport/...` akan
+ * melahirkan `//passport/...`, dan bentuk itulah yang paling mudah diketik
+ * di panel env Vercel.
  */
 export function urlKembali(path: string): string | null {
-  const basis = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
+  const basis = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim().replace(/\/+$/, "");
   if (basis === "") return null;
   return `${basis}${path}`;
 }

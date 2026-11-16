@@ -156,6 +156,30 @@ describe("catat_tautan_gateway", () => {
     expect((await barisPesanan(p.id)).tautan_gateway).toBeNull();
   });
 
+  it.each([
+    ["http biasa", "http://gateway.example.test/bayar/abc"],
+    ["javascript:", "javascript:alert(1)"],
+    ["teks bebas", "token-snap-lama"],
+    ["HTTPS tanpa garis miring", "https:gateway.example.test"],
+    ["kosong", ""],
+  ])("tautan yang tidak diawali https:// ditolak P0001 (%s), kolom tetap null", async (_n, tautan) => {
+    // Tautan ini dikirim ke peramban pembeli lewat `window.location.assign`
+    // (jalur pakai-ulang `terbitkanTautanBayar`). Apa pun selain halaman
+    // https bukan halaman bayar DOKU.
+    const p = await pesananBaru();
+    const klien = await signInAs(KLIEN);
+    const { error } = await klien.rpc("catat_tautan_gateway", {
+      p_pesanan_id: p.id,
+      p_percobaan: p.percobaan,
+      p_tautan: tautan,
+    });
+    expect(error?.code).toBe("P0001");
+    expect(error!.message).toContain("https://");
+    const b = await barisPesanan(p.id);
+    expect(b.tautan_gateway).toBeNull();
+    expect(b.tautan_terbit_pada).toBeNull();
+  });
+
   it("pesanan yang tidak lagi menunggu_bayar dijawab P0002", async () => {
     const p = await pesananBaru();
     const klien = await signInAs(KLIEN);
