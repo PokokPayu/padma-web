@@ -188,6 +188,8 @@ describe("struktur orders", () => {
       // 20261113140800: percobaan yang MELUNASI (pembanding bayar ganda). Angka
       // percobaan 1..9, bukan nominal.
       "percobaan_lunas",
+      // 20261113140800: penanda sapuan pesanan tertutup Lapis 3 (cap waktu).
+      "rekonsiliasi_tutup_pada",
     ]);
   });
 

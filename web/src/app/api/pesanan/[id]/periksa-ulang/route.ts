@@ -32,13 +32,16 @@ const PESAN: Record<HasilPeriksaPesanan, string> = {
   belum_kedaluwarsa:
     "DOKU belum mengenal transaksinya, dan tenggang satu jam sesudah tenggat belum lewat.",
   gateway_tak_terjawab: "DOKU tidak menjawab. Coba lagi beberapa saat lagi.",
-  // Kalimat yang SAMA PERSIS dengan yang sudah dipilih `terbitkanTokenSnap`
-  // (Tugas 8) untuk keadaan yang sama, dan sengaja TIDAK menyuruh mencoba
-  // lagi: `DOKU_SECRET_KEY` yang belum terpasang tidak berubah karena
-  // tombolnya ditekan ulang. Satu-satunya tindakan yang menolong adalah
-  // memanggil orang yang bisa memasang env-nya.
+  // Kalimat yang SAMA PERSIS dengan yang sudah dipilih `terbitkanTautanBayar`
+  // (`src/lib/doku/tautan.ts`) untuk keadaan yang sama, dan sengaja TIDAK
+  // menyuruh mencoba lagi: `DOKU_SECRET_KEY` yang belum terpasang tidak
+  // berubah karena tombolnya ditekan ulang. Satu-satunya tindakan yang
+  // menolong adalah memanggil orang yang bisa memasang env-nya.
   kunci_belum_terpasang: "Pembayaran belum aktif. Hubungi tim PADMA.",
   galat_basis_data: "Jawaban DOKU gagal diterapkan.",
+  // Rute ini tidak memasang anggaran waktu, jadi nilai ini tidak terjangkau
+  // dari sini hari ini; kalimatnya tetap ada supaya peta ini total.
+  waktu_habis: "Pemeriksaan terhenti sebelum semua percobaan ditanyakan. Coba lagi.",
 };
 
 export async function POST(
@@ -82,7 +85,7 @@ export async function POST(
 
   // 502, bukan 200: "sudah diperiksa" untuk pemeriksaan yang tidak pernah
   // terjadi membuat staf berhenti memeriksanya.
-  if (hasil === "gateway_tak_terjawab") {
+  if (hasil === "gateway_tak_terjawab" || hasil === "waktu_habis") {
     return NextResponse.json({ hasil, pesan: PESAN[hasil] }, { status: 502 });
   }
   // 503, angka yang sama dengan jawaban rute webhook untuk keadaan yang sama

@@ -478,3 +478,216 @@ describe("sapuan /api/cron/pesanan", () => {
     expect(mati).toEqual({ diperiksa: 0, dilewati: 1 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sapuan pesanan TERTUTUP (F2b, perbaikan akhir 17 Nov)
+// ---------------------------------------------------------------------------
+//
+// Pesanan yang KITA tutup (`dibatalkan`: klien membatalkan, staf menerbitkan
+// ulang, harga berubah, percobaan kesepuluh) sementara tautan DOKU-nya masih
+// bisa dibayar. Bila webhook-nya hilang, satu-satunya yang bisa melihat uang
+// itu adalah bertanya. Lapis 3 menanyakan setiap percobaannya sampai tautan
+// pasti mati (`kedaluwarsa_pada` + tenggang), lalu menandainya selesai.
+
+const invK = (kode: string, k: number) => `${kode.replaceAll("-", "")}${k}`;
+
+const SUKSES = (invoice: string) => ({
+  ok: true,
+  status: { invoice, status: "SUCCESS", nominal: HARGA, transaksiId: `trx-${invoice}`, kanal: "QRIS" },
+});
+const MENUNGGU = (invoice: string) => ({
+  ok: true,
+  status: { invoice, status: "PENDING", nominal: HARGA, transaksiId: "", kanal: "" },
+});
+const TAK_DIKENAL = { ok: false, kode: 404, pesan: "Invoice tidak dikenal DOKU." };
+
+async function semaiTertutup(
+  kode: string,
+  o: {
+    kedaluwarsaJam: number;
+    percobaan?: number;
+    tautan?: boolean;
+    percobaanLunas?: number | null;
+    status?: "dibatalkan" | "kedaluwarsa";
+  },
+): Promise<string> {
+  const jamLalu = (j: number) => new Date(Date.now() - j * 3_600_000).toISOString();
+  const { data, error } = await admin
+    .from("orders")
+    .insert({
+      kode,
+      percobaan: o.percobaan ?? 1,
+      client_id: KLIEN_ANANDA,
+      status: o.status ?? "dibatalkan",
+      jumlah_item: 1,
+      dibuat_pada: jamLalu(30),
+      ditutup_pada: jamLalu(0.5),
+      kedaluwarsa_pada: new Date(Date.now() + o.kedaluwarsaJam * 3_600_000).toISOString(),
+      tautan_gateway: o.tautan === false ? null : "https://checkout-uji.doku.test/tertutup",
+      tautan_terbit_pada: o.tautan === false ? null : jamLalu(1),
+      percobaan_lunas: o.percobaanLunas ?? null,
+      diperiksa_pada: null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  const { error: galatItem } = await admin.from("order_items").insert({
+    pesanan_id: data!.id,
+    jenis: "produk_digital",
+    product_id: produkId,
+    judul_beku: JUDUL,
+    harga_beku: HARGA,
+    urutan: 1,
+  });
+  if (galatItem) throw galatItem;
+  return data!.id as string;
+}
+
+type BarisTertutup = {
+  status: string;
+  sebab_tinjauan: string | null;
+  butuh_tinjauan_pada: string | null;
+  rekonsiliasi_tutup_pada: string | null;
+};
+
+async function bacaTertutup(id: string): Promise<BarisTertutup> {
+  const { data, error } = await admin
+    .from("orders")
+    .select("status, sebab_tinjauan, butuh_tinjauan_pada, rekonsiliasi_tutup_pada")
+    .eq("id", id)
+    .single<BarisTertutup>();
+  if (error) throw error;
+  return data!;
+}
+
+/**
+ * Menyapu sampai tidak ada lagi baris yang layak. Sapuan ini LINTAS KLIEN dan
+ * berbatas sepuluh baris per jenis; baris berkas lain (atau sesi lain di
+ * Supabase lokal yang sama) bisa mendahului baris uji. Setiap putaran mencap
+ * barisnya, jadi pengurasan berhenti.
+ */
+async function sapuSampaiSepi(): Promise<void> {
+  process.env.CRON_SECRET = "rahasia-uji";
+  for (let i = 0; i < 8; i += 1) {
+    const r = await POST(permintaan("Bearer rahasia-uji"));
+    expect(r.status).toBe(200);
+    const isi = (await r.json()) as { diperiksa: number; dilewati: number };
+    if (isi.diperiksa === 0 && isi.dilewati === 0) return;
+  }
+  throw new Error("sapuan tidak pernah sepi; populasi tidak terkuras");
+}
+
+describe("F2b: Lapis 3 menyapu pesanan dibatalkan yang pernah bertautan DOKU", () => {
+  it("SUCCESS yang ditemukan pada pesanan dibatalkan → lunas_setelah_tutup + tanda tinjauan, lalu ditandai", async () => {
+    // Contoh brief: klien membayar VA pukul 13.58, admin menekan "Terbitkan
+    // ulang" pukul 14.05, webhook hilang. Tanpa sapuan ini uangnya senyap.
+    const kode = `${AWALAN_KODE}0101`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: -3 });
+    doku.jawabPer.set(invK(kode, 1), SUKSES(invK(kode, 1)));
+
+    await sapuSampaiSepi();
+
+    expect(doku.panggilan).toContain(invK(kode, 1));
+    const b = await bacaTertutup(id);
+    expect(b.status).toBe("dibatalkan");
+    expect(b.sebab_tinjauan).toBe("lunas_setelah_tutup");
+    expect(b.butuh_tinjauan_pada).not.toBeNull();
+    expect(b.rekonsiliasi_tutup_pada).not.toBeNull();
+    const { data: jejak } = await admin
+      .from("jejak_pesanan").select("kejadian").eq("pesanan_id", id);
+    expect((jejak ?? []).map((j) => j.kejadian)).toContain("lunas_setelah_tutup");
+  });
+
+  it("selama tautan masih hidup: uang ditemukan LEBIH AWAL, tetapi pesanan belum ditandai selesai", async () => {
+    const kode = `${AWALAN_KODE}0102`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: 5 });
+    doku.jawabPer.set(invK(kode, 1), SUKSES(invK(kode, 1)));
+
+    await sapuSampaiSepi();
+
+    expect(doku.panggilan).toContain(invK(kode, 1));
+    const b = await bacaTertutup(id);
+    expect(b.sebab_tinjauan).toBe("lunas_setelah_tutup");
+    // Tautannya masih bisa dibayar LAGI sampai tenggat: belum selesai.
+    expect(b.rekonsiliasi_tutup_pada).toBeNull();
+  });
+
+  it("sesudah jendela lewat: SETIAP percobaan ditanyakan, ditandai, lalu tidak pernah ditanyakan lagi", async () => {
+    // Percobaan 2 dengan `tautan_terbit_pada` NULL: `p_ulang` mengosongkan
+    // tautan percobaan sebelumnya, padahal tautan percobaan 1 bisa sudah di
+    // tangan pembeli. `percobaan > 1` karena itu ikut menandai "pernah
+    // bertautan".
+    const kode = `${AWALAN_KODE}0103`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: -3, percobaan: 2, tautan: false });
+    doku.jawabPer.set(invK(kode, 1), TAK_DIKENAL);
+    doku.jawabPer.set(invK(kode, 2), MENUNGGU(invK(kode, 2)));
+
+    await sapuSampaiSepi();
+
+    const milikIni = doku.panggilan.filter((i) => i.startsWith(kode.replaceAll("-", "")));
+    // Serial, urut percobaan.
+    expect(milikIni).toEqual([invK(kode, 1), invK(kode, 2)]);
+    const b = await bacaTertutup(id);
+    expect(b.rekonsiliasi_tutup_pada).not.toBeNull();
+    expect(b.butuh_tinjauan_pada).toBeNull();
+
+    // Pagar lima menit dicabut: yang menahan kini HANYA penandanya.
+    await admin.from("orders").update({ diperiksa_pada: null }).eq("id", id);
+    doku.panggilan.length = 0;
+    await sapuSampaiSepi();
+    expect(doku.panggilan.filter((i) => i.startsWith(kode.replaceAll("-", "")))).toEqual([]);
+  });
+
+  it("DOKU tak terjawab: TIDAK ditandai, dan ditanyakan lagi pada putaran berikutnya", async () => {
+    const kode = `${AWALAN_KODE}0104`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: -3 });
+    doku.jawabPer.set(invK(kode, 1), { ok: false, kode: 503, pesan: "Service unavailable" });
+
+    await sapuSampaiSepi();
+    expect(doku.panggilan).toContain(invK(kode, 1));
+    expect((await bacaTertutup(id)).rekonsiliasi_tutup_pada).toBeNull();
+
+    await admin.from("orders").update({ diperiksa_pada: null }).eq("id", id);
+    doku.panggilan.length = 0;
+    doku.jawabPer.set(invK(kode, 1), TAK_DIKENAL);
+    await sapuSampaiSepi();
+    expect(doku.panggilan).toContain(invK(kode, 1));
+    expect((await bacaTertutup(id)).rekonsiliasi_tutup_pada).not.toBeNull();
+  });
+
+  it("dibatalkan TANPA tautan, dan pesanan kedaluwarsa, TIDAK PERNAH ditanyakan", async () => {
+    const tanpa = `${AWALAN_KODE}0105`;
+    const kedaluwarsa = `${AWALAN_KODE}0106`;
+    await semaiTertutup(tanpa, { kedaluwarsaJam: -3, tautan: false });
+    await semaiTertutup(kedaluwarsa, { kedaluwarsaJam: -3, status: "kedaluwarsa" });
+    doku.jawabPer.set(invK(tanpa, 1), SUKSES(invK(tanpa, 1)));
+    doku.jawabPer.set(invK(kedaluwarsa, 1), SUKSES(invK(kedaluwarsa, 1)));
+
+    await sapuSampaiSepi();
+
+    expect(doku.panggilan).not.toContain(invK(tanpa, 1));
+    expect(doku.panggilan).not.toContain(invK(kedaluwarsa, 1));
+  });
+
+  it("percobaan PELUNAS (uang yang sudah tercatat) tidak ditanyakan ulang — tidak ada tuduhan palsu", async () => {
+    // ditahan -> putusan staf "dibatalkan": uang percobaan 1 SUDAH tercatat
+    // dan diputuskan manusia. Menanyakannya lagi melahirkan
+    // lunas_setelah_tutup atas uang yang sama.
+    const satu = `${AWALAN_KODE}0107`;
+    const dua = `${AWALAN_KODE}0108`;
+    const idSatu = await semaiTertutup(satu, { kedaluwarsaJam: -3, percobaanLunas: 1 });
+    const idDua = await semaiTertutup(dua, { kedaluwarsaJam: -3, percobaan: 2, percobaanLunas: 1 });
+    doku.jawabPer.set(invK(satu, 1), SUKSES(invK(satu, 1)));
+    doku.jawabPer.set(invK(dua, 1), SUKSES(invK(dua, 1)));
+    doku.jawabPer.set(invK(dua, 2), TAK_DIKENAL);
+
+    await sapuSampaiSepi();
+
+    expect(doku.panggilan).not.toContain(invK(satu, 1));
+    expect(doku.panggilan).not.toContain(invK(dua, 1));
+    expect(doku.panggilan).toContain(invK(dua, 2));
+    expect((await bacaTertutup(idSatu)).sebab_tinjauan).toBeNull();
+    expect((await bacaTertutup(idDua)).sebab_tinjauan).toBeNull();
+    expect((await bacaTertutup(idDua)).rekonsiliasi_tutup_pada).not.toBeNull();
+  });
+});

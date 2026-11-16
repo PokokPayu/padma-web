@@ -12,6 +12,9 @@
 --   (1) orders.percobaan_lunas + terapkan_notifikasi_gateway   F1: pembanding
 --       cabang bayar ganda (Ruling 7) adalah percobaan PELUNAS, bukan
 --       percobaan kini (Ruling 12: kolom baru, `orders.percobaan` tidak ditimpa)
+--   (2) orders.rekonsiliasi_tutup_pada + indeks sapuan          F2b: penanda
+--       "pesanan tertutup ini sudah ditanyakan ke DOKU sesudah tautannya
+--       pasti mati" untuk sapuan Lapis 3 (`sapuPesananTertutup`)
 -- ===========================================================================
 
 -- ---------------------------------------------------------------------------
@@ -400,3 +403,33 @@ comment on function public.terapkan_notifikasi_gateway(text, text, text, text, n
 revoke all on function
   public.terapkan_notifikasi_gateway(text, text, text, text, numeric, text, text, text)
   from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- (2) orders.rekonsiliasi_tutup_pada — penanda sapuan pesanan tertutup (F2b)
+-- ---------------------------------------------------------------------------
+-- Pesanan yang KITA tutup (`dibatalkan`) sementara tautan DOKU-nya bisa masih
+-- hidup disapu Lapis 3 sampai tautan itu pasti mati. Kolom ini diisi Lapis 3
+-- (service role, `src/lib/pesanan/periksa-menggantung.ts`) oleh pemeriksaan
+-- yang DIMULAI sesudah `kedaluwarsa_pada` + JAM_TENGGANG_TANPA_VONIS dan yang
+-- setiap percobaannya terjawab DOKU. Sesudahnya baris tidak pernah dipilih
+-- lagi. Tidak pernah dikosongkan.
+--
+-- Kenapa kolom baru, bukan `diperiksa_pada`: kolom itu pagar laju lima menit,
+-- dan `terapkan_notifikasi_gateway` menyetelnya pada SETIAP jawaban Check
+-- Status — juga ketika baru satu dari beberapa percobaan yang terjawab. Makna
+-- "setiap percobaan sudah ditanyakan sesudah tautan mati" tidak bisa dibaca
+-- darinya tanpa membuat percobaan yang gagal ditanyakan tampak selesai.
+alter table public.orders
+  add column if not exists rekonsiliasi_tutup_pada timestamptz;
+
+comment on column public.orders.rekonsiliasi_tutup_pada is
+  'Lapis 3: pesanan tertutup ini sudah ditanyakan ke DOKU (setiap percobaan '
+  'kecuali percobaan pelunas) SESUDAH kedaluwarsa_pada + tenggang. NULL = '
+  'belum, atau tidak pernah perlu (tanpa tautan).';
+
+-- Kembaran `orders_sapuan_idx` (sapuan pesanan terbuka). Daftar statusnya =
+-- PESANAN_TUTUP_DISAPU (src/lib/pesanan/status.ts); tests/pesanan-status-db
+-- mengikat keduanya.
+create index if not exists orders_sapuan_tutup_idx
+  on public.orders (diperiksa_pada nulls first)
+  where status = 'dibatalkan' and rekonsiliasi_tutup_pada is null;

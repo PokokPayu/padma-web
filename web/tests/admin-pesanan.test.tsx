@@ -752,6 +752,7 @@ describe("POST /api/pesanan/[id]/periksa-ulang", () => {
     const anggota = [
       "diterapkan", "duplikat", "tanpa_efek", "pesanan_tidak_ada", "bentuk_invoice",
       "belum_kedaluwarsa", "gateway_tak_terjawab", "kunci_belum_terpasang", "galat_basis_data",
+      "waktu_habis",
     ];
     for (const a of anggota) expect(sumber, a).toMatch(new RegExp(`\\n\\s+${a}:`));
     expect(sumber).not.toMatch(/midtrans/i);

@@ -122,6 +122,20 @@ export const PESANAN_BERUANG: readonly StatusPesanan[] = ["lunas", "ditahan"];
 export const PESANAN_MATI: readonly StatusPesanan[] = ["kedaluwarsa", "dibatalkan"];
 
 /**
+ * TUTUP-DISAPU — pesanan yang KITA tutup sementara tautan DOKU-nya bisa masih
+ * hidup: klien membatalkan, staf menerbitkan ulang atau mengubah masukan harga,
+ * percobaan kesepuluh. Lapis 3 (`sapuPesananTertutup`) menanyakan setiap
+ * percobaannya sampai tautannya pasti mati, karena webhook yang hilang
+ * membuat uang yang mendarat di sana senyap (perbaikan akhir F2b).
+ *
+ * `kedaluwarsa` sengaja TIDAK ikut: setiap jalan ke sana — EXPIRED dari DOKU
+ * maupun vonis waktu lokal — kini menanyakan semua percobaan lebih dulu
+ * (F2a), dan tautannya memang sudah mati. `lunas`/`ditahan` tidak ikut: uang
+ * kedua di sana sudah bertanda oleh mesin begitu jawabannya tiba.
+ */
+export const PESANAN_TUTUP_DISAPU: readonly StatusPesanan[] = ["dibatalkan"];
+
+/**
  * Kejadian yang WAJIB menyalakan `butuh_tinjauan_pada` + `sebab_tinjauan` pada
  * baris `orders`-nya, di transaksi yang sama dengan jejaknya.
  *
@@ -158,7 +172,9 @@ export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string> = {
 
 /**
  * Tenggat pesanan, dalam jam. SATU konstanta untuk DUA tempat: kolom
- * `orders.kedaluwarsa_pada` dan `expiry` di payload Snap.
+ * `orders.kedaluwarsa_pada` dan `payment_due_date` tautan DOKU. Yang kedua
+ * diturunkan dari kolom yang pertama (`terbitkanTautanBayar`, sisa menit
+ * dibulatkan ke bawah), jadi tautan DOKU tidak pernah hidup melewati kolomnya.
  *
  * Tagihan sesi memakai angka yang sama di SQL: `interval '24 hours'` di
  * `terbitkan_tagihan_sesi` (migrasi 20261113140100), dengan batas jam

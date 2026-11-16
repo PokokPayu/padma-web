@@ -57,6 +57,11 @@ vi.mock("@/lib/supabase/server", () => ({
 // `.env.local` tidak pernah dibaca berkas ini.
 const doku = vi.hoisted(() => ({
   jawaban: null as unknown,
+  // Jawaban PER INVOICE, didahulukan atas `jawaban`. Dipakai uji percobaan
+  // lama (F2a): percobaan kini dan percobaan lama menjawab berbeda.
+  jawabPer: new Map<string, unknown>(),
+  // Jeda buatan sebelum menjawab, per invoice — untuk uji anggaran waktu.
+  jedaPer: new Map<string, number>(),
   panggilan: [] as string[],
   lempar: false,
 }));
@@ -64,7 +69,9 @@ vi.mock("@/lib/doku/adapter", () => ({
   bacaStatusDoku: async (invoice: string) => {
     doku.panggilan.push(invoice);
     if (doku.lempar) throw new Error("DOKU tidak terhubung");
-    return doku.jawaban;
+    const jeda = doku.jedaPer.get(invoice);
+    if (jeda) await new Promise((r) => setTimeout(r, jeda));
+    return doku.jawabPer.has(invoice) ? doku.jawabPer.get(invoice) : doku.jawaban;
   },
   buatPembayaranDoku: async () => ({ ok: false, pesan: "tidak dipakai di berkas ini" }),
 }));
@@ -112,6 +119,7 @@ const idDisemai: string[] = [];
  */
 async function semaiPesanan(o: {
   kode: string;
+  percobaan?: number;
   clientId?: string;
   menitLalu?: number;
   diperiksaMenitLalu?: number | null;
@@ -122,7 +130,7 @@ async function semaiPesanan(o: {
     .from("orders")
     .insert({
       kode: o.kode,
-      percobaan: 1,
+      percobaan: o.percobaan ?? 1,
       client_id: o.clientId ?? KLIEN_ANANDA,
       status: "menunggu_bayar",
       jumlah_item: 1,
@@ -311,6 +319,8 @@ beforeEach(async () => {
   doku.panggilan.length = 0;
   doku.lempar = false;
   doku.jawaban = null;
+  doku.jawabPer.clear();
+  doku.jedaPer.clear();
   await bersihkan();
 });
 
@@ -670,6 +680,149 @@ describe("tabel §5.5 baris 9-11: vonis waktu lokal", () => {
 // ---------------------------------------------------------------------------
 // 4. Kegagalan disembunyikan
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 3c. Percobaan lama sebelum vonis tutup (F2a, perbaikan akhir 17 Nov)
+// ---------------------------------------------------------------------------
+
+/** Invoice percobaan ke-`k`. */
+const invK = (kode: string, k: number) => `${kode.replaceAll("-", "")}${k}`;
+
+async function percobaanLunas(id: string): Promise<number | null> {
+  const { data } = await admin.from("orders").select("percobaan_lunas").eq("id", id).single();
+  return (data!.percobaan_lunas as number | null) ?? null;
+}
+
+describe("F2a: percobaan lama ditanyakan sebelum pesanan ditutup kedaluwarsa", () => {
+  // Pesanan di percobaan 2. Tautan percobaan 1 masih bisa dibayar sampai
+  // tenggatnya, dan webhook-nya bisa hilang (K3, K9, Request-Target, 3x/12 jam,
+  // deploy). Check Status percobaan kini saja tidak pernah melihat uang itu,
+  // dan vonis waktu lokal menutup pesanannya sebagai kedaluwarsa — uang masuk
+  // tanpa tanda di mana pun.
+  const lewatJam = -2;
+  const periksa = (id: string, kode: string, opsi?: { tenggatMs?: number }) =>
+    terapkanJawabanGateway(
+      {
+        id,
+        kode,
+        percobaan: 2,
+        kedaluwarsaPada: new Date(Date.now() + lewatJam * 3_600_000).toISOString(),
+      },
+      opsi,
+    );
+
+  it.each([
+    ["PENDING", () => jawabanSukses("", "PENDING")],
+    ["404", () => TAK_DIKENAL],
+  ])("percobaan kini %s sesudah lewat, percobaan LAMA SUCCESS → lunas, bukan kedaluwarsa", async (_n, kini) => {
+    const kode = `${AWALAN_KODE}0201`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 2), kini());
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "SUCCESS"));
+
+    expect(await periksa(id, kode)).toBe("diterapkan");
+
+    // Serial, percobaan kini dulu lalu yang lama.
+    expect(doku.panggilan).toEqual([invK(kode, 2), invK(kode, 1)]);
+    expect(await statusPesanan(id)).toBe("lunas");
+    expect(await percobaanLunas(id)).toBe(1);
+    // Uang yang masuk menerbitkan akses lewat jalur mesin yang sama.
+    const { data: hak } = await admin
+      .from("digital_entitlements").select("pesanan_id").eq("pesanan_id", id);
+    expect(hak ?? []).toHaveLength(1);
+    // Vonis waktu lokal TIDAK ikut dikirim sesudah uang ditemukan.
+    expect(await statusGatewayTercatat(id)).toEqual(["SUCCESS"]);
+  });
+
+  it("EXPIRED asli dari DOKU pada percobaan kini juga menanyakan percobaan lama dulu", async () => {
+    // Premis "pesanan kedaluwarsa tidak perlu disapu" hanya benar bila SETIAP
+    // jalan ke kedaluwarsa melewati pemeriksaan ini — termasuk EXPIRED asli.
+    const kode = `${AWALAN_KODE}0202`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "EXPIRED"));
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "SUCCESS"));
+
+    expect(await periksa(id, kode)).toBe("diterapkan");
+
+    expect(doku.panggilan).toEqual([invK(kode, 2), invK(kode, 1)]);
+    expect(await statusPesanan(id)).toBe("lunas");
+  });
+
+  it("SEMUA percobaan belum final → vonis waktu lokal berlaku, sesudah setiap percobaan ditanyakan", async () => {
+    const kode = `${AWALAN_KODE}0203`;
+    const id = await semaiPesanan({ kode, percobaan: 3, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 3), jawabanSukses(invK(kode, 3), "PENDING"));
+    doku.jawabPer.set(invK(kode, 1), TAK_DIKENAL);
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "FAILED"));
+
+    const hasil = await terapkanJawabanGateway({
+      id,
+      kode,
+      percobaan: 3,
+      kedaluwarsaPada: new Date(Date.now() + lewatJam * 3_600_000).toISOString(),
+    });
+
+    expect(hasil).toBe("diterapkan");
+    expect(doku.panggilan).toEqual([invK(kode, 3), invK(kode, 1), invK(kode, 2)]);
+    expect(await statusPesanan(id)).toBe("kedaluwarsa");
+    // Jawaban belum-final percobaan lama tidak dikirim ke mesin (tidak ada
+    // yang bisa diputuskan darinya); yang tercatat hanya vonisnya.
+    expect(await statusGatewayTercatat(id)).toEqual(["EXPIRED"]);
+  });
+
+  it("percobaan lama TAK TERJAWAB → tidak ada vonis tutup, pesanan tetap menunggu_bayar", async () => {
+    // Tidak tahu bukan "tidak dibayar". Menutupnya di sini mengulang persis
+    // lubang yang sedang ditambal, hanya untuk satu putaran.
+    const kode = `${AWALAN_KODE}0204`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "PENDING"));
+    doku.jawabPer.set(invK(kode, 1), { ok: false as const, kode: 503, pesan: "gangguan" });
+
+    expect(await periksa(id, kode)).toBe("gateway_tak_terjawab");
+
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+    expect(await statusGatewayTercatat(id)).toEqual([]);
+  });
+
+  it("anggaran waktu habis di tengah percobaan lama → waktu_habis, tanpa vonis", async () => {
+    const kode = `${AWALAN_KODE}0205`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "PENDING"));
+    doku.jedaPer.set(invK(kode, 2), 150);
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "SUCCESS"));
+
+    expect(await periksa(id, kode, { tenggatMs: Date.now() + 50 })).toBe("waktu_habis");
+
+    expect(doku.panggilan).toEqual([invK(kode, 2)]);
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
+
+  it("anggaran yang SUDAH habis: nol permintaan ke DOKU", async () => {
+    const kode = `${AWALAN_KODE}0206`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: lewatJam });
+    doku.jawaban = jawabanSukses("", "PENDING");
+
+    expect(await periksa(id, kode, { tenggatMs: Date.now() - 1 })).toBe("waktu_habis");
+    expect(doku.panggilan).toEqual([]);
+  });
+
+  it("SEBELUM lewat, percobaan lama TIDAK ditanyakan (tidak ada vonis tutup yang dipertaruhkan)", async () => {
+    const kode = `${AWALAN_KODE}0207`;
+    const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: 5 });
+    doku.jawaban = jawabanSukses("", "PENDING");
+
+    const hasil = await terapkanJawabanGateway({
+      id,
+      kode,
+      percobaan: 2,
+      kedaluwarsaPada: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+    });
+
+    expect(hasil).toBe("tanpa_efek");
+    expect(doku.panggilan).toEqual([invK(kode, 2)]);
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
+});
 
 describe("kegagalan disembunyikan", () => {
   it("kode pesanan yang CACAT tidak melempar, dan tidak menghentikan sapuan", async () => {
