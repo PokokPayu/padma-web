@@ -397,7 +397,7 @@ disetel di transaksi yang sama dengan jejaknya (aturan `KEJADIAN_BUTUH_TINJAUAN`
 
 | # | Jawaban DOKU | Datang lewat | Vonis | Pesanan `menunggu_bayar` | Pesanan `kedaluwarsa` / `dibatalkan` | Pesanan `ditahan` | Pesanan `lunas` |
 |---|---|---|---|---|---|---|---|
-| 1 | `SUCCESS`, nominal = Σ`harga_beku` dan cacah item cocok | webhook, status API | lunas | → `lunas`, jejak `lunas`, **penyalur jalan** | jejak + tinjauan `lunas_setelah_tutup` | jejak + tinjauan `selisih_status` | tanpa efek, jejak `notifikasi` (lihat K4) |
+| 1 | `SUCCESS`, nominal = Σ`harga_beku` dan cacah item cocok | webhook, status API | lunas | → `lunas`, jejak `lunas`, **penyalur jalan** | jejak + tinjauan `lunas_setelah_tutup` | jejak + tinjauan `selisih_status` | percobaan yang sama: tanpa efek, jejak `notifikasi` (lihat K4). Percobaan **lain**: jejak + tinjauan `selisih_status` "kemungkinan bayar ganda" (lihat catatan) |
 | 2 | `SUCCESS`, nominal **tidak** cocok atau tidak bisa dinormalisasi | webhook, status API | ditahan | → `ditahan`, tinjauan `selisih_nominal` | jejak + tinjauan **`lunas_setelah_tutup`** (lihat catatan cacat P1) | jejak + tinjauan `selisih_status` | jejak + tinjauan `selisih_nominal` |
 | 3 | `PENDING`, `REDIRECT`, `TIMEOUT` | status API | menunggu | tanpa efek | tanpa efek | tanpa efek | tanpa efek |
 | 4 | `FAILED` | webhook, status API | menunggu (Checkout: pelanggan boleh berganti metode [S14]) | tanpa efek | tanpa efek | tanpa efek | tanpa efek |
@@ -425,6 +425,17 @@ Catatan:
   tinjauan, padahal uangnya sudah masuk. Fungsi baru wajib memperlakukan
   SUCCESS apa pun pada pesanan tertutup sebagai `lunas_setelah_tutup`. Ujinya
   harus terbukti merah terhadap logika lama.
+- **Bayar ganda lewat percobaan basi (ditambahkan saat implementasi, 13 Nov).**
+  Baris 1 kolom `lunas` semula hanya mencatat jejak `notifikasi`. Ternyata ada
+  kasus yang lolos: pembeli membuka tautan percobaan 1, lalu percobaan 2
+  terbit dan lunas, dan tautan lama itu masih bisa dibayar. SUCCESS-nya
+  mendarat pada pesanan `lunas` dengan percobaan yang berbeda. Itu uang kedua
+  yang sungguh masuk, bukan pengiriman ulang. Kalau hanya dicatat di jejak, ia
+  melanggar anti-tujuan §3 butir 1. Fungsi
+  `terapkan_notifikasi_gateway` (`20261113130100`) karena itu memasang
+  tinjauan `selisih_status` bila percobaan invoice ≠ percobaan kini. Dengan
+  percobaan yang sama, perilakunya tetap baris 1 (tanpa efek). Refund tetap
+  manual (§2).
 - Cabang Midtrans `capture`/`challenge`/`deny` tidak punya padanan DOKU dan
   ikut hilang. Status `ditahan` tetap lahir lewat baris 2.
 - Status dibandingkan sebagai **himpunan bernama** di TS dan sebagai daftar
