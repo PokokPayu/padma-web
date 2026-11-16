@@ -1,8 +1,9 @@
 /**
  * KUNCI OBJEK BUKTI BAYAR (spec C2 P3).
  *
- * Fungsi murni tanpa impor — dipakai rute unggah (service role) dan rute baca
- * (staf), dan diuji tanpa storage.
+ * Fungsi murni tanpa impor — tadinya dipakai rute unggah (dipensiunkan di P3/B7);
+ * kini tinggal dipegang uji bucket `bukti-bayar`, yang objek lamanya
+ * TETAP ada, dan diuji tanpa storage.
  */
 
 /** Batas yang ditegakkan bucket. Ditulis di sini agar peramban bisa menolak lebih awal. */

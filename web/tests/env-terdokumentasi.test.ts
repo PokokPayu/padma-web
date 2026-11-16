@@ -2,7 +2,7 @@
  * PAGAR: setiap env yang DIBACA kode punya barisnya sendiri di `.env.example`.
  *
  * Kelas kesalahan ini bukan hipotesis. `CRON_SECRET` dibaca
- * `src/app/api/cron/tenggat/route.ts` sejak rute itu lahir, dan sampai commit ini
+ * rute cron mesin sejak rute pertama lahir, dan sampai commit ini
  * ia TIDAK ADA di `.env.example` — jadi satu-satunya cara seseorang tahu ia harus
  * memasangnya adalah membaca kode rutenya. Bentuk kegagalannya khas dan mahal:
  * rute itu fail-closed, jadi env yang lupa dipasang tidak melahirkan galat

@@ -251,7 +251,7 @@ type HasilKirimEmail = { ok: true } | { ok: false; pesan: string };
  * `menunggu_bayar` pada titik ini) dan server action `kirimUlangEmailTagihan`
  * — endpoint POST tersendiri (aturan #1 dokblok atas berkas ini) yang bisa
  * dipanggil langsung atau diklik ganda pada panel yang kadung basi sesudah
- * `batalkan_lewat_tenggat()` melepas slotnya. Tanpa pagar ini, POST semacam
+ * tagihannya kedaluwarsa dan slotnya lepas. Tanpa pagar ini, POST semacam
  * itu mengirim "Mohon selesaikan pembayaran paling lambat <tenggat lama>"
  * untuk jadwal yang sudah tidak dipegang siapa pun.
  *

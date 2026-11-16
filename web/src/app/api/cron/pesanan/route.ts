@@ -23,8 +23,8 @@ export const runtime = "nodejs";
  * ===== KENAPA POST, DAN KENAPA TIDAK ADA GET =====
  * Keharusan mengekspor GET lahir dari Vercel Cron yang memanggil GET.
  * Penjadwalnya di sini GitHub Actions dengan `curl` — kita yang memilih
- * verbanya, jadi bentuknya sama dengan `/api/cron/tenggat` (POST di baris 22
- * berkas itu). Tidak ada `vercel.json` yang perlu lahir, dan tidak ada jebakan
+ * verbanya, jadi bentuknya POST, seperti rute cron pertama repo ini (sudah
+ * dipensiunkan di P3/B7). Tidak ada `vercel.json` yang perlu lahir, dan tidak ada jebakan
  * "salah taruh di akar repo lalu gagal dalam diam".
  *
  * ===== KENAPA RAHASIA, BUKAN requireRole =====

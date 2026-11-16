@@ -67,8 +67,8 @@ export type SesiRekap = {
  * tertulis yang membuat cabang `di_atas_20` di `hitungRekap()` di bawah
  * terlihat benar padahal ia membuang tarif dasar yang KLIENNYA SUDAH BAYAR.
  *
- * Yang berlaku sekarang, sama persis dengan lapisan tagihan
- * (`hitungTagihanPengajuan()`, `lib/tagihan/pengajuan.ts`): baris ini adalah
+ * Yang berlaku sekarang, sama dengan urutan yang dulu dipakai rumus
+ * tagihan TS (dipensiunkan di P3/B7): baris ini adalah
  * PENIMPA yang MENANG bila ada, dan ketiadaannya berarti tarif DASAR
  * `di_atas_20` dari `transport_rates` yang berlaku — bukan "tarif hilang".
  */
@@ -295,8 +295,8 @@ export function hitungRekap(input: {
       let transport: { tarifKlien: number; honorMitra: number } | null = null;
       let transportHilang = false;
       if (s.jenjang !== null) {
-        // PENIMPA DULU, BARU TARIF DASAR — urutan yang SAMA PERSIS dengan
-        // lapisan tagihan (`hitungTagihanPengajuan()`, `lib/tagihan/pengajuan.ts`).
+        // PENIMPA DULU, BARU TARIF DASAR — urutan yang dulu dipakai rumus
+        // tagihan TS (dipensiunkan di P3/B7).
         //
         // (Ruling 26, gelombang perbaikan akhir) Sebelumnya `di_atas_20` punya
         // cabangnya SENDIRI di sini: penimpa `transport_khusus` atau

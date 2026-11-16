@@ -1,6 +1,4 @@
 import { createServerSupabase } from "@/lib/supabase/server";
-import { createAdminSupabase } from "@/lib/supabase/admin";
-import { hitungTagihanPengajuan } from "@/lib/tagihan/pengajuan";
 import type { SebabTagihanTakLengkap } from "@/lib/tagihan/pengajuan";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
 import { formatRupiah } from "@/lib/rupiah-publik";
@@ -10,12 +8,17 @@ import { LABEL_JENJANG } from "@/lib/transport/jarak";
 import type { JenjangTransport } from "@/lib/transport/jarak";
 
 /**
- * TAGIHAN PENGAJUAN UNTUK LAYAR ADMIN (spec C2 P3, P4).
+ * TAGIHAN WARISAN QRIS UNTUK LAYAR ADMIN (spec C2 P3, P4; dibatasi di B7).
  *
- * Barisnya dibaca dengan SESI PENGGUNA — policy "booking: staf" yang
- * memutuskan, jadi admin yang perannya dicabut kehilangan aksesnya seketika
- * tanpa satu baris kode pun berubah. Tarifnya dibaca service role karena
- * `transport_rates` berpolicy hanya-owner, dan admin memang bukan owner.
+ * Hanya pengajuan yang TIDAK punya pesanan: yang terbit sebelum DOKU dan masih
+ * menunggu verifikasi bukti QRIS, atau yang lunas dan buktinya belum dibuang.
+ * Pengajuan yang punya pesanan dibayar lewat DOKU dan dikelola di
+ * `/admin/pesanan`.
+ *
+ * Seluruhnya dibaca dengan SESI PENGGUNA — policy "booking: staf" dan
+ * "pesanan: staf baca" yang memutuskan, jadi admin yang perannya dicabut
+ * kehilangan aksesnya seketika. Angkanya dari `rincian_tagihan_permintaan`,
+ * satu-satunya tempat rumus harga hidup.
  */
 
 export type BarisTagihanPengajuanAdmin = {
@@ -47,16 +50,19 @@ export type BarisTagihanPengajuanAdmin = {
 type BarisDb = {
   id: string;
   tanggal: string;
-  variant_id: string;
   status_bayar: "belum" | "menunggu_verifikasi" | "lunas";
   tenggat: string | null;
   bukti_objek: string | null;
-  alamat_lat: number | null;
-  alamat_lon: number | null;
   updated_at?: string | null;
   clients: { nama: string } | null;
   services: { nama: string } | null;
-  partners: { lat: number | null; lon: number | null } | null;
+};
+
+type RincianSql = {
+  layanan: number | null;
+  transport: number | null;
+  jenjang: JenjangTransport | null;
+  sebab: string | null;
 };
 
 /**
@@ -67,27 +73,24 @@ type BarisDb = {
  *   rekening orang.
  */
 export async function daftarTagihanPengajuanAdmin(
-  opsi: { buktiLama?: boolean; permintaanId?: string } = {},
+  opsi: { buktiLama?: boolean } = {},
 ): Promise<BarisTagihanPengajuanAdmin[]> {
-  const { buktiLama = false, permintaanId } = opsi;
+  const { buktiLama = false } = opsi;
   const supabase = await createServerSupabase();
 
   let q = supabase
     .from("booking_requests")
     .select(
-      "id, tanggal, variant_id, status_bayar, tenggat, bukti_objek, alamat_lat, alamat_lon, " +
-        "clients ( nama ), services ( nama ), partners ( lat, lon )",
+      "id, tanggal, status_bayar, tenggat, bukti_objek, " +
+        "clients ( nama ), services ( nama ), orders ( id )",
     )
+    // Anti-join: tanpa satu pun pesanan, apa pun statusnya. Disaring di basis
+    // data, bukan sesudah `limit`, supaya pengajuan DOKU yang menumpuk tidak
+    // mendesak baris warisan keluar dari 100 baris pertama.
+    .is("orders", null)
     .limit(100);
 
-  if (permintaanId) {
-    // SATU permintaan, APA PUN statusnya. Dipakai gerbang `terbitkanTagihan()`,
-    // yang harus tahu totalnya SEBELUM status berpindah ke `menunggu_bayar` —
-    // saringan status di cabang ketiga justru menyembunyikan baris yang sedang
-    // hendak diperiksa, dan gerbang yang tidak pernah menemukan barisnya adalah
-    // gerbang yang tidak pernah menutup.
-    q = q.eq("id", permintaanId);
-  } else if (buktiLama) {
+  if (buktiLama) {
     // Lunas, masih memegang bukti, dan tenggatnya sudah lewat 90 hari.
     // `tenggat` dipakai sebagai penanda waktu karena ia satu-satunya cap waktu
     // yang pasti ada pada tagihan yang pernah terbit.
@@ -100,98 +103,39 @@ export async function daftarTagihanPengajuanAdmin(
     q = q.eq("status", PERMINTAAN_MENUNGGU_BAYAR).order("tenggat", { ascending: true });
   }
 
-  // GALAT DIBACA, BUKAN DIBUANG — dan di sini akibatnya lebih berat daripada
-  // layar kosong. Draf sebelumnya menulis `const { data } = await q...`, jadi
-  // galat PostgREST (PGRST205 saat schema cache belum reload sesudah deploy,
-  // 42703 kolom embed salah, timeout) memulangkan `data: null` yang jatuh ke
-  // `[]`. Pemanggil terpentingnya bukan sebuah daftar, melainkan GERBANG
-  // penerbitan tagihan di `terbitkanTagihan()` (`app/admin/sesi/aksi.ts`):
-  // `[]` di sana terbaca sebagai `rincianAwal === null`, gerbangnya DILEWATI,
-  // status berpindah ke `menunggu_bayar`, tenggat 24 jam mulai berjalan, dan
-  // pesan WhatsApp-nya kembali berbunyi "Total: menyusul dari tim" — persis
-  // gejala yang seluruh cabang ini dibangun untuk membunuh. Gerbang yang
-  // gagal-TERBUKA bukan gerbang.
-  //
-  // Pola dan alasannya sama persis dengan `ambilDaftarPermintaan()`
-  // (`lib/admin/permintaan.ts`, commit 885b86e): lempar, jangan menyamar jadi
-  // hasil kosong. Pemanggil yang perlu bertahan hidup menangkapnya sendiri —
-  // `terbitkanTagihan()` menerjemahkannya jadi penolakan yang bisa ditindak,
-  // dan `kirimEmailTagihan()` sudah punya `try/catch` yang menjadikannya
-  // "email tidak terkirim", bukan "tagihan tidak terbit".
+  // Galat dibaca, bukan dibuang: `data: null` yang jatuh ke `[]` terbaca
+  // "tidak ada yang menunggu", padahal yang rusak bacaannya.
   const { data, error } = await q.returns<BarisDb[]>();
   if (error) throw error;
   if (!data || data.length === 0) return [];
 
-  const admin = createAdminSupabase();
-  const [{ data: tarif, error: galatTarif }, { data: tarifTransport, error: galatTransport }] =
-    await Promise.all([
-      admin.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
-      admin.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
-    ]);
-  // KEGAGALAN INFRASTRUKTUR TIDAK BOLEH MENYAMAR JADI DIAGNOSIS.
-  //
-  // `(tarif ?? [])` pada galat menghasilkan daftar tarif KOSONG, dan daftar
-  // kosong bukan keadaan netral di sini: `hitungTagihanPengajuan()` akan
-  // memulangkan `total: null` dengan sebab `tarif_varian_kosong`, yang
-  // `KALIMAT_SEBAB_ADMIN` terjemahkan menjadi "Belum ada tarif varian yang
-  // berlaku pada tanggal sesi ini. Owner menetapkannya di menu Tarif." Admin
-  // lalu membuka menu Tarif, melihat tarifnya SUDAH ADA di sana, dan tidak
-  // punya satu pun petunjuk bahwa yang rusak adalah bacaannya. Diagnosis yang
-  // salah dan meyakinkan lebih mahal daripada galat yang jujur.
-  if (galatTarif) throw galatTarif;
-  if (galatTransport) throw galatTransport;
-
-  const barisTarif = (tarif ?? []).map((t) => ({
-    variantId: t.variant_id as string,
-    hargaKlien: t.harga_klien as number,
-    berlakuSejak: t.berlaku_sejak as string,
-  }));
-  const barisTransport = (tarifTransport ?? []).map((t) => ({
-    jenjang: t.jenjang as JenjangTransport,
-    tarifKlien: t.tarif_klien as number,
-    berlakuSejak: t.berlaku_sejak as string,
-  }));
-
   const hasil: BarisTagihanPengajuanAdmin[] = [];
   for (const p of data) {
-    let jenjang: JenjangTransport | null = null;
-    if (
-      p.partners?.lat != null &&
-      p.partners?.lon != null &&
-      p.alamat_lat != null &&
-      p.alamat_lon != null
-    ) {
-      const { data: km } = await admin.rpc("jarak_km", {
-        lat1: p.partners.lat,
-        lon1: p.partners.lon,
-        lat2: p.alamat_lat,
-        lon2: p.alamat_lon,
-      });
-      const { data: j } = await admin.rpc("jenjang_dari_jarak", { km: km ?? 0 });
-      jenjang = (j as JenjangTransport | null) ?? null;
-    }
-
-    const mitraBertitik = p.partners?.lat != null && p.partners?.lon != null;
-
-    const rincian = hitungTagihanPengajuan({
-      variantId: p.variant_id,
-      tanggal: p.tanggal,
-      jenjang,
-      sebabJenjangNull: mitraBertitik ? "alamat_tanpa_pin" : "mitra_tanpa_titik",
-      tarif: barisTarif,
-      tarifTransport: barisTransport,
-    });
+    // GALAT RPC DILEMPAR, bukan dijatuhkan ke rincian kosong: rincian kosong
+    // terbaca "tarif belum ada", diagnosis yang salah dan meyakinkan, dan admin
+    // akan mencari di menu Tarif sesuatu yang tidak rusak.
+    const { data: rincianBaris, error: galatRincian } = await supabase.rpc(
+      "rincian_tagihan_permintaan",
+      { p_permintaan_id: p.id },
+    );
+    if (galatRincian) throw galatRincian;
+    const rincian = (rincianBaris as RincianSql[] | null)?.[0];
+    if (!rincian) throw new Error(`Rincian tagihan ${p.id} tidak dipulangkan.`);
+    const total =
+      rincian.layanan === null || rincian.transport === null
+        ? null
+        : rincian.layanan + rincian.transport;
 
     hasil.push({
       permintaanId: p.id,
       namaKlien: p.clients?.nama ?? "Klien",
       namaLayanan: p.services?.nama ?? "Layanan",
       tanggal: formatTanggalID(p.tanggal),
-      total: rincian.total === null ? null : formatRupiah(rincian.total),
+      total: total === null ? null : formatRupiah(total),
       hargaLayanan: rincian.layanan === null ? null : formatRupiah(rincian.layanan),
       hargaTransport: rincian.transport === null ? null : formatRupiah(rincian.transport),
       labelJenjang: rincian.jenjang === null ? null : LABEL_JENJANG[rincian.jenjang],
-      sebab: rincian.sebab,
+      sebab: rincian.sebab as SebabTagihanTakLengkap | null,
       labelBayar:
         p.status_bayar === "lunas"
           ? "lunas"

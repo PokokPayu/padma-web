@@ -4,8 +4,9 @@
  * Fungsi yang diuji di sini menentukan BERAPA yang ditagihkan ke klien
  * sungguhan, jadi yang dijaga adalah kegagalan yang tidak bersuara:
  *
- *  - harga dihitung di SQL (`rincian_tagihan_permintaan`) dan harus sama
- *    persis dengan rumus TS lama sebelum rumus itu dihapus (D1);
+ *  - harga dihitung di SQL (`rincian_tagihan_permintaan`), satu-satunya
+ *    tempat rumusnya; kesetaraannya dengan rumus TS lama terbukti di B2 dan
+ *    rumus TS itu dihapus di B7, jadi yang dijaga kini angka tetap (D1);
  *  - tenggat = yang lebih dulu antara "24 jam lagi" dan jam kunjungan dalam
  *    kalender JAKARTA — Vercel dan Postgres berjalan UTC, dan salah zona
  *    menggeser tenggat tujuh jam tanpa satu galat pun (Review Focus 1);
@@ -29,9 +30,8 @@ import { skriningHijau } from "./helpers/skrining";
 import { hariIniJakarta } from "@/lib/passport/waktu";
 import { geserHari } from "@/lib/owner/pekan";
 import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
-import { formatRupiah } from "@/lib/rupiah-publik";
-import { LABEL_JENJANG, type JenjangTransport } from "@/lib/transport/jarak";
-import { hitungTagihanPengajuan, KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
+import type { JenjangTransport } from "@/lib/transport/jarak";
+import { KALIMAT_SEBAB_ADMIN } from "@/lib/tagihan/pengajuan";
 import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 const ref = vi.hoisted(() => ({ sesi: null as SupabaseClient | null }));
@@ -48,7 +48,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 const { terbitkanTagihan } = await import("@/app/admin/sesi/aksi");
-const { daftarTagihanPengajuanAdmin } = await import("@/lib/admin/tagihan-pengajuan");
 
 const svc = createAdminSupabase();
 
@@ -1051,60 +1050,10 @@ describe("dua panggilan bersamaan", () => {
 });
 
 // ---------------------------------------------------------------------------
-// D1 — kesetaraan dengan rumus TS lama, sebelum rumus itu dihapus (B7)
+// D1 — angka tetap rumus SQL (rumus TS pembandingnya dihapus di B7)
 // ---------------------------------------------------------------------------
 
-describe("rincian_tagihan_permintaan setara dengan rumus TS lama (D1)", () => {
-  /** Rumus TS lama, diberi baris tarif yang sama dan jenjang dihitung persis seperti pemanggilnya dulu. */
-  async function rumusLama(id: string) {
-    const [p] = await querySql<{
-      variant_id: string;
-      tanggal: string;
-      alamat_lat: number | null;
-      alamat_lon: number | null;
-      lat: number | null;
-      lon: number | null;
-    }>(
-      `select b.variant_id, b.tanggal::text, b.alamat_lat, b.alamat_lon, m.lat, m.lon
-         from public.booking_requests b left join public.partners m on m.id = b.partner_id
-        where b.id = $1`,
-      [id],
-    );
-    const { data: tarif } = await wajib(
-      svc.from("variant_rates").select("variant_id, harga_klien, berlaku_sejak"),
-    );
-    const { data: tarifTransport } = await wajib(
-      svc.from("transport_rates").select("jenjang, tarif_klien, berlaku_sejak"),
-    );
-    let jenjang: JenjangTransport | null = null;
-    if (p.lat != null && p.lon != null && p.alamat_lat != null && p.alamat_lon != null) {
-      const { data: km } = await svc.rpc("jarak_km", {
-        lat1: p.lat,
-        lon1: p.lon,
-        lat2: p.alamat_lat,
-        lon2: p.alamat_lon,
-      });
-      const { data: j } = await svc.rpc("jenjang_dari_jarak", { km: km ?? 0 });
-      jenjang = (j as JenjangTransport | null) ?? null;
-    }
-    return hitungTagihanPengajuan({
-      variantId: p.variant_id,
-      tanggal: p.tanggal,
-      jenjang,
-      sebabJenjangNull: p.lat != null && p.lon != null ? "alamat_tanpa_pin" : "mitra_tanpa_titik",
-      tarif: (tarif ?? []).map((t) => ({
-        variantId: t.variant_id as string,
-        hargaKlien: t.harga_klien as number,
-        berlakuSejak: t.berlaku_sejak as string,
-      })),
-      tarifTransport: (tarifTransport ?? []).map((t) => ({
-        jenjang: t.jenjang as JenjangTransport,
-        tarifKlien: t.tarif_klien as number,
-        berlakuSejak: t.berlaku_sejak as string,
-      })),
-    });
-  }
-
+describe("rincian_tagihan_permintaan memberi angka tetap (D1)", () => {
   const fixture: Array<[string, OpsiPengajuan, Partial<Rincian>]> = [
     ["jenjang terisi (5_10)", {}, { layanan: HARGA_LAMA, jenjang: "5_10", sebab: null }],
     ["tanpa pin alamat", { lon: null }, { layanan: HARGA_LAMA, jenjang: null, transport: null, sebab: "alamat_tanpa_pin" }],
@@ -1123,30 +1072,16 @@ describe("rincian_tagihan_permintaan setara dengan rumus TS lama (D1)", () => {
     ["tarif varian kosong", { varian: VARIAN_TANPA_TARIF }, { layanan: null, jenjang: "5_10", sebab: "tarif_varian_kosong" }],
   ];
 
-  async function samaDenganRumusLama(id: string, harapan: Partial<Rincian>): Promise<void> {
+  async function cocokAngkaTetap(id: string, harapan: Partial<Rincian>): Promise<void> {
     const sql = await rincian(id);
-    // Angka mutlak lebih dulu: kesetaraan dua rumus yang sama-sama salah
-    // (mis. keduanya null) tidak membuktikan apa pun.
+    // Angka tetap. Rumus TS pembandingnya sudah dihapus di B7 (kesetaraannya
+    // terbukti di B2 selagi keduanya hidup), jadi angka mutlak inilah yang
+    // menjaga rumus SQL.
     expect(sql).toMatchObject(harapan);
-
-    const ts = await rumusLama(id);
-    expect(sql).toEqual({
-      layanan: ts.layanan,
-      transport: ts.transport,
-      jenjang: ts.jenjang,
-      sebab: ts.sebab,
-    });
-
-    // Jalur penuh yang dipakai produksi sebelum B2 (bacaan + rumus + format).
-    const [lama] = await daftarTagihanPengajuanAdmin({ permintaanId: id });
-    expect(lama.hargaLayanan).toBe(sql.layanan === null ? null : formatRupiah(sql.layanan));
-    expect(lama.hargaTransport).toBe(sql.transport === null ? null : formatRupiah(sql.transport));
-    expect(lama.labelJenjang).toBe(sql.jenjang === null ? null : LABEL_JENJANG[sql.jenjang]);
-    expect(lama.sebab).toBe(sql.sebab);
   }
 
   it.each(fixture)("%s", async (_nama, opsi, harapan) => {
-    await samaDenganRumusLama(await pengajuanSiap(opsi), harapan);
+    await cocokAngkaTetap(await pengajuanSiap(opsi), harapan);
   });
 
   it("tarif TRANSPORT berganti di antara hari ini dan tanggal kunjungan", async () => {
@@ -1165,8 +1100,8 @@ describe("rincian_tagihan_permintaan setara dengan rumus TS lama (D1)", () => {
       const sesudah = await pengajuanSiap({ tanggal: geserHari(HARI_INI, 10), waktu: "sore" });
       const lama = (await rincian(sebelum)).transport;
       expect(lama).not.toBe(TARIF_SELA);
-      await samaDenganRumusLama(sebelum, { jenjang: "5_10", transport: lama, sebab: null });
-      await samaDenganRumusLama(sesudah, { jenjang: "5_10", transport: TARIF_SELA, sebab: null });
+      await cocokAngkaTetap(sebelum, { jenjang: "5_10", transport: lama, sebab: null });
+      await cocokAngkaTetap(sesudah, { jenjang: "5_10", transport: TARIF_SELA, sebab: null });
     } finally {
       await svc.from("transport_rates").delete().eq("id", baris!.id);
     }

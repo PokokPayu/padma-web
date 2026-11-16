@@ -36,8 +36,9 @@ export type TarifTransportRingkas = {
  *
  * Yang berlaku sekarang: rate card memberi tarif DASAR supaya tagihan selalu
  * bisa terbit; `transport_khusus` tetap menimpanya per kasus bila owner
- * menetapkannya. Urutannya ditetapkan di SATU tempat —
- * `hitungTagihanPengajuan()` di `lib/tagihan/pengajuan.ts`.
+ * menetapkannya. Rumus tagihan sesi sendiri hidup
+ * di SQL (`rincian_tagihan_permintaan`); rumus TS lamanya dipensiunkan di
+ * P3/B7.
  *
  * Konstanta ini menggerakkan layar owner (`/owner/transport` merender satu
  * kartu per anggota), penjagaan `simpanTarifTransport()`, dan daftar

@@ -201,7 +201,7 @@ export default async function HalamanBayar() {
           />
         </div>
         <h2 className="mb-1 mt-6 font-serif text-lg text-night">Langkah pembayaran</h2>
-        <LangkahBayar unggahDiSini={false} />
+        <LangkahBayar />
       </details>
     </>
   );

@@ -7,11 +7,11 @@ import { createHash, timingSafeEqual } from "node:crypto";
  * `!==` atas string berhenti pada karakter pertama yang berbeda, jadi lamanya
  * membanding membocorkan berapa karakter awal yang sudah cocok. Dua rute di
  * repo ini dijaga rahasia bersama tanpa sesi dan tanpa peran
- * (`/api/cron/tenggat`, `/api/cron/pesanan`), dan yang kedua menembakkan
+ * (kini hanya `/api/cron/pesanan`; rute cron pertama sudah dipensiunkan), dan ia menembakkan
  * permintaan ke DOKU dengan service role lintas klien. Keterpaparannya
  * lewat HTTPS memang rendah — derau jaringan jauh lebih besar daripada selisih
  * beberapa nanodetik — tapi harganya satu panggilan fungsi, dan dokblok
- * `/api/cron/tenggat` sudah MENJANJIKAN banding panjang-tetap sejak rute itu
+ * rute cron pertama sudah MENJANJIKAN banding panjang-tetap sejak rute itu
  * lahir. Janji yang tidak ditepati kode lebih buruk daripada janji yang tidak
  * pernah dibuat: pembaca berikutnya berhenti memeriksa.
  *
