@@ -185,6 +185,9 @@ describe("struktur orders", () => {
       "status_gateway",
       "jenis",
       "booking_request_id",
+      // 20261113140800: percobaan yang MELUNASI (pembanding bayar ganda). Angka
+      // percobaan 1..9, bukan nominal.
+      "percobaan_lunas",
     ]);
   });
 

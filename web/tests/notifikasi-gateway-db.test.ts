@@ -539,6 +539,97 @@ describe("percobaan, sumber, dan cermin kolom", () => {
     expect(await aksesAktif()).toBe(true);
   });
 
+  it("CERMIN: percobaan LAMA yang melunasi, lalu SUCCESS percobaan kini: tetap tinjauan bayar ganda", async () => {
+    // Kebalikan uji di atas, dan inilah yang dulu lolos: pembanding Ruling 7
+    // adalah `orders.percobaan` (percobaan KINI), bukan percobaan yang
+    // benar-benar melunasi. Pesanan di percobaan 2, tautan percobaan 1 yang
+    // dibayar dulu, lalu tautan percobaan 2 dibayar juga — uang kedua itu
+    // jatuh ke cabang "percobaan sama" dan hanya tercatat di jejak.
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+    expect((ulang.data as Array<{ percobaan: number }>)[0].percobaan).toBe(2);
+
+    const bayar = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 1) });
+    expect(bayar.error).toBeNull();
+    expect(bayar.data).toBe("diterapkan");
+    expect((await bacaPesanan(p.id)).status).toBe("lunas");
+
+    const jejakAwal = new Set((await jejak(p.id)).map((j) => j.id));
+    const kini = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 2) });
+    expect(kini.error).toBeNull();
+    expect(kini.data).toBe("tanpa_efek");
+
+    const akhir = await bacaPesanan(p.id);
+    expect(akhir.status).toBe("lunas");
+    expect(akhir.sebab_tinjauan).toBe("selisih_status");
+    expect(akhir.butuh_tinjauan_pada).not.toBeNull();
+
+    const baru = (await jejak(p.id)).filter((j) => !jejakAwal.has(j.id));
+    expect(baru.map((j) => j.kejadian).sort()).toEqual(["notifikasi", "selisih_status"]);
+    const selisih = baru.find((j) => j.kejadian === "selisih_status")!;
+    expect(selisih.keterangan).toContain("bayar ganda");
+    // Kalimatnya menyebut percobaan PELUNAS (1), bukan percobaan kini.
+    expect(selisih.keterangan).toContain("SUCCESS percobaan 2");
+    expect(selisih.keterangan).toContain("lunas di percobaan 1");
+    expect(await aksesAktif()).toBe(true);
+  });
+
+  it("SUCCESS kedua pada percobaan PELUNAS yang lama: tanpa tanda, walau percobaan kini berbeda", async () => {
+    // Pasangan uji cermin: yang dibandingkan adalah percobaan PELUNAS, jadi
+    // kiriman kedua dari percobaan yang sama (transaksi lain, sidik lain) tetap
+    // baris 1 kolom lunas — K4 masih terbuka, tanpa tanda.
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+    expect((ulang.data as Array<{ percobaan: number }>)[0].percobaan).toBe(2);
+
+    await terapkanPasti(p, STATUS_DOKU_LUNAS[0], p.nominal, "diterapkan");
+    // `terapkanPasti` merakit invoice dari `p.percobaan` = 1: percobaan lama.
+    expect((await bacaPesanan(p.id)).status).toBe("lunas");
+
+    const jejakAwal = new Set((await jejak(p.id)).map((j) => j.id));
+    const sama = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 1) });
+    expect(sama.error).toBeNull();
+    expect(sama.data).toBe("tanpa_efek");
+    const akhir = await bacaPesanan(p.id);
+    expect(akhir.sebab_tinjauan).toBeNull();
+    expect(akhir.butuh_tinjauan_pada).toBeNull();
+    const baru = (await jejak(p.id)).filter((j) => !jejakAwal.has(j.id));
+    expect(baru.map((j) => j.kejadian)).toEqual(["notifikasi"]);
+  });
+
+  it("percobaan pelunas tercatat juga saat uang masuk sebagai ditahan", async () => {
+    // `ditahan` = uang SUDAH masuk, hanya nominalnya meleset. Bila percobaan
+    // pelunasnya tidak dicatat di sana, putusan staf "lunas" lalu kiriman ulang
+    // percobaan yang SAMA (transaksi lain) dibandingkan dengan percobaan kini
+    // dan dituduh bayar ganda.
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+
+    const tahan = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal + 7_000, { invoice: rakitInvoice(p.kode, 1) });
+    expect(tahan.error).toBeNull();
+    expect(tahan.data).toBe("diterapkan");
+    expect((await bacaPesanan(p.id)).status).toBe("ditahan");
+
+    const admin = await signInAs("admin@padma.test");
+    const putus = await admin.rpc("putuskan_pesanan_ditahan", { p_pesanan_id: p.id, p_putusan: "lunas" });
+    expect(putus.error).toBeNull();
+    expect((await bacaPesanan(p.id)).status).toBe("lunas");
+
+    // SUCCESS kedua pada percobaan PELUNAS yang sama (transaksi lain, nominal
+    // cocok): baris 1 kolom lunas, K4 — tanpa tuduhan bayar ganda.
+    const jejakAwal = new Set((await jejak(p.id)).map((j) => j.id));
+    const ulangSama = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, {
+      invoice: rakitInvoice(p.kode, 1),
+    });
+    expect(ulangSama.error).toBeNull();
+    expect(ulangSama.data).toBe("tanpa_efek");
+    const baru = (await jejak(p.id)).filter((j) => !jejakAwal.has(j.id));
+    expect(baru.map((j) => j.kejadian)).toEqual(["notifikasi"]);
+  });
+
   it("p_sumber = 'status_api': diperiksa_pada terisi, jejak diperiksa_ulang, keterangan menempel", async () => {
     const p = await pesananBaru();
     const keterangan = "DOKU menjawab PENDING sesudah tenggat (uji)";
