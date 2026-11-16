@@ -651,7 +651,13 @@ describe("halaman bayar — status tanpa nominal", () => {
   });
 
   it("TIDAK ada nominal uang di halaman klien (money firewall)", async () => {
+    // Yang dijaga: tagihan JALUR 2 (sesi lepas, klaim + QRIS) tetap tanpa
+    // angka. Sejak P3/B6 tagihan sesi DOKU milik klien sendiri memang tampil
+    // bernominal BEKU di halaman ini (spec §6.7) — diuji di
+    // tests/passport-bayar-sesi.test.ts. Ananda tidak punya tagihan sesi, jadi
+    // markup di sini hanya memuat jalur 2; seksi tagihan sesi harus absen.
     const m = await markup();
+    expect(m).not.toContain("data-bayar");
     expect(nominalDalam(m), "nominal bocor").toEqual([]);
     expect(m).not.toContain("harga");
     expect(m).not.toContain("Harga");

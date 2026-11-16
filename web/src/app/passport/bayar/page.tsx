@@ -4,23 +4,26 @@ import { ambilKlien, ambilPaket, ambilSesi } from "@/lib/passport/data";
 import { susunTagihan, type PayStatus } from "@/lib/passport/turunan";
 import { bacaPengaturan } from "@/lib/settings";
 import { TombolKlaim } from "./tombol-klaim";
-import { ambilTagihanPengajuan } from "@/lib/tagihan/baca";
+import {
+  ambilTagihanPengajuan,
+  kalimatSisaWaktu,
+  keadaanTagihanKlien,
+  KALIMAT_KEADAAN_KLIEN,
+  KEADAAN_BISA_DIBAYAR,
+} from "@/lib/tagihan/baca";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
 import { CaraBayar, LangkahBayar } from "./cara-bayar";
+import { TombolBayar } from "./[id]/tombol-bayar";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Pembayaran" };
 
-// KOMENTAR INI DIKOREKSI (Ruling 26). Sebelumnya di sini berdiri kalimat
-// "halaman ini menampilkan STATUS, bukan angka (keputusan #10)" — padahal
-// halaman ini sudah lama merender nominal. Yang berlaku: keputusan #10
-// digantikan spec V4, harga klien memang tampil publik karena QRIS PADMA
-// statis dan klien mengetik sendiri jumlahnya. Alasan lengkapnya di dokblok
-// `lib/tagihan/baca.ts` — jangan menuliskannya kedua kali, cukup jangan
-// bertentangan dengannya.
+// NOMINAL di halaman ini hanya milik tagihan sesi klien sendiri, dari angka
+// BEKU pesanannya (P3/B6) — alasan lengkapnya di dokblok `lib/tagihan/baca.ts`;
+// jangan menuliskannya kedua kali, cukup jangan bertentangan dengannya.
+// Tagihan jalur 2 di bawah tetap tanpa angka.
 //
 // Yang TIDAK berubah, dan itulah money firewall yang sesungguhnya:
 // `honor_mitra` tidak pernah keluar dari tabel tarif menuju permukaan mana
@@ -53,61 +56,81 @@ export default async function HalamanBayar() {
     ambilPaket(klien.id),
     ambilSesi(klien.id),
     bacaPengaturan(),
-    ambilTagihanPengajuan(klien.id),
+    ambilTagihanPengajuan(),
   ]);
   const tagihan = susunTagihan({ paket, sesi });
+  // Tagihan yang sudah lunas DAN sesinya lahir sudah selesai: sesinya tampil
+  // di "Tagihan Anda" di bawah dan di Jadwal. Sisanya masih butuh perhatian
+  // klien — membayar, atau sekadar tahu tagihannya sedang di tangan admin.
+  const tagihanSesi = tagihanPengajuan
+    .map((t) => ({ t, keadaan: keadaanTagihanKlien(t) }))
+    .filter(({ keadaan }) => keadaan !== "lunas_sesi");
 
   return (
     <>
-      {/* TAGIHAN PENGAJUAN (spec C2) — di ATAS tagihan sesi, dan itu disengaja:
-          hanya yang ini punya tenggat, dan hanya yang ini menahan jadwal. */}
-      {tagihanPengajuan.length > 0 && (
+      {/* TAGIHAN SESI DARI PENGAJUAN (P3/B6, spec §6.3) — di ATAS tagihan
+          jalur 2, dan itu disengaja: hanya yang ini punya tenggat. Dibayar
+          lewat DOKU, bukan QRIS. Kartu menaut ke halamannya sendiri; tombol
+          Bayar hidup di LUAR tautan (tombol di dalam <a> bukan HTML sah). */}
+      {tagihanSesi.length > 0 && (
         <section className="mb-4 rounded-2xl border border-black/10 bg-white p-6">
           <h2 className="mb-1 font-serif text-xl text-night">Menunggu pembayaran</h2>
           <p className="mb-4 text-[12.5px] text-ink-soft">
-            Jadwal terkunci setelah pembayaran diverifikasi tim. Ketuk satu tagihan untuk
-            membayarnya.
+            Jadwal terkunci begitu pembayaran diterima. Ketuk satu tagihan untuk melihat
+            rinciannya.
           </p>
           <div className="grid gap-3">
-            {tagihanPengajuan.map((t) => (
-              <Link
-                key={t.permintaanId}
-                href={`/passport/bayar/${t.permintaanId}`}
-                data-tagihan={t.permintaanId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[1.6px] border-dashed border-gold bg-[#FDFAF1] p-4"
-              >
-                <span className="min-w-0">
-                  <b className="block text-sm text-night">{t.namaLayanan}</b>
-                  <span className="block text-[12px] text-ink-soft">
-                    {formatTanggalID(t.tanggal)} · {formatJam(jamDariDb(t.jamMulai))}
-                  </span>
-                  {t.statusBayar === "belum" && t.tenggat && (
-                    <span className="mt-1 block text-[12px] text-clay">
-                      Bayar dalam {labelSisaWaktu(t.tenggat)}
+            {tagihanSesi.map(({ t, keadaan }) => {
+              const sisa = KEADAAN_BISA_DIBAYAR.includes(keadaan) ? kalimatSisaWaktu(t) : null;
+              return (
+                <div
+                  key={t.permintaanId}
+                  data-tagihan={t.permintaanId}
+                  className="rounded-2xl border-[1.6px] border-dashed border-gold bg-[#FDFAF1] p-4"
+                >
+                  <Link
+                    href={`/passport/bayar/${t.permintaanId}`}
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <span className="min-w-0">
+                      <b className="block text-sm text-night">{t.namaLayanan}</b>
+                      <span className="block text-[12px] text-ink-soft">
+                        {formatTanggalID(t.tanggal)} · {formatJam(jamDariDb(t.jamMulai))}
+                      </span>
+                      <span
+                        className={`mt-1 block text-[12px] ${sisa ? "text-clay" : "text-[#8A6A1B]"}`}
+                      >
+                        {sisa ?? KALIMAT_KEADAAN_KLIEN[keadaan]}
+                      </span>
                     </span>
-                  )}
-                  {t.statusBayar === "menunggu_verifikasi" && (
-                    <span className="mt-1 block text-[12px] text-[#8A6A1B]">
-                      Bukti diterima, menunggu verifikasi
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      {t.total !== null && (
+                        <b className="text-[15px] text-night" data-total>
+                          {formatRupiah(t.total)}
+                        </b>
+                      )}
+                      <svg width="8" viewBox="0 0 8 14" aria-hidden className="text-ink-soft">
+                        <path
+                          d="M1 1l6 6-6 6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
                     </span>
+                  </Link>
+                  {KEADAAN_BISA_DIBAYAR.includes(keadaan) && (
+                    <div className="mt-3">
+                      <TombolBayar
+                        permintaanId={t.permintaanId}
+                        label={keadaan === "diproses" ? "Lanjutkan pembayaran" : "Bayar"}
+                      />
+                    </div>
                   )}
-                </span>
-                <span className="flex items-center gap-2 whitespace-nowrap">
-                  <b className="text-[15px] text-night">
-                    {t.rincian.total === null ? "Menunggu total" : formatRupiah(t.rincian.total)}
-                  </b>
-                  <svg width="8" viewBox="0 0 8 14" aria-hidden className="text-ink-soft">
-                    <path
-                      d="M1 1l6 6-6 6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </span>
-              </Link>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

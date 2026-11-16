@@ -109,7 +109,17 @@ describe("pembaca tagihan tidak meng-embed tabel berpolicy staf ke query sesi kl
     expect(tanpaKomentar).not.toMatch(/partners\s*\(/);
   });
 
-  it("koordinat mitra dibaca lewat klien service role", () => {
-    expect(sumber).toMatch(/admin\s*\n?\s*\.from\("partners"\)/);
+  // P3/B6: pembaca tidak lagi menghitung ulang tagihan dari tarif, jadi tidak
+  // ada lagi koordinat mitra atau tarif yang perlu dibaca service role. Yang
+  // dibaca adalah angka BEKU pesanan lewat RPC `tagihan_sesi_saya` — security
+  // definer yang memilih baris dari `auth.uid()` — dengan sesi pemanggil.
+  it("membaca lewat RPC tagihan_sesi_saya, tanpa service role dan tanpa rumus tarif", () => {
+    const tanpaKomentar = sumber
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(tanpaKomentar).toMatch(/\.rpc\(\s*"tagihan_sesi_saya"/);
+    expect(tanpaKomentar).not.toMatch(/createAdminSupabase|supabase\/admin/);
+    expect(tanpaKomentar).not.toMatch(/hitungTagihanPengajuan/);
+    expect(tanpaKomentar).not.toMatch(/\.from\(\s*"(variant_rates|transport_rates|partners|booking_requests)"/);
   });
 });

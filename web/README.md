@@ -116,8 +116,8 @@ sama-sama membuat `npm test` MERAH.
 | `/passport/sesi` | Klien | Riwayat sesi; tiap kartu menaut ke detail kunjungannya |
 | `/passport/materi` | Klien | Daftar materi panduan; terkunci sampai layanan terkait dijalani |
 | `/passport/materi/[id]` | Klien | Reader e-book/video berwatermark identitas, tanpa unduhan |
-| `/passport/bayar/[id]` | Klien | Satu tagihan pengajuan: nominal, tenggat, QRIS, dan unggah bukti dalam satu layar |
-| `/passport/bayar` | Klien | Daftar tagihan: pengajuan bertenggat menaut ke halamannya sendiri, tagihan sesi + klaim "saya sudah bayar", QRIS terlipat |
+| `/passport/bayar/[id]` | Klien | Satu tagihan sesi: rincian dari angka beku pesanan, sisa waktu, dan tombol Bayar (DOKU). Juga halaman kembali DOKU: menjalankan Lapis 1b, tidak membaca parameter apa pun dari DOKU. Baris warisan QRIS hanya mendapat kalimat §7, tanpa QRIS dan tanpa unggah |
+| `/passport/bayar` | Klien | Daftar tagihan: tagihan sesi dari pengajuan (tombol Bayar DOKU) menaut ke halamannya sendiri; tagihan jalur 2 + klaim "saya sudah bayar", QRIS terlipat |
 | `/passport/ajukan` | Klien | Ajukan jadwal: varian, tanggal, JAM, alamat — selalu berstatus `diminta`. Tanpa skrining hijau yang belum terpakai: ajakan skrining, bukan formulir |
 | `/passport/ajukan/terkirim` | Klien | Konfirmasi sesudah pengajuan jadwal terkirim |
 | `/passport/sertifikat/[serviceId]` | Klien | Sertifikat klien untuk satu layanan, dipilih menurut sesi `selesai` terbaru |
@@ -175,6 +175,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/bukti/[permintaan]` | Admin, Owner | GET bukti bayar. Bucket tanpa policy, jadi ini SATU-SATUNYA pintunya; `requireRole` di baris pertama, respons `private, no-store` |
 | `/api/cron/tenggat` | Mesin | POST pembatal pengajuan yang lewat tenggat bayar. Dijaga `CRON_SECRET`, fail-closed bila secret tidak terpasang |
 | `/api/pesanan/checkout` | Klien | POST membuat pesanan lalu menerbitkan tautan bayar DOKU: rute menjawab dengan URL halaman bayar DOKU dan peramban mengalihkan ke sana (`window.location.assign`). Rute TIPIS: RPC `buat_pesanan` dipanggil dengan SESI PEMANGGIL, tidak pernah service role — `client_id` dipilih dari `auth.uid()` di dalam RPC, harga dibekukan di sana, dan pesanan terbuka kedua ditolak unique parsial |
+| `/api/pesanan/sesi/[permintaan]/bayar` | Klien | POST menerbitkan atau memakai ulang tautan bayar DOKU untuk tagihan sesi milik pemanggil. Badan tidak dibaca: kepemilikan, angka beku, dan "uang sudah masuk" dibaca lewat RPC `tagihan_sesi_saya` dengan sesi pemanggil; 409 bila tidak ada pesanan terbuka atau uang sudah masuk, 403 tanpa persetujuan S&K |
 | `/api/pesanan/[id]/batal` | Klien | POST pembatalan mandiri pesanan sendiri yang masih `menunggu_bayar`. Ada karena satu klien hanya boleh punya satu pesanan terbuka: tanpanya, berubah pikiran soal produk berarti menunggu 24 jam |
 | `/api/pesanan/[id]/periksa-ulang` | Admin, Owner | POST menanyakan Check Status DOKU untuk satu pesanan lalu menjalankan jawabannya lewat `terapkan_notifikasi_gateway` (service role). Vonisnya datang dari DOKU, tidak pernah dari badan permintaan |
 | `/api/pesanan/[id]/terbitkan-akses` | Admin, Owner | POST menerbitkan ulang akses untuk pesanan **lunas** yang aksesnya tidak pernah terbit; memanggil `terbitkan_akses_item` per item, bukan penyalur — aturan "penyalur hanya dari transisi" tetap utuh |

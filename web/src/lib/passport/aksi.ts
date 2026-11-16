@@ -12,6 +12,7 @@ import { hariIniJakarta } from "./waktu";
 import { bentukJamSah } from "@/lib/jadwal/jam";
 import { bacaPengaturan } from "@/lib/settings";
 import { PERMINTAAN_AWAL, STATUS_ANTRE } from "@/lib/jadwal/status";
+import { ambilTagihanPengajuanSatu, keadaanTagihanKlien } from "@/lib/tagihan/baca";
 
 /**
  * SATU-SATUNYA jalur tulis milik klien.
@@ -363,6 +364,9 @@ export async function batalkanPengajuan(permintaanId: string): Promise<Berhasil 
       error.code === "P0001" && Object.hasOwn(KALIMAT_BATAL_KLIEN, error.message)
         ? KALIMAT_BATAL_KLIEN[error.message]
         : null;
+    if (kalimat !== null && error.message === SQL_UANG_MASUK && (await buktiWarisanDiperiksa(permintaanId))) {
+      return { ok: false, pesan: KALIMAT_BATAL_BUKTI_WARISAN };
+    }
     return { ok: false, pesan: kalimat ?? "Gagal membatalkan. Coba lagi." };
   }
 
@@ -380,13 +384,38 @@ export async function batalkanPengajuan(permintaanId: string): Promise<Berhasil 
  * ia perlu tahu adalah uangnya aman dan siapa yang bergerak berikutnya, bukan
  * bahwa ada penjaga yang menolak.
  */
+const SQL_UANG_MASUK = "Pembayaran pengajuan ini sudah masuk dan sedang diperiksa admin.";
+
 const KALIMAT_BATAL_KLIEN: Record<string, string> = {
-  "Pembayaran pengajuan ini sudah masuk dan sedang diperiksa admin.":
+  [SQL_UANG_MASUK]:
     "Pembayaran Anda untuk pengajuan ini sudah kami terima dan sedang diperiksa admin, " +
     "jadi pengajuan tidak bisa dibatalkan dari sini. Admin PADMA akan menghubungi Anda.",
   "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.":
     "Pengajuan ini sudah dikonfirmasi atau sudah dibatalkan sebelumnya.",
 };
+
+/**
+ * Baris WARISAN QRIS yang buktinya diunggah tetapi belum diverifikasi (§7):
+ * "sudah kami terima" di atas berlebihan untuknya — yang ada baru bukti,
+ * belum uang yang dicocokkan. Kalimatnya mengikuti tabel §7.
+ */
+const KALIMAT_BATAL_BUKTI_WARISAN =
+  "Bukti Anda sedang diperiksa admin, jadi pengajuan tidak bisa dibatalkan dari sini. " +
+  "Admin PADMA akan menghubungi Anda.";
+
+/**
+ * Keadaan tagihan dibaca lewat pembaca Passport yang sama (`tagihan_sesi_saya`,
+ * sesi pemanggil), bukan kueri sendiri. Gagal membaca jatuh ke kalimat umum —
+ * ini hanya pilihan kalimat, bukan pagar.
+ */
+async function buktiWarisanDiperiksa(permintaanId: string): Promise<boolean> {
+  try {
+    const t = await ambilTagihanPengajuanSatu(permintaanId);
+    return t !== null && keadaanTagihanKlien(t) === "warisan_bukti";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Klien menilai satu sesi yang sudah selesai (spec C1 J10).
