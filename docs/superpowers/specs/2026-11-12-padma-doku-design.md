@@ -269,7 +269,7 @@ Butir bertanda ✉ sudah ditanyakan di email 12 Nov (nomor email dalam kurung).
 | K1 ✉(A1) | Kapan QRIS menjadi Active? | Go-live tertunda. Kode tidak berubah |
 | K2 ✉(A2) | Apakah Checkout tersedia untuk akun ini, dan apakah QRIS tampil di Checkout? | **Penghalang terbesar.** Bila tidak, adapter harus pindah ke Direct API QRIS (SNAP). Struktur §5 tetap; adapter, tanda tangan, dan webhook berubah |
 | K3 ✉(B4) | Satu URL notifikasi untuk Checkout, atau satu per channel? Apa beda menu *Checkout Page Notification* dan *HTTP Notifications*? | Hanya checklist go-live |
-| K4 ✉(B5) | Bisakah satu invoice tercatat SUCCESS dua kali bila pelanggan berganti metode? | Desain sudah menangkapnya (notifikasi kedua `tanpa_efek`, tercatat di jejak). Bila "ya", tambahkan tanda tinjauan untuk SUCCESS kedua (§5.5 baris 1, kolom "lunas") |
+| K4 ✉(B5) | Bisakah satu invoice tercatat SUCCESS dua kali bila pelanggan berganti metode? | Desain sudah menangkapnya (notifikasi kedua `tanpa_efek`, tercatat di jejak). Bila "ya", tambahkan tanda tinjauan untuk SUCCESS kedua (§5.5 baris 1, kolom "lunas"). **Catatan perbaikan akhir (17 Nov, R-F3):** satu invoice yang dibayar dua kali lewat dua halaman DOKU — dua tab, atau tautan baru untuk nomor yang sama (K6 menunjukkan sandbox menerbitkannya) — hari ini **tidak bertanda**. Pembandingan `transaksi_id` sengaja belum dibuat: webhook dan Check Status bisa membawa pengenal yang berbeda untuk transaksi yang sama, sehingga pembandingan itu melahirkan tuduhan bayar ganda palsu. Menunggu jawaban DOKU |
 | K5 ✉(B6) | Mungkinkah SUCCESS setelah `payment_due_date` lewat, dengan Recover Abandoned Cart mati? | Sudah ditangkap sebagai `lunas_setelah_tutup` |
 | K6 ✉(B7) | Karakter apa yang sah di `invoice_number`, dan bolehkah nomor dipakai ulang dengan Request-Id baru? | Desain memakai alfanumerik saja dan nomor baru per percobaan (§5.2), jadi aman di kedua jawaban. **Terukur 13 Nov (sandbox, bagian pemakaian ulang nomor):** `invoice_number` yang sama dikirim tiga kali dengan Request-Id baru (10.000, 10.000, 12.000): ketiganya HTTP 200 `SUCCESS`, tanpa `error_messages`, dan tiap jawaban membawa URL serta `token_id` BARU (hash berbeda; host `staging.doku.com`, panjang 91). Check Status sesudahnya menjawab `PENDING` dengan nominal 12.000, yaitu nominal permintaan terakhir. Jadi sandbox tidak menolak dan tidak memulangkan halaman lama untuk nomor ganda; tautan lama tidak diuji apakah masih hidup, dan perilaku produksi serta sesudah ada yang membayar belum terukur. Karakter sah `invoice_number` belum terukur |
 | K7 ✉(B8) | Apa jawaban Check Status untuk invoice tak dikenal, berapa rate limit-nya, dan transaksi mana yang dipulangkan bila percobaannya banyak? | Memengaruhi cabang "tidak ditemukan" (§5.6). **Terukur 13 Nov (sandbox):** invoice tak pernah dibuat menjawab HTTP 404 dengan badan JSON berkunci tunggal `error`; cabang `kode === 404` benar. Rate limit dan perilaku percobaan banyak belum terukur |
@@ -436,6 +436,14 @@ Catatan:
   tinjauan `selisih_status` bila percobaan invoice ≠ percobaan kini. Dengan
   percobaan yang sama, perilakunya tetap baris 1 (tanpa efek). Refund tetap
   manual (§2).
+  **Dikoreksi 17 Nov (perbaikan akhir F1, migrasi `20261113140800`):** yang
+  dibandingkan adalah percobaan yang **melunasi** (`orders.percobaan_lunas`,
+  diisi pada transisi ke `lunas` dan `ditahan`), bukan percobaan kini.
+  Pembanding lama salah ke dua arah begitu yang melunasi adalah percobaan
+  lama: pesanan di percobaan 2, tautan 1 dibayar (lunas), lalu tautan 2
+  dibayar juga — uang kedua itu tidak bertanda, sementara kiriman kedua
+  percobaan 1 dituduh bayar ganda. Baris lama tanpa `percobaan_lunas`
+  memakai percobaan kini seperti sebelumnya.
 - Cabang Midtrans `capture`/`challenge`/`deny` tidak punya padanan DOKU dan
   ikut hilang. Status `ditahan` tetap lahir lewat baris 2.
 - Status dibandingkan sebagai **himpunan bernama** di TS dan sebagai daftar
@@ -464,6 +472,24 @@ Tiga lapis P1 tetap ada, dan hanya sumber jawabannya yang berganti:
   Vonis tetap tidak pernah menjadi parameter dari pemanggil bersesi.
 - `JAM_TENGGANG_404` berganti nama netral (misalnya `JAM_TENGGANG_TANPA_VONIS`)
   dan nilainya tetap 1 jam.
+- **Diperluas 17 Nov (perbaikan akhir F2).** Rekonsiliasi dulu buta di dua
+  tempat bila webhook hilang (K3, K9, Request-Target meleset, DOKU hanya
+  mengulang 3x/12 jam, deploy mati):
+  - *Percobaan lama.* Sebelum jawaban yang menutup pesanan terbuka sebagai
+    `kedaluwarsa` (vonis waktu lokal baris 9–10, **atau** `EXPIRED` asli dari
+    DOKU) diterapkan pada pesanan `percobaan > 1`, percobaan 1..n-1 ikut
+    ditanyakan, serial. SUCCESS di sana melunasi pesanan lewat mesin yang sama;
+    ada yang tak terjawab berarti tidak ada vonis. Berlaku di ketiga lapis.
+  - *Pesanan yang kita tutup.* Lapis 3 juga menyapu pesanan `dibatalkan` yang
+    pernah bertautan DOKU (`tautan_terbit_pada` terisi atau `percobaan > 1`):
+    setiap putaran selama tautannya hidup, lalu satu pemeriksaan lengkap
+    sesudah `kedaluwarsa_pada` + tenggang, yang menandainya
+    `orders.rekonsiliasi_tutup_pada`. Uang yang ditemukan menjadi
+    `lunas_setelah_tutup` + tinjauan. Pesanan `kedaluwarsa` tidak disapu:
+    setiap jalan ke sana sudah melewati pemeriksaan percobaan lama. Lapis 1b
+    tidak menjalankannya (lintas klien, menahan render). Pemeriksaan di dalam
+    aksi staf (terbit ulang, batal) sengaja tidak dibuat (R-F4): yang
+    tertangkap sesudahnya bertanda, tidak senyap.
 
 ### 5.7 Migrasi maju (strategi (a) brief: nama netral-gateway)
 

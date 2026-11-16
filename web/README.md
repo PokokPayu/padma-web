@@ -470,6 +470,61 @@ kebetulan membuka halamannya lagi (Lapis 1b). Sumbernya spec DOKU §8
    - Sesudah tidak ada baris warisan di produksi, jalur warisan (tab verifikasi,
      tombol konfirmasi lama, `konfirmasi_permintaan`) dihapus sebagai langkah
      terpisah.
+
+   **Dua baris warisan tanpa jalan keluar di aplikasi.** Keduanya terkunci
+   karena predikat "uang sudah masuk" (`uang_sudah_masuk_permintaan`) membaca
+   `status_bayar <> 'belum'` sebagai uang yang sudah diterima. Keduanya
+   diputuskan satu per satu, dengan persetujuan pemilik repo.
+
+   a. **`menunggu_verifikasi` dengan bukti yang tidak sah** (gambar keliru,
+      bukan transfer ke rekening PADMA, nominal tidak ada di mutasi).
+      "Batalkan pengajuan" ditolak predikat, dan tidak ada RPC penolak bukti.
+      - Admin menghubungi klien dan mencocokkan mutasi rekening. Bila
+        transfernya ternyata ada, jalannya biasa: "Verifikasi", lalu
+        "Konfirmasi jadwal".
+      - Bila transfernya memang tidak ada, admin mencatat keputusannya (id
+        pengajuan, siapa, kapan, alasan) dan meminta izin pemilik. Sesudah
+        izin itu, **seorang manusia** — bukan skrip, bukan agen — mengubah
+        satu baris lewat SQL Editor Supabase produksi. Berkas bukti tidak
+        dihapus; ia tetap jadi jejak.
+
+        ```sql
+        -- Dijalankan MANUSIA, dengan izin pemilik repo, satu baris per keputusan.
+        begin;
+        update public.booking_requests b
+           set status_bayar = 'belum'
+         where b.id = '<id-pengajuan>'
+           and b.status = 'menunggu_bayar'
+           and b.status_bayar = 'menunggu_verifikasi'
+           and not exists (select 1 from public.orders o where o.booking_request_id = b.id);
+        -- Harus "UPDATE 1". Bila 0: rollback, lalu periksa barisnya lagi.
+        select public.uang_sudah_masuk_permintaan('<id-pengajuan>');  -- harus false
+        commit;
+        ```
+      - Yang diperiksa sesudahnya: predikat di atas `false`, dan `/admin/sesi`
+        menampilkan baris itu sebagai warisan `belum`. Admin lalu memilih
+        "Terbitkan ulang" lewat DOKU atau "Batalkan pengajuan".
+
+   b. **`lunas` (QRIS sudah diverifikasi) yang bidannya sudah nonaktif.**
+      "Konfirmasi jadwal" ditolak ("Bidan sudah tidak aktif"). "Ganti bidan"
+      ditolak `guard_masukan_harga_warisan`, karena harga baris warisan
+      diturunkan dari bidannya dan klien sudah membayar angka itu. Tidak ada
+      jalur aplikasi yang memindahkan bidan sebuah sesi.
+      - Pemilik memutuskan lebih dulu apakah bidan lama masih bisa melayani
+        kunjungan itu.
+      - Admin mengaktifkan bidan lama sementara di `/admin/mitra`, menekan
+        "Konfirmasi jadwal" pada baris itu (sesi lahir dari angka yang dibayar
+        klien), lalu **segera** menonaktifkannya lagi. Selama jendela itu bidan
+        tersebut muncul di daftar pilihan admin, jadi jendelanya dibuat
+        sependek mungkin.
+      - Bila bidan lama tidak bisa melayani, sesi yang baru lahir dibatalkan
+        lewat jenjang C3-a di panel sesi. Kelanjutannya (hak sesi untuk klien
+        atau refund manual) diputuskan pemilik.
+      - Yang diperiksa sesudahnya: pengajuan berstatus `dikonfirmasi`, ada satu
+        baris `sessions` dengan `booking_request_id` pengajuan itu, dan bidan
+        lama kembali nonaktif di `/admin/mitra`.
+      - Tidak ada SQL di langkah ini. Mengubah `partner_id` baris warisan yang
+        beruang memang ditolak untuk semua peran, dan penolakan itu disengaja.
 7. **Penjadwal:** pasang `CRON_SECRET` yang sama sebagai GitHub Secret, buka
    komentar blok `schedule:` di `.github/workflows/rekonsiliasi-pesanan.yml`,
    lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di
