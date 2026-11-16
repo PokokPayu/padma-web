@@ -60,8 +60,11 @@ export const BATAS_PERIKSA_SEKALI = 3;
  * Anggaran waktu Lapis 1b, dalam ms: BATAS_PERIKSA_SEKALI x batas waktu adapter
  * (10 s) — kasus terburuk SEBELUM percobaan lama ikut ditanyakan (F2a).
  * Pesanan produk bisa sampai percobaan 9; tanpa anggaran, satu halaman bisa
- * tertahan delapan Check Status tambahan. Yang tidak sempat ditanyakan
- * memulangkan `waktu_habis` TANPA vonis, dan Lapis 3 menyelesaikannya.
+ * tertahan delapan Check Status tambahan. Anggarannya menahan dimulainya
+ * permintaan BARU, jadi terburuknya kini ≈ 40 s (satu permintaan yang sedang
+ * terbang saat anggaran habis), bukan 30 s + 8 x 10 s. Yang tidak sempat
+ * ditanyakan memulangkan `waktu_habis` TANPA vonis, dan Lapis 3
+ * menyelesaikannya.
  */
 const ANGGARAN_LAPIS_1B_MS = BATAS_PERIKSA_SEKALI * 10_000;
 
