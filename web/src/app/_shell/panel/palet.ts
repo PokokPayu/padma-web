@@ -21,6 +21,7 @@ export const PALET_GRAFIK = ["#2e8b57", "#8c4a7d", "#c8952f"] as const;
 
 /** Kisi & sumbu sengaja resesif: data yang menonjol, bukan rangkanya. */
 export const WARNA_KISI = "#e4e7e3";
-export const WARNA_TINTA_SUMBU = "#6b756e";
+/** Sama dengan token `--color-panel-muted` (globals.css); uji kontras menjaga keduanya. */
+export const WARNA_TINTA_SUMBU = "#646e67";
 /** Permukaan kartu — dipakai sebagai cincin 2px pada penanda yang bertumpuk. */
 export const WARNA_PERMUKAAN = "#ffffff";

@@ -28,7 +28,10 @@
   --color-panel-surface: #ffffff;
   --color-panel-border: #e4e7e3;
   --color-panel-ink: #1b1f1d;
-  --color-panel-muted: #6b756e;
+  /* #646e67: 4,88:1 di atas panel-bg, 5,29:1 di atas panel-surface (WCAG AA).
+     Nilai lama #6b756e hanya 4,41:1 di atas panel-bg. Dijaga
+     tests/kontras-token-panel.test.ts; `WARNA_TINTA_SUMBU` (palet.ts) ikut. */
+  --color-panel-muted: #646e67;
   /* Rail = sidebar gelap. Nilainya sama dengan --color-night, tetapi diberi
      nama sendiri supaya "warna sidebar" bisa digeser kelak tanpa menyeret
      seluruh halaman klien yang juga memakai night. */
