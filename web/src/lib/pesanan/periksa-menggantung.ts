@@ -308,7 +308,8 @@ function lebihBerarti(a: HasilPeriksaPesanan, b: HasilPeriksaPesanan): HasilPeri
 type HasilBanyakPercobaan = {
   /**
    * Kegagalan PERTAMA (tak terjawab, kunci, waktu habis, bentuk, galat mesin),
-   * atau `null` bila setiap percobaan terjawab dan setiap jawaban finalnya
+   * atau `null` bila setiap percobaan terjawab dan setiap jawaban yang boleh
+   * dikirim (`perluDikirimKeMesin`; EXPIRED percobaan lama tidak termasuk)
    * sudah diterapkan. Selain `null`, tidak ada keputusan "sudah lengkap" yang
    * boleh diambil: vonis tutup (F2a) maupun penanda selesai (F2b).
    */
