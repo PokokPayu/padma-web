@@ -806,6 +806,69 @@ describe("F2a: percobaan lama ditanyakan sebelum pesanan ditutup kedaluwarsa", (
     expect(doku.panggilan).toEqual([]);
   });
 
+  // ===== Putaran 2 (I1): HANYA vonis tutup yang boleh menutup pesanan =====
+  // Mesin mencari pesanan lewat `kode` saja, jadi EXPIRED untuk invoice
+  // percobaan LAMA menutup pesanan seluruhnya — padahal ia hanya berkata
+  // tautan percobaan itu mati. Dikirim sementara percobaan lain belum
+  // terjawab, ia menutup pesanan sebelum semua percobaan ditanyakan, dan
+  // pesanan `kedaluwarsa` tidak pernah disapu lagi.
+  const tenggatLewat = () => new Date(Date.now() + lewatJam * 3_600_000).toISOString();
+
+  it("percobaan 3: percobaan 1 EXPIRED, percobaan 2 tak terjawab → tetap menunggu_bayar, nol EXPIRED tercatat", async () => {
+    const kode = `${AWALAN_KODE}0208`;
+    const id = await semaiPesanan({ kode, percobaan: 3, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 3), jawabanSukses(invK(kode, 3), "PENDING"));
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "EXPIRED"));
+    doku.jawabPer.set(invK(kode, 2), { ok: false as const, kode: 503, pesan: "gangguan" });
+
+    const hasil = await terapkanJawabanGateway({ id, kode, percobaan: 3, kedaluwarsaPada: tenggatLewat() });
+
+    expect(hasil).toBe("gateway_tak_terjawab");
+    expect(doku.panggilan).toEqual([invK(kode, 3), invK(kode, 1), invK(kode, 2)]);
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+    expect(await statusGatewayTercatat(id)).toEqual([]);
+  });
+
+  it("percobaan 3: SUCCESS percobaan 1 gagal diterapkan (galat basis data), percobaan 2 EXPIRED → tidak ada yang menutup", async () => {
+    // Nominal 1e20 meluapi `notifikasi_pesanan.nominal_diterima`: galat NYATA.
+    const kode = `${AWALAN_KODE}0209`;
+    const id = await semaiPesanan({ kode, percobaan: 3, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 3), jawabanSukses(invK(kode, 3), "PENDING"));
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "SUCCESS", 1e20));
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "EXPIRED"));
+
+    const mata = vi.spyOn(console, "error").mockImplementation(() => {});
+    let hasil: string;
+    try {
+      hasil = await terapkanJawabanGateway({ id, kode, percobaan: 3, kedaluwarsaPada: tenggatLewat() });
+    } finally {
+      mata.mockRestore();
+    }
+
+    expect(hasil).toBe("galat_basis_data");
+    expect(await statusPesanan(id)).toBe("menunggu_bayar");
+    expect(await statusGatewayTercatat(id)).toEqual([]);
+  });
+
+  it("EXPIRED percobaan lama tidak pernah dikirim: yang menutup hanya vonis tutup, tepat sekali", async () => {
+    const kode = `${AWALAN_KODE}0210`;
+    const id = await semaiPesanan({ kode, percobaan: 3, kedaluwarsaJam: lewatJam });
+    doku.jawabPer.set(invK(kode, 3), jawabanSukses(invK(kode, 3), "PENDING"));
+    doku.jawabPer.set(invK(kode, 1), jawabanSukses(invK(kode, 1), "EXPIRED"));
+    doku.jawabPer.set(invK(kode, 2), jawabanSukses(invK(kode, 2), "FAILED"));
+
+    expect(
+      await terapkanJawabanGateway({ id, kode, percobaan: 3, kedaluwarsaPada: tenggatLewat() }),
+    ).toBe("diterapkan");
+
+    expect(await statusPesanan(id)).toBe("kedaluwarsa");
+    // Satu baris notifikasi saja: vonis waktu atas percobaan KINI.
+    expect(await statusGatewayTercatat(id)).toEqual(["EXPIRED"]);
+    const notif = (await jejakPesanan(id)).filter((j) => j.kejadian === "notifikasi");
+    expect(notif).toHaveLength(1);
+    expect(notif[0].keterangan).toContain("DOKU menjawab PENDING sesudah tenggat");
+  });
+
   it("SEBELUM lewat, percobaan lama TIDAK ditanyakan (tidak ada vonis tutup yang dipertaruhkan)", async () => {
     const kode = `${AWALAN_KODE}0207`;
     const id = await semaiPesanan({ kode, percobaan: 2, kedaluwarsaJam: 5 });

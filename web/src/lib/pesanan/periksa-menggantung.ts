@@ -320,18 +320,41 @@ type HasilBanyakPercobaan = {
 };
 
 /**
- * Menanyakan percobaan-percobaan `daftar` SATU PER SATU, lalu menerapkan setiap
- * jawaban FINAL lewat mesin (yang mencari pesanannya lewat kode di invoice).
+ * Jawaban percobaan LAMA yang dikirim ke mesin: hanya yang membawa kabar
+ * tentang UANG — SUCCESS, refund, dan status asing — yang mesin tandai tanpa
+ * pernah menutup pesanan terbuka.
+ *
+ * TIDAK PERNAH dikirim (putaran 2, I1):
+ *   - belum final (404, PENDING, ...): tidak ada yang bisa diputuskan, dan
+ *     setiap kiriman menulis dua baris jejak;
+ *   - `EXPIRED`: mesin mencari pesanan lewat `kode` SAJA, jadi EXPIRED untuk
+ *     invoice percobaan 1 menutup pesanan di percobaan 3 seluruhnya — padahal
+ *     ia hanya berkata tautan percobaan itu mati. Bila percobaan lain belum
+ *     terjawab, pesanan `kedaluwarsa` yang lahir dari situ tidak pernah disapu
+ *     lagi, dan uang di percobaan lain senyap selamanya. Yang boleh menutup
+ *     pesanan hanya vonis tutup sesudah SEMUA percobaan terjawab
+ *     (`tutupSesudahPercobaanLama`).
+ */
+function perluDikirimKeMesin(s: StatusDoku): boolean {
+  return (
+    !(STATUS_DOKU_MENUNGGU as readonly string[]).includes(s.status) &&
+    !(STATUS_DOKU_KEDALUWARSA as readonly string[]).includes(s.status)
+  );
+}
+
+/**
+ * Menanyakan percobaan-percobaan `daftar` SATU PER SATU, lalu menerapkan
+ * jawaban yang membawa kabar uang (`perluDikirimKeMesin`) lewat mesin.
  *
  * - Serial, dan berhenti pada kegagalan pertama: bila DOKU mati, sisa
  *   permintaannya hanya akan menghabiskan batas waktu masing-masing.
- * - Jawaban final yang sudah terkumpul TETAP diterapkan walau percobaan
- *   berikutnya gagal: uang yang ditemukan tidak menunggu putaran berikutnya.
- * - SUCCESS diterapkan LEBIH DULU daripada jawaban final lain. Bila `EXPIRED`
- *   percobaan lain diterapkan dulu, pesanan terbuka tertutup lebih dulu dan
- *   uang yang masih bisa melunasinya jatuh menjadi `lunas_setelah_tutup`.
- * - Jawaban belum final (404, PENDING, ...) TIDAK dikirim: tidak ada yang
- *   bisa diputuskan darinya, dan setiap kiriman menulis dua baris jejak.
+ * - Jawaban yang sudah terkumpul TETAP diterapkan walau percobaan berikutnya
+ *   gagal: uang yang ditemukan tidak menunggu putaran berikutnya. Aman karena
+ *   tidak satu pun dari jawaban itu bisa menutup pesanan terbuka.
+ * - Penerapan berhenti pada galat mesin PERTAMA, dan `gagal` terisi: tidak
+ *   ada vonis tutup maupun penanda selesai pada putaran ini; putaran
+ *   berikutnya mengulang seluruhnya (sidik membuat yang sudah masuk
+ *   `duplikat`).
  */
 async function periksaPercobaan(
   pesananId: string,
@@ -347,12 +370,10 @@ async function periksaPercobaan(
       gagal = j.hasil;
       break;
     }
-    if (j.jenis === "jawab" && !(STATUS_DOKU_MENUNGGU as readonly string[]).includes(j.status.status)) {
+    if (j.jenis === "jawab" && perluDikirimKeMesin(j.status)) {
       final.push({ invoice: j.invoice, status: j.status });
     }
   }
-
-  final.sort((a, b) => Number(!lunasDoku(a.status)) - Number(!lunasDoku(b.status)));
 
   let hasil: HasilPeriksaPesanan = "tanpa_efek";
   let lunasDitemukan = false;
@@ -360,7 +381,7 @@ async function periksaPercobaan(
     const h = await kirimKeMesin(argumenJawaban(f.invoice, f.status));
     if (h === "galat_basis_data") {
       gagal ??= h;
-      continue;
+      break;
     }
     if (lunasDoku(f.status)) lunasDitemukan = true;
     hasil = lebihBerarti(hasil, h);
@@ -377,11 +398,12 @@ async function periksaPercobaan(
  *   vonis tutup TIDAK dikirim.
  * - Ada yang tidak terjawab (atau anggaran habis): tidak ada vonis. "Tidak
  *   tahu" bukan "tidak dibayar"; putaran berikutnya mencoba lagi.
- * - Setiap percobaan terjawab tanpa SUCCESS: vonis dikirim. Jawaban final lain
- *   dari percobaan lama (REFUNDED, VOIDED, EXPIRED) sudah diterapkan mesin
- *   dengan tandanya sendiri, dan TIDAK menahan vonis. Kalau menahan, pesanan
- *   itu tetap terbuka selamanya — jawaban yang sama pulang `duplikat` setiap
- *   putaran — padahal tidak ada uang hidup di sana.
+ * - Setiap percobaan terjawab tanpa SUCCESS: vonis dikirim. REFUNDED/VOIDED
+ *   percobaan lama sudah diterapkan mesin dengan tandanya sendiri dan TIDAK
+ *   menahan vonis (kalau menahan, pesanan itu terbuka selamanya — jawaban yang
+ *   sama pulang `duplikat` setiap putaran). EXPIRED percobaan lama tidak
+ *   dikirim sama sekali (`perluDikirimKeMesin`): vonis inilah satu-satunya
+ *   yang boleh menutup pesanan.
  */
 async function tutupSesudahPercobaanLama(
   p: PesananDiperiksa,
@@ -715,15 +737,38 @@ type BarisTertutup = {
 
 /**
  * Percobaan yang ditanyakan untuk pesanan tertutup: 1..n, KECUALI percobaan
- * pelunas. Uang percobaan pelunas sudah tercatat (pesanan pernah `ditahan`
- * lalu diputuskan staf "dibatalkan"); menanyakannya lagi melahirkan
- * `lunas_setelah_tutup` atas uang yang sama — tanda tinjauan palsu yang,
- * untuk pesanan sesi, mengunci terbit ulang dan pembatalan pengajuannya.
+ * yang uangnya SUDAH tercatat:
+ *   - percobaan pelunas (pesanan pernah `ditahan` lalu diputuskan staf
+ *     "dibatalkan");
+ *   - percobaan yang SUCCESS-nya sudah tercatat di `notifikasi_pesanan`
+ *     (mis. webhook yang mendarat sesudah pesanan ditutup — sudah bertanda
+ *     `lunas_setelah_tutup`, mungkin sudah ditinjau staf).
+ * Menanyakannya lagi tidak bisa mengajarkan apa pun (SUCCESS kedua pada
+ * invoice yang sama tidak ditandai, K4/R-F3), dan sejak putaran 2 mesin tidak
+ * lagi menandainya dua kali (langkah 9a) — pengecualian di sini menghemat
+ * permintaan DOKU dan jejak `diperiksa_ulang` setiap putaran.
  */
-function percobaanTertutup(b: BarisTertutup): number[] {
+function percobaanTertutup(b: BarisTertutup, sudahTercatat: ReadonlySet<number>): number[] {
   const daftar: number[] = [];
-  for (let k = 1; k <= b.percobaan; k += 1) if (k !== b.percobaan_lunas) daftar.push(k);
+  for (let k = 1; k <= b.percobaan; k += 1) {
+    if (k !== b.percobaan_lunas && !sudahTercatat.has(k)) daftar.push(k);
+  }
   return daftar;
+}
+
+/**
+ * Penanda selesai sapuan pesanan tertutup. Penanda yang gagal berarti baris
+ * itu terpilih lagi pada putaran berikutnya — idempoten lewat sidik, bukan
+ * uang yang hilang. Dicatat, tidak dilempar: sisa sapuan tetap berjalan.
+ */
+async function tandaiTertutupSelesai(admin: SupabaseClient, id: string): Promise<void> {
+  const { error } = await admin
+    .from("orders")
+    .update({ rekonsiliasi_tutup_pada: new Date().toISOString() })
+    .eq("id", id)
+    .in("status", [...PESANAN_TUTUP_DISAPU])
+    .is("rekonsiliasi_tutup_pada", null);
+  if (error) console.error(`[pesanan] penanda rekonsiliasi gagal untuk ${id}: ${error.message}`);
 }
 
 /**
@@ -758,6 +803,9 @@ function percobaanTertutup(b: BarisTertutup): number[] {
  * Penanda `rekonsiliasi_tutup_pada` baru dipasang oleh pemeriksaan yang
  * DIMULAI sesudah `kedaluwarsa_pada + JAM_TENGGANG_TANPA_VONIS` dan yang
  * SETIAP percobaannya terjawab. Sesudah itu baris tidak pernah dipilih lagi.
+ * Dua pengecualian yang ditandai seketika (putaran 2): baris yang uang setiap
+ * percobaannya sudah tercatat (tidak ada yang tersisa untuk ditanyakan), dan
+ * baris ber-`kode` cacat (tidak pernah BISA ditanyakan).
  *
  * ===== KENAPA PENANDA BARU, BUKAN `diperiksa_pada` =====
  * `diperiksa_pada` adalah pagar laju, dan mesin menyetelnya pada SETIAP
@@ -799,15 +847,30 @@ export async function sapuPesananTertutup(
     .returns<BarisTertutup[]>();
   if (error) throw error;
   if (!data || data.length === 0) return { diperiksa: 0, dilewati: 0 };
+  const ids = data.map((b) => b.id);
+
+  // Percobaan yang SUCCESS-nya sudah tercatat (`percobaanTertutup`). Bagian
+  // dari pemilihan: gagal membacanya MELEMPAR, seperti pemilihan baris.
+  const { data: tercatat, error: galatTercatat } = await admin
+    .from("notifikasi_pesanan")
+    .select("pesanan_id, percobaan")
+    .in("pesanan_id", ids)
+    .in("status_gateway", [...STATUS_DOKU_LUNAS])
+    .not("percobaan", "is", null)
+    .returns<{ pesanan_id: string; percobaan: number }[]>();
+  if (galatTercatat) throw galatTercatat;
+  const lunasTercatat = new Map<string, Set<number>>();
+  for (const n of tercatat ?? []) {
+    const himpunan = lunasTercatat.get(n.pesanan_id) ?? new Set<number>();
+    himpunan.add(n.percobaan);
+    lunasTercatat.set(n.pesanan_id, himpunan);
+  }
 
   // CAP DULU, BARU BERTANYA — alasan yang sama dengan penyapu terbuka.
   const { error: galatCap } = await admin
     .from("orders")
     .update({ diperiksa_pada: new Date().toISOString() })
-    .in(
-      "id",
-      data.map((b) => b.id),
-    )
+    .in("id", ids)
     .in("status", [...PESANAN_TUTUP_DISAPU])
     .is("rekonsiliasi_tutup_pada", null);
   if (galatCap) throw galatCap;
@@ -819,15 +882,38 @@ export async function sapuPesananTertutup(
       dilewati += 1;
       continue;
     }
+    const daftar = percobaanTertutup(b, lunasTercatat.get(b.id) ?? new Set<number>());
+    if (daftar.length === 0) {
+      // Uang SETIAP percobaan sudah tercatat: tidak ada lagi yang bisa
+      // dipelajari dari DOKU tentang pesanan ini, jadi ia selesai sekarang,
+      // tanpa menunggu tautannya mati. Dihitung DIPERIKSA: tidak ada yang
+      // gagal, dan tidak ada yang tidak diketahui.
+      diperiksa += 1;
+      await tandaiTertutupSelesai(admin, b.id);
+      continue;
+    }
+
     // Dicatat SEBELUM permintaan pertama: penanda hanya sah bagi pemeriksaan
     // yang seluruhnya terjadi sesudah tautan pasti mati.
     const mulai = Date.now();
     let r: HasilBanyakPercobaan;
     try {
-      r = await periksaPercobaan(b.id, b.kode, percobaanTertutup(b), opsi);
+      r = await periksaPercobaan(b.id, b.kode, daftar, opsi);
     } catch {
       console.error(`[pesanan] pemeriksaan pesanan tertutup ${b.id} melempar; sapuan diteruskan.`);
       dilewati += 1;
+      continue;
+    }
+    if (r.gagal === "bentuk_invoice") {
+      // M5 (putaran 2): `kode` yang tidak berbentuk invoice TIDAK PERNAH bisa
+      // ditanyakan ke DOKU — `rakitInvoice` menolaknya untuk setiap percobaan.
+      // Tanpa penanda, baris itu terpilih setiap putaran selamanya dan
+      // memakan jatah sapuan pesanan lain. Ditandai selesai dan dihitung
+      // DILEWATI (tidak ditanyakan); sebabnya sudah tercatat di log oleh
+      // `tanyaPercobaan`.
+      dilewati += 1;
+      console.error(`[pesanan] pesanan tertutup ${b.id} ditandai selesai tanpa ditanyakan (kode cacat).`);
+      await tandaiTertutupSelesai(admin, b.id);
       continue;
     }
     if (r.gagal !== null) {
@@ -838,19 +924,7 @@ export async function sapuPesananTertutup(
 
     const tenggang = Date.parse(b.kedaluwarsa_pada) + JAM_TENGGANG_TANPA_VONIS * 3_600_000;
     if (!Number.isFinite(tenggang) || mulai < tenggang) continue;
-
-    const { error: galatTanda } = await admin
-      .from("orders")
-      .update({ rekonsiliasi_tutup_pada: new Date().toISOString() })
-      .eq("id", b.id)
-      .in("status", [...PESANAN_TUTUP_DISAPU])
-      .is("rekonsiliasi_tutup_pada", null);
-    // Penanda yang gagal berarti baris itu ditanyakan sekali lagi pada putaran
-    // berikutnya — idempoten lewat sidik, bukan uang yang hilang. Dicatat,
-    // tidak dilempar: sisa sapuan tetap berjalan.
-    if (galatTanda) {
-      console.error(`[pesanan] penanda rekonsiliasi gagal untuk ${b.id}: ${galatTanda.message}`);
-    }
+    await tandaiTertutupSelesai(admin, b.id);
   }
   return { diperiksa, dilewati };
 }

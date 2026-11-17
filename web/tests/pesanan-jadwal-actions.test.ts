@@ -30,6 +30,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createAdminSupabase } from "@/lib/supabase/admin";
+import { signInAs } from "./helpers/as-user";
 
 const admin = createAdminSupabase();
 
@@ -689,5 +690,57 @@ describe("F2b: Lapis 3 menyapu pesanan dibatalkan yang pernah bertautan DOKU", (
     expect((await bacaTertutup(idSatu)).sebab_tinjauan).toBeNull();
     expect((await bacaTertutup(idDua)).sebab_tinjauan).toBeNull();
     expect((await bacaTertutup(idDua)).rekonsiliasi_tutup_pada).not.toBeNull();
+  });
+
+  // ===== Putaran 2 =====
+
+  it("I2: SUCCESS yang sudah dikirim webhook dan sudah ditinjau TIDAK ditandai lagi oleh sapuan", async () => {
+    const kode = `${AWALAN_KODE}0109`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: -3 });
+    const webhook = await admin.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: invK(kode, 1),
+      p_status: "SUCCESS",
+      p_transaksi_id: `trx-${kode}`,
+      p_kanal: "QRIS",
+      p_nominal: HARGA,
+      p_sidik: `sidik-webhook-${kode}-${Date.now()}`,
+      p_sumber: "webhook",
+    });
+    expect(webhook.error).toBeNull();
+    expect((await bacaTertutup(id)).sebab_tinjauan).toBe("lunas_setelah_tutup");
+    const staf = await signInAs("admin@padma.test");
+    const tutup = await staf.rpc("tutup_tinjauan", { p_pesanan_id: id });
+    expect(tutup.error).toBeNull();
+
+    doku.jawabPer.set(invK(kode, 1), SUKSES(invK(kode, 1)));
+    await sapuSampaiSepi();
+
+    const b = await bacaTertutup(id);
+    expect(b.butuh_tinjauan_pada).toBeNull();
+    expect(b.sebab_tinjauan).toBeNull();
+    // Satu-satunya percobaannya sudah tercatat beruang: tidak ada lagi yang
+    // bisa dipelajari dari DOKU, jadi ia selesai tanpa ditanyakan.
+    expect(doku.panggilan).not.toContain(invK(kode, 1));
+    expect(b.rekonsiliasi_tutup_pada).not.toBeNull();
+    const { data: jejak } = await admin
+      .from("jejak_pesanan").select("kejadian").eq("pesanan_id", id).eq("kejadian", "lunas_setelah_tutup");
+    expect(jejak ?? []).toHaveLength(1);
+  });
+
+  it("M5: kode yang tidak berbentuk invoice ditandai selesai dan tidak memakan jatah sapuan lagi", async () => {
+    // `rakitInvoice` menolaknya (bukan heksa), jadi DOKU tidak PERNAH bisa
+    // ditanyai tentangnya. Tanpa penanda, ia terpilih setiap putaran
+    // selamanya. Awalan kodenya tetap milik berkas ini supaya pembersih
+    // menemukannya.
+    const kode = `${AWALAN_KODE}01Z9`;
+    const id = await semaiTertutup(kode, { kedaluwarsaJam: 5 });
+    const mata = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await sapuSampaiSepi();
+    } finally {
+      mata.mockRestore();
+    }
+    expect((await bacaTertutup(id)).rekonsiliasi_tutup_pada).not.toBeNull();
+    expect(doku.panggilan.filter((i) => i.startsWith(kode.replaceAll("-", "")))).toEqual([]);
   });
 });
