@@ -115,7 +115,7 @@ function MedanIsi({ tipe, materiId }: { tipe: TipeMateri; materiId?: string }) {
     if (materiId === undefined) {
       return (
         <p className="mt-3 text-[12px] text-ink-soft">
-          Simpan materi ini dulu, lalu unggah videonya lewat “Kelola isi”.
+          Simpan materi ini dulu, lalu unggah videonya di kartu “Isi” pada halaman materinya.
         </p>
       );
     }
@@ -155,7 +155,7 @@ function MedanPdfBaru({
       <span className="mt-1 block text-[11.5px] leading-relaxed text-ink-soft">
         {berkas
           ? "Materi disimpan, PDF-nya diunggah, lalu materinya diaktifkan — sekali tekan."
-          : "Tanpa berkas, materi lahir nonaktif dan menunggu isinya lewat “Kelola isi”."}
+          : "Tanpa berkas, materi lahir nonaktif dan menunggu isinya diunggah di kartu “Isi” pada halaman materinya."}
       </span>
     </label>
   );
@@ -224,7 +224,7 @@ export function FormMateriBaru({
               setLangkah(null);
               setPesan(
                 `Materi tersimpan (nonaktif), tetapi PDF-nya gagal: ${unggah.pesan} ` +
-                  "Buka “Kelola isi” pada baris materinya untuk mengulang unggahan.",
+                  "Buka halaman materinya, lalu ulangi unggahan di kartu “Isi”.",
               );
               router.refresh();
               return;

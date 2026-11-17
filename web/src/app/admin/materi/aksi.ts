@@ -311,13 +311,13 @@ export async function perbaruiMateri(
       if (!(await punyaIsi(id, "video"))) {
         return {
           ok: false,
-          pesan: `Mengubah tipe ke Video wajib disertai ${LABEL_ISI.video}. Simpan tipenya di sini, lalu unggah videonya lewat "Kelola isi" sebelum menerbitkan materinya.`,
+          pesan: `Mengubah tipe ke Video wajib disertai ${LABEL_ISI.video}. Simpan tipenya di sini, lalu unggah videonya di kartu “Isi” sebelum menerbitkan materinya.`,
         };
       }
     } else if (!(await punyaIsi(id, "ebook"))) {
       return {
         ok: false,
-        pesan: `Mengubah tipe ke E-Book wajib disertai ${LABEL_ISI.ebook}. Simpan tipenya di sini, lalu unggah PDF-nya lewat "Kelola isi" sebelum menerbitkan materinya.`,
+        pesan: `Mengubah tipe ke E-Book wajib disertai ${LABEL_ISI.ebook}. Simpan tipenya di sini, lalu unggah PDF-nya di kartu “Isi” sebelum menerbitkan materinya.`,
       };
     }
   }
