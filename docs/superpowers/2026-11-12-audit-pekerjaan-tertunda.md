@@ -31,6 +31,20 @@ Dari 38 rencana, 37 terbukti dieksekusi: berkas yang dijanjikan ada di repo, ata
 
 ## 1. Bug nyata (terverifikasi di kode)
 
+**Status per 17 Nov 2026:**
+- **Diperbaiki:**
+  - B1–B4 (merge `bf0195d`, 13 Nov);
+  - B5, B6, dan B8 (branch `fix/audit-b5-b10`).
+- **B10 DITUTUP tanpa perubahan kode** (keputusan pemilik repo, 17 Nov). Alasannya:
+  - teks baris transport admin dan klien sengaja identik dan tanpa nominal
+    (`tests/admin-bayar.test.ts:687`);
+  - gratisnya 0–5 km adalah nilai rate card, bukan aturan, sehingga
+    perbaikannya butuh view baru di dua sisi yang terkena batas 1000 baris;
+  - P3 sudah membuang item transport Rp0 untuk tagihan pengajuan
+    (`20261113140100`), sedangkan tagihan jalur 2 tampil tanpa angka sama
+    sekali.
+- **Sisa:** B7 dan B9.
+
 | # | Bug | Bukti |
 |---|---|---|
 | B1 | Sesi yang dibuat admin lewat "+ Sesi baru" tidak menyalin alamat, sehingga Passport klien menampilkan "Tempat: —". Jalur konfirmasi permintaan menyalinnya. | `src/app/admin/sesi/aksi.ts` (insert tanpa `alamat*`) vs `20260909135000_konfirmasi_atomik.sql:94-103`; `passport/sesi/[id]/page.tsx:100` |
