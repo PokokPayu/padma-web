@@ -51,7 +51,24 @@ produksi dan tidak dilanggar.
 | 4 | Sandi akun uji dev diganti | Selesai (agen) |
 | 5 | Env proyek Vercel dev dipasang lewat REST API (token Vercel 1 hari dari pemilik), lalu redeploy | Selesai (agen) |
 | 6 | Supabase dev → Auth: `site_url` dan `uri_allow_list` lewat Management API | Selesai (agen) |
-| 7 | Notification URL di Back Office DOKU sandbox | **Belum.** Tidak ada API; dikerjakan pemilik |
+| 7 | Notification URL di Back Office DOKU sandbox | Selesai untuk **QRIS saja** (pemilik, 17 Nov). URL notifikasi dipasang **per channel**, jadi channel lain di halaman Checkout tidak mengirim webhook; uji hanya dengan QRIS |
+
+**Fakta Back Office yang terkonfirmasi** (dokumentasi resmi, dibaca 17 Nov):
+- **Lokasi URL notifikasi:** Settings → Payment Settings, per channel
+  (mis. QR Payment → QRIS Settings → Edit; Virtual Account → Configure), atau
+  di halaman Webhook versi baru (Settings → Payment Settings → Webhook).
+  Sumber: https://docs.doku.com/get-started/manage-business/set-up-integration/webhook-payment-notification
+- **URL harus publik;** URL yang dilindungi login ditolak.
+  Sumber: https://developers.doku.com/get-started-with-doku-api/notification/setup-notification-url
+- **Simulator:** login `https://sandbox.doku.com/bo/login` → Settings →
+  Payment Settings → **Simulator** → pilih metode yang sama dengan yang dipilih
+  di Checkout → **Simulate**.
+  Sumber: https://docs.doku.com/get-started/manage-business/set-up-integration/simulate-transactions
+- **Belum dijelaskan dokumentasi:** apakah simulasi memicu notifikasi HTTP. Uji
+  ini yang menjawabnya.
+- **Untuk produksi** (runbook 2.8): URL notifikasi wajib dipasang di **setiap**
+  channel yang aktif di Checkout. Channel yang terlewat hanya tertolong
+  Lapis 1b/3.
 
 **Isi langkah 5:**
 - Env baru: `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (sensitive), dan
