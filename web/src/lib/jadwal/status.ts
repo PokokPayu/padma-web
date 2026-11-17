@@ -100,6 +100,24 @@ export const STATUS_UBAH_PERMINTAAN: readonly StatusPermintaan[] = [
 ];
 
 /**
+ * Keadaan yang boleh diubah ADMIN lewat `perbaruiPermintaan` sejak P3/B4:
+ * ketiga keadaan di atas DITAMBAH `menunggu_bayar`.
+ *
+ * Alasan `STATUS_UBAH_PERMINTAAN` menolak `menunggu_bayar` (tagihan yang sudah
+ * terkirim diam-diam berhenti benar) kini dijaga basis data, bukan dengan
+ * menutup pintunya: trigger `tutup_pesanan_sesi_terbuka` (migrasi
+ * `20261113140400`) menutup pesanan terbuka begitu tanggal, jam, atau titik
+ * alamat berubah, sehingga harga beku yang basi tidak bisa dibayar lagi dan
+ * admin wajib menerbitkan ulang. Pintunya justru HARUS terbuka untuk pengajuan
+ * tertahan (pesanan lunas, sesi belum lahir): jadwal yang sudah lewat atau
+ * berbenturan diubah dulu, baru sesinya dibuat.
+ */
+export const STATUS_UBAH_PERMINTAAN_STAF: readonly StatusPermintaan[] = [
+  ...STATUS_UBAH_PERMINTAAN,
+  "menunggu_bayar",
+];
+
+/**
  * Keadaan asal yang sah untuk konfirmasi. Dipakai server action & uji supaya
  * nilainya tidak perlu ditulis literal di luar berkas ini (pagar
  * `tests/status-satu-sumber.test.ts` memang melarangnya).

@@ -16,8 +16,8 @@
  * kosong sama saja dengan tagihan yang tidak pernah terkirim — dan tenggatnya
  * tetap berjalan.
  *
- * Tidak ada honor mitra, tidak ada margin, tidak ada apa pun dari
- * `variant_rates` selain `harga_klien`.
+ * Angkanya adalah harga BEKU pesanan terbuka (`pesanan_item_staf`), bukan hasil
+ * hitung ulang tarif. Tidak ada honor mitra, tidak ada margin.
  */
 
 /**
@@ -48,15 +48,14 @@ export function emailTagihan(input: {
   tanggal: string;
   /** Sudah diformat, mis. "09.00 WIB". */
   jam: string;
-  /** Sudah diformat, mis. "Rp 395.000". */
+  /** Harga beku item urutan 1, sudah diformat, mis. "Rp 395.000". */
   hargaLayanan: string;
-  hargaTransport: string;
-  /** Mis. ">10–15 km". */
-  labelJenjang: string;
+  /** Harga beku item urutan 2; `null` bila tidak ada biaya transport. */
+  hargaTransport: string | null;
   total: string;
   /** ABSOLUT, mis. "Rabu, 10 September 2026 pukul 14.30 WIB". */
   tenggatAbsolut: string;
-  /** URL penuh ke halaman bayar, mis. "https://…/passport/bayar". */
+  /** URL penuh ke halaman bayar, mis. "https://…/passport/bayar/<id pengajuan>". */
   tautanBayar: string;
 }): { html: string; teks: string } {
   const {
@@ -66,7 +65,6 @@ export function emailTagihan(input: {
     jam,
     hargaLayanan,
     hargaTransport,
-    labelJenjang,
     total,
     tenggatAbsolut,
     tautanBayar,
@@ -80,15 +78,14 @@ export function emailTagihan(input: {
     `Layanan : ${namaLayanan}`,
     `Jadwal  : ${tanggal}, ${jam}`,
     "",
-    `Layanan            ${hargaLayanan}`,
-    `Transport (${labelJenjang})  ${hargaTransport}`,
+    `Sesi kunjungan     ${hargaLayanan}`,
+    ...(hargaTransport ? [`Biaya transport    ${hargaTransport}`] : []),
     `TOTAL              ${total}`,
     "",
     `Mohon selesaikan pembayaran paling lambat ${tenggatAbsolut}.`,
-    `Bayar & unggah bukti transfer di: ${tautanBayar}`,
-    "QRIS-nya ada di halaman yang sama — nominalnya diketik sendiri sesuai total di atas.",
+    `Bayar di Digital Passport: ${tautanBayar}`,
     "",
-    "Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain — tapi Anda tetap bisa mengajukan ulang kapan saja.",
+    "Bila lewat dari batas itu, tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan.",
     "",
     "Terima kasih,",
     "Tim PADMA Wellness",
@@ -102,13 +99,17 @@ export function emailTagihan(input: {
   <p>Bidan untuk sesi Anda sudah siap. Berikut rincian tagihannya.</p>
   <p style="margin:0 0 4px"><b>${escapeHtml(namaLayanan)}</b><br><span style="color:#5A6B62">${escapeHtml(tanggal)}, ${escapeHtml(jam)}</span></p>
   <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="padding:6px 0;color:#5A6B62">Layanan</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaLayanan)}</td></tr>
-    <tr><td style="padding:6px 0;color:#5A6B62">Transport · ${escapeHtml(labelJenjang)}</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaTransport)}</td></tr>
+    <tr><td style="padding:6px 0;color:#5A6B62">Sesi kunjungan</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaLayanan)}</td></tr>${
+      hargaTransport
+        ? `
+    <tr><td style="padding:6px 0;color:#5A6B62">Biaya transport</td><td style="padding:6px 0;text-align:right">${escapeHtml(hargaTransport)}</td></tr>`
+        : ""
+    }
     <tr><td style="padding:10px 0;border-top:1px solid #E4E0D6"><b>Total</b></td><td style="padding:10px 0;border-top:1px solid #E4E0D6;text-align:right"><b>${escapeHtml(total)}</b></td></tr>
   </table>
   <p>Mohon selesaikan pembayaran paling lambat <b>${escapeHtml(tenggatAbsolut)}</b>.</p>
-  <p><a href="${escapeHtml(tautanBayar)}" style="display:inline-block;background:#C9A227;color:#2A2013;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Bayar &amp; unggah bukti</a></p>
-  <p style="color:#5A6B62;font-size:13px">QRIS-nya ada di halaman yang sama — nominalnya diketik sendiri sesuai total di atas. Kalau lewat dari batas itu, jadwalnya kami lepas untuk klien lain, tapi Anda tetap bisa mengajukan ulang kapan saja.</p>
+  <p><a href="${escapeHtml(tautanBayar)}" style="display:inline-block;background:#C9A227;color:#2A2013;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold">Bayar di Digital Passport</a></p>
+  <p style="color:#5A6B62;font-size:13px">Bila lewat dari batas itu, tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan.</p>
   <p style="color:#5A6B62;font-size:13px">Terima kasih,<br>Tim PADMA Wellness</p>
 </div>`;
 

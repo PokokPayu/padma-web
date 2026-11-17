@@ -164,7 +164,7 @@ describe("Syarat & Ketentuan — fakta wajib", () => {
 
 describe("Kebijakan Privasi — fakta wajib", () => {
   it("menyebut setiap pemroses pihak ketiga", () => {
-    for (const nama of ["Supabase", "Vercel", "Cloudflare R2", "Resend", "Google", "Midtrans", "OpenStreetMap"]) {
+    for (const nama of ["Supabase", "Vercel", "Cloudflare R2", "Resend", "Google", "DOKU", "OpenStreetMap"]) {
       expect(teksPrivasi, `pemroses hilang: ${nama}`).toContain(nama);
     }
   });
@@ -212,6 +212,41 @@ describe("Kebijakan Privasi — fakta wajib", () => {
     // Akar kata `cadang`, bukan `cadangan`: "dicadangkan" tidak memuat "cadangan",
     // dan bentuk itulah yang paling mungkin ditulis (bukti-merah Tugas 3).
     expect(teksPrivasi).not.toMatch(/backup|cadang/i);
+  });
+});
+
+describe("pembayaran lewat DOKU (spec DOKU §5.9)", () => {
+  it("kedua dokumen menyebut DOKU dan tidak lagi menyebut Midtrans", () => {
+    for (const t of [teksSK, teksPrivasi]) {
+      expect(t).toContain("DOKU");
+      expect(t).not.toMatch(/Midtrans/i);
+    }
+  });
+
+  it("privasi menyebut kegunaan DOKU: produk digital dan tagihan sesi", () => {
+    expect(teksPrivasi.toLowerCase()).toContain("pemrosesan pembayaran produk digital dan tagihan sesi");
+  });
+
+  it("S&K tidak lagi menjanjikan QRIS + unggah bukti, maupun pembatalan otomatis", () => {
+    expect(teksSK).not.toContain("bukti pembayarannya diunggah");
+    expect(teksSK).not.toContain("QRIS");
+    expect(teksSK).not.toContain("pengajuan batal dan slotnya dilepas");
+  });
+
+  it("S&K memuat tenggat tagihan sesi, jalur admin, dan keputusan admin bila tenggat lewat", () => {
+    for (const penggal of [
+      "halaman pembayaran DOKU",
+      "sesuai arahan admin",
+      "24 jam atau sampai jam kunjungan, mana yang lebih dulu",
+      "tidak batal dengan sendirinya",
+      "menerbitkan ulang tagihan atau membatalkan pengajuan",
+    ]) {
+      expect(teksSK, `hilang: ${penggal}`).toContain(penggal);
+    }
+  });
+
+  it("VERSI_DOKUMEN tidak dinaikkan (keputusan pemilik repo, spec §5.9)", () => {
+    expect(VERSI_DOKUMEN).toBe("2026-10-06");
   });
 });
 

@@ -45,9 +45,9 @@ const POLA_NOMINAL_TEKS = /(\b\d{1,3}(?:\.\d{3})+\b)|(rp\.?\s*\d)/i;
  * PERBAIKAN REVIEW AKHIR P1-A, TEMUAN 2 — `jejak_pesanan.keterangan`.
  *
  * `POLA_NOMINAL_TEKS` di atas TIDAK menangkap "150000": ia menuntut pemisah
- * ribuan, dan baris audit uang di `terapkan_notifikasi_midtrans`
- * (`20260926140000_pesanan_webhook_rpc.sql:548`,
- * `format('ditagih %s, diterima %s', v_total, p_gross_amount)`) menulis angka
+ * ribuan, dan baris audit uang di `terapkan_notifikasi_gateway`
+ * (`20261113130100_terapkan_notifikasi_gateway.sql`,
+ * `format('ditagih %s, diterima %s', v_total, v_nominal_teks)`) menulis angka
  * MENTAH, tanpa titik. Pola kedua ini karena itu lebih lebar SENGAJA: deretan
  * digit TELANJANG, empat atau lebih, tanpa syarat pemisah sama sekali.
  *
@@ -61,7 +61,7 @@ const POLA_NOMINAL_TEKS = /(\b\d{1,3}(?:\.\d{3})+\b)|(rp\.?\s*\d)/i;
  *
  * Tapi daftar putih kejadian saja TIDAK cukup, dan itu terbukti empiris:
  * `lunas` bukan anggota daftar putih, jadi ia dipindai — padahal
- * keterangannya sah berbunyi `midtrans settlement, transaksi <uuid>`, dan
+ * keterangannya sah berbunyi `SUCCESS, transaksi <uuid>`, dan
  * `akses_tertahan` berbunyi `... dicabut pada 2026-09-27 ...` yang tahunnya
  * saja sudah empat digit. `\d{4,}` telanjang menuduh keduanya. Uji yang
  * memerah dengan diagnosis "nominal bocor" pada baris yang tidak memuat
@@ -93,16 +93,20 @@ const POLA_DIGIT_TELANJANG = /(?<![\w.:-])\d{4,}(?![\w-])/;
  * Daftar putih `kejadian` yang BOLEH memuat angka nominal di
  * `keterangan` — DITURUNKAN DARI KODE, bukan dari ingatan (Ruling Temuan 2).
  *
- * Satu-satunya pemanggil `format('ditagih %s, diterima %s', ...)` di seluruh
- * repo ada di `20260926140000_pesanan_webhook_rpc.sql:548`, dan ia menulis
- * `v_sebab::public.order_event` sebagai `kejadian`-nya. `v_sebab` hanya
- * pernah diisi DUA nilai yang bisa mencapai baris itu: `'selisih_nominal'`
- * (`:449`, verifikasi jumlah meleset) dan `'selisih_status'` (`:455`, capture
- * kartu yang dicurigai). Assignment KETIGA (`:414`, di dalam cabang
- * refund/chargeback/asing) sudah `return` di `:426` sebelum baris `:548`
- * tercapai — tidak pernah ikut. Kedua nilai inilah, dan HANYA itu.
+ * Satu-satunya penulis `format('ditagih %s, diterima %s', ...)` di seluruh
+ * repo kini `terapkan_notifikasi_gateway` (`20261113130100`, tugas A4).
+ * Pendahulunya `terapkan_notifikasi_midtrans` sudah di-drop
+ * (`20261113130200`); versi itu hanya pernah menulis `selisih_nominal` dan
+ * `selisih_status` (capture kartu yang dicurigai), dan tidak pernah
+ * `lunas_setelah_tutup` — cabang refund/chargeback/asing-nya sudah `return`
+ * sebelum baris audit uang tercapai.
+ *
+ * Penulis angka di fungsi gateway: `lunas_setelah_tutup` (staf yang memutuskan
+ * uang pada pesanan tertutup butuh kedua angkanya), `selisih_status` (pesanan
+ * ditahan yang menerima jawaban lagi), dan `selisih_nominal` (pesanan lunas &
+ * transisi ke ditahan). Tiga nilai inilah, dan HANYA itu.
  */
-const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status"]);
+const KEJADIAN_BOLEH_ANGKA = new Set(["selisih_nominal", "selisih_status", "lunas_setelah_tutup"]);
 
 const svc = createAdminSupabase();
 
@@ -390,7 +394,7 @@ describe("jejak_pesanan.keterangan tidak memuat nominal DI LUAR daftar putih (Te
     // ini mengunci polanya sendiri, lepas dari isi tabel, jadi pelebaran
     // yang menuduh terlalu banyak memerah di sini lebih dulu.
     for (const sah of [
-      "midtrans settlement, transaksi b3ac369e-1234-4f8a-9c21-123456789012",
+      "SUCCESS, transaksi b3ac369e-1234-4f8a-9c21-123456789012",
       "entitlement produk ce2f1234-0000-4aaa-8bbb-000012345678 dicabut pada 2026-09-27 11:20:33+00",
       "entitlement dicabut pada 2026-09-27 11:20:33.123456+00",
       "item 2026-09-27T11:20:33.123456+00:00",

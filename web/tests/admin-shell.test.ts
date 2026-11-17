@@ -121,6 +121,7 @@ const NOL: Antrean = {
   // nav), jadi NOL sudah cukup untuk fixture ini.
   menungguTarifTransport: 0,
   menungguJenjangTransport: 0,
+  kabariBidan: 0,
 };
 
 function markupNav(pathname: string, antrean: Antrean = NOL): string {
@@ -485,6 +486,7 @@ describe("navigasi admin", () => {
       klienBelumAktif: 7,
       menungguTarifTransport: 0,
       menungguJenjangTransport: 0,
+      kabariBidan: 0,
     });
     // Keempat tujuan berbadge ada di sidebar DAN bar bawah -> dua kali.
     expect([...m.matchAll(/aria-label="3 menunggu"/g)]).toHaveLength(2); // Inbox
@@ -545,6 +547,7 @@ describe("navigasi admin", () => {
       klienBelumAktif: 1,
       menungguTarifTransport: 1,
       menungguJenjangTransport: 1,
+      kabariBidan: 1,
     });
     expect(nominalDalam(m), "nominal bocor").toEqual([]);
     expect(nominalDalam(sumberNav), "nominal bocor").toEqual([]);

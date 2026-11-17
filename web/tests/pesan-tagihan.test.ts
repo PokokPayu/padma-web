@@ -9,15 +9,12 @@ const CONTOH = {
   namaLayanan: "Garbha Relief",
   tanggal: "20 Mei 2027",
   jam: "09.00 WIB",
-  hargaLayanan: "Rp 174.000",
-  hargaTransport: "Rp 20.000",
-  labelJenjang: ">10–15 km",
-  total: "Rp194.000",
+  tautanPassport: "https://padma.test/passport/bayar/11111111-1111-1111-1111-111111111111",
   sisaWaktu: "24 jam lagi",
 };
 
-describe("pesan tagihan memuat LIMA unsur wajib", () => {
-  it("nama, layanan, kapan, berapa, dan sampai kapan", () => {
+describe("pesan tagihan memuat unsur wajib, TANPA angka (D3)", () => {
+  it("nama, layanan, kapan, tautan Passport, dan sampai kapan", () => {
     // Pesan tagihan tanpa batas waktu adalah pesan yang membuat orang
     // kehilangan slotnya tanpa pernah tahu ada tenggatnya.
     const p = pesanTagihan(CONTOH);
@@ -25,26 +22,23 @@ describe("pesan tagihan memuat LIMA unsur wajib", () => {
     expect(p).toContain("Garbha Relief");
     expect(p).toContain("20 Mei 2027");
     expect(p).toContain("09.00 WIB");
-    expect(p).toContain("Rp194.000");
     expect(p).toContain("24 jam lagi");
+    expect(p).toContain(
+      "Tagihan Anda sudah terbit. Bayar di Digital Passport: " + CONTOH.tautanPassport,
+    );
   });
 
-  it("menyebut apa yang terjadi bila lewat, dan bahwa itu bukan akhir", () => {
+  it("keluarannya tidak cocok /rp|\\d{1,3}(\\.\\d{3})+/i dan tanpa QRIS", () => {
     const p = pesanTagihan(CONTOH);
-    expect(p).toMatch(/lepas untuk klien lain/);
-    expect(p).toMatch(/mengajukan ulang/);
+    expect(p).not.toMatch(/rp|\d{1,3}(\.\d{3})+/i);
+    expect(p).not.toMatch(/qris|unggah|transfer/i);
   });
 
-  it("total yang belum lengkap dikatakan apa adanya, bukan Rp0", () => {
-    const p = pesanTagihan({ ...CONTOH, total: null });
-    expect(p).toContain("menyusul dari tim");
-    expect(p).not.toContain("Rp0");
-  });
-
-  it("menyebutkan bahwa nominal QRIS diketik sendiri", () => {
-    // QRIS PADMA statis: ia tidak membawa nominal. Klien yang tidak tahu itu
-    // akan memindai lalu bingung mencari angkanya.
-    expect(pesanTagihan(CONTOH)).toMatch(/diketik sendiri/);
+  it("menyebut apa yang terjadi bila lewat SESUAI kebijakan: admin menghubungi, tanpa pelepasan otomatis", () => {
+    // Spec §6.5 mencabut pembatalan otomatis; S&K berkata admin menghubungi klien.
+    const p = pesanTagihan(CONTOH);
+    expect(p).toContain("tim PADMA akan menghubungi Anda untuk menerbitkan ulang atau membatalkan");
+    expect(p).not.toMatch(/lepas untuk klien lain/);
   });
 });
 

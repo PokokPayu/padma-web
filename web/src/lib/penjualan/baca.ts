@@ -1,4 +1,5 @@
 import { createServerSupabase } from "@/lib/supabase/server";
+import { STATUS_DOKU_REFUND } from "@/lib/doku/status";
 import {
   PESANAN_BERUANG,
   PESANAN_MATI,
@@ -38,8 +39,8 @@ export const BATAS_BARIS_PENJUALAN = 500;
  */
 const STATUS_DIBACA: StatusPesanan[] = [...PESANAN_BERUANG, ...PESANAN_MATI];
 
-/** Nilai `status_midtrans` yang berarti uang KELUAR lagi. */
-const STATUS_KEMBALI = ["refund", "partial_refund", "chargeback", "partial_chargeback"];
+/** Nilai `status_gateway` yang berarti uang KELUAR lagi. */
+const STATUS_KEMBALI: string[] = [...STATUS_DOKU_REFUND];
 
 /** Kejadian yang menandai uang mendarat sesudah pesanan ditutup. Bertipe, bukan literal: rename enum jadi galat kompilasi. */
 const KEJADIAN_SETELAH_TUTUP: KejadianPesanan[] = ["lunas_setelah_tutup"];
@@ -95,7 +96,7 @@ const KOLOM_ORDERS =
  *  DILEWATI, dan cabang yang dilewati harus memulangkan bentuk yang sama. */
 type BarisNotifikasi = {
   pesanan_id: string | null;
-  status_midtrans: string | null;
+  status_gateway: string | null;
   nominal_diterima: number | null;
   diterima_pada: string;
 };
@@ -127,7 +128,7 @@ export async function bacaPenjualan(opsi: {
   // KEDUA KOLOM ITU TIDAK SELALU SAMA — bahkan untuk pesanan `lunas`. Ada DUA
   // penulis `status = 'lunas'`, dan hanya satu yang membuat keduanya identik:
   //
-  //   1. Webhook Midtrans
+  //   1. Webhook gateway (dulu Midtrans)
   //      (`20260927100000_sebab_tinjauan_lestari.sql:506-513`) menulis
   //      `lunas_pada = now()` DAN `ditutup_pada = now()` dalam satu UPDATE.
   //      Di sanalah keduanya identik — dan UPDATE itu bergerbang
@@ -158,7 +159,9 @@ export async function bacaPenjualan(opsi: {
   let saringTutup = sb
     .from("orders")
     .select(KOLOM_ORDERS)
-    .in("status", STATUS_DIBACA);
+    .in("status", STATUS_DIBACA)
+    // Laporan P4 hanya produk digital; tagihan sesi bukan penjualan produk.
+    .eq("jenis", "produk_digital");
   if (opsi.mulai) saringTutup = saringTutup.gte("ditutup_pada", opsi.mulai);
   if (opsi.sampai) saringTutup = saringTutup.lt("ditutup_pada", opsi.sampai);
   if (opsi.clientId) saringTutup = saringTutup.eq("client_id", opsi.clientId);
@@ -170,13 +173,14 @@ export async function bacaPenjualan(opsi: {
   // Kueri (c) — `lunas_pada` DI DALAM rentang. Satu-satunya yang memungut
   // pesanan yang keputusan lunasnya datang di bulan sesudah penutupannya.
   // Kueri (b) buta terhadapnya: keputusan manusia hanya menulis
-  // `jejak_pesanan`, tidak ada notifikasi Midtrans baru yang mendarat di
+  // `jejak_pesanan`, tidak ada notifikasi gateway baru yang mendarat di
   // bulan itu. Batas baris dan saringan kliennya sama persis dengan (a), dan
   // tutupnya ikut dilaporkan lewat `terpotong`.
   let saringLunas = sb
     .from("orders")
     .select(KOLOM_ORDERS)
     .in("status", PESANAN_BERUANG)
+    .eq("jenis", "produk_digital")
     // Tanpa rentang, gte/lt di bawah tidak terpasang sama sekali dan baris
     // `ditahan` (yang `lunas_pada`-nya NULL) ikut terbawa — pada
     // `order(desc)` PostgreSQL justru NULL yang mendahului, jadi batas 500
@@ -218,7 +222,7 @@ export async function bacaPenjualan(opsi: {
     : (() => {
         let q = sb
           .from("notifikasi_pesanan")
-          .select("pesanan_id, status_midtrans, nominal_diterima, diterima_pada")
+          .select("pesanan_id, status_gateway, nominal_diterima, diterima_pada")
           .not("pesanan_id", "is", null)
           .order("diterima_pada", { ascending: false })
           .limit(BATAS_BARIS_PENJUALAN);
@@ -271,7 +275,8 @@ export async function bacaPenjualan(opsi: {
             .from("orders")
             .select(KOLOM_ORDERS)
             .in("id", idTambahan)
-            .in("status", STATUS_DIBACA);
+            .in("status", STATUS_DIBACA)
+            .eq("jenis", "produk_digital");
           // Putaran 1(b) tidak bisa menyaring klien (notifikasi tak punya
           // client_id), jadi saringan ini WAJIB dipasang lagi di sini.
           if (opsi.clientId) q = q.eq("client_id", opsi.clientId);
@@ -288,7 +293,7 @@ export async function bacaPenjualan(opsi: {
     bacaBerbongkah(semuaId, (ids, batas) =>
       sb
         .from("notifikasi_pesanan")
-        .select("pesanan_id, status_midtrans, nominal_diterima, diterima_pada")
+        .select("pesanan_id, status_gateway, nominal_diterima, diterima_pada")
         .in("pesanan_id", ids)
         .order("diterima_pada", { ascending: false })
         // PEMECAH SERI, tugasnya STABILITAS. `diterima_pada` hanyalah
@@ -326,7 +331,7 @@ export async function bacaPenjualan(opsi: {
   const uangPer = new Map<string, string>();
   for (const r of notif.data ?? []) {
     const kunci = r.pesanan_id as string;
-    const status = (r.status_midtrans as string | null) ?? "";
+    const status = (r.status_gateway as string | null) ?? "";
     if (STATUS_KEMBALI.includes(status)) dikembalikan.add(kunci);
     // Hanya notifikasi yang MEMBAWA uang (`nominal_diterima` terisi) yang
     // menentukan tanggal uang: expire/deny/refund susulan tidak boleh

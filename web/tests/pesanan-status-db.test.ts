@@ -9,10 +9,11 @@ import {
   PESANAN_TIDAK_AKTIF,
   PESANAN_BERUANG,
   PESANAN_MATI,
+  PESANAN_TUTUP_DISAPU,
   LABEL_STATUS_PESANAN,
   JAM_TENGGAT_PESANAN,
   MENIT_JEDA_PERIKSA,
-  JAM_TENGGANG_404,
+  JAM_TENGGANG_TANPA_VONIS,
   type StatusPesanan,
 } from "@/lib/pesanan/status";
 
@@ -75,9 +76,12 @@ describe("enum pesanan lahir utuh di basis data", () => {
     expect(await nilaiEnum("order_item_source")).toEqual([...SUMBER_ITEM_PESANAN]);
   });
 
-  it("order_event berisi PERSIS enam belas nilai, urut sama dengan daftar TS", async () => {
+  it("order_event berisi PERSIS delapan belas nilai, urut sama dengan daftar TS", async () => {
+    // 16 nilai P1 + `sesi_terkonfirmasi` & `sesi_tertahan` (B3, penyalur sesi),
+    // DI EKOR: `alter type … add value` selalu menambah di akhir, jadi urutan
+    // TS yang menyelipkan keduanya di tengah memerahkan baris di bawah.
     const nilai = await nilaiEnum("order_event");
-    expect(nilai).toHaveLength(16);
+    expect(nilai).toHaveLength(18);
     expect(nilai).toEqual([...KEJADIAN_PESANAN_SAH]);
   });
 
@@ -119,7 +123,7 @@ describe("himpunan status — partisi yang tidak boleh bocor", () => {
     }
   });
 
-  it("kelima kejadian penanda tinjauan adalah anggota sah order_event", () => {
+  it("keenam kejadian penanda tinjauan adalah anggota sah order_event", () => {
     for (const k of KEJADIAN_BUTUH_TINJAUAN) {
       expect(KEJADIAN_PESANAN_SAH, `kejadian ${k} bukan anggota order_event`).toContain(k);
     }
@@ -129,13 +133,15 @@ describe("himpunan status — partisi yang tidak boleh bocor", () => {
       "lunas_setelah_tutup",
       "akses_tertahan",
       "penangan_belum_ada",
+      // B3: penyalur sesi yang tidak bisa melahirkan sesi memanggil manusia.
+      "sesi_tertahan",
     ]);
   });
 
   it("konstanta waktu bernilai seperti yang diputuskan spec", () => {
     expect(JAM_TENGGAT_PESANAN).toBe(24);
     expect(MENIT_JEDA_PERIKSA).toBe(5);
-    expect(JAM_TENGGANG_404).toBe(1);
+    expect(JAM_TENGGANG_TANPA_VONIS).toBe(1);
   });
 });
 
@@ -226,5 +232,85 @@ describe("hak fungsi mesin", () => {
                 'EXECUTE') as bisa`,
     );
     expect(row.bisa).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Himpunan TS terikat ke daftar status SQL (perbaikan akhir, rekomendasi 8)
+// ---------------------------------------------------------------------------
+
+/**
+ * Status pesanan yang DISEBUT predikat SQL sebagai daftar eksplisit.
+ *
+ * Indeks: literal `'x'::order_status` di klausa WHERE `pg_indexes`. Fungsi:
+ * literal pada `o.status = '<x>'` dan `o.status = any (array[...]::
+ * public.order_status[])` di badan fungsi tanpa komentar. Awalan `o.` sengaja:
+ * `terbitkan_tagihan_sesi` juga membandingkan `b.status` (status PENGAJUAN,
+ * enum lain yang kebetulan berbagi nama `menunggu_bayar`), dan `set status =`
+ * adalah TUJUAN tulisan, bukan predikat.
+ */
+async function statusIndeks(nama: string): Promise<Set<string>> {
+  const [b] = await querySql<{ def: string }>(
+    `select indexdef as def from pg_indexes where schemaname = 'public' and indexname = $1`,
+    [nama],
+  );
+  expect(b, `indeks ${nama} tidak ada`).toBeDefined();
+  const where = b.def.slice(b.def.indexOf(" WHERE ") + 1);
+  return new Set([...where.matchAll(/'([a-z_]+)'::order_status/g)].map((m) => m[1]));
+}
+
+async function statusFungsi(nama: string): Promise<Set<string>> {
+  const [f] = await querySql<{ badan: string }>(
+    `select regexp_replace(p.prosrc, '--[^\\n]*', '', 'g') as badan
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = $1`,
+    [nama],
+  );
+  expect(f, `fungsi ${nama} tidak ada`).toBeDefined();
+  const hasil = new Set<string>();
+  for (const m of f.badan.matchAll(/\bo\.status\s*=\s*'([a-z_]+)'/g)) hasil.add(m[1]);
+  for (const m of f.badan.matchAll(
+    /\bo\.status\s*=\s*any\s*\(\s*array\s*\[([^\]]*)\]\s*::\s*public\.order_status\[\]\s*\)/g,
+  )) {
+    for (const x of m[1].matchAll(/'([a-z_]+)'/g)) hasil.add(x[1]);
+  }
+  return hasil;
+}
+
+describe("himpunan status TS terikat ke daftar SQL — untuk SETIAP nilai enum", () => {
+  // Pelajaran "status adalah himpunan" dari sisi SQL: plpgsql tidak bisa
+  // dipaksa kompilator. Nilai enum baru yang masuk `PESANAN_TERBUKA` tetapi
+  // tidak masuk indeks "satu pesanan terbuka" (atau sebaliknya) membuat dua
+  // tagihan terbuka mungkin; yang masuk `PESANAN_BERUANG` tetapi tidak masuk
+  // predikat uang membuat terbit ulang menagih dua kali. Diadu per nilai
+  // `order_status` dari `pg_enum`, bukan per daftar ketikan.
+  //
+  // STRUKTURAL, bukan perilaku. Uji perilaku per nilai enum menuntut fixture
+  // pengajuan + pesanan dalam setiap status (termasuk status yang hanya bisa
+  // dicapai lewat webhook/putusan staf) untuk dua indeks dan satu predikat —
+  // jauh lebih berat, dan cabang-cabang SQL ini membandingkan status HANYA
+  // lewat daftar literal yang dibaca di sini. Perilaku masing-masing sudah
+  // diuji di berkasnya sendiri (tagihan-sesi-db, penjaga-pengajuan-db).
+  const TERIKAT: { nama: string; baca: () => Promise<Set<string>>; ts: readonly string[] }[] = [
+    { nama: "indeks pesanan_produk_terbuka_satu_per_klien", baca: () => statusIndeks("pesanan_produk_terbuka_satu_per_klien"), ts: PESANAN_TERBUKA },
+    { nama: "indeks pesanan_sesi_terbuka_satu_per_pengajuan", baca: () => statusIndeks("pesanan_sesi_terbuka_satu_per_pengajuan"), ts: PESANAN_TERBUKA },
+    { nama: "indeks orders_sapuan_idx (penyapu terbuka)", baca: () => statusIndeks("orders_sapuan_idx"), ts: PESANAN_TERBUKA },
+    { nama: "indeks orders_sapuan_tutup_idx (penyapu tertutup)", baca: () => statusIndeks("orders_sapuan_tutup_idx"), ts: PESANAN_TUTUP_DISAPU },
+    { nama: "predikat uang_sudah_masuk_permintaan", baca: () => statusFungsi("uang_sudah_masuk_permintaan"), ts: PESANAN_BERUANG },
+    { nama: "terbitkan_tagihan_sesi (pesanan yang ditutup terbit ulang)", baca: () => statusFungsi("terbitkan_tagihan_sesi"), ts: PESANAN_TERBUKA },
+    { nama: "trigger tutup_pesanan_sesi_terbuka", baca: () => statusFungsi("tutup_pesanan_sesi_terbuka"), ts: PESANAN_TERBUKA },
+  ];
+
+  it.each(TERIKAT)("$nama", async ({ baca, ts }) => {
+    const sql = await baca();
+    // Daftar kosong berarti regex-nya yang buta, bukan kesepakatan.
+    expect(sql.size, "tidak ada literal status yang terbaca").toBeGreaterThan(0);
+    const enumNyata = await nilaiEnum("order_status");
+    for (const s of sql) expect(enumNyata, `literal ${s} bukan nilai order_status`).toContain(s);
+    for (const nilai of enumNyata) {
+      expect(sql.has(nilai), `${nilai}: SQL ${sql.has(nilai) ? "memuat" : "tidak memuat"}, TS ${ts.includes(nilai as StatusPesanan) ? "memuat" : "tidak memuat"}`).toBe(
+        ts.includes(nilai as StatusPesanan),
+      );
+    }
   });
 });

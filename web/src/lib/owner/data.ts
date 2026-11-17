@@ -586,8 +586,8 @@ type BarisTransportRateDb = {
  * terbit, bukan tersangkut menunggu sesi yang baru lahir sesudah lunas.
  * `transport_khusus` (`ambilSesiMenungguTarif()` di bawah) TETAP HIDUP
  * sebagai PENIMPA per kasus di atas tarif dasar ini, dan penimpa itu selalu
- * menang — urutannya ditetapkan di `hitungTagihanPengajuan()`
- * (`lib/tagihan/pengajuan.ts`).
+ * menang di rekap owner ini. Rumus tagihan sesi sendiri hidup di SQL
+ * (`rincian_tagihan_permintaan`); rumus TS lamanya dipensiunkan di P3/B7.
  *
  * `hariIni` WAJIB diberikan pemanggil (halaman meneruskan `hariIniJakarta()`),
  * alasan yang SAMA dengan `ambilRateCard()`: fungsi yang membaca jam sistem

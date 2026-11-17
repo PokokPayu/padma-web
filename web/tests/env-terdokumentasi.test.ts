@@ -2,7 +2,7 @@
  * PAGAR: setiap env yang DIBACA kode punya barisnya sendiri di `.env.example`.
  *
  * Kelas kesalahan ini bukan hipotesis. `CRON_SECRET` dibaca
- * `src/app/api/cron/tenggat/route.ts` sejak rute itu lahir, dan sampai commit ini
+ * rute cron mesin sejak rute pertama lahir, dan sampai commit ini
  * ia TIDAK ADA di `.env.example` — jadi satu-satunya cara seseorang tahu ia harus
  * memasangnya adalah membaca kode rutenya. Bentuk kegagalannya khas dan mahal:
  * rute itu fail-closed, jadi env yang lupa dipasang tidak melahirkan galat
@@ -11,7 +11,7 @@
  * ===== SATU ARAH, DAN ITU DISENGAJA =====
  * Yang diuji hanya "dibaca kode -> ada di contoh". Arah sebaliknya (terdokumentasi
  * tetapi belum dipakai) TIDAK memerahkan apa pun. Alasannya praktis: P1 menulis
- * keempat env Midtrans ke `.env.example` di tugas ini, sementara yang membacanya
+ * env pembayaran ke `.env.example` lebih dulu, sementara yang membacanya
  * lahir di tugas-tugas berikutnya. Pagar dua arah akan memaksa urutan mendarat
  * yang tidak ada hubungannya dengan kebenaran apa pun.
  *

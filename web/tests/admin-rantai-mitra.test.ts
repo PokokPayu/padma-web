@@ -63,6 +63,22 @@ async function bersihkan() {
   // Sesi DULU, baru permintaannya: `sessions.booking_request_id` menahan
   // penghapusan permintaan yang sudah menjadi sesi (FK tanpa on delete).
   await admin.from("sessions").delete().eq("tanggal", TGL);
+  // Pesanan sesi juga (B2): `terbitkanTagihan` kini melahirkan `orders` yang
+  // menunjuk permintaannya (FK tanpa on delete), jadi tanpa ini penghapusan
+  // permintaan di bawah GAGAL diam-diam dan baris sisa memerahkan uji
+  // berikutnya. Jejak & notifikasi tanpa FK dihapus lebih dulu supaya tidak
+  // menjadi yatim; `order_items` ikut lewat ON DELETE CASCADE.
+  const { data: brTgl } = await admin.from("booking_requests").select("id").eq("tanggal", TGL);
+  const idBr = (brTgl ?? []).map((b) => b.id as string);
+  if (idBr.length) {
+    const { data: ps } = await admin.from("orders").select("id").in("booking_request_id", idBr);
+    const idPs = (ps ?? []).map((p) => p.id as string);
+    if (idPs.length) {
+      await admin.from("jejak_pesanan").delete().in("pesanan_id", idPs);
+      await admin.from("notifikasi_pesanan").delete().in("pesanan_id", idPs);
+      await admin.from("orders").delete().in("id", idPs);
+    }
+  }
   await admin.from("booking_requests").delete().eq("tanggal", TGL);
   // SESUDAH booking_requests: FK screening_id (RESTRICT) menahan penghapusan
   // selama masih ditunjuk baris permintaan.
@@ -221,7 +237,8 @@ describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
   });
 
   it("memindahkan mitra_siap -> menunggu_bayar DAN mengisi tenggat", async () => {
-    // Koordinat WAJIB disertakan sejak Task 4: gerbang di `terbitkanTagihan()`
+    // Koordinat WAJIB disertakan sejak Task 4: gerbang penerbitan (sejak B2 di
+    // `terbitkan_tagihan_sesi`, bukan lagi di `terbitkanTagihan()`)
     // menolak tagihan yang totalnya belum bisa dihitung, dan tanpa titik
     // alamat jenjangnya tidak pernah diketahui. Pasangan koordinat ini sama
     // dengan yang dipakai `tests/tagihan-baca-hak.test.ts` — sudah terbukti
@@ -247,31 +264,36 @@ describe("terbitkanTagihan: mitra_siap -> menunggu_bayar", () => {
     expect(tenggatMs).toBeLessThan(Date.now() + 25 * 3_600_000);
   });
 
-  it("dipanggil DUA KALI tidak memperpanjang tenggat — yang kedua ditolak", async () => {
-    // Lihat catatan pada uji sebelumnya: koordinat ini WAJIB supaya gerbang
-    // Task 4 tidak menolak penerbitan yang pertama.
+  it("dipanggil DUA KALI = terbit ULANG: pesanan lama ditutup, tetap satu pesanan terbuka", async () => {
+    // Sejak B2 (spec §6.5) panggilan kedua dari `menunggu_bayar` bukan lagi
+    // penolakan: ia menutup pesanan lama dan menerbitkan pesanan baru dengan
+    // tenggat baru. Yang tetap dijaga adalah invariannya — PALING BANYAK satu
+    // pesanan terbuka per permintaan, dan `tenggat` ikut pesanan yang terbuka.
     const id = await permintaanPada("mitra_siap", MITRA, {
       alamat_lat: -7.9666,
       alamat_lon: 112.6966,
     });
     expect(await terbitkanTagihan(id)).toEqual({ ok: true });
+    expect(await terbitkanTagihan(id)).toEqual({ ok: true });
 
-    const { data: pertama } = await admin
-      .from("booking_requests")
-      .select("tenggat")
-      .eq("id", id)
-      .single<{ tenggat: string }>();
+    const pesanan = await querySql<{ id: string; status: string; sama: boolean }>(
+      `select o.id, o.status::text as status, o.kedaluwarsa_pada = b.tenggat as sama
+         from public.orders o join public.booking_requests b on b.id = o.booking_request_id
+        where o.booking_request_id = $1
+        order by o.dibuat_pada`,
+      [id],
+    );
+    expect(pesanan.map((p) => p.status)).toEqual(["dibatalkan", "menunggu_bayar"]);
+    expect(pesanan[1].sama).toBe(true);
+    expect(await statusPermintaan(id)).toBe("menunggu_bayar");
+  });
 
-    const kedua = await terbitkanTagihan(id);
-    expect(kedua.ok).toBe(false);
-
-    const { data: sesudah } = await admin
-      .from("booking_requests")
-      .select("status, tenggat")
-      .eq("id", id)
-      .single<{ status: string; tenggat: string }>();
-    expect(sesudah!.status).toBe("menunggu_bayar");
-    expect(sesudah!.tenggat).toBe(pertama!.tenggat);
+  it("menolak permintaan yang belum mitra_siap, dengan kalimat", async () => {
+    const id = await permintaanPada("mencari_mitra");
+    const hasil = await terbitkanTagihan(id);
+    expect(hasil.ok).toBe(false);
+    expect(hasil.ok === false && hasil.pesan).toMatch(/sudah ditangani atau tidak ditemukan/);
+    expect(await statusPermintaan(id)).toBe("mencari_mitra");
   });
 });
 
@@ -369,6 +391,43 @@ describe("konfirmasi_permintaan() sebagai RPC — pagar di dalam fungsinya", () 
     // "ada jenjang tapi sumbernya bukan otomatis" dari jalur ini.
     if (sesi[0].jenjang !== null) expect(sesi[0].jenjang_sumber).toBe("otomatis");
     else expect(sesi[0].jenjang_sumber).toBeNull();
+  });
+
+  it("MENOLAK pengajuan yang punya pesanan (P0001): sesinya hanya lahir lewat penyalur", async () => {
+    // Sejak B3 (spec §6.4) pengajuan yang tagihannya pesanan DOKU tidak pernah
+    // dikonfirmasi tangan: lunas melahirkan sesinya sendiri. Fixture ini
+    // memenuhi SELURUH syarat klaim lama (menunggu_bayar + status_bayar
+    // lunas), jadi yang menolaknya hanya pemeriksaan pesanan.
+    await admin.from("partners").update({ lat: -7.96662, lon: 112.632632 }).eq("id", MITRA);
+    const id = await permintaanPada("mitra_siap", MITRA, {
+      alamat_lat: -7.9666,
+      alamat_lon: 112.6966,
+    });
+    expect(await terbitkanTagihan(id)).toEqual({ ok: true });
+    const { error: eb } = await admin
+      .from("booking_requests")
+      .update({ status_bayar: "lunas" })
+      .eq("id", id);
+    expect(eb).toBeNull();
+
+    const { data, error } = await sesiAdmin.rpc("konfirmasi_permintaan", { permintaan_id: id });
+    expect(data).toBeNull();
+    expect(error?.code).toBe("P0001");
+    expect(error?.message).toBe("Pengajuan ini dibayar lewat DOKU; sesinya lahir otomatis.");
+    expect(await statusPermintaan(id)).toBe("menunggu_bayar");
+    expect(await sesiDari(id)).toEqual([]);
+  });
+
+  it("baris WARISAN (tanpa pesanan, status_bayar lunas) tetap dikonfirmasi — sesinya lahir TANPA penanda kabari bidan", async () => {
+    // Penanda "Baru — kabari bidan" milik sesi yang lahir otomatis; sesi
+    // warisan dikonfirmasi admin dengan tangannya sendiri.
+    const id = await permintaanSiapKonfirmasi();
+    expect(await konfirmasiPermintaan(id)).toEqual({ ok: true });
+    const sesi = await querySql<{ kabari_bidan_sejak: Date | null }>(
+      `select kabari_bidan_sejak from public.sessions where booking_request_id = $1`,
+      [id],
+    );
+    expect(sesi).toEqual([{ kabari_bidan_sejak: null }]);
   });
 
   it("memulangkan NULL — bukan galat — ketika permintaannya sudah tidak menunggu_bayar", async () => {

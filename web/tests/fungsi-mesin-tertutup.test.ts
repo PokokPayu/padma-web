@@ -42,17 +42,34 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { querySql } from "./helpers/db";
 
 /**
- * Jantung mesin pembayaran. Ketiga yang pertama menulis uang orang; yang keempat
- * adalah penjaga transisinya. Tidak satu pun boleh bisa dipanggil dari PostgREST
- * oleh pemegang sesi mana pun — vonis Midtrans tidak boleh menjadi parameter
- * yang dikirim pemanggil bersesi, atau admin mana pun bisa mencetak `lunas`
- * dengan satu `curl`.
+ * Jantung mesin pembayaran. Semuanya kecuali `perpindahan_pesanan_sah` menulis
+ * uang orang; yang satu itu adalah penjaga transisinya. Tidak satu pun boleh
+ * bisa dipanggil dari PostgREST oleh pemegang sesi mana pun — vonis gateway
+ * (DOKU) tidak boleh menjadi parameter yang dikirim pemanggil
+ * bersesi, atau admin mana pun bisa mencetak `lunas` dengan satu `curl`.
  */
 const MESIN_TERTUTUP = [
   "perpindahan_pesanan_sah",
   "salurkan_pesanan",
-  "terapkan_notifikasi_midtrans",
+  // B3: penyalur sesi (menulis jejak & tanda tinjauan pesanan) dan sisipan
+  // sesinya. Keduanya hanya dipanggil fungsi definer lain (`salurkan_pesanan`,
+  // `konfirmasi_permintaan`) dan rute pemulihan bersevice role. Sisipan bukan
+  // penulis tabel pesanan, tetapi membukanya berarti siapa pun yang login
+  // bisa melahirkan sesi LUNAS dari id pengajuan mana saja.
+  "salurkan_sesi",
+  "sisipkan_sesi_dari_permintaan",
+  "terapkan_notifikasi_gateway",
   "terbitkan_akses_item",
+  // B4: penutup pesanan terbuka saat pengajuan dilepas atau masukan harganya
+  // berubah. Fungsi TRIGGER (tidak pernah dipanggil langsung), security
+  // definer karena menulis `orders` dan `jejak_pesanan` atas nama tulisan
+  // pengajuan dari peran mana pun.
+  "tutup_pesanan_sesi_terbuka",
+  // Bukan penulis (B2, Ruling 1): predikat "uang sudah masuk" yang dipakai
+  // fungsi definer lain (terbit ulang B2, penjaga batal B4, tombol Bayar B6).
+  // Dikunci di sini supaya membukanya — memberi tahu siapa pun pengajuan mana
+  // yang sudah dibayar — memerahkan pagar.
+  "uang_sudah_masuk_permintaan",
 ] as const;
 
 /**
@@ -74,17 +91,32 @@ const TERBUKA_SADAR = {
   // Memilih `client_id`-nya sendiri dari sesi, alih-alih memercayai payload.
   ambil_produk_gratis: "auth.uid",
   baca_keranjang: "auth.uid",
+  // B4 (Ruling 7): pembatalan pengajuan oleh klien. Badannya tidak menulis
+  // tabel pesanan, tetapi UPDATE-nya memicu `tutup_pesanan_sesi_terbuka` yang
+  // menulis `orders` dan `jejak_pesanan` — jadi gerbangnya disebut di sini.
+  batalkan_pengajuan_saya: "auth.uid",
   batalkan_pesanan_saya: "auth.uid",
   buat_pesanan: "auth.uid",
   buat_pesanan_keranjang: "auth.uid",
-  catat_token_snap: "auth.uid",
+  catat_tautan_gateway: "auth.uid",
   hapus_dari_keranjang: "auth.uid",
   tambah_ke_keranjang: "auth.uid",
   // Gerbang PERAN. `auth.uid()` juga muncul di badan keduanya, tapi hanya
   // untuk mengambil nama pemutus/penutup — dan itulah sebabnya kolom ini
   // menyebut gerbang yang diharapkan, bukan menerima salah satu dari dua.
   putuskan_pesanan_ditahan: "user_role",
+  // B2: rumus harga (bukan penulis) dan penerbit tagihan sesi. Keduanya hanya
+  // menerima id pengajuan; gerbangnya peran staf.
+  rincian_tagihan_permintaan: "user_role",
+  terbitkan_tagihan_sesi: "user_role",
   tutup_tinjauan: "user_role",
+  // B4: pembatalan dan ganti bidan oleh staf menulis tabel pesanan LEWAT
+  // trigger `tutup_pesanan_sesi_terbuka`; verifikasi bukti warisan menulis
+  // `booking_requests.status_bayar`, keadaan uang yang tidak lagi boleh
+  // ditulis peran API. Ketiganya hanya menerima id; gerbangnya peran staf.
+  batalkan_pengajuan_staf: "user_role",
+  ganti_bidan_permintaan: "user_role",
+  verifikasi_bukti_warisan: "user_role",
 } as const;
 
 type Gerbang = (typeof TERBUKA_SADAR)[keyof typeof TERBUKA_SADAR];

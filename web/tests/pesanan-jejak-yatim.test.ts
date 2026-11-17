@@ -70,7 +70,7 @@ async function yatim(): Promise<Yatim[]> {
        left join public.orders o on o.id = j.pesanan_id
       where j.pesanan_id is not null and o.id is null
      union all
-     select 'notifikasi_pesanan', n.id::text, n.pesanan_id::text, n.status_midtrans
+     select 'notifikasi_pesanan', n.id::text, n.pesanan_id::text, n.status_gateway
        from public.notifikasi_pesanan n
        left join public.orders o2 on o2.id = n.pesanan_id
       where n.pesanan_id is not null and o2.id is null
@@ -135,7 +135,7 @@ describe("jejak 'lunas' lahir TEPAT SATU KALI per pesanan", () => {
   });
 
   it("kejadian LAIN boleh berulang untuk pesanan yang sama", async () => {
-    // `notifikasi` lahir satu per notifikasi Midtrans, `diperiksa_ulang` satu
+    // `notifikasi` lahir satu per notifikasi gateway, `diperiksa_ulang` satu
     // per panggilan penyapu, `token_terbit` satu per percobaan. Indeks unik
     // atas (pesanan_id, kejadian) akan mematahkan ketiganya — dan bentuk
     // kegagalannya adalah webhook yang menolak notifikasi kedua Midtrans.
@@ -159,7 +159,7 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
 
     const pertama = await svc
       .from("notifikasi_pesanan")
-      .insert({ pesanan_id: pesananId, sidik, status_midtrans: "settlement" })
+      .insert({ pesanan_id: pesananId, sidik, status_gateway: "settlement" })
       .select("id")
       .single();
     expect(pertama.error).toBeNull();
@@ -167,23 +167,23 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
 
     const kedua = await svc
       .from("notifikasi_pesanan")
-      .insert({ pesanan_id: pesananId, sidik, status_midtrans: "settlement" })
+      .insert({ pesanan_id: pesananId, sidik, status_gateway: "settlement" })
       .select("id");
     expect(kedua.error?.code).toBe("23505");
     expect(kedua.error?.message).toContain("notifikasi_pesanan_sidik_unik");
   });
 
   it("dua sidik BERBEDA untuk satu pesanan sama-sama diterima", async () => {
-    // Midtrans mengirim beberapa notifikasi per pesanan: `pending` lalu
-    // `settlement`. Dengan sidik SEPESANAN, yang pertama mengunci barisnya dan
-    // `settlement` ditolak sebagai duplikat — pembeli membayar, uang masuk,
+    // DOKU mengirim beberapa notifikasi per pesanan: `PENDING` lalu
+    // `SUCCESS`. Dengan sidik SEPESANAN, yang pertama mengunci barisnya dan
+    // `SUCCESS` ditolak sebagai duplikat — pembeli membayar, uang masuk,
     // pesanan tinggal menunggu_bayar selamanya. Kasus ini pagar terhadap
     // "sederhanakan saja sidiknya jadi order_id".
     const pesananId = await semaiPesanan();
     for (const status of ["pending", "settlement"]) {
       const { data, error } = await svc
         .from("notifikasi_pesanan")
-        .insert({ pesanan_id: pesananId, sidik: `sidik-${status}-${Date.now()}`, status_midtrans: status })
+        .insert({ pesanan_id: pesananId, sidik: `sidik-${status}-${Date.now()}`, status_gateway: status })
         .select("id")
         .single();
       expect(error).toBeNull();
@@ -192,10 +192,10 @@ describe("notifikasi_pesanan — lapis idempotensi pertama", () => {
   });
 
   it("nominal_diterima ada dan bertipe angka — bukan teks", async () => {
-    // Satu-satunya tempat nominal yang BENAR-BENAR diterima Midtrans
+    // Satu-satunya tempat nominal yang BENAR-BENAR diterima gateway
     // disimpan. Untuk baris `ditahan` — satu-satunya baris yang angkanya jadi
     // keputusan manusia — tanpa kolom ini yang tersimpan hanyalah angka yang
-    // KITA tagih, dan staf tetap harus membuka dashboard Midtrans.
+    // KITA tagih, dan staf tetap harus membuka Back Office DOKU.
     const [kolom] = await querySql<{ data_type: string; is_nullable: string }>(
       `select data_type, is_nullable from information_schema.columns
         where table_schema = 'public' and table_name = 'notifikasi_pesanan'

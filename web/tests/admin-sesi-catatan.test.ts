@@ -1244,8 +1244,12 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     }
     expect(sumberAksi).not.toContain("setDate(");
     expect(sumberAksi).not.toContain("getDay(");
-    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(2);
-    expect(sumberAksi).toMatch(/const tenggat = new Date\(.*\)\.toISOString\(\);/);
+    // B2 (P3): `terbitkanTagihan` tidak lagi menghitung `tenggat` — fungsi SQL
+    // `terbitkan_tagihan_sesi` memasangnya (least(24 jam, jam kunjungan
+    // Jakarta)). Pemakaian sah yang TERSISA hanya `email_tagihan_pada`.
+    // Angkanya turun dari 2 ke 1, tetap TEPAT, bukan dilonggarkan.
+    expect([...sumberAksi.matchAll(/toISOString/g)]).toHaveLength(1);
+    expect(sumberAksi).not.toMatch(/const tenggat = new Date\(/);
     expect(sumberAksi).toMatch(/email_tagihan_pada:\s*new Date\(\)\.toISOString\(\)/);
   });
 
@@ -1264,8 +1268,13 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // gerbang penerbitan tagihan kini menangkap galat baca rincian dan
     // menolak penerbitan alih-alih melewatinya. Argumennya `e` — objek galat
     // generik, tanpa satu pun medan klien — sama seperti tiga baris lainnya.
+    // B2 (P3): gerbang baca rincian di `terbitkanTagihan` DIHAPUS (harga kini
+    // dihitung di SQL), jadi barisnya keluar dari daftar. Penggantinya
+    // mencatat galat RPC `terbitkan_tagihan_sesi` yang BUKAN penolakan
+    // bersebab — argumennya `error` (objek galat Postgres, tanpa medan klien),
+    // sama seperti tiga baris lainnya. Jumlahnya tetap empat.
     const KONSOL_SAH = [
-      'console.error("[tagihan] gerbang penerbitan gagal membaca rincian:", e);',
+      'console.error("[tagihan] terbitkan_tagihan_sesi gagal:", error);',
       'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
       'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
       'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',
@@ -1285,6 +1294,45 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     expect([...layout.matchAll(/requireRole\(/g)]).toHaveLength(1);
     expect(layout).toMatch(/requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/);
     expect(baca("src/app/admin/page.tsx")).toContain('href="/admin/skrining"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bentuk berkas aksi-tagihan.ts (P3/B4)
+// ---------------------------------------------------------------------------
+
+describe("bentuk berkas aksi-tagihan.ts (pembatalan, ganti bidan, kabari bidan)", () => {
+  const sumberAksiTagihan = baca("src/app/admin/sesi/aksi-tagihan.ts");
+
+  it("berkas 'use server' yang hanya mengekspor fungsi async", () => {
+    expect(sumberAksiTagihan.trimStart().startsWith('"use server"')).toBe(true);
+    const ekspor = [...sumberAksiTagihan.matchAll(/^export\s+(?!type\b)(\w+)/gm)].map((m) => m[1]);
+    expect([...new Set(ekspor)]).toEqual(["async"]);
+  });
+
+  it("SETIAP action memanggil requireRole(['admin','owner']) di dalam dirinya", () => {
+    // Dihitung PER FUNGSI, bukan total: badan setiap ekspor (sampai ekspor
+    // berikutnya) harus memuat penjaganya sendiri. Angkanya tepat: action
+    // baru tanpa penjaga harus memerahkan berkas ini.
+    const potongan = sumberAksiTagihan.split(/^(?=export\s+async\s+function\s+)/m).slice(1);
+    const nama = potongan.map((p) => /^export\s+async\s+function\s+(\w+)/.exec(p)![1]);
+    expect(nama).toEqual(["batalkanPengajuanStaf", "gantiBidanMenungguBayar", "tandaiSudahDikabari"]);
+    for (const [i, badan] of potongan.entries()) {
+      expect(badan, `${nama[i]} tanpa requireRole`).toMatch(
+        /await\s+requireRole\(\s*\[\s*"admin"\s*,\s*"owner"\s*\]\s*\)/,
+      );
+    }
+  });
+
+  it("memakai sesi pengguna, bukan service role", () => {
+    expect(sumberAksiTagihan).not.toContain("createAdminSupabase");
+    expect(sumberAksiTagihan).not.toContain("SERVICE_ROLE");
+    expect(sumberAksiTagihan).toContain("createServerSupabase");
+  });
+
+  it("tidak mencatat ke log dan tidak menghitung tanggal dengan Date", () => {
+    expect(sumberAksiTagihan).not.toContain("console.");
+    expect(sumberAksiTagihan).not.toContain("toISOString");
   });
 });
 

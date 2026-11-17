@@ -131,6 +131,39 @@ describe("bacaPenjualan", () => {
     expect(baris.some((b) => b.kode === kode)).toBe(true);
   });
 
+  it("pesanan lunas dengan notifikasi REFUNDED ditandai pernahDikembalikan (status DOKU, bukan 'refund' Midtrans)", async () => {
+    // `STATUS_KEMBALI` diturunkan dari `STATUS_DOKU_REFUND`. Bila ia kembali ke
+    // nilai huruf kecil Midtrans, uang yang sudah dikembalikan tetap dihitung
+    // sebagai omzet — tanpa galat di mana pun.
+    const sb = createAdminSupabase();
+    const { kode, pesananId } = await semaiProdukLunas(
+      `p4-refund-${randomUUID().slice(0, 8)}`,
+      150_000,
+      "Kelas Refund",
+    );
+    const { error } = await sb.from("notifikasi_pesanan").insert({
+      pesanan_id: pesananId,
+      sidik: randomUUID(),
+      status_gateway: "REFUNDED",
+      nominal_diterima: 150_000,
+      diterima_pada: "2026-10-16T05:00:00Z",
+    });
+    if (error) throw error;
+    bersihkan.push(async () => {
+      await sb.from("notifikasi_pesanan").delete().eq("pesanan_id", pesananId);
+    });
+
+    const { bacaPenjualan } = await import("@/lib/penjualan/baca");
+    const { baris } = await bacaPenjualan({
+      mulai: "2026-10-01T00:00:00+07:00",
+      sampai: "2026-11-01T00:00:00+07:00",
+      klien: await signInAs("admin@padma.test"),
+    });
+    const punya = baris.find((b) => b.kode === kode);
+    expect(punya).toBeDefined();
+    expect(punya!.pernahDikembalikan).toBe(true);
+  });
+
   it("KLIEN tidak memperoleh nominal siapa pun — kosong, bukan galat", async () => {
     // Bentuk kegagalan yang dijaga: `pesanan_item_staf` bergerbang
     // `user_role()` DI DALAM badan view-nya, jadi sesi klien memperoleh NOL

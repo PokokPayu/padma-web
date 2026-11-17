@@ -14,7 +14,9 @@ import { Tabel, Th, Td } from "@/app/_shell/panel/tabel";
 import { PanelPermintaan } from "./panel-permintaan";
 import type { MitraPilihan as MitraPilihanPanel } from "./aksi-permintaan";
 import {
+  type BarisPermintaanDaftar,
   ambilDaftarPermintaan,
+  ambilPermintaanPerId,
   SARING_PERMINTAAN,
   SARING_MENUNGGU,
   SARING_RIWAYAT,
@@ -30,12 +32,12 @@ import {
   LABEL_SESI,
   STATUS_PERMINTAAN,
   LABEL_PERMINTAAN,
+  sesiBatal,
 } from "@/lib/jadwal/status";
 import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { labelSisaWaktu } from "@/lib/tagihan/tenggat";
+import { tombolUntuk } from "@/lib/tagihan/keadaan";
 import { pesanTagihan, tautanWaTagihan, tautanWaPercakapan } from "@/lib/tagihan/pesan-tagihan";
-import { daftarTagihanPengajuanAdmin } from "@/lib/admin/tagihan-pengajuan";
-import { PERMINTAAN_MENUNGGU_BAYAR } from "@/lib/jadwal/status";
 import { urutkanMitraMenurutJarak, labelJarak } from "@/lib/jadwal/urutan-mitra";
 import { bacaPengaturan } from "@/lib/settings";
 import { nomorWaKlien } from "@/lib/pengaturan/bentuk";
@@ -46,22 +48,15 @@ export const metadata = { title: "Sesi" };
 const BASIS = "/admin/sesi";
 
 /**
- * Keadaan pembayaran sebuah permintaan, sebagai satu kalimat.
+ * Keadaan pembayaran sebuah permintaan, sebagai satu kalimat NOL RUPIAH.
  *
- * Diformat DI SERVER dengan sengaja: sisa waktu yang dihitung di peramban
- * berbeda antara render server dan render klien, dan ketidakcocokan hidrasinya
- * muncul acak — tidak sebagai galat, melainkan sebagai angka yang sesekali
- * berubah sendiri.
+ * Diturunkan di lapisan data (`keadaanTagihan`) dari pesanan dan sesinya, dan
+ * dirender DI SERVER: sisa waktu yang dihitung di peramban berbeda antara
+ * render server dan render klien, dan ketidakcocokan hidrasinya muncul acak.
  */
-function labelBayarPermintaan(p: {
-  statusBayar: "belum" | "menunggu_verifikasi" | "lunas";
-  tenggat: string | null;
-}): string {
-  if (p.statusBayar === "lunas") return "sudah dibayar & diverifikasi";
-  if (p.statusBayar === "menunggu_verifikasi") return "bukti masuk, menunggu verifikasi";
-  return `belum dibayar · ${labelSisaWaktu(p.tenggat)}`;
+function labelBayarPermintaan(p: BarisPermintaanDaftar): string {
+  return p.keadaanTagihan.kalimat;
 }
-
 
 export default async function SesiPage({
   searchParams,
@@ -132,22 +127,16 @@ export default async function SesiPage({
     butuhMitra ? pilihanMitra() : Promise.resolve([]),
   ]);
 
-  // Nominal per pengajuan dipakai SATU tempat: pesan WhatsApp tagihan di panel
-  // permintaan. Karena itu ia diambil persis ketika tab Permintaan aktif —
-  // bukan selalu (query yang hasilnya dibuang di tab Sesi), dan bukan hanya
-  // saat `?lihat=` terisi. Melewatkannya TIDAK terlihat sebagai galat: pesan
-  // WhatsApp tetap tersusun rapi, hanya saja nominalnya hilang, dan klien
-  // menerima tagihan tanpa angka.
-  const tagihanAdmin = tab === "permintaan" ? await daftarTagihanPengajuanAdmin() : [];
-  // Barisnya UTUH, bukan hanya totalnya: panel detail kini menampilkan rincian
-  // dan sebab, dan pesan WhatsApp merangkai dari medan yang sama. Dua peta
-  // untuk satu baris hanya menambah tempat keduanya bisa berselisih.
-  const tagihanPerPermintaan = new Map(tagihanAdmin.map((t) => [t.permintaanId, t]));
-
   // KESAHIHAN `lihat` DIBUKTIKAN DENGAN MENEMUKAN BARISNYA, bukan dengan
   // mempercayai URL — persis pola `ubah` di atas.
   const lihat = typeof sp.lihat === "string" ? sp.lihat : "";
-  const barisLihat = daftarPermintaan.baris.find((p) => p.id === lihat);
+  // Bila barisnya TIDAK ada di halaman daftar aktif (halaman ke-2, atau status di
+  // luar antrean seperti `dibatalkan_tenggat` dengan tinjauan refund), diambil
+  // menurut id lewat pemetaan yang sama. Tautan "Sesi" dari /admin/pesanan
+  // bergantung padanya; tanpa ini panelnya diam-diam tidak terbuka.
+  const barisLihat =
+    daftarPermintaan.baris.find((p) => p.id === lihat) ??
+    (tab === "permintaan" && lihat !== "" ? await ambilPermintaanPerId(lihat) : undefined);
 
   // Bidan diurutkan terhadap alamat PERMINTAAN INI. Daftar bersama untuk
   // seluruh antrean akan benar untuk paling banyak satu baris. Diurutkan &
@@ -162,36 +151,37 @@ export default async function SesiPage({
       ).map((m) => ({ id: m.id, nama: m.nama, jarak: labelJarak(m) }))
     : [];
 
-  // Pesannya dirakit DI SERVER: `pesanTagihan` murni, tetapi nominal dan sisa
-  // waktunya butuh tarif & jam server.
+  // Pesannya dirakit DI SERVER dan TANPA ANGKA (D3): `/admin/sesi` nol rupiah,
+  // jadi WhatsApp hanya mengantar klien ke Digital Passport tempat rinciannya.
   //
-  // Tujuannya nomor KLIEN, bukan setelan `nomor_wa` klinik. Versi sebelumnya
+  // Tujuannya nomor KLIEN, bukan setelan `nomor_wa` klinik. Versi lama
   // memakai yang kedua, dan bentuk kegagalannya tidak terlihat sebagai galat:
   // WhatsApp terbuka dengan pesan tagihan yang rapi, hanya saja lawan
-  // bicaranya PADMA sendiri. Klien tidak pernah ditagih dan tenggat 24 jamnya
-  // tetap berjalan. `nomorWaKlien` sengaja TANPA nomor cadangan — lihat
-  // alasannya di `@/lib/pengaturan/bentuk`.
-  const tagihanLihat = barisLihat ? (tagihanPerPermintaan.get(barisLihat.id) ?? null) : null;
-
+  // bicaranya PADMA sendiri. `nomorWaKlien` sengaja TANPA nomor cadangan.
+  //
+  // Tautan Passport dirangkai dari `NEXT_PUBLIC_BASIS_URL`; kosong berarti
+  // tautan relatif yang mati di WhatsApp klien, jadi tombolnya dihilangkan dan
+  // kalimatnya menyebut sebabnya.
+  const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
+  const nomorTagihan = barisLihat ? nomorWaKlien(barisLihat.noHpKlien) : "";
+  const bolehWa = barisLihat ? tombolUntuk(barisLihat.keadaanTagihan.kode).wa : false;
   const tautanWaUntukLihat =
-    barisLihat &&
-    barisLihat.status === PERMINTAAN_MENUNGGU_BAYAR &&
-    nomorWaKlien(barisLihat.noHpKlien)
+    barisLihat && bolehWa && nomorTagihan && basisUrl
       ? tautanWaTagihan(
-          nomorWaKlien(barisLihat.noHpKlien),
+          nomorTagihan,
           pesanTagihan({
             namaKlien: barisLihat.namaKlien,
             namaLayanan: barisLihat.namaLayanan,
             tanggal: formatTanggalID(barisLihat.tanggal),
             jam: formatJam(jamDariDb(barisLihat.jamMulai)),
-            hargaLayanan: tagihanLihat?.hargaLayanan ?? null,
-            hargaTransport: tagihanLihat?.hargaTransport ?? null,
-            labelJenjang: tagihanLihat?.labelJenjang ?? null,
-            total: tagihanLihat?.total ?? null,
+            tautanPassport: `${basisUrl}/passport/bayar/${barisLihat.id}`,
             sisaWaktu: labelSisaWaktu(barisLihat.tenggat),
           }),
         )
       : "";
+  const kalimatTanpaWaUntukLihat = !nomorTagihan
+    ? "Nomor WhatsApp klien belum sah — lengkapi di menu Klien."
+    : "Alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum terpasang, jadi tautan Passport tidak bisa dirangkai. Laporkan ke teknis.";
 
   // Tersedia di SEMUA status, termasuk permintaan yang sudah batal — menghubungi
   // klien tidak pernah berbahaya, dan justru permintaan yang batal karena tenggat
@@ -442,6 +432,13 @@ export default async function SesiPage({
                         <span className="mt-0.5 block font-mono text-[11px] text-panel-muted">
                           {s.padmaId}
                         </span>
+                        {/* Sesi lahir otomatis dari pesanan lunas: bidannya
+                            belum tentu tahu. Sesi batal tidak ditandai. */}
+                        {s.kabariBidanSejak !== null && !sesiBatal(s.status) && (
+                          <span className="mt-1 inline-block rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-extrabold text-[#8A6A16]">
+                            Baru — kabari bidan
+                          </span>
+                        )}
                       </Td>
                       <Td>
                         {s.namaLayanan}
@@ -556,13 +553,11 @@ export default async function SesiPage({
             tanggal={formatTanggalID(barisLihat.tanggal)}
             jam={formatJam(jamDariDb(barisLihat.jamMulai))}
             waktu={LABEL_WAKTU[barisLihat.preferensiWaktu] ?? barisLihat.preferensiWaktu}
-            labelBayar={labelBayarPermintaan(barisLihat)}
-            lunas={barisLihat.statusBayar === "lunas"}
             tautanWa={tautanWaUntukLihat}
+            kalimatTanpaWa={kalimatTanpaWaUntukLihat}
             tautanWaKosong={tautanWaKosongUntukLihat}
             jamPilihan={jamLayanan}
             tanggalIso={barisLihat.tanggal}
-            tagihan={tagihanLihat}
             emailTerkirim={barisLihat?.emailTagihanPada != null}
           />
         </PanelGeser>

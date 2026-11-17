@@ -49,7 +49,7 @@ describe("golongkan", () => {
     }
   });
 
-  it("ditahan BUKAN omzet — uangnya ada di Midtrans, belum di PADMA", () => {
+  it("ditahan BUKAN omzet — uangnya ada di DOKU, belum di PADMA", () => {
     expect(golongkan(barisDasar({ status: "ditahan", lunasPada: null }))).toBe("ditahan");
   });
 

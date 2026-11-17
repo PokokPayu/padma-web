@@ -12,7 +12,7 @@ import { setujuiDokumenUntukUji } from "./persetujuan";
  * gerbang PERTAMA ketiga RPC klien adalah `v_client_id is null -> 42501`,
  * bukan pemeriksaan kepemilikan baris. Yang teruji jadi "akun tanpa rekam
  * klien ditolak", BUKAN "klien B ditolak atas pesanan klien A": klausa
- * `and o.client_id = v_client_id` di `catat_token_snap` dan
+ * `and o.client_id = v_client_id` di `catat_tautan_gateway` dan
  * `batalkan_pesanan_saya` boleh dihapus hari ini tanpa satu pun uji merah.
  *
  * ===== KENAPA BUKAN MENAUTKAN RINA =====

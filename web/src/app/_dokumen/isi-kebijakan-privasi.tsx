@@ -19,7 +19,7 @@ const PEMROSES = [
   { nama: "Cloudflare R2", guna: "Penyimpanan video materi, produk, dan testimoni" },
   { nama: "Resend", guna: "Pengiriman email sistem dan tagihan" },
   { nama: "Google", guna: "Masuk dengan akun Google, bila Anda memilihnya" },
-  { nama: "Midtrans", guna: "Pemrosesan pembayaran produk digital" },
+  { nama: "DOKU", guna: "Pemrosesan pembayaran produk digital dan tagihan sesi" },
   { nama: "OpenStreetMap (Nominatim)", guna: "Mengubah teks alamat menjadi titik koordinat" },
 ] as const;
 
@@ -65,7 +65,7 @@ export function IsiKebijakanPrivasi({ waHref, waTampilan }: { waHref: string; wa
           </li>
           <li>
             <strong>Riwayat pesanan dan pembayaran</strong>, termasuk metode bayar dan nomor transaksi
-            dari Midtrans. Data kartu atau rekening yang Anda masukkan di halaman pembayaran Midtrans
+            dari DOKU. Data kartu atau rekening yang Anda masukkan di halaman pembayaran DOKU
             tidak diterima PADMA.
           </li>
           <li>
@@ -205,7 +205,7 @@ export function IsiKebijakanPrivasi({ waHref, waTampilan }: { waHref: string; wa
           Kami hanya memakai cookie yang diperlukan agar layanan berjalan: sesi masuk; penanda klaim
           skrining (2 jam); penanda undangan aktivasi (1 jam); tujuan setelah masuk (1 jam); dan penanda
           persetujuan dari formulir pendaftaran (1 hari). Kami tidak memakai cookie analitik atau
-          pelacak. Halaman pembayaran Midtrans dapat memasang cookie-nya sendiri.
+          pelacak. Halaman pembayaran DOKU dapat memasang cookie-nya sendiri.
         </p>
       </Bagian>
 

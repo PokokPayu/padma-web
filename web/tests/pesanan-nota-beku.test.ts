@@ -9,7 +9,7 @@ import { JAM_TENGGAT_PESANAN } from "@/lib/pesanan/status";
  * NOTA PESANAN — tabel uang yang barisnya tidak boleh ditulis ulang.
  *
  * `order_items.harga_beku` adalah satu-satunya angka yang dipakai
- * memverifikasi `gross_amount` notifikasi Midtrans. Bila baris itu bisa
+ * memverifikasi `gross_amount` notifikasi gateway. Bila baris itu bisa
  * disunting sesudah terbit, verifikasi jumlah berhenti berarti apa pun:
  * siapa pun yang bisa menulisnya bisa membuat setiap notifikasi "cocok".
  *
@@ -155,7 +155,7 @@ async function sisipPesanan(bentuk: BentukPesanan = {}) {
 }
 
 describe("struktur orders", () => {
-  it("berkolom PERSIS sembilan belas, urut seperti yang ditulis migrasi", async () => {
+  it("berkolom PERSIS dua puluh satu, urut seperti yang ditulis migrasi", async () => {
     // Daftar dikunci karena menambah kolom ke tabel uang adalah satu baris
     // ketikan yang tidak memerahkan apa pun — dan tabel ini yang menjadi nota.
     const kolom = await querySql<{ column_name: string }>(
@@ -174,15 +174,22 @@ describe("struktur orders", () => {
       "kedaluwarsa_pada",
       "lunas_pada",
       "ditutup_pada",
-      "snap_token",
-      "snap_diterbitkan_pada",
+      "tautan_gateway",
+      "tautan_terbit_pada",
       "notifikasi_pada",
       "diperiksa_pada",
       "butuh_tinjauan_pada",
       "sebab_tinjauan",
       "kanal",
       "transaksi_id",
-      "status_midtrans",
+      "status_gateway",
+      "jenis",
+      "booking_request_id",
+      // 20261113140800: percobaan yang MELUNASI (pembanding bayar ganda). Angka
+      // percobaan 1..9, bukan nominal.
+      "percobaan_lunas",
+      // 20261113140800: penanda sapuan pesanan tertutup Lapis 3 (cap waktu).
+      "rekonsiliasi_tutup_pada",
     ]);
   });
 
@@ -288,7 +295,7 @@ describe("satu pesanan terbuka per klien", () => {
 
     const kedua = await sisipPesanan();
     expect(kedua.error?.code).toBe("23505");
-    expect(kedua.error?.message).toContain("pesanan_terbuka_satu_per_klien");
+    expect(kedua.error?.message).toContain("pesanan_produk_terbuka_satu_per_klien");
   });
 
   it("dua klien BERBEDA boleh sama-sama punya pesanan terbuka", async () => {

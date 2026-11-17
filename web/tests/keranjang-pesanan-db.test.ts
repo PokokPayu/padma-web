@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
-import { rakitOrderId } from "@/lib/pesanan/order-id";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 /**
  * Titik buta 2 (spec P2, "Pengujian"): gerbang P1 dijalankan PER PRODUK di
@@ -102,13 +102,12 @@ describe("buat_pesanan_keranjang — gerbang per produk", () => {
     const { data: satu, error: eSatu } = await keranjang([a]);
     expect(eSatu).toBeNull();
     const p = (satu as BarisPesanan[])[0];
-    const settlement = await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: rakitOrderId(p.kode, p.percobaan),
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-kp-beruang",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 120_000,
+    const settlement = await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(p.kode, p.percobaan),
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-kp-beruang",
+      p_kanal: "bank_transfer",
+      p_nominal: 120_000,
       p_sidik: randomUUID(),
     });
     expect(settlement.data).toBe("diterapkan");

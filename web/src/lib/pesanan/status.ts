@@ -18,12 +18,11 @@
  * benar hari ini dan salah begitu `ditahan` lahir; `PESANAN_BERUANG.includes(...)`
  * memaksa orang berikutnya memutuskan di mana nilai barunya masuk.
  *
- * ===== KENAPA BUKAN MENGIMPOR `JAM_TENGGAT_BAYAR` =====
- * `src/lib/tagihan/tenggat.ts:10` sudah mengekspor `JAM_TENGGAT_BAYAR = 24`
- * untuk tenggat bayar SESI. `JAM_TENGGAT_PESANAN` di bawah bernilai sama dan
- * SENGAJA tidak mengimpornya: P3-lah yang memindahkan pembayaran sesi ke mesin
- * pesanan, dan penyatuan dua konstanta ini adalah keputusannya, bukan keputusan
- * P1. Menyatukannya sekarang berarti P1 mendahului keputusan yang belum diambil.
+ * ===== SATU TENGGAT UNTUK PRODUK DAN SESI (P3/B2) =====
+ * `JAM_TENGGAT_BAYAR` (`src/lib/tagihan/tenggat.ts`) dulu memegang tenggat bayar
+ * SESI dengan nilai yang sama. P1 sengaja tidak menyatukannya; P3 memindahkan
+ * tagihan sesi ke mesin pesanan dan menyatukannya: `JAM_TENGGAT_PESANAN` kini
+ * satu-satunya, dan konstanta lama dihapus.
  */
 
 /**
@@ -63,11 +62,16 @@ export const SUMBER_ITEM_PESANAN = ["produk_digital", "sesi"] as const;
 export type SumberItemPesanan = (typeof SUMBER_ITEM_PESANAN)[number];
 
 /**
- * Enum `order_event` — 16 nilai, urut sama dengan `pg_enum`.
+ * Enum `order_event` — 18 nilai, urut sama dengan `pg_enum`.
  *
  * Tidak ada kejadian "tinjauan dibuka": yang membukanya SELALU salah satu dari
- * kelima kejadian di `KEJADIAN_BUTUH_TINJAUAN`, dan nilai enum yang tidak punya
+ * keenam kejadian di `KEJADIAN_BUTUH_TINJAUAN`, dan nilai enum yang tidak punya
  * penulis adalah nilai yang pasti salah dibaca kelak.
+ *
+ * Dua nilai terakhir milik penyalur sesi (B3, migrasi 20261113140200), di
+ * EKOR karena `alter type … add value` selalu menambah di akhir.
+ * `penangan_belum_ada` sejak itu tidak punya penulis baru; nilainya tetap ada
+ * karena nilai enum tidak bisa dicabut dan jejak lama boleh memuatnya.
  */
 export const KEJADIAN_PESANAN_SAH = [
   "dibuat",
@@ -86,6 +90,8 @@ export const KEJADIAN_PESANAN_SAH = [
   "penangan_belum_ada",
   "diperiksa_ulang",
   "tinjauan_ditutup",
+  "sesi_terkonfirmasi",
+  "sesi_tertahan",
 ] as const;
 
 export type KejadianPesanan = (typeof KEJADIAN_PESANAN_SAH)[number];
@@ -116,6 +122,20 @@ export const PESANAN_BERUANG: readonly StatusPesanan[] = ["lunas", "ditahan"];
 export const PESANAN_MATI: readonly StatusPesanan[] = ["kedaluwarsa", "dibatalkan"];
 
 /**
+ * TUTUP-DISAPU — pesanan yang KITA tutup sementara tautan DOKU-nya bisa masih
+ * hidup: klien membatalkan, staf menerbitkan ulang atau mengubah masukan harga,
+ * percobaan kesepuluh. Lapis 3 (`sapuPesananTertutup`) menanyakan setiap
+ * percobaannya sampai tautannya pasti mati, karena webhook yang hilang
+ * membuat uang yang mendarat di sana senyap (perbaikan akhir F2b).
+ *
+ * `kedaluwarsa` sengaja TIDAK ikut: setiap jalan ke sana — EXPIRED dari DOKU
+ * maupun vonis waktu lokal — kini menanyakan semua percobaan lebih dulu
+ * (F2a), dan tautannya memang sudah mati. `lunas`/`ditahan` tidak ikut: uang
+ * kedua di sana sudah bertanda oleh mesin begitu jawabannya tiba.
+ */
+export const PESANAN_TUTUP_DISAPU: readonly StatusPesanan[] = ["dibatalkan"];
+
+/**
  * Kejadian yang WAJIB menyalakan `butuh_tinjauan_pada` + `sebab_tinjauan` pada
  * baris `orders`-nya, di transaksi yang sama dengan jejaknya.
  *
@@ -132,6 +152,9 @@ export const KEJADIAN_BUTUH_TINJAUAN: readonly KejadianPesanan[] = [
   "lunas_setelah_tutup",
   "akses_tertahan",
   "penangan_belum_ada",
+  // Pesanan sesi lunas yang sesinya tidak bisa lahir (bidan nonaktif, jam
+  // kunjungan lewat, pengajuan berubah, atau galat): uang masuk, sesi belum.
+  "sesi_tertahan",
 ];
 
 /**
@@ -149,12 +172,20 @@ export const LABEL_STATUS_PESANAN: Record<StatusPesanan, string> = {
 
 /**
  * Tenggat pesanan, dalam jam. SATU konstanta untuk DUA tempat: kolom
- * `orders.kedaluwarsa_pada` dan `expiry` di payload Snap.
+ * `orders.kedaluwarsa_pada` dan `payment_due_date` tautan DOKU. Yang kedua
+ * diturunkan dari kolom yang pertama (`terbitkanTautanBayar`, sisa menit
+ * dibulatkan ke bawah), jadi tautan DOKU tidak pernah hidup melewati kolomnya.
+ *
+ * Tagihan sesi memakai angka yang sama di SQL: `interval '24 hours'` di
+ * `terbitkan_tagihan_sesi` (migrasi 20261113140100), dengan batas jam
+ * kunjungan Jakarta — `least(now() + 24 jam, jam kunjungan)`. Pengikatnya uji
+ * tenggat di `tests/tagihan-sesi-db.test.ts`, yang menghitung harapannya dari
+ * konstanta ini.
  *
  * Dua angka yang boleh berbeda adalah dua kegagalan simetris. Kolom lebih
  * pendek: kita berhenti bertanya sementara VA-nya masih bisa dibayar, dan
  * settlement mendarat pada pesanan yang sudah kita tutup. Kolom lebih panjang:
- * penyapu menanyai Midtrans tentang transaksi yang tak akan pernah berubah.
+ * penyapu menanyai DOKU tentang transaksi yang tak akan pernah berubah.
  */
 export const JAM_TENGGAT_PESANAN = 24;
 
@@ -166,9 +197,11 @@ export const JAM_TENGGAT_PESANAN = 24;
 export const MENIT_JEDA_PERIKSA = 5;
 
 /**
- * Margin terhadap jam Midtrans sebelum jawaban 404 ("Transaction doesn't
- * exist") boleh dibaca sebagai kedaluwarsa. Bukan perpanjangan tenggat: yang
- * memutuskan tetap Midtrans — ia menyatakan transaksinya tidak pernah ada —
- * dan waktu lokal hanya memutuskan kapan berhenti bertanya.
+ * Margin terhadap jam DOKU sebelum jawaban Check Status yang belum final
+ * (invoice tidak ditemukan, PENDING, REDIRECT, TIMEOUT, FAILED) boleh dibaca
+ * sebagai kedaluwarsa. Bukan perpanjangan tenggat: vonis tetap dari gateway,
+ * dan waktu lokal hanya memutuskan kapan berhenti bertanya. Dulu
+ * `JAM_TENGGANG_404`; namanya dinetralkan karena kini berlaku juga untuk
+ * status non-final, bukan hanya 404.
  */
-export const JAM_TENGGANG_404 = 1;
+export const JAM_TENGGANG_TANPA_VONIS = 1;

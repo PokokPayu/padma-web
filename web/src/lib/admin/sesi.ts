@@ -63,6 +63,11 @@ export type BarisSesiDaftar = {
    * honor transport mitra.
    */
   jenjangHitung: JenjangTransport | null;
+  /**
+   * Terisi bila sesi lahir otomatis dari pesanan lunas dan bidannya belum
+   * dikabari. Dikosongkan tombol "Sudah dikabari". Bukan uang.
+   */
+  kabariBidanSejak: string | null;
 };
 
 type BarisDb = {
@@ -76,6 +81,7 @@ type BarisDb = {
   jenjang: JenjangTransport | null;
   jenjang_sumber: "otomatis" | "admin" | null;
   jadwal_ulang_terpakai: boolean;
+  kabari_bidan_sejak: string | null;
   alamat_lat: number | null;
   alamat_lon: number | null;
   clients: { nama: string; padma_id: string; alamat_lat: number | null; alamat_lon: number | null } | null;
@@ -105,7 +111,7 @@ export async function ambilDaftarSesi(
   let q = supabase
     .from("sessions")
     .select(
-      "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, jadwal_ulang_terpakai, " +
+      "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, jenjang, jenjang_sumber, jadwal_ulang_terpakai, kabari_bidan_sejak, " +
         "alamat_lat, alamat_lon, " +
         "clients!inner(nama, padma_id, alamat_lat, alamat_lon), services(nama), partners(nama, lat, lon)",
       { count: "exact" },
@@ -161,6 +167,7 @@ export async function ambilDaftarSesi(
       jenjang: s.jenjang,
       jenjangSumber: s.jenjang_sumber,
       jadwalUlangTerpakai: s.jadwal_ulang_terpakai,
+      kabariBidanSejak: s.kabari_bidan_sejak,
       ...jarakUntukSesi({
         mitra: koordinat(s.partners?.lat, s.partners?.lon),
         alamatSesi: koordinat(s.alamat_lat, s.alamat_lon),

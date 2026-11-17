@@ -3,7 +3,6 @@ import { bacaProdukPerSlug } from "@/lib/produk/katalog";
 import { labelMasaBerlaku } from "@/lib/produk/status";
 import { urlSampulPublik } from "@/lib/produk/objek";
 import { formatRupiah } from "@/lib/rupiah-publik";
-import { midtransProduksi } from "@/lib/midtrans/konfig";
 import { TombolAmbil } from "./tombol-ambil";
 import { TombolBeli } from "./tombol-beli";
 import { DaftarBab } from "./daftar-bab";
@@ -25,16 +24,12 @@ function HargaProduk({
   harga,
   hargaCoret,
   masaBerlakuBulan,
-  produksi,
-  clientKey,
 }: {
   slug: string;
   productId: string;
   harga: number | null;
   hargaCoret: number | null;
   masaBerlakuBulan: number | null;
-  produksi: boolean;
-  clientKey: string;
 }) {
   if (harga === null) {
     return <p className="mt-4 text-[15px] text-ink-soft">Harga segera diumumkan</p>;
@@ -75,8 +70,6 @@ function HargaProduk({
       <TombolBeli
         slug={slug}
         productId={productId}
-        produksi={produksi}
-        clientKey={clientKey}
       />
     </>
   );
@@ -106,19 +99,12 @@ export default async function ProdukDetailPage({
             </div>
             <h1 className="text-[22px] font-bold leading-snug text-ink">{produk.judul}</h1>
 
-            {/* Keduanya dibaca DI SERVER. `MIDTRANS_PRODUKSI` sengaja tanpa prefiks
-                NEXT_PUBLIC_, jadi peramban tidak bisa membacanya sendiri — dan
-                komponen klien yang mencoba akan selalu mendapat sandbox, senyap.
-                Karena halaman ini `revalidate = 300`, keduanya juga harus sudah
-                terpasang saat build/revalidasi, bukan hanya saat request. */}
             <HargaProduk
               slug={produk.slug}
               productId={produk.id}
               harga={produk.harga}
               hargaCoret={produk.hargaCoret}
               masaBerlakuBulan={produk.masaBerlakuBulan}
-              produksi={midtransProduksi()}
-              clientKey={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY ?? ""}
             />
             {produk.jenisMateri.length > 0 && (
               <p className="mt-4 border-t border-black/10 pt-3 text-[13px] text-ink-soft">

@@ -19,6 +19,12 @@ export type Antrean = {
    * `hitungMenungguJenjangTransport()` di bawah.
    */
   menungguJenjangTransport: number;
+  /**
+   * Sesi yang lahir otomatis dari pesanan lunas dan bidannya belum dikabari
+   * (`sessions.kabari_bidan_sejak` terisi, sesi tidak batal). Angka, bukan
+   * nominal.
+   */
+  kabariBidan: number;
 };
 
 /**
@@ -210,6 +216,7 @@ export const hitungAntrean = cache(async function hitungAntrean(): Promise<Antre
     belumAktif,
     menungguTarifTransport,
     menungguJenjangTransport,
+    kabariBidan,
   ] = await Promise.all([
     supabase
       .from("screenings")
@@ -223,6 +230,13 @@ export const hitungAntrean = cache(async function hitungAntrean(): Promise<Antre
     supabase.from("clients").select("*", kepala).is("user_id", null),
     hitungMenungguTarifTransport(),
     hitungMenungguJenjangTransport(),
+    // Sesi batal TIDAK dihitung: bidan tidak perlu dikabari soal sesi yang
+    // sudah tidak terjadi, dan badge yang tak bisa dipadamkan berhenti dipercaya.
+    supabase
+      .from("sessions")
+      .select("*", kepala)
+      .not("kabari_bidan_sejak", "is", null)
+      .not("status", "in", FILTER_SESI_BATAL),
   ]);
 
   return {
@@ -232,5 +246,6 @@ export const hitungAntrean = cache(async function hitungAntrean(): Promise<Antre
     klienBelumAktif: belumAktif.count ?? 0,
     menungguTarifTransport,
     menungguJenjangTransport,
+    kabariBidan: kabariBidan.count ?? 0,
   };
 });

@@ -1,5 +1,5 @@
 /**
- * TOMBOL BELI — tiga keadaan, dan satu jebakan env yang senyap.
+ * TOMBOL BELI — tiga keadaan, dan peralihan ke halaman bayar DOKU.
  *
  * Urutan keadaan yang ditampilkan layar TIDAK boleh ditebak, dan spec
  * menyebutnya: entitlement DULU (punya -> tampilkan jalan masuknya), baru
@@ -7,19 +7,11 @@
  * beli. Membaliknya berarti orang yang baru mentransfer lewat VA ditawari
  * membeli lagi — dan sebagian akan membayar dua kali.
  *
- * ===== JEBAKAN ENV, DIUJI SEBAGAI PERILAKU =====
- * `MIDTRANS_PRODUKSI` TIDAK berprefix `NEXT_PUBLIC_`, jadi di peramban ia
- * `undefined`. Komponen klien yang memanggil `midtransProduksi()` karena itu
- * akan SELALU memuat skrip Snap sandbox, di produksi, tanpa satu pun galat —
- * pembayaran yang "berhasil" dengan uang mainan. Dua pagar di bawah:
- *   (a) perilaku — `urlSkripSnap(false)` tetap sandbox WALAU env produksi
- *       terpasang; ia memakai parameternya, bukan env;
- *   (b) sumber — larangan NEGATIF: kedua berkas sisi-peramban tidak boleh
- *       menyebut `midtransProduksi` maupun `process.env` sama sekali. Larangan
- *       negatif tidak bisa dipuaskan oleh sebuah baris impor.
+ * Pembayaran = alihan penuh ke `payment.url` DOKU (spec §5.1). Tidak ada
+ * skrip pihak ketiga, tidak ada popup, dan tidak ada callback peramban.
  */
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -35,15 +27,12 @@ const {
   PanelBeli,
   keadaanBeli,
   mintaCheckout,
+  mintaLaluAlihkan,
   mintaBatal,
   pesananYangBisaDibatalkan,
   punyaPesananMenungguDiPeramban,
   BATAS_BARIS_PESANAN,
 } = await import("@/app/produk/[slug]/tombol-beli");
-const { urlSkripSnap } = await import("@/lib/midtrans/konfig");
-const { muatSkripSnap, PESAN_PEMBAYARAN_BELUM_AKTIF } = await import(
-  "@/lib/midtrans/snap-peramban"
-);
 
 const AKAR = path.resolve(__dirname, "..");
 const baca = (rel: string) => readFileSync(path.join(AKAR, rel), "utf8");
@@ -262,90 +251,91 @@ describe("punyaPesananMenungguDiPeramban gagal TERTUTUP", () => {
   });
 });
 
-describe("pemilihan sandbox/produksi tidak boleh senyap", () => {
-  // Bentuk env-nya sendiri ("HANYA nilai true") dijaga berkas TERSENDIRI milik
-  // Tugas 8: `tests/midtrans-konfig.test.ts`, tujuh nilai, nol basis data.
-  // Yang tinggal di sini adalah dua hal yang memang milik sisi peramban:
-  // bahwa `urlSkripSnap` memakai parameternya, dan larangan negatif atas kedua
-  // berkas sisi-klien.
-  it("urlSkripSnap memakai PARAMETERNYA, bukan env", () => {
-    const sebelum = process.env.MIDTRANS_PRODUKSI;
-    process.env.MIDTRANS_PRODUKSI = "true";
-    try {
-      // Kalau fungsi ini diam-diam membaca env, baris ini merah — dan itulah
-      // satu-satunya cara jebakan ini bisa tertangkap sebelum produksi.
-      expect(urlSkripSnap(false)).toContain("app.sandbox.midtrans.com");
-      expect(urlSkripSnap(true)).toBe("https://app.midtrans.com/snap/snap.js");
-    } finally {
-      if (sebelum === undefined) delete process.env.MIDTRANS_PRODUKSI;
-      else process.env.MIDTRANS_PRODUKSI = sebelum;
-    }
+describe("mintaLaluAlihkan — redirect menggantikan Snap", () => {
+  it("200 dengan url -> fetch ke checkout, lalu ARAHKAN dipanggil dengan url itu", async () => {
+    const ambil = fetchPalsu({
+      status: 200,
+      isi: { url: "https://sandbox.doku.test/bayar/abc", kode: "PSN-260927-A1B2C3", pesananId: "pesanan-abc" },
+    });
+    const arahkan = vi.fn();
+    const r = await mintaLaluAlihkan("produk-1", false, arahkan, ambil);
+
+    expect(ambil.panggilan).toHaveLength(1);
+    expect(ambil.panggilan[0].url).toBe("/api/pesanan/checkout");
+    expect(arahkan).toHaveBeenCalledTimes(1);
+    expect(arahkan).toHaveBeenCalledWith("https://sandbox.doku.test/bayar/abc");
+    expect(r.hasil).toEqual({
+      jenis: "url",
+      url: "https://sandbox.doku.test/bayar/abc",
+      pesananId: "pesanan-abc",
+    });
   });
 
   it.each([
-    "src/app/produk/[slug]/tombol-beli.tsx",
-    "src/lib/midtrans/snap-peramban.ts",
-  ])("%s tidak menyebut midtransProduksi maupun process.env", (rel) => {
-    const isi = baca(rel);
-    expect(isi).not.toContain("midtransProduksi");
-    expect(isi).not.toContain("process.env");
+    [503, { pesan: "Pembayaran belum aktif. Hubungi tim PADMA." }],
+    [502, { pesan: "Pembayaran belum bisa dimulai. Coba lagi." }],
+    [409, { pesan: "Selesaikan dulu pesanan terbuka Anda." }],
+  ])("status %i -> pesan tampil dan TIDAK ada alihan", async (status, isi) => {
+    const arahkan = vi.fn();
+    const r = await mintaLaluAlihkan("produk-1", false, arahkan, fetchPalsu({ status, isi }));
+    expect(r.hasil).toEqual({ jenis: "pesan", pesan: isi.pesan });
+    expect(arahkan).not.toHaveBeenCalled();
   });
 
-  it("page.tsx membaca keduanya di SERVER dan mengopernya sebagai prop", () => {
-    const isi = baca("src/app/produk/[slug]/page.tsx");
-    expect(isi).toContain("midtransProduksi");
-    expect(isi).toContain("NEXT_PUBLIC_MIDTRANS_CLIENT_KEY");
-    expect(isi).toContain("produksi={");
-    expect(isi).toContain("clientKey={");
-  });
-});
-
-describe("muatSkripSnap", () => {
-  it("MELEMPAR di luar peramban", async () => {
-    // Pagar terhadap impor yang salah: dipanggil dari server component ia harus
-    // gagal keras, bukan memulangkan promise yang tidak pernah selesai.
-    await expect(muatSkripSnap("kunci", false)).rejects.toThrow();
+  it("200 tanpa url (mis. badan lama bertoken) -> TIDAK ada alihan", async () => {
+    const arahkan = vi.fn();
+    await mintaLaluAlihkan("produk-1", false, arahkan, fetchPalsu({ status: 200, isi: { token: "tok" } }));
+    expect(arahkan).not.toHaveBeenCalled();
   });
 
-  it.each([[""], ["   "]])(
-    "kunci klien %p ditolak — fail closed, kalimat yang sama dengan adapter server",
-    async (kunci) => {
-      // `page.tsx` mengoper `?? ""`, jadi env yang belum dipasang tiba di sini
-      // sebagai string kosong. Tanpa pagar ini skripnya dimuat dengan
-      // `data-client-key=""` dan pembayarannya gagal tanpa menyebut sebabnya —
-      // satu-satunya env Midtrans di repo ini yang tidak fail-closed.
-      await expect(muatSkripSnap(kunci, false)).rejects.toThrow(
-        PESAN_PEMBAYARAN_BELUM_AKTIF,
-      );
-    },
-  );
+  it("jaringan mati -> TIDAK ada alihan", async () => {
+    const arahkan = vi.fn();
+    await mintaLaluAlihkan("produk-1", false, arahkan, fetchPalsu("tolak"));
+    expect(arahkan).not.toHaveBeenCalled();
+  });
 
-  it("kalimatnya PERSIS sama dengan yang dipakai terbitkanTokenSnap", () => {
-    // Satu keadaan, satu kalimat. Kalau yang satu diubah tanpa yang lain,
-    // pembeli mendapat dua penjelasan berbeda untuk sebab yang sama.
-    expect(PESAN_PEMBAYARAN_BELUM_AKTIF).toBe("Pembayaran belum aktif. Hubungi tim PADMA.");
-    expect(baca("src/lib/midtrans/adapter.ts")).toContain(PESAN_PEMBAYARAN_BELUM_AKTIF);
+  it("sisi-peramban beralih lewat window.location.assign dan tidak menyisipkan skrip", () => {
+    for (const rel of [
+      "src/app/produk/[slug]/tombol-beli.tsx",
+      "src/app/passport/keranjang/isi-keranjang.tsx",
+    ]) {
+      const isi = baca(rel);
+      expect(isi).toContain("window.location.assign");
+      expect(isi).not.toMatch(/createElement\(\s*["']script/);
+      expect(isi).not.toMatch(/snap\.pay|window\.snap|muatSkripSnap|midtrans/i);
+      expect(isi).not.toContain("process.env");
+    }
+    expect(existsSync(path.join(AKAR, "src/lib/midtrans/snap-peramban.ts"))).toBe(false);
+  });
+
+  it("kedua page.tsx tidak lagi mengoper produksi/clientKey", () => {
+    for (const rel of ["src/app/produk/[slug]/page.tsx", "src/app/passport/keranjang/page.tsx"]) {
+      const isi = baca(rel);
+      expect(isi).not.toMatch(/midtrans/i);
+      expect(isi).not.toContain("clientKey");
+      expect(isi).not.toContain("produksi");
+    }
   });
 });
 
 /**
- * PEMULIHAN SESUDAH SNAP MENOLAK — inilah beda antara "coba lagi" dan
+ * PEMULIHAN SESUDAH DOKU MENOLAK — inilah beda antara "coba lagi" dan
  * "terkunci 24 jam".
  *
- * Midtrans menolak `order_id` kembar SELAMANYA. Percobaan kedua yang mengirim
+ * DOKU menolak `invoice_number` kembar SELAMANYA. Percobaan kedua yang mengirim
  * `ulang: false` membuat `buat_pesanan` memulangkan pesanan terbuka yang SAMA
- * berikut `kode` dan `percobaan` yang sama; rute merakit `order_id` yang sama;
- * Snap menolaknya lagi; 502 berulang selamanya. Pembeli terkunci sampai
+ * berikut `kode` dan `percobaan` yang sama; rute merakit `invoice_number` yang sama;
+ * DOKU menolaknya lagi; 502 berulang selamanya. Pembeli terkunci sampai
  * tenggat 24 jamnya lewat — dan layarnya berkata "Pembayaran Anda sedang
  * diproses", kalimat yang tidak benar untuk orang yang tidak pernah membayar.
  *
  * Jalan keluarnya sudah dibangun mesin (`buat_pesanan(p_ulang := true)`
- * menaikkan `percobaan` dan mengosongkan `snap_token`) dan sampai perbaikan
+ * menaikkan `percobaan` dan mengosongkan `tautan_gateway`) dan sampai perbaikan
  * ini NOL pemanggil di `src/` pernah mengirimnya.
  */
 describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () => {
   it("percobaan PERTAMA mengirim ulang: false", async () => {
-    const ambil = fetchPalsu({ status: 200, isi: { token: "tok" } });
+    const ambil = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
     await mintaCheckout("produk-1", false, ambil);
 
     expect(ambil.panggilan).toHaveLength(1);
@@ -366,16 +356,44 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     expect(pertama.orderIdTerbakar).toBe(true);
 
     // Nilai itulah yang diumpankan balik oleh komponen sebagai `ulang`.
-    const lagi = fetchPalsu({ status: 200, isi: { token: "tok-2" } });
+    const lagi = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/dua" } });
     const kedua = await mintaCheckout("produk-1", pertama.orderIdTerbakar, lagi);
 
     expect(lagi.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: true });
-    expect(kedua.hasil).toEqual({ jenis: "token", token: "tok-2", pesananId: null });
+    expect(kedua.hasil).toEqual({ jenis: "url", url: "https://sandbox.doku.test/bayar/dua", pesananId: null });
   });
 
-  it("token terbit juga membakar order_id — Snap sudah memegangnya", async () => {
-    const ambil = fetchPalsu({ status: 200, isi: { token: "tok" } });
-    expect((await mintaCheckout("produk-1", false, ambil)).orderIdTerbakar).toBe(true);
+  it("200 TIDAK membakar order_id; 502 dan jaringan mati membakar", async () => {
+    const ok = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
+    expect((await mintaCheckout("produk-1", false, ok)).orderIdTerbakar).toBe(false);
+    expect((await mintaCheckout("produk-1", false, fetchPalsu({ status: 502, isi: {} }))).orderIdTerbakar).toBe(true);
+    expect((await mintaCheckout("produk-1", false, fetchPalsu("tolak"))).orderIdTerbakar).toBe(true);
+  });
+
+  it("sesudah 200, permintaan berikutnya mengirim ulang: false (tautan dipakai ulang)", async () => {
+    const pertama = await mintaCheckout(
+      "produk-1",
+      false,
+      fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } }),
+    );
+    const lagi = fetchPalsu({ status: 200, isi: { url: "https://sandbox.doku.test/bayar/abc" } });
+    await mintaCheckout("produk-1", pertama.orderIdTerbakar, lagi);
+    expect(lagi.panggilan[0].badan).toEqual({ productId: "produk-1", ulang: false });
+  });
+
+  it("503 dan 409 tidak membakar", async () => {
+    for (const status of [503, 409]) {
+      const r = await mintaCheckout("produk-1", false, fetchPalsu({ status, isi: { pesan: "x" } }));
+      expect(r.orderIdTerbakar).toBe(false);
+    }
+  });
+
+  it("kedua komponen mengunci tombol sesudah alihan dimulai", () => {
+    for (const rel of ["src/app/produk/[slug]/tombol-beli.tsx", "src/app/passport/keranjang/isi-keranjang.tsx"]) {
+      const isi = baca(rel);
+      expect(isi).toContain("setDialihkan(true)");
+      expect(isi).toContain("pendingTrans || dialihkan");
+    }
   });
 
   it("pesananId dari rute DISIMPAN, bukan dibuang", async () => {
@@ -384,11 +402,11 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     // tombol batalnya.
     const ambil = fetchPalsu({
       status: 200,
-      isi: { token: "tok", kode: "PSN-260927-A1B2C3", pesananId: "pesanan-abc", produksi: false },
+      isi: { url: "https://sandbox.doku.test/bayar/abc", kode: "PSN-260927-A1B2C3", pesananId: "pesanan-abc" },
     });
     expect((await mintaCheckout("produk-1", false, ambil)).hasil).toEqual({
-      jenis: "token",
-      token: "tok",
+      jenis: "url",
+      url: "https://sandbox.doku.test/bayar/abc",
       pesananId: "pesanan-abc",
     });
   });
@@ -408,7 +426,7 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
   });
 
   it.each([[400], [409]])(
-    "status %i TIDAK membakar: keduanya berhenti sebelum Snap disentuh",
+    "status %i TIDAK membakar: keduanya berhenti sebelum DOKU disentuh",
     async (status) => {
       const ambil = fetchPalsu({ status, isi: { pesan: "Selesaikan dulu pesanan terbuka Anda." } });
       const hasil = await mintaCheckout("produk-1", false, ambil);
@@ -448,7 +466,7 @@ describe("mintaCheckout — percobaan berikutnya sesudah order_id terbakar", () 
     expect(hasil.orderIdTerbakar).toBe(false);
   });
 
-  it("200 tanpa token diperlakukan sebagai kegagalan berkalimat", async () => {
+  it("200 tanpa url diperlakukan sebagai kegagalan berkalimat", async () => {
     const ambil = fetchPalsu({ status: 200, isi: {} });
     expect((await mintaCheckout("produk-1", false, ambil)).hasil).toEqual({
       jenis: "pesan",
@@ -573,7 +591,7 @@ describe("pesananYangBisaDibatalkan — jalan (2), tebakan konservatif sesudah m
  * produk APA PUN, dan menyala selamanya.
  *
  * Tanpa jalan (1), pembeli yang pernah belanja — segmen yang paling mungkin
- * membeli lagi — kehilangan tombol batalnya PERMANEN: popup Snap yang gagal
+ * membeli lagi — kehilangan tombol batalnya PERMANEN: alihan yang gagal
  * meninggalkan mereka tanpa tombol beli DAN tanpa tombol batal sampai tenggat
  * 24 jam lewat. Itu persis keluhan Temuan 1, bertahan hidup di segmen yang
  * paling sering menemuinya.

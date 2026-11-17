@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
-import { rakitOrderId } from "@/lib/pesanan/order-id";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 import {
   EMAIL_KLIEN_KEDUA,
   KLIEN_KEDUA_ID,
@@ -123,13 +123,12 @@ describe("trigger pembersihan — lewat webhook NYATA", () => {
     expect(ePesanan).toBeNull();
     const baris = (pesanan as { kode: string; percobaan: number }[])[0];
 
-    const settlement = await svc.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: rakitOrderId(baris.kode, baris.percobaan),
-      p_transaction_status: "settlement",
-      p_fraud_status: "",
-      p_transaction_id: "trx-keranjang-bersih",
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 120_000,
+    const settlement = await svc.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(baris.kode, baris.percobaan),
+      p_status: "SUCCESS",
+      p_transaksi_id: "trx-keranjang-bersih",
+      p_kanal: "bank_transfer",
+      p_nominal: 120_000,
       p_sidik: randomUUID(),
     });
     expect(settlement.error).toBeNull();

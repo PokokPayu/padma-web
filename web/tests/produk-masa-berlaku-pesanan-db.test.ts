@@ -5,7 +5,7 @@ import { signInAs } from "./helpers/as-user";
 /**
  * Masa berlaku di alur bayar (spec 2026-10-16, "Masa berlaku dalam alur
  * bayar"). Cabang penerbitan & webhook kembar TIDAK terlihat saat menguji
- * manual — butuh menunggu kedaluwarsa atau memalsukan notifikasi Midtrans.
+ * manual — butuh menunggu kedaluwarsa atau memalsukan notifikasi gateway.
  */
 const svc = createAdminSupabase();
 const KLIEN = "ananda@padma.test";

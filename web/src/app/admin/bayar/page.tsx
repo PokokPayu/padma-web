@@ -52,20 +52,20 @@ export default async function BayarPage({
             <> Sesi yang tercakup paket tidak muncul sendiri: status bayarnya mengikuti paketnya.</>
           )}{" "}
           Nominal tidak ditampilkan di daftar sesi — besarannya disampaikan tim PADMA lewat
-          WhatsApp. Tagihan <b>pengajuan</b> di blok atas berbeda: ia menahan jadwal, punya
-          tenggat, dan nominalnya memang ditampilkan karena QRIS statis menuntut klien mengetik
-          jumlahnya sendiri.
+          WhatsApp. Blok <b>warisan QRIS</b> di atas hanya memuat pengajuan lama yang
+          dibayar lewat QRIS dan belum punya pesanan; tagihan sesi yang baru dibayar lewat DOKU dan
+          dikelola di <b>Pesanan</b>. Nominal blok itu ditampilkan karena QRIS statis menuntut klien
+          mengetik jumlahnya sendiri.
         </Bantuan>
       </header>
 
-      {/* TAGIHAN PENGAJUAN (spec C2) — blok TERSENDIRI di atas, bukan dilebur.
-          Hanya yang ini menahan jadwal dan punya tenggat; meleburnya ke satu
-          daftar tanpa penanda berarti admin tidak bisa lagi membedakan mana
-          yang mendesak. */}
-      <section aria-label="Tagihan pengajuan" className="mb-5">
+      {/* WARISAN QRIS (spec §6.8, §7) — pengajuan TANPA pesanan, yang dibayar
+          sebelum DOKU. Blok tersendiri, tidak dilebur ke daftar klaim; ia
+          dihapus setelah barisnya habis. */}
+      <section aria-label="Tagihan pengajuan warisan QRIS" className="mb-5">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[15px] font-bold text-panel-ink">
-            Tagihan pengajuan — menahan jadwal
+            Tagihan pengajuan — warisan QRIS
           </h2>
           <a
             href={lamaTerlihat ? BASIS : `${BASIS}?bukti_lama=ya`}
@@ -78,7 +78,7 @@ export default async function BayarPage({
           <p className="rounded-lg border border-panel-border bg-panel-surface p-6 text-center text-[13px] italic text-panel-muted">
             {lamaTerlihat
               ? "Tidak ada bukti lunas yang lebih tua dari 90 hari."
-              : "Tidak ada tagihan pengajuan yang menunggu."}
+              : "Tidak ada tagihan warisan QRIS yang menunggu."}
           </p>
         ) : (
           <ul>

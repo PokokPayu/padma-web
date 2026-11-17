@@ -9,6 +9,8 @@ import {
   kirimUlangEmailTagihan,
 } from "./aksi";
 import { perbaruiPermintaan } from "./aksi-ubah-permintaan";
+import { batalkanPengajuanStaf, gantiBidanMenungguBayar } from "./aksi-tagihan";
+import { tombolUntuk, type KodeKeadaanTagihan } from "@/lib/tagihan/keadaan";
 import {
   PERMINTAAN_AWAL,
   PERMINTAAN_DICARIKAN,
@@ -31,7 +33,11 @@ const KELAS_KEDUA =
  *   diminta        -> "Cari bidan"
  *   mencari_mitra  -> daftar bidan terurut jarak + "Tetapkan bidan"
  *   mitra_siap     -> "Terbitkan tagihan" + "Ganti bidan"
- *   menunggu_bayar -> WA tagihan, lalu "Konfirmasi jadwal" bila sudah lunas
+ *   menunggu_bayar -> tombol menurut KEADAAN tagihan (`tombolUntuk`): WA &
+ *                     email saat terbuka; "Terbitkan ulang" / "Batalkan
+ *                     pengajuan" saat terbuka, lewat tenggat, atau ditutup;
+ *                     "Ganti bidan" juga untuk pengajuan tertahan;
+ *                     "Konfirmasi jadwal" HANYA baris warisan lunas tanpa pesanan
  *
  * Langkahnya dipisah karena tarif transport berasal dari domisili BIDAN ke
  * alamat KLIEN: transport tidak bisa dihitung sebelum bidannya diketahui.
@@ -51,27 +57,36 @@ export function TombolPermintaan({
   status,
   namaMitra,
   mitra,
-  lunas,
+  keadaan,
   tautanWa,
+  kalimatTanpaWa,
   emailTerkirim,
 }: {
   permintaanId: string;
   status: StatusPermintaan;
   namaMitra: string | null;
   mitra: MitraPilihan[];
-  lunas: boolean;
+  /** Keadaan tagihan, dari `keadaanTagihan()` di server. */
+  keadaan: KodeKeadaanTagihan;
   tautanWa: string;
+  /** Kenapa tombol WA tidak ada (nomor tidak sah, basis URL kosong). */
+  kalimatTanpaWa: string;
   emailTerkirim: boolean;
 }) {
+  const tombol = tombolUntuk(keadaan);
   const [pending, mulai] = useTransition();
   const [pesan, setPesan] = useState<string | null>(null);
   const [partnerId, setPartnerId] = useState(mitra[0]?.id ?? "");
   const tanpaMitra = mitra.length === 0;
 
-  function jalankan(aksi: () => Promise<{ ok: true } | { ok: false; pesan: string }>) {
+  function jalankan(
+    aksi: () => Promise<{ ok: true; pesan?: string } | { ok: false; pesan: string }>,
+  ) {
     mulai(async () => {
       const r = await aksi();
-      setPesan(r.ok ? null : r.pesan);
+      // `pesan` pada keberhasilan = kabar yang HARUS dibaca admin (mis. tagihan
+      // terbuka ikut ditutup), bukan hiasan.
+      setPesan(r.ok ? (r.pesan ?? null) : r.pesan);
     });
   }
 
@@ -151,24 +166,24 @@ export function TombolPermintaan({
 
       {status === PERMINTAAN_MENUNGGU_BAYAR && (
         <>
-          {tautanWa ? (
-            <a href={tautanWa} target="_blank" rel="noopener" className={KELAS_KEDUA}>
-              Kirim tagihan via WA
-            </a>
-          ) : (
-            /* Tombolnya HILANG ketika nomor klien tidak sah, dan kalimat ini
-               yang membuat hilangnya terlihat. Tanpa kalimat, admin membaca
-               layar yang sama persis seperti layar yang benar dan menyimpulkan
-               tagihannya sudah terkirim — sementara tenggat 24 jam berjalan. */
-            <span className="text-[12px] font-semibold text-clay">
-              Nomor WhatsApp klien belum sah — lengkapi di menu Klien.
-            </span>
-          )}
-          {/* Konfirmasi hanya muncul ketika pembayaran SUDAH diverifikasi.
-              Menampilkannya lebih awal berarti menawarkan tombol yang akan
-              ditolak basis data — dan tombol yang berbohong adalah cara
-              tercepat membuat admin berhenti memercayai layarnya. */}
-          {lunas && (
+          {tombol.wa &&
+            (tautanWa ? (
+              <a href={tautanWa} target="_blank" rel="noopener" className={KELAS_KEDUA}>
+                Kirim tagihan via WA
+              </a>
+            ) : (
+              /* Tombolnya HILANG ketika tautan tidak bisa dibuat, dan kalimat
+                 ini yang membuat hilangnya terlihat. Tanpa kalimat, admin
+                 membaca layar yang sama persis seperti layar yang benar dan
+                 menyimpulkan tagihannya sudah terkirim — sementara tenggatnya
+                 berjalan. */
+              <span className="text-[12px] font-semibold text-clay">{kalimatTanpaWa}</span>
+            ))}
+          {/* "Konfirmasi jadwal" HANYA untuk baris warisan QRIS yang lunas
+              tanpa pesanan. Pesanan DOKU melahirkan sesinya sendiri; tombol
+              ini di sana akan ditolak basis data, dan tombol yang berbohong
+              adalah cara tercepat membuat admin berhenti memercayai layarnya. */}
+          {tombol.konfirmasi && (
             <button
               type="button"
               disabled={pending}
@@ -178,14 +193,76 @@ export function TombolPermintaan({
               {pending ? "Memproses…" : "Konfirmasi jadwal"}
             </button>
           )}
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => jalankan(() => kirimUlangEmailTagihan(permintaanId))}
-            className={KELAS_KEDUA}
-          >
-            {pending ? "Memproses…" : emailTerkirim ? "Kirim ulang email" : "Kirim email tagihan"}
-          </button>
+          {tombol.terbitUlang && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => jalankan(() => terbitkanTagihan(permintaanId))}
+              className={KELAS_UTAMA}
+            >
+              {pending ? "Memproses…" : "Terbitkan ulang"}
+            </button>
+          )}
+          {tombol.email && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => jalankan(() => kirimUlangEmailTagihan(permintaanId))}
+              className={KELAS_KEDUA}
+            >
+              {pending ? "Memproses…" : emailTerkirim ? "Kirim ulang email" : "Kirim email tagihan"}
+            </button>
+          )}
+          {tombol.batalkan && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                // TIDAK BISA DIURUNGKAN: pesanan terbuka ditutup dan skrining
+                // dilepas. Pola konfirmasi admin yang sama dengan artikel/editor.
+                if (
+                  !confirm(
+                    "Batalkan pengajuan ini? Tagihan yang sedang terbuka ditutup dan skrining klien dilepas. Tindakan ini tidak bisa dibatalkan.",
+                  )
+                )
+                  return;
+                jalankan(() => batalkanPengajuanStaf(permintaanId));
+              }}
+              className={KELAS_KEDUA}
+            >
+              Batalkan pengajuan
+            </button>
+          )}
+          {tombol.gantiBidan && (
+            /* Bidan diganti TANPA mundur ke `mencari_mitra`. Pada pengajuan
+               tertahan ini jalan pemulihan "bidan nonaktif": ganti bidan,
+               lalu "Buat sesi" di /admin/pesanan. */
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor={`ganti-${permintaanId}`}>
+                Bidan pengganti
+              </label>
+              <select
+                id={`ganti-${permintaanId}`}
+                value={partnerId}
+                onChange={(e) => setPartnerId(e.target.value)}
+                className="min-h-[38px] flex-1 rounded-lg border border-black/15 bg-white px-2.5 py-1.5 text-[12.5px]"
+              >
+                {mitra.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nama} · {m.jarak}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={pending || tanpaMitra}
+                onClick={() => jalankan(() => gantiBidanMenungguBayar(permintaanId, partnerId))}
+                className={KELAS_KEDUA}
+              >
+                Ganti bidan
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -218,7 +295,9 @@ export function FormUbahPermintaan({
       action={(formData) =>
         mulai(async () => {
           const r = await perbaruiPermintaan(permintaanId, formData);
-          setPesan(r.ok ? "Perubahan tersimpan." : r.pesan);
+          // Pada keberhasilan, `pesan` (bila ada) lebih penting dari "tersimpan":
+          // ia mengabarkan tagihan terbuka yang ikut ditutup.
+          setPesan(r.ok ? (r.pesan ?? "Perubahan tersimpan.") : r.pesan);
         })
       }
     >

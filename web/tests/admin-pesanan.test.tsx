@@ -9,7 +9,7 @@
  * Itu bukan kelalaian, melainkan KEPUTUSAN PEMILIK REPO yang tercatat di spec
  * `docs/superpowers/specs/2026-09-26-padma-inti-pembayaran-design.md`, seksi
  * "Catatan: nominal di layar staf": admin harus bisa menjawab "berapa yang
- * klien ini bayar" dari dalam PADMA, bukan dari dashboard Midtrans. Untuk
+ * klien ini bayar" dari dalam PADMA, bukan dari dashboard DOKU. Untuk
  * baris `ditahan` — satu-satunya baris yang angkanya benar-benar jadi
  * keputusan manusia, karena artinya "uang masuk tapi jumlahnya tidak cocok" —
  * yang ditagih dan yang diterima harus terbaca BERDAMPINGAN, karena
@@ -40,6 +40,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { signInAs } from "./helpers/as-user";
 import { nominalDalam } from "./helpers/nominal";
+import { rakitInvoice } from "@/lib/pesanan/order-id";
 
 const admin = createAdminSupabase();
 const AKAR = path.resolve(__dirname, "..");
@@ -63,15 +64,15 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => {}, refresh: () => {} }),
 }));
 
-// Midtrans dipalsukan seluruhnya — `tests/setup-fetch-guard.ts` adalah daftar
-// izin dan `.midtrans.com` sengaja TIDAK ada di sana.
-const midtrans = vi.hoisted(() => ({ jawaban: null as unknown, panggilan: [] as string[] }));
-vi.mock("@/lib/midtrans/adapter", () => ({
-  bacaStatusTransaksi: async (orderId: string) => {
-    midtrans.panggilan.push(orderId);
-    return midtrans.jawaban;
+// DOKU dipalsukan seluruhnya — `tests/setup-fetch-guard.ts` adalah daftar
+// izin dan domain DOKU sengaja TIDAK ada di sana; kunci `.env.local` tak dibaca.
+const doku = vi.hoisted(() => ({ jawaban: null as unknown, panggilan: [] as string[] }));
+vi.mock("@/lib/doku/adapter", () => ({
+  bacaStatusDoku: async (invoice: string) => {
+    doku.panggilan.push(invoice);
+    return doku.jawaban;
   },
-  terbitkanTokenSnap: async () => ({ ok: false, pesan: "tidak dipakai di berkas ini" }),
+  buatPembayaranDoku: async () => ({ ok: false, pesan: "tidak dipakai di berkas ini" }),
 }));
 
 const { bacaPesananStaf } = await import("@/lib/admin/pesanan");
@@ -89,6 +90,9 @@ const KLIEN_RINA = "44444444-4444-4444-4444-444444444402";
 const AWALAN_KODE = "PSN-260926-AD";
 const SLUG = "uji-admin-pesanan";
 const JUDUL = "Uji Layar Pesanan";
+
+/** Invoice DOKU dari `kode`: tanpa tanda hubung + digit percobaan 1. */
+const inv = (kode: string) => `${kode.replaceAll("-", "")}1`;
 
 const K_TERBUKA_BARU = `${AWALAN_KODE}0001`;
 const K_TERBUKA_LAMA = `${AWALAN_KODE}0002`;
@@ -133,7 +137,7 @@ async function semai(o: {
       sebab_tinjauan: o.butuhTinjauan ?? null,
       kanal: o.status === "menunggu_bayar" ? null : "bank_transfer",
       transaksi_id: o.status === "menunggu_bayar" ? null : `trx-${o.kode}`,
-      status_midtrans: o.status === "menunggu_bayar" ? null : "settlement",
+      status_gateway: o.status === "menunggu_bayar" ? null : "settlement",
     })
     .select("id")
     .single();
@@ -211,7 +215,7 @@ async function siapkan() {
     pesanan_id: idDitahan,
     sidik: `sidik-${K_DITAHAN}`,
     transaksi_id: `trx-${K_DITAHAN}`,
-    status_midtrans: "settlement",
+    status_gateway: "settlement",
     kanal: "bank_transfer",
     nominal_diterima: 95_000,
   });
@@ -250,8 +254,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   ref.sesi = sesiAdmin;
-  midtrans.panggilan.length = 0;
-  midtrans.jawaban = null;
+  doku.panggilan.length = 0;
+  doku.jawaban = null;
   await siapkan();
 });
 
@@ -425,7 +429,9 @@ describe("TabelPesanan", () => {
     sebabTinjauan: "selisih_nominal",
     kanal: "bank_transfer",
     transaksiId: "trx-9999",
-    statusMidtrans: "settlement",
+    statusGateway: "settlement",
+    jenis: "produk_digital" as const,
+    bookingRequestId: null,
     items: [
       {
         pesananId: "11111111-1111-1111-1111-111111111111",
@@ -453,7 +459,7 @@ describe("TabelPesanan", () => {
     // `tutup_tinjauan` menolak baris `ditahan` dengan P0001. Menawarkan tombol
     // yang pasti ditolak adalah janji yang tidak akan ditepati — dan di sini
     // janji itu berbunyi "beres" untuk pesanan yang uangnya sudah di tangan
-    // Midtrans dan barangnya belum keluar.
+    // DOKU dan barangnya belum keluar.
     const m = renderToStaticMarkup(<TabelPesanan baris={[dasar]} />);
     expect(m).not.toContain("Tutup tinjauan");
     expect(m).toContain("Putuskan lunas");
@@ -465,7 +471,9 @@ describe("TabelPesanan", () => {
       <TabelPesanan baris={[{ ...dasar, status: "lunas" as const, nominalDiterima: null }]} />,
     );
     expect(m).toContain("Tutup tinjauan");
-    expect(m).toContain("Terbitkan akses");
+    // Satu tombol untuk dua jenis pesanan (B3): produk menerbitkan akses,
+    // sesi menjalankan ulang penyalur sesi.
+    expect(m).toContain("Terbitkan akses / Buat sesi");
   });
 
   it("nominal yang tidak terbaca dirender sebagai KEGAGALAN, bukan sebagai Rp 0", () => {
@@ -509,7 +517,9 @@ describe('"Putuskan lunas" menyuruh langkah berikutnya', () => {
   it("putusan lunas memulangkan kalimat yang menyebut tombol berikutnya", () => {
     const kalimat = panduanSesudah("putuskan", { putusan: "lunas" });
     expect(kalimat).toBeTruthy();
-    expect(kalimat).toContain("Terbitkan akses");
+    // Nama tombol PERSIS seperti yang dirender: sejak B3 putusan lunas atas
+    // pesanan SESI juga tidak menyalurkan, dan sesinya lahir dari tombol ini.
+    expect(kalimat).toContain("Terbitkan akses / Buat sesi");
   });
 
   it("putusan BATAL tidak menyuruh menerbitkan apa pun", () => {
@@ -647,8 +657,12 @@ describe("POST /api/pesanan/[id]/terbitkan-akses", () => {
     const id = idPesanan.get(K_LUNAS_TANPA_AKSES)!;
     const r = await terbitkanAkses(permintaan("terbitkan-akses"), param(id));
     expect(r.status).toBe(200);
-    const isi = (await r.json()) as { terbit: string[] };
+    const isi = (await r.json()) as { terbit: string[]; belumAdaPenangan: number[]; sesi: unknown };
     expect(isi.terbit).toEqual(["akses_terbit"]);
+    // Pesanan produk tidak punya item sesi: `sesi` ADA di jawaban dan bernilai
+    // null (bukan hilang), supaya tombol tidak perlu menebak bentuknya.
+    expect(isi.sesi).toBeNull();
+    expect(isi.belumAdaPenangan).toEqual([]);
 
     const { data } = await admin
       .from("digital_entitlements")
@@ -679,49 +693,69 @@ describe("POST /api/pesanan/[id]/terbitkan-akses", () => {
 describe("POST /api/pesanan/[id]/periksa-ulang", () => {
   it("menanyai Status API lalu menjalankan jawabannya lewat mesin", async () => {
     const id = idPesanan.get(K_TERBUKA_BARU)!;
-    midtrans.jawaban = {
+    doku.jawaban = {
       ok: true as const,
       status: {
-        order_id: `${K_TERBUKA_BARU}.1`,
-        status_code: "200",
-        transaction_status: "settlement",
-        transaction_id: "trx-periksa-ulang",
-        gross_amount: "75000.00",
-        fraud_status: null,
-        payment_type: "gopay",
+        invoice: inv(K_TERBUKA_BARU),
+        status: "SUCCESS",
+        nominal: 75_000,
+        transaksiId: "trx-periksa-ulang",
+        kanal: "EMONEY_OVO",
       },
     };
 
     const r = await periksaUlang(permintaan("periksa-ulang"), param(id));
     expect(r.status).toBe(200);
-    expect(midtrans.panggilan).toEqual([`${K_TERBUKA_BARU}.1`]);
+    expect(doku.panggilan).toEqual([inv(K_TERBUKA_BARU)]);
     expect(await statusPesanan(id)).toBe("lunas");
   });
 
-  it("Midtrans yang tidak menjawab memulangkan 502, bukan 200 palsu", async () => {
+  it("DOKU yang tidak menjawab memulangkan 502 dengan kalimatnya, bukan 200 palsu", async () => {
     // 200 di sini berarti staf melihat "selesai" untuk pemeriksaan yang tidak
     // pernah terjadi, lalu berhenti memeriksanya.
     const id = idPesanan.get(K_TERBUKA_BARU)!;
-    midtrans.jawaban = { ok: false as const, kode: 500, pesan: "gangguan" };
+    doku.jawaban = { ok: false as const, kode: 500, pesan: "gangguan" };
 
     const r = await periksaUlang(permintaan("periksa-ulang"), param(id));
     expect(r.status).toBe(502);
+    expect(((await r.json()) as { pesan: string }).pesan).toBe(
+      "DOKU tidak menjawab. Coba lagi beberapa saat lagi.",
+    );
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
   });
 
-  it("kunci Midtrans belum terpasang memulangkan 503, BUKAN 502 yang menyuruh coba lagi", async () => {
+  it("kunci DOKU belum terpasang memulangkan 503, BUKAN 502 yang menyuruh coba lagi", async () => {
     // Beda kode, beda kalimat, beda tindakan: 502 (uji di atas) menyuruh staf
-    // coba lagi karena Midtrans MUNGKIN sembuh sendiri; kunci yang belum
+    // coba lagi karena DOKU MUNGKIN sembuh sendiri; kunci yang belum
     // dipasang tidak pernah sembuh dengan menekan tombol yang sama — hanya
     // orang yang bisa memasang env yang menolong. Menyatukan keduanya berarti
     // staf menekan tombol "Periksa ulang" selamanya untuk kegagalan yang
     // menunggu manusia lain.
     const id = idPesanan.get(K_TERBUKA_BARU)!;
-    midtrans.jawaban = { ok: false as const, kode: -1, pesan: "Kunci Midtrans belum dipasang." };
+    doku.jawaban = { ok: false as const, kode: -1, pesan: "Kunci DOKU belum dipasang." };
 
     const r = await periksaUlang(permintaan("periksa-ulang"), param(id));
     expect(r.status).toBe(503);
+    expect(((await r.json()) as { pesan: string }).pesan).toBe(
+      "Pembayaran belum aktif. Hubungi tim PADMA.",
+    )
     expect(await statusPesanan(id)).toBe("menunggu_bayar");
+  });
+
+  it("setiap anggota HasilPeriksaPesanan punya kalimat di peta rute", async () => {
+    // Kompilator sudah memaksanya lewat `Record<HasilPeriksaPesanan, string>`;
+    // ini menjaga sebaliknya: tidak ada sisa nama lama (Midtrans) di peta.
+    const sumber = readFileSync(
+      path.join(__dirname, "../src/app/api/pesanan/[id]/periksa-ulang/route.ts"),
+      "utf8",
+    );
+    const anggota = [
+      "diterapkan", "duplikat", "tanpa_efek", "pesanan_tidak_ada", "bentuk_invoice",
+      "belum_kedaluwarsa", "gateway_tak_terjawab", "kunci_belum_terpasang", "galat_basis_data",
+      "waktu_habis",
+    ];
+    for (const a of anggota) expect(sumber, a).toMatch(new RegExp(`\\n\\s+${a}:`));
+    expect(sumber).not.toMatch(/midtrans/i);
   });
 
   it("pesanan yang tidak ada memulangkan 404", async () => {
@@ -730,7 +764,7 @@ describe("POST /api/pesanan/[id]/periksa-ulang", () => {
       param("00000000-0000-0000-0000-000000000000"),
     );
     expect(r.status).toBe(404);
-    expect(midtrans.panggilan).toEqual([]);
+    expect(doku.panggilan).toEqual([]);
   });
 });
 
@@ -751,13 +785,12 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
       butuhTinjauan: "lunas_setelah_tutup",
     });
 
-    const { error } = await admin.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: `${kode}.1`,
-      p_transaction_status: "refund",
-      p_fraud_status: "",
-      p_transaction_id: `trx-${kode}-refund`,
-      p_payment_type: "bank_transfer",
-      p_gross_amount: 50_000,
+    const { error } = await admin.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(kode, 1),
+      p_status: "REFUNDED",
+      p_transaksi_id: `trx-${kode}-refund`,
+      p_kanal: "bank_transfer",
+      p_nominal: 50_000,
       p_sidik: `sidik-${kode}-refund`,
       p_sumber: "webhook",
     });
@@ -780,14 +813,13 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
     const kode = `${AWALAN_KODE}0007`;
     const id = await semai({ kode, clientId: KLIEN_RINA, status: "lunas", harga: 40_000 });
 
-    await admin.rpc("terapkan_notifikasi_midtrans", {
-      p_order_id: `${kode}.1`,
-      p_transaction_status: "chargeback",
-      p_fraud_status: "",
-      p_transaction_id: `trx-${kode}-cb`,
-      p_payment_type: "credit_card",
-      p_gross_amount: 40_000,
-      p_sidik: `sidik-${kode}-cb`,
+    await admin.rpc("terapkan_notifikasi_gateway", {
+      p_invoice: rakitInvoice(kode, 1),
+      p_status: "REFUNDED",
+      p_transaksi_id: `trx-${kode}-rf`,
+      p_kanal: "bank_transfer",
+      p_nominal: 40_000,
+      p_sidik: `sidik-${kode}-rf`,
       p_sumber: "webhook",
     });
 
@@ -796,7 +828,7 @@ describe("sebab_tinjauan tidak tertimpa notifikasi berikutnya", () => {
       .select("sebab_tinjauan, butuh_tinjauan_pada")
       .eq("id", id)
       .single();
-    expect(data!.sebab_tinjauan).toBe("chargeback");
+    expect(data!.sebab_tinjauan).toBe("refund");
     expect(data!.butuh_tinjauan_pada).not.toBeNull();
   });
 });
@@ -850,7 +882,7 @@ describe("galat basis data TIDAK dilaporkan sebagai 404", () => {
    * dan `kirimKeMesin` Tugas 10), dan `bacaPesananStaf` di modul ini sendiri
    * sudah berargumen begitu lalu MELEMPAR. Ketiga rute harus sepakat.
    */
-  it("periksa-ulang: 500 dengan kalimatnya sendiri, dan Midtrans tidak pernah ditanyai", async () => {
+  it("periksa-ulang: 500 dengan kalimatnya sendiri, dan DOKU tidak pernah ditanyai", async () => {
     ref.sesi = sesiOrdersGagal(sesiAdmin);
     const r = await periksaUlang(permintaan("periksa-ulang"), param(idPesanan.get(K_TERBUKA_BARU)!));
     expect(r.status).toBe(500);
@@ -858,7 +890,7 @@ describe("galat basis data TIDAK dilaporkan sebagai 404", () => {
     expect(isi.pesan).not.toContain("tidak ditemukan");
     // Barisnya tidak pernah terbaca, jadi tidak ada yang bisa ditanyakan —
     // bertanya tetap berarti membakar satu order_id percobaan tanpa alasan.
-    expect(midtrans.panggilan).toEqual([]);
+    expect(doku.panggilan).toEqual([]);
   });
 
   it("terbitkan-akses: 500 dengan kalimatnya sendiri, bukan 404", async () => {

@@ -11,7 +11,7 @@ import { penggunaSaatIni } from "@/lib/auth/sesi";
  *
  * Yang bisa disalahgunakan pemanggil hanyalah pesanannya SENDIRI: RPC memilih
  * barisnya dari `auth.uid()` dan hanya menerima pesanan `menunggu_bayar`. Ia
- * merusak checkoutnya sendiri, bukan milik orang lain — dan `snap_token` tidak
+ * merusak checkoutnya sendiri, bukan milik orang lain — dan `tautan_gateway` tidak
  * pernah dipercaya sebagai bukti pembayaran oleh apa pun.
  *
  * `dibatalkan: false` BUKAN galat. Ia jawaban jujur untuk "tidak ada pesanan

@@ -1,11 +1,11 @@
 /**
  * QRIS + langkah pembayaran, sebagai satu komponen server.
  *
- * Dipakai DUA tempat: halaman satu tagihan (`/passport/bayar/[id]`), tempat ia
- * berdiri berdampingan dengan tombol unggah, dan daftar tagihan, tempat ia
- * TERLIPAT. Yang kedua tetap perlu: tagihan sesi lepas ditagih lewat WhatsApp
- * dan tidak punya halaman sendiri, jadi kliennya tetap butuh kode untuk
- * dipindai.
+ * Sejak P3/B6 hanya dipakai daftar tagihan, tempat ia TERLIPAT: tagihan sesi
+ * jalur 2 ditagih lewat WhatsApp dan tidak punya halaman sendiri, jadi
+ * kliennya tetap butuh kode untuk dipindai. Halaman satu tagihan
+ * (`/passport/bayar/[id]`) dibayar lewat DOKU dan tidak lagi memuat QRIS
+ * (§6.8).
  *
  * Satu salinan, bukan dua. Nama penerima dan NMID adalah satu-satunya yang
  * bisa diperiksa mata sebelum mengirim uang — dua salinan yang boleh berbeda
@@ -55,15 +55,10 @@ export function CaraBayar({
 }
 
 /** Tiga langkah, urutannya sama di mana pun ia dirender. */
-export function LangkahBayar({ unggahDiSini }: { unggahDiSini: boolean }) {
+export function LangkahBayar() {
   const langkah: [string, string][] = [
     ["01", "Scan QRIS di atas, atau transfer sesuai arahan admin"],
-    [
-      "02",
-      unggahDiSini
-        ? "Unggah bukti pembayaran lewat tombol di atas"
-        : "Kirim bukti pembayaran ke WhatsApp PADMA",
-    ],
+    ["02", "Kirim bukti pembayaran ke WhatsApp PADMA"],
     ["03", "Tim memverifikasi & jadwal Anda terkunci"],
   ];
 

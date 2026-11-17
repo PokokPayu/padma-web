@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/supabase/admin";
 import { rahasiaMesinCocok } from "@/lib/auth/rahasia-mesin";
-import { sapuPesananMenggantung } from "@/lib/pesanan/periksa-menggantung";
+import { sapuPesananMenggantung, sapuPesananTertutup } from "@/lib/pesanan/periksa-menggantung";
 
 export const runtime = "nodejs";
 
@@ -23,14 +23,14 @@ export const runtime = "nodejs";
  * ===== KENAPA POST, DAN KENAPA TIDAK ADA GET =====
  * Keharusan mengekspor GET lahir dari Vercel Cron yang memanggil GET.
  * Penjadwalnya di sini GitHub Actions dengan `curl` — kita yang memilih
- * verbanya, jadi bentuknya sama dengan `/api/cron/tenggat` (POST di baris 22
- * berkas itu). Tidak ada `vercel.json` yang perlu lahir, dan tidak ada jebakan
+ * verbanya, jadi bentuknya POST, seperti rute cron pertama repo ini (sudah
+ * dipensiunkan di P3/B7). Tidak ada `vercel.json` yang perlu lahir, dan tidak ada jebakan
  * "salah taruh di akar repo lalu gagal dalam diam".
  *
  * ===== KENAPA RAHASIA, BUKAN requireRole =====
  * Pemanggilnya mesin: tidak ada sesi, tidak ada peran. Tanpa `CRON_SECRET`
  * terpasang, rute ini MENOLAK semua orang — fail-closed persis seperti rute
- * tenggat. Rute publik yang menembakkan permintaan ke Midtrans bisa dipanggil
+ * tenggat. Rute publik yang menembakkan permintaan ke DOKU bisa dipanggil
  * siapa pun berulang kali, dan ongkosnya dibayar akun merchant PADMA.
  * Nilainya hidup sebagai GitHub Secret, bukan di repo: repo ini PUBLIK, jadi
  * itu syarat, bukan kehati-hatian umum.
@@ -55,18 +55,39 @@ export const runtime = "nodejs";
  *      tetap berjalan.
  *   3. `timeout-minutes: 10` job Actions: pagar terluar, tidak pernah tercapai.
  *
- * ARITMATIKANYA, supaya bisa diperiksa ulang tanpa menurunkannya lagi:
+ * ===== SEJAK PERBAIKAN AKHIR (17 Nov): ANGGARAN WAKTU, BUKAN HITUNGAN BARIS =====
+ * Dulu satu baris = satu Check Status, dan aritmatikanya cukup dihitung dari
+ * baris: 10 x 10 s = 100 s. Kini satu baris bisa butuh sampai SEMBILAN
+ * permintaan — percobaan lama sebelum vonis tutup (F2a), dan setiap
+ * percobaan pesanan tertutup (F2b) — jadi batas baris tidak lagi membatasi
+ * durasi. Yang membatasinya kini dua TENGGAT dinding-jam, diperiksa SEBELUM
+ * setiap Check Status dimulai:
  *
- *     BATAS_SAPUAN (10 baris) × BATAS_MS adapter (10 s) = 100 s
- *     + 1 SELECT + 1 UPDATE cap + ≤10 RPC  ≈ 12 perjalanan basis data
+ *     sapuan terbuka   : tidak memulai permintaan sesudah  t0 + 100 s
+ *     sapuan tertutup  : tidak memulai permintaan sesudah  t0 + 150 s
+ *     + satu permintaan yang sedang terbang (BATAS_MS adapter 10 s)
+ *     + satu RPC mesin + satu UPDATE penanda sesudahnya
  *     ------------------------------------------------------------
- *     kasus terburuk ≈ 160 s   <   maxDuration 240 s   <   batas Hobby 300 s
+ *     kasus terburuk ≈ 165 s   <   maxDuration 240 s   <   batas Hobby 300 s
  *
- * Kasus terburuk itu berarti Midtrans mati total dan SETIAP panggilan habis
+ * Tenggat dinding-jam, bukan hitungan permintaan, karena yang dibatasi
+ * Vercel adalah waktu — termasuk basis data yang lambat. Sapuan terbuka
+ * berhenti lebih dulu supaya sapuan tertutup selalu kebagian paling sedikit
+ * 50 s: tanpa itu antrean pesanan terbuka yang panjang bisa membuat pesanan
+ * tertutup tidak pernah ditanyakan. Baris yang tidak sempat ditanyakan sudah
+ * dicap dan menunggu `MENIT_JEDA_PERIKSA` (5 menit); kadensnya 15 menit, jadi
+ * putaran berikutnya mengambilnya lagi.
+ *
+ * Kasus terburuk itu berarti DOKU mati total dan SETIAP panggilan habis
  * waktunya — keadaan yang tidak menyelesaikan apa pun betapapun lama ia
  * dibiarkan. Yang penting justru bahwa ia berhenti, bukan bahwa ia selesai.
  */
 export const maxDuration = 240;
+
+/** Sesudah ini sapuan pesanan TERBUKA tidak memulai Check Status baru. */
+const ANGGARAN_TERBUKA_MS = 100_000;
+/** Sesudah ini sapuan pesanan TERTUTUP tidak memulai Check Status baru. */
+const ANGGARAN_TOTAL_MS = 150_000;
 
 /**
  * Batas baris per jalan.
@@ -84,6 +105,10 @@ export const maxDuration = 240;
  * Kapasitasnya tetap longgar: 10 baris × 4 putaran/jam = 40 pesanan/jam, dan
  * urutan `diperiksa_pada nulls first` menjamin yang paling lama tidak
  * diperiksa selalu dapat giliran lebih dulu.
+ *
+ * Batas yang SAMA dipakai sapuan pesanan tertutup (F2b), dengan pemilihan
+ * dan capnya sendiri: dua antrean, masing-masing paling banyak sepuluh baris.
+ * Durasinya dibatasi tenggat di atas, bukan oleh angka ini.
  */
 const BATAS_SAPUAN = 10;
 
@@ -97,6 +122,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ pesan: "Tidak berwenang." }, { status: 401 });
   }
 
+  const mulai = Date.now();
+  let diperiksa = 0;
+  let dilewati = 0;
+  let gagal = false;
+
   try {
     // Service role sebagai PEMILIH: itulah satu-satunya perbedaan dengan Lapis
     // 1b, yang mengoper sesi pemanggil dan karena itu hanya melihat pesanannya
@@ -107,22 +137,11 @@ export async function POST(request: Request) {
     // pemanggil supaya radiusnya tidak bergantung pada kebetulan bahwa
     // pemanggilnya bukan staf; Lapis 3 memang lintas klien, dan itu keputusan
     // yang harus terlihat di tempat ia diambil.
-    const { diperiksa, dilewati } = await sapuPesananMenggantung(
-      createAdminSupabase(),
-      BATAS_SAPUAN,
-      null,
-    );
-    // ===== DUA ANGKA, KARENA SATU ANGKA PUNYA DUA ARTI =====
-    // `{diperiksa: 0}` sendirian berarti "tidak ada yang perlu disapu" DAN
-    // "kesepuluh barisnya gagal" — dua keadaan yang menuntut dua tindakan
-    // berbeda, dan yang kedua tidak menghasilkan galat di mana pun.
-    // `dilewati` memisahkannya: sapuan sehat yang sepi pulang
-    // `{0, 0}`, sapuan yang mati total pulang `{0, 10}`.
-    //
-    // Ini pasangan dari lubang yang sudah ditutup di sisi lain (server tanpa
-    // kunci melaporkan "diperiksa: 20"): keduanya kelas yang sama — penjadwal
-    // sakit yang terbaca persis seperti penjadwal sehat.
-    return NextResponse.json({ diperiksa, dilewati });
+    const terbuka = await sapuPesananMenggantung(createAdminSupabase(), BATAS_SAPUAN, null, {
+      tenggatMs: mulai + ANGGARAN_TERBUKA_MS,
+    });
+    diperiksa += terbuka.diperiksa;
+    dilewati += terbuka.dilewati;
   } catch (galat) {
     // SEBABNYA DICATAT. Tanpa baris ini, sapuan yang mati karena basis data
     // tidak meninggalkan satu jejak pun di mana pun: `sapuPesananMenggantung`
@@ -134,11 +153,48 @@ export async function POST(request: Request) {
     // mencatat galat RPC-nya, begitu juga penangkap per-baris di dalam sapuan,
     // keduanya dengan alasan "kegagalan senyap adalah yang termahal". Rute ini
     // mengikuti doktrin yang sama alih-alih jadi satu-satunya lubangnya.
-    console.error(
-      `[pesanan] sapuan Lapis 3 gagal: ${galat instanceof Error ? galat.message : String(galat)}`,
-    );
+    console.error(`[pesanan] sapuan Lapis 3 gagal: ${sebab(galat)}`);
+    gagal = true;
+  }
+
+  // Pesanan yang KITA tutup sementara tautan DOKU-nya bisa masih hidup (F2b).
+  // HANYA di sini — Lapis 1b tidak menjalankannya karena ia lintas klien dan
+  // menahan render. Dijalankan WALAU sapuan terbuka gagal: satu kegagalan
+  // basis data tidak boleh membisukan jaring yang lain.
+  try {
+    const tertutup = await sapuPesananTertutup(BATAS_SAPUAN, {
+      tenggatMs: mulai + ANGGARAN_TOTAL_MS,
+    });
+    diperiksa += tertutup.diperiksa;
+    dilewati += tertutup.dilewati;
+  } catch (galat) {
+    console.error(`[pesanan] sapuan pesanan tertutup gagal: ${sebab(galat)}`);
+    gagal = true;
+  }
+
+  if (gagal) {
     // 500, dan `curl --fail` di workflow menerjemahkannya jadi job MERAH.
     // Penyapu yang gagal dalam diam adalah penyapu yang tidak ada.
     return NextResponse.json({ pesan: "Gagal menjalankan." }, { status: 500 });
   }
+
+  // ===== DUA ANGKA, KARENA SATU ANGKA PUNYA DUA ARTI =====
+  // `{diperiksa: 0}` sendirian berarti "tidak ada yang perlu disapu" DAN
+  // "kesepuluh barisnya gagal" — dua keadaan yang menuntut dua tindakan
+  // berbeda, dan yang kedua tidak menghasilkan galat di mana pun.
+  // `dilewati` memisahkannya: sapuan sehat yang sepi pulang
+  // `{0, 0}`, sapuan yang mati total pulang `{0, 10}`.
+  //
+  // Ini pasangan dari lubang yang sudah ditutup di sisi lain (server tanpa
+  // kunci melaporkan "diperiksa: 20"): keduanya kelas yang sama — penjadwal
+  // sakit yang terbaca persis seperti penjadwal sehat.
+  //
+  // Kedua sapuan DIJUMLAHKAN ke dua angka yang sama: kalimatnya identik
+  // ("kita bertanya dan jawabannya sampai" lawan "terpilih tapi tidak"), dan
+  // bentuk jawaban yang dibaca penjadwal tidak berubah.
+  return NextResponse.json({ diperiksa, dilewati });
+}
+
+function sebab(galat: unknown): string {
+  return galat instanceof Error ? galat.message : String(galat);
 }

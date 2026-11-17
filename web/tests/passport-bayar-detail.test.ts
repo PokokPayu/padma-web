@@ -5,7 +5,7 @@
  * pengajuan yang bertenggat, tagihan sesi, QRIS, lalu tiga langkah pembayaran.
  * Bentuk kegagalannya bukan galat melainkan JARAK: nominal di puncak, QRIS
  * jauh di bawah, dan tombol unggah kembali ke puncak. Satu tagihan kini punya
- * satu layar, dan ketiganya berdiri berdampingan di sana.
+ * satu layar (sejak P3 dibayar lewat DOKU, tanpa QRIS dan tanpa unggah).
  *
  * Dua hal yang dijaga berkas ini, dan yang kedua yang paling gampang hilang
  * lagi tanpa disadari:
@@ -14,11 +14,11 @@
  *     URL. Tanpa saringan `client_id`, id yang ditebak seseorang memulangkan
  *     tagihan — berikut nominal dan jadwal — milik klien lain.
  *
- *  2. TOMBOL UNGGAH YANG TERLIHAT. Versi sebelumnya memakai `<input
- *     type="file">` telanjang bawaan peramban dengan `text-[12px]` dan tanpa
- *     satu pun kelas. Di halaman yang seluruhnya kartu bergaya, kontrol itu
- *     hilang dari pandangan — dan corong pembayaran yang tombolnya tidak
- *     terlihat adalah corong yang mati tanpa satu pun galat di log.
+ *  2. JALUR QRIS PENGAJUAN SUDAH PENSIUN (P3/B6, spec §6.8, §7). Fixture di
+ *     berkas ini adalah baris WARISAN: `menunggu_bayar` tanpa pesanan. Yang
+ *     klien lihat untuknya kalimat §7 — tagihannya dialihkan ke pembayaran
+ *     baru — tanpa QRIS, tanpa unggah, dan tanpa tombol Bayar. Tagihan yang
+ *     sudah berupa pesanan DOKU diuji di `tests/passport-bayar-sesi.test.ts`.
  *
  * Data uji memakai tanggal khusus (2026-12-31) dan dibersihkan di `afterAll`.
  */
@@ -52,7 +52,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => {}, refresh: () => {} }),
 }));
 
-const { ambilTagihanPengajuanSatu } = await import("@/lib/tagihan/baca");
+const { ambilTagihanPengajuanSatu, keadaanTagihanKlien } = await import("@/lib/tagihan/baca");
 const { default: HalamanBayar } = await import("@/app/passport/bayar/page");
 const { default: HalamanBayarSatu } = await import("@/app/passport/bayar/[id]/page");
 
@@ -130,40 +130,42 @@ afterAll(async () => {
 });
 
 describe("ambilTagihanPengajuanSatu", () => {
-  it("memulangkan tagihan milik klien, lengkap dengan tenggatnya", async () => {
+  it("memulangkan baris warisan milik klien: tanpa pesanan, keadaan dialihkan", async () => {
     ref.sesi = sesiAnanda;
-    const t = await ambilTagihanPengajuanSatu(ANANDA, idAnanda);
+    const t = await ambilTagihanPengajuanSatu(idAnanda);
 
     expect(t?.permintaanId).toBe(idAnanda);
     expect(t?.namaLayanan).toBe("Sankalpa Fertility Massage");
-    expect(t?.tenggat).toBeTruthy();
     expect(t?.statusBayar).toBe("belum");
+    expect(t?.pesananId).toBeNull();
+    expect(t?.items).toEqual([]);
+    expect(keadaanTagihanKlien(t!)).toBe("warisan_dialihkan");
   });
 
   it("memulangkan null untuk tagihan milik klien lain", async () => {
     ref.sesi = sesiAnanda;
-    expect(await ambilTagihanPengajuanSatu(ANANDA, idRina)).toBeNull();
+    expect(await ambilTagihanPengajuanSatu(idRina)).toBeNull();
   });
 
   it("memulangkan null untuk id karangan, tanpa melempar", async () => {
     ref.sesi = sesiAnanda;
-    expect(await ambilTagihanPengajuanSatu(ANANDA, HANTU)).toBeNull();
+    expect(await ambilTagihanPengajuanSatu(HANTU)).toBeNull();
   });
 });
 
 describe("halaman /passport/bayar/[id]", () => {
-  it("menaruh nominal, QRIS, dan tombol unggah dalam SATU layar", async () => {
+  it("baris warisan belum dibayar: kalimat §7, tanpa QRIS, tanpa unggah, tanpa tombol Bayar", async () => {
     ref.sesi = sesiAnanda;
     const m = await renderDetail(idAnanda);
 
     expect(m).toContain("Sankalpa Fertility Massage");
-    // QRIS sungguhan beserta penerimanya — QRIS statis tidak menyebut nominal,
-    // jadi nama penerima dan NMID adalah satu-satunya yang bisa diperiksa mata
-    // sebelum mengirim uang.
-    expect(m).toContain("qris-padma");
-    expect(m).toContain("PADMA WOMEN&#x27;S WELLNESS HOMEC");
-    expect(m).toContain("ID1026557963836");
-    expect(m).toContain("Unggah bukti transfer");
+    expect(m).toContain(
+      "Tagihan Anda sedang dialihkan ke pembayaran baru; admin akan mengirimkannya.",
+    );
+    expect(m).not.toMatch(/qris/i);
+    expect(m).not.toMatch(/unggah/i);
+    expect(m).not.toContain('type="file"');
+    expect(m).not.toContain("data-bayar");
   });
 
   it("tagihan milik klien lain berakhir notFound", async () => {
@@ -182,28 +184,6 @@ describe("halaman /passport/bayar/[id]", () => {
   });
 });
 
-describe("tombol unggah bukti", () => {
-  it("BUKAN input berkas telanjang: kontrolnya bergaya dan cukup besar disentuh", async () => {
-    ref.sesi = sesiAnanda;
-    const m = await renderDetail(idAnanda);
-
-    // Input aslinya disembunyikan dari mata TAPI tetap fokusabel — `sr-only`,
-    // bukan `display:none` dan bukan `hidden`, supaya papan ketik dan pembaca
-    // layar tetap sampai kepadanya.
-    expect(m).toMatch(/<input[^>]*type="file"[^>]*class="[^"]*sr-only/);
-    expect(m).not.toMatch(/<input[^>]*type="file"[^>]*hidden/);
-    // Yang dilihat mata: sasaran sentuh setinggi minimal 44px, ukuran yang
-    // sama dengan tombol utama Passport lain.
-    expect(m).toMatch(/min-h-\[44px\][^>]*>\s*Unggah bukti transfer/);
-  });
-
-  it("input berkas punya nama terakses, bukan hanya teks di sebelahnya", async () => {
-    ref.sesi = sesiAnanda;
-    const m = await renderDetail(idAnanda);
-    expect(m).toMatch(/<input[^>]*type="file"[^>]*aria-label="Unggah bukti transfer"/);
-  });
-});
-
 describe("daftar /passport/bayar", () => {
   it("kartu tagihan yang menunggu pembayaran menaut ke halamannya sendiri", async () => {
     ref.sesi = sesiAnanda;
@@ -218,8 +198,8 @@ describe("daftar /passport/bayar", () => {
     ref.sesi = sesiAnanda;
     const m = renderToStaticMarkup(await HalamanBayar());
 
-    // Mengunggah bukti sekarang milik halaman tagihannya sendiri — di daftar
-    // tidak ada satu pun kontrol berkas.
+    // Unggah bukti jalur pengajuan sudah pensiun (§6.8) — di daftar tidak ada
+    // satu pun kontrol berkas.
     expect(m).not.toContain('type="file"');
     // QRIS tetap TERSEDIA di sini (tagihan sesi lepas ditagih lewat WhatsApp
     // dan tidak punya halaman sendiri), tetapi TERLIPAT: ia tidak boleh lagi

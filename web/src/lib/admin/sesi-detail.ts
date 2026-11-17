@@ -93,6 +93,7 @@ type BarisDb = {
   jenjang: JenjangTransport | null;
   jenjang_sumber: "otomatis" | "admin" | null;
   jadwal_ulang_terpakai: boolean;
+  kabari_bidan_sejak: string | null;
   alamat: string;
   alamat_lat: number | null;
   alamat_lon: number | null;
@@ -120,7 +121,7 @@ export async function ambilDetailSesi(id: string): Promise<DetailSesi | null> {
     .from("sessions")
     .select(
       "id, tanggal, jam_mulai, status, catatan, rekomendasi, client_package_id, " +
-        "jenjang, jenjang_sumber, jadwal_ulang_terpakai, alamat, alamat_lat, alamat_lon, client_id, " +
+        "jenjang, jenjang_sumber, jadwal_ulang_terpakai, kabari_bidan_sejak, alamat, alamat_lat, alamat_lon, client_id, " +
         "clients(nama, padma_id, alamat_lat, alamat_lon), services(nama), " +
         "partners(nama, lat, lon), " +
         "booking_requests(screenings(id, kode, hasil, created_at, flags))",
@@ -150,6 +151,7 @@ export async function ambilDetailSesi(id: string): Promise<DetailSesi | null> {
     jenjang: data.jenjang,
     jenjangSumber: data.jenjang_sumber,
     jadwalUlangTerpakai: data.jadwal_ulang_terpakai,
+    kabariBidanSejak: data.kabari_bidan_sejak,
     alamat: data.alamat,
     ...jarakUntukSesi({
       mitra: koordinat(data.partners?.lat, data.partners?.lon),
