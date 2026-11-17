@@ -84,6 +84,8 @@ Sisanya menambah objek baru.
      4. Push `development`, lalu jalankan uji simulator sesuai README Fase 3
         langkah 2.
    - Kunci produksi tidak pernah dipasang di scope Preview.
+   - Rincian langkah, env, proteksi preview, dan skenario uji:
+     `2026-11-17-sandbox-doku-dev.md`.
 6. **Siapkan env Produksi Vercel lebih awal** (README Fase 3 langkah 4). Kode
    lama tidak membacanya, jadi aman dipasang sebelum rilis:
    - pasang `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY`, `DOKU_PRODUKSI=true` (persis),
