@@ -49,14 +49,38 @@ produksi dan tidak dilanggar.
 | 2 | Dev di-reset: 116 migrasi, `seed.sql`, dan `seed:users`; isi sebelumnya hanya data sintetis | Selesai (agen, dengan izin) |
 | 3 | `development` di-push (`6c2a6ec`), deploy dev Ready | Selesai |
 | 4 | Sandi akun uji dev diganti | Selesai (agen) |
-| 5 | Env DOKU di proyek Vercel dev | **Belum terbaca.** Webhook menjawab `503 {"hasil":"kunci_kosong"}` |
-| 6 | Supabase dev → Auth → URL Configuration | Belum dipastikan |
-| 7 | Notification URL di Back Office DOKU sandbox | Belum dipastikan |
+| 5 | Env proyek Vercel dev dipasang lewat REST API (token Vercel 1 hari dari pemilik), lalu redeploy | Selesai (agen) |
+| 6 | Supabase dev → Auth: `site_url` dan `uri_allow_list` lewat Management API | Selesai (agen) |
+| 7 | Notification URL di Back Office DOKU sandbox | **Belum.** Tidak ada API; dikerjakan pemilik |
+
+**Isi langkah 5:**
+- Env baru: `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (sensitive), dan
+  `DOKU_PRODUKSI=false`. Kunci diambil dari env worktree DOKU, yang
+  `DOKU_PRODUKSI`-nya `false`.
+- Env baru lainnya: `CRON_SECRET` (sensitive; salinannya di
+  `web/.env.akun-dev`) dan `PADMA_PROXY_TEPERCAYA=1`.
+- Diperbaiki: `NEXT_PUBLIC_BASIS_URL`, yang sebelumnya
+  `padma-web-16ot.vercel.app` **tanpa `https://`**. `urlKembali()`
+  (`src/lib/doku/konfig.ts:55`) menyambung nilainya apa adanya, sehingga URL
+  kembali dari DOKU menjadi relatif. Nilai produksi wajib diawali `https://`.
+
+**Bukti sesudah redeploy:**
+- webhook `POST {}` → `400 skema_gagal`, sebelumnya `503 kunci_kosong`;
+- cron tanpa rahasia → 401;
+- cron dengan rahasia → `200 {"diperiksa":0,"dilewati":0}`.
+
+**Temuan yang belum ditindak** (keputusan pemilik):
+- Proyek dev memegang `R2_*` dan `RESEND_API_KEY`. Nilainya bertipe
+  sensitive dan tidak terbaca.
+- Bila `R2_BUCKET_VIDEO` sama dengan bucket produksi klien, unggahan dari dev
+  mendarat di bucket klien.
+- Resend dari dev mengirim ke alamat `@padma.test` yang tidak ada. Pantulannya
+  merusak reputasi domain pengirim.
 
 ## Yang tersisa untuk pemilik
 
-1. **Env proyek Vercel `padma-web-16ot`** (scope Production proyek dev), lalu
-   **redeploy**. Env server baru terbaca oleh deploy berikutnya.
+1. ~~Env proyek Vercel `padma-web-16ot`~~ **selesai 17 Nov** (lihat status di
+   atas). Tabel ini tetap sebagai acuan bila proyek dev dibangun ulang.
 
    | Variabel | Nilai |
    |---|---|
@@ -73,8 +97,7 @@ produksi dan tidak dilanggar.
    - `R2_*`, supaya tidak menulis ke bucket klien;
    - `RESEND_API_KEY` dan `EMAIL_PENGIRIM`, karena tagihan tetap terbit tanpa
      email.
-2. **Supabase dev → Authentication → URL Configuration:** Site URL =
-   `https://padma-web-16ot.vercel.app`; Redirect URLs = URL itu + `/**`.
+2. ~~Supabase dev → URL Configuration~~ **selesai 17 Nov.**
 3. **Back Office DOKU sandbox:**
    - Notification URL = `https://padma-web-16ot.vercel.app/api/pembayaran/doku`.
      Tanpa parameter apa pun, karena deploy dev publik dan tidak butuh bypass
