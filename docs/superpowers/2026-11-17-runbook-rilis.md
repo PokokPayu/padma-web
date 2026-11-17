@@ -69,23 +69,15 @@ Sisanya menambah objek baru.
    - jawab empat pertanyaan terbuka S&K (lama proses refund, usia minimal 18,
      waktu tanggap 3×24 jam, persetujuan skrining yang diisikan orang lain);
    - tetapkan tanggal final `VERSI_DOKUMEN`.
-5. **Tutup celah lingkungan uji sandbox.**
-   - README Fase 3 langkah 2 meminta uji asap di **deploy preview Vercel**,
-     tetapi spec deploy §6 sengaja **tidak** memasang env di scope Preview.
-     Akibatnya preview tidak tersambung ke database mana pun.
-   - Usulan:
-     1. Hidupkan lagi proyek dev (`mdtzrzwapuaalmsxomkm`) dari dasbor.
-     2. Bangun ulang dari migrasi, bukan dari dump (README, "Membangun
-        lingkungan lain"). Pastikan ref yang tertaut memang dev sebelum
-        perintah apa pun.
-     3. Pasang env scope **Preview** di Vercel yang menunjuk ke dev, plus kunci
-        **sandbox** DOKU dan `NEXT_PUBLIC_BASIS_URL` = URL alias branch
-        `development`.
-     4. Push `development`, lalu jalankan uji simulator sesuai README Fase 3
-        langkah 2.
-   - Kunci produksi tidak pernah dipasang di scope Preview.
-   - Rincian langkah, env, proteksi preview, dan skenario uji:
-     `2026-11-17-sandbox-doku-dev.md`.
+5. **Lingkungan uji sandbox (proyek dev).**
+   - Produksi dan dev ternyata dua proyek Vercel terpisah. Dev
+     (`padma-web-16ot`) membangun `development` dan sudah tersambung ke
+     Supabase dev (terverifikasi 17 Nov).
+   - Dev sudah di-reset dari migrasi, dan sandi akun uji diganti.
+   - Yang tersisa: env DOKU sandbox di proyek Vercel dev, URL Auth Supabase
+     dev, dan Notification URL sandbox. Lalu jalankan uji simulator sesuai
+     README Fase 3 langkah 2.
+   - Rinciannya: `2026-11-17-sandbox-doku-dev.md`.
 6. **Siapkan env Produksi Vercel lebih awal** (README Fase 3 langkah 4). Kode
    lama tidak membacanya, jadi aman dipasang sebelum rilis:
    - pasang `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY`, `DOKU_PRODUKSI=true` (persis),

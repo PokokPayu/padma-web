@@ -1,122 +1,106 @@
 # Lingkungan uji sandbox DOKU di proyek dev
 
-Ditulis 17 Nov 2026. Ini rincian langkah 1.5 runbook rilis
+Ditulis 17 Nov 2026, lalu dikoreksi pada hari yang sama sesudah arsitektur
+Vercel yang sebenarnya diketahui. Ini rincian langkah 1.5 runbook rilis
 (`2026-11-17-runbook-rilis.md`) dan prasyarat README Fase 3 langkah 2 (uji asap
-sandbox di deploy preview Vercel).
+sandbox).
 
-**Masalahnya:** spec deploy §6 sengaja tidak memasang env di scope Preview,
-supaya kode yang belum di-review tidak menulis ke database pasien. Akibatnya
-deploy preview tidak tersambung ke database mana pun, dan uji sandbox DOKU
-tidak punya tempat.
+## Arsitektur yang sebenarnya
 
-**Jawabannya:** Preview disambungkan ke proyek **dev**, bukan produksi, dan
-hanya ke kunci **sandbox** DOKU.
+Draf pertama dokumen ini mengira dev memakai deploy *preview* dari proyek Vercel
+produksi. Kenyataannya, produksi dan dev adalah **dua proyek Vercel terpisah**:
+
+| | Proyek Vercel | Branch yang dibangun | Supabase | Akses |
+|---|---|---|---|---|
+| Produksi | proyek produksi (domain `padmawellnessid.com`) | `main` | `vtprvvwslclyqlunzuvj` | publik |
+| Dev | `padma-web-16ot`, URL `https://padma-web-16ot.vercel.app` | `development`, sebagai deploy "Production" proyek dev | `mdtzrzwapuaalmsxomkm` (dev) | **publik, tanpa proteksi** |
+
+Diverifikasi 17 Nov dari luar:
+- Bundel JavaScript deploy dev memuat `mdtzrzwapuaalmsxomkm.supabase.co` dan
+  tidak memuat ref produksi.
+- `/persetujuan` ada, artinya kode `6c2a6ec` sudah ter-deploy.
+
+Karena itu env dev hidup di scope **Production milik proyek dev**. Spec deploy
+§6 ("env tidak dipasang di scope Preview") tetap berlaku untuk proyek
+produksi dan tidak dilanggar.
 
 ## Prinsip
 
-- **Kunci produksi tidak pernah masuk scope Preview.** Ini berlaku untuk
+- **Kunci produksi tidak pernah masuk proyek Vercel dev.** Ini berlaku untuk
   Supabase produksi, DOKU produksi, R2 produksi, dan Resend.
 - **Dev berisi data sintetis saja.** Dibangun dari migrasi
-  (`supabase db reset --linked`), bukan dari dump produksi. README
-  ("Membangun lingkungan lain") menjelaskan bahwa restore dump menghasilkan
-  hak lebih luas daripada sumbernya.
-- **Akun uji dev bersandi `padma-dev-123`, dan sandi itu tertulis di repo
-  publik** (`scripts/seed-users.ts`). Karena itu preview **tetap di balik
-  Vercel Deployment Protection**. Lihat langkah 5.
+  (`supabase db reset --linked`, 17 Nov), bukan dari dump produksi.
+- **Deploy dev publik.** Sandi seed `padma-dev-123` tertulis di repo publik
+  (`scripts/seed-users.ts`), jadi sandi ketiga akun uji di dev **diganti ke
+  nilai acak** pada 17 Nov.
+  - Sandi barunya ada di `web/.env.akun-dev`, berkas lokal yang di-gitignore
+    dengan mode 600.
+  - Menjalankan ulang `npm run seed:users` ke dev mengembalikan sandi ke nilai
+    publik, jadi sesudahnya sandi harus diganti lagi.
 - **Repo tertaut ke dev** (`web/supabase/.temp/project-ref` =
   `mdtzrzwapuaalmsxomkm`). Setiap perintah `--linked` diawali pemeriksaan ref
   itu.
 
-## Langkah
+## Status per 17 Nov
 
-| # | Langkah | Siapa |
+| # | Langkah | Status |
 |---|---|---|
-| 1 | Hidupkan proyek **dev-padma-web** (`mdtzrzwapuaalmsxomkm`) dari dasbor Supabase (Restore project). CLI di mesin ini tidak punya perintahnya | Pemilik |
-| 2 | Periksa isi dev (jumlah baris tabel inti), lalu `supabase db reset --linked` dan `seed:users` ke dev. Rinciannya di bawah | Agen, dengan izin pemilik |
-| 3 | Supabase dev → Authentication → URL Configuration: Site URL = alias preview branch `development`; Redirect URLs = alias itu + `/**` | Pemilik |
-| 4 | Vercel → Settings → Environment Variables, scope **Preview**, dibatasi ke branch `development` bila dasbor menawarkannya. Daftarnya di bawah | Pemilik |
-| 5 | Vercel → Deployment Protection untuk preview **tetap menyala**. Webhook DOKU masuk lewat Protection Bypass for Automation (lihat "Webhook dan proteksi") | Pemilik |
-| 6 | `git push origin development`. Vercel membangun preview, lalu catat URL alias branch-nya. Bila URL alias baru diketahui sesudah build pertama, isi `NEXT_PUBLIC_BASIS_URL` lalu redeploy, karena nilai `NEXT_PUBLIC_*` dibakukan saat build | Agen dengan izin pemilik, atau pemilik |
-| 7 | Back Office DOKU **sandbox**: Notification URL = `<alias>/api/pembayaran/doku` (plus parameter bypass, lihat di bawah); Recover Abandoned Cart mati | Pemilik |
-| 8 | Uji asap: dua skenario di bawah | Pemilik di peramban; agen memeriksa database dev |
+| 1 | Proyek Supabase dev dihidupkan | Selesai (pemilik) |
+| 2 | Dev di-reset: 116 migrasi, `seed.sql`, dan `seed:users`; isi sebelumnya hanya data sintetis | Selesai (agen, dengan izin) |
+| 3 | `development` di-push (`6c2a6ec`), deploy dev Ready | Selesai |
+| 4 | Sandi akun uji dev diganti | Selesai (agen) |
+| 5 | Env DOKU di proyek Vercel dev | **Belum terbaca.** Webhook menjawab `503 {"hasil":"kunci_kosong"}` |
+| 6 | Supabase dev → Auth → URL Configuration | Belum dipastikan |
+| 7 | Notification URL di Back Office DOKU sandbox | Belum dipastikan |
 
-### Langkah 2: yang dijalankan agen
+## Yang tersisa untuk pemilik
 
-```bash
-cd web
-cat supabase/.temp/project-ref          # HARUS mdtzrzwapuaalmsxomkm (dev)
-npx supabase db query --linked "select count(*) from public.clients"   # dll.: lapor isi dev dulu
-npx supabase db reset --linked          # skema dari 116 migrasi + seed.sql
-```
+1. **Env proyek Vercel `padma-web-16ot`** (scope Production proyek dev), lalu
+   **redeploy**. Env server baru terbaca oleh deploy berikutnya.
 
-- `seed:users` dijalankan dengan URL dan service role key **dev** sebagai env
-  proses (dotenv tidak menimpa env yang sudah terpasang). `.env.local` tidak
-  disunting.
-- Kuncinya diambil dengan `supabase projects api-keys --project-ref
-  mdtzrzwapuaalmsxomkm` langsung ke env proses, tanpa dicetak.
-- Skrip ini **tidak punya pagar anti-produksi**, jadi URL target diperiksa
-  memuat `mdtzrzwapuaalmsxomkm` sebelum skrip berjalan.
+   | Variabel | Nilai |
+   |---|---|
+   | `DOKU_CLIENT_ID` | Client ID **sandbox** |
+   | `DOKU_SECRET_KEY` | Secret Key **sandbox** |
+   | `DOKU_PRODUKSI` | `false` |
+   | `NEXT_PUBLIC_BASIS_URL` | `https://padma-web-16ot.vercel.app` |
+   | `CRON_SECRET` | nilai acak, **beda** dari produksi |
+   | `PADMA_PROXY_TEPERCAYA` | `1` |
+   | `NOMINATIM_USER_AGENT` | sama dengan produksi |
+   | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | sudah menunjuk ke dev (terverifikasi) |
 
-### Langkah 4: env Preview
+   **Sengaja kosong:**
+   - `R2_*`, supaya tidak menulis ke bucket klien;
+   - `RESEND_API_KEY` dan `EMAIL_PENGIRIM`, karena tagihan tetap terbit tanpa
+     email.
+2. **Supabase dev → Authentication → URL Configuration:** Site URL =
+   `https://padma-web-16ot.vercel.app`; Redirect URLs = URL itu + `/**`.
+3. **Back Office DOKU sandbox:**
+   - Notification URL = `https://padma-web-16ot.vercel.app/api/pembayaran/doku`.
+     Tanpa parameter apa pun, karena deploy dev publik dan tidak butuh bypass
+     proteksi;
+   - Recover Abandoned Cart mati.
 
-| Variabel | Nilai | Sumber |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://mdtzrzwapuaalmsxomkm.supabase.co` | proyek dev |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key **dev** | Supabase dev → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | service role key **dev** | idem; jangan pernah kunci produksi |
-| `DOKU_CLIENT_ID` | Client ID **sandbox** | Back Office DOKU sandbox |
-| `DOKU_SECRET_KEY` | Secret Key **sandbox** | idem |
-| `DOKU_PRODUKSI` | `false` | nilai selain `true` persis = sandbox |
-| `NEXT_PUBLIC_BASIS_URL` | URL alias preview branch `development` | Vercel → Deployments → branch `development` → Domains |
-| `CRON_SECRET` | nilai acak baru, **beda** dari produksi | untuk memicu Lapis 3 secara manual |
-| `PADMA_PROXY_TEPERCAYA` | `1` | sama dengan produksi (Vercel = 1 proxy) |
-| `NOMINATIM_USER_AGENT` | sama dengan produksi | pencarian alamat |
+Cara memeriksa langkah 1 sesudah redeploy: `POST {}` ke webhook harus berubah
+dari `503 kunci_kosong` menjadi galat validasi (400). Agen bisa menjalankan
+probe ini.
 
-**Sengaja dikosongkan:**
-- `R2_*`: unggah dan tonton video mati, dan preview tidak boleh menulis ke
-  bucket klien.
-- `RESEND_API_KEY` dan `EMAIL_PENGIRIM`: tagihan tetap terbit tanpa email, dan
-  sebabnya tercatat di log.
+## Skenario uji asap
 
-### Webhook dan proteksi
-
-Preview yang dilindungi Vercel Authentication menolak POST dari DOKU. Ada dua
-jalan, dicoba berurutan:
-
-1. **Protection Bypass for Automation.**
-   - Aktifkan di Vercel → Deployment Protection. Vercel menerbitkan sebuah
-     rahasia.
-   - Pasang Notification URL sandbox sebagai
-     `<alias>/api/pembayaran/doku?x-vercel-protection-bypass=<rahasia>`.
-   - **Perlu dibuktikan di uji ini:** spec DOKU (§ notifikasi, [S14]) hanya
-     menyebut `Request-Target` = *path* URL notifikasi. Kode kita menandatangani
-     path tetap `/api/pembayaran/doku` tanpa query (`route.ts:148`).
-   - Bila DOKU ikut menandatangani query string, webhook menjawab 401 tanda
-     tangan, dan log Vercel menunjukkannya. Itu jawaban untuk butir "perlu
-     konfirmasi DOKU", bukan bug yang perlu ditambal di produksi, karena URL
-     produksi tidak memakai query.
-2. **Cadangan bila jalan 1 gagal.**
-   - Matikan proteksi preview HANYA selama jendela uji.
-   - Sebelumnya, ganti sandi akun `admin@`, `owner@`, dan `ananda@padma.test`
-     di dev ke nilai acak yang disimpan di password manager.
-   - Nyalakan lagi proteksinya sesudah uji.
-
-### Langkah 8: skenario uji asap
+Akun dan sandinya ada di `web/.env.akun-dev`.
 
 | Skenario | Langkah | Yang dibuktikan |
 |---|---|---|
 | A. Produk digital | Seed tidak membuat produk digital, jadi buat dulu satu: `admin@padma.test` di `/admin/produk`, harga ditetapkan `owner@padma.test` di `/owner/produk`, lalu tayangkan. Sebagai `ananda@padma.test`: setujui S&K, buka `/produk/<slug>`, Beli, bayar di simulator DOKU sandbox | Checkout menerbitkan tautan; webhook mengubah pesanan menjadi lunas; akses terbit di `/passport/produk`; `/admin/penjualan` mencatatnya |
-| B. Tagihan sesi (P3) | Klien mengajukan jadwal; admin menerbitkan tagihan di `/admin/sesi`; klien membayar dari `/passport/bayar/[id]` lewat simulator | Webhook mengubah pesanan sesi; sesi tersalur; status di Passport dan panel admin berubah sendiri |
-| C. Lapis 3 | `curl -H "Authorization: Bearer $CRON_SECRET" <alias>/api/cron/pesanan` (lewat parameter bypass juga) | Rekonsiliasi berjalan dan menjawab ringkasan |
+| B. Tagihan sesi (P3) | `ananda@` mengajukan jadwal; admin menerbitkan tagihan di `/admin/sesi`; klien membayar dari `/passport/bayar/[id]` lewat simulator | Webhook mengubah pesanan sesi; sesi tersalur; status di Passport dan panel admin berubah sendiri |
+| C. Lapis 3 | `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://padma-web-16ot.vercel.app/api/cron/pesanan`. Rute ini hanya menerima POST; GET dijawab 405 | Rekonsiliasi berjalan dan menjawab ringkasan |
 
 Agen memeriksa hasilnya langsung di database dev (`db query --linked`, data
-sintetis) dan log rute.
+sintetis).
 
 ## Sesudah uji
 
-- Catat jawaban K-butir yang terjawab di spec DOKU §4.3, terutama soal query
-  string di `Request-Target`.
+- Catat jawaban K-butir yang terjawab di spec DOKU §4.3.
 - Biarkan dev menyala selama fase uji. Supabase mem-pause proyek free tier yang
   lama tidak dipakai.
-- Env Preview tetap menunjuk ke dev. **Jangan pernah** menyalinnya ke scope
-  Production.
+- **Jangan pernah** menyalin env proyek Vercel dev ke proyek produksi.
