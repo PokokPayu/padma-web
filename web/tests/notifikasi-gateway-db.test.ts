@@ -437,6 +437,75 @@ describe("idempotensi dan invoice yang tidak dikenal", () => {
   });
 });
 
+describe("lunas_setelah_tutup SEKALI per percobaan (putaran 2, I2)", () => {
+  // Webhook dan Check Status atas SUCCESS yang SAMA punya sidik berbeda
+  // (digest badan vs status), jadi pintu sidik meloloskan keduanya. Tanpa
+  // pemeriksaan per percobaan, sapuan Lapis 3 yang menemukan SUCCESS yang
+  // sudah dikirim webhook — dan sudah ditinjau staf — menyalakan tanda lagi:
+  // `uang_sudah_masuk_permintaan` kembali benar (terbit ulang/batal pengajuan
+  // terkunci) dan staf membaca "diterima Y" kedua, lalu bisa me-refund dua kali.
+  async function tutupTinjauan(id: string): Promise<void> {
+    const admin = await signInAs("admin@padma.test");
+    const { error } = await admin.rpc("tutup_tinjauan", { p_pesanan_id: id });
+    if (error) throw new Error(`tutup_tinjauan gagal: ${error.code} ${error.message}`);
+  }
+
+  it("SUCCESS webhook pada pesanan dibatalkan → tinjauan ditutup → Check Status SUCCESS percobaan SAMA: tanpa tanda kedua", async () => {
+    const p = await bentukPesanan("dibatalkan");
+    await terapkanPasti(p, STATUS_DOKU_LUNAS[0], p.nominal, "tanpa_efek");
+    expect((await bacaPesanan(p.id)).sebab_tinjauan).toBe("lunas_setelah_tutup");
+    await tutupTinjauan(p.id);
+
+    const jejakAwal = new Set((await jejak(p.id)).map((j) => j.id));
+    const r = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { sumber: "status_api" });
+    expect(r.error).toBeNull();
+    expect(r.data).toBe("tanpa_efek");
+
+    const akhir = await bacaPesanan(p.id);
+    expect(akhir.butuh_tinjauan_pada).toBeNull();
+    expect(akhir.sebab_tinjauan).toBeNull();
+    const semua = await jejak(p.id);
+    expect(semua.filter((j) => j.kejadian === "lunas_setelah_tutup")).toHaveLength(1);
+    const baru = semua.filter((j) => !jejakAwal.has(j.id)).map((j) => j.kejadian).sort();
+    expect(baru).toEqual(["diperiksa_ulang", "notifikasi"]);
+  });
+
+  it("SUCCESS percobaan LAIN pada pesanan tertutup yang sudah pernah kemasukan: tetap bertanda lagi", async () => {
+    // Pemeriksaannya per PERCOBAAN, bukan per pesanan: tautan lain yang
+    // dibayar adalah uang kedua yang sungguhan.
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+    const batal = await klien.rpc("batalkan_pesanan_saya", { p_pesanan_id: p.id });
+    expect(batal.error).toBeNull();
+
+    const r1 = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 1) });
+    expect(r1.data).toBe("tanpa_efek");
+    expect((await bacaPesanan(p.id)).sebab_tinjauan).toBe("lunas_setelah_tutup");
+    await tutupTinjauan(p.id);
+
+    const r2 = await terapkan(p, STATUS_DOKU_LUNAS[0], p.nominal, { invoice: rakitInvoice(p.kode, 2) });
+    expect(r2.data).toBe("tanpa_efek");
+    const akhir = await bacaPesanan(p.id);
+    expect(akhir.sebab_tinjauan).toBe("lunas_setelah_tutup");
+    expect(akhir.butuh_tinjauan_pada).not.toBeNull();
+    expect((await jejak(p.id)).filter((j) => j.kejadian === "lunas_setelah_tutup")).toHaveLength(2);
+  });
+
+  it("notifikasi_pesanan mencatat percobaan invoice-nya", async () => {
+    const p = await pesananBaru();
+    const ulang = await klien.rpc("buat_pesanan_keranjang", { p_product_ids: [produkId], p_ulang: true });
+    expect(ulang.error).toBeNull();
+    const sidik = randomUUID();
+    await terapkan(p, STATUS_DOKU_MENUNGGU[0], p.nominal, { invoice: rakitInvoice(p.kode, 1), sidik });
+    const [n] = await querySql<{ percobaan: number | null }>(
+      "select percobaan from public.notifikasi_pesanan where sidik = $1",
+      [sidik],
+    );
+    expect(n.percobaan).toBe(1);
+  });
+});
+
 describe("baris audit uang memuat KEDUA angka", () => {
   // Staf memutuskan nasib uang dari kalimat ini. v_total pernah hanya dihitung
   // di dalam cabang `lunas`, sehingga baris audit menulis "ditagih , diterima X"

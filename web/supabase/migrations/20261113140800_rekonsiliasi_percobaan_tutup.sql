@@ -12,6 +12,10 @@
 --   (1) orders.percobaan_lunas + terapkan_notifikasi_gateway   F1: pembanding
 --       cabang bayar ganda (Ruling 7) adalah percobaan PELUNAS, bukan
 --       percobaan kini (Ruling 12: kolom baru, `orders.percobaan` tidak ditimpa)
+--   (1b) notifikasi_pesanan.percobaan                           putaran 2 (I2):
+--       SUCCESS kedua untuk percobaan yang SAMA pada pesanan tertutup tidak
+--       lagi menyalakan lunas_setelah_tutup kedua (webhook vs Check Status
+--       punya sidik berbeda untuk uang yang sama)
 --   (2) orders.rekonsiliasi_tutup_pada + indeks sapuan          F2b: penanda
 --       "pesanan tertutup ini sudah ditanyakan ke DOKU sesudah tautannya
 --       pasti mati" untuk sapuan Lapis 3 (`sapuPesananTertutup`)
@@ -44,9 +48,35 @@ comment on column public.orders.percobaan_lunas is
   'uang masuk, atau baris sebelum 20261113140800.';
 
 -- ---------------------------------------------------------------------------
--- (1) terapkan_notifikasi_gateway — salinan 20261113130100 dengan tiga
+-- (1b) notifikasi_pesanan.percobaan
+-- ---------------------------------------------------------------------------
+-- Percobaan invoice yang dijawab notifikasi ini (digit terakhir
+-- `invoice_number`). Tabel ini tidak menyimpan invoice-nya, dan `sidik`
+-- sengaja berbeda antara webhook (digest badan) dan Check Status (status),
+-- jadi tanpa kolom ini mesin tidak bisa tahu bahwa SUCCESS yang ditemukan
+-- sapuan adalah SUCCESS yang SAMA dengan yang sudah dikirim webhook. Diisi
+-- `terapkan_notifikasi_gateway` (langkah 4); baris lama tetap NULL dan tidak
+-- pernah dianggap "sudah tercatat" (perilaku lama: ditandai).
+alter table public.notifikasi_pesanan
+  add column if not exists percobaan smallint;
+
+alter table public.notifikasi_pesanan
+  drop constraint if exists notifikasi_percobaan_wajar;
+alter table public.notifikasi_pesanan
+  add constraint notifikasi_percobaan_wajar
+  check (percobaan is null or (percobaan >= 1 and percobaan <= 9));
+
+comment on column public.notifikasi_pesanan.percobaan is
+  'Percobaan invoice yang dijawab notifikasi ini (1..9). Dipakai mesin untuk '
+  'tidak menandai lunas_setelah_tutup dua kali atas SUCCESS percobaan yang sama. '
+  'NULL = baris sebelum 20261113140800.';
+
+-- ---------------------------------------------------------------------------
+-- (1) terapkan_notifikasi_gateway — salinan 20261113130100 dengan lima
 --     perubahan: v_percobaan_lunas dibaca, cabang bayar ganda membandingkan
---     dengan percobaan pelunas, dan UPDATE transisi mengisi percobaan_lunas.
+--     dengan percobaan pelunas, UPDATE transisi mengisi percobaan_lunas,
+--     sisipan notifikasi mencatat percobaannya (1b), dan langkah 9 tidak
+--     menandai SUCCESS percobaan yang sudah tercatat untuk kedua kalinya.
 -- ---------------------------------------------------------------------------
 create or replace function public.terapkan_notifikasi_gateway(
   p_invoice text,
@@ -139,10 +169,10 @@ begin
   -- invoice saja: satu invoice menerima lebih dari satu jawaban (PENDING lalu
   -- SUCCESS), dan sidik per-invoice akan menolak SUCCESS sebagai duplikat.
   insert into public.notifikasi_pesanan (
-    pesanan_id, sidik, transaksi_id, status_gateway, kanal, nominal_diterima
+    pesanan_id, sidik, transaksi_id, status_gateway, kanal, nominal_diterima, percobaan
   ) values (
     v_pesanan_id, p_sidik, nullif(p_transaksi_id, ''), p_status,
-    nullif(p_kanal, ''), p_nominal
+    nullif(p_kanal, ''), p_nominal, v_percobaan
   )
   on conflict (sidik) do nothing
   returning id into v_notif_id;
@@ -231,6 +261,27 @@ begin
   -- tertutup adalah `lunas_setelah_tutup`, berapa pun nominalnya.
   if v_vonis = 'lunas'
      and v_status = any (array['kedaluwarsa','dibatalkan']::public.order_status[]) then
+    -- (9a) SUCCESS untuk percobaan yang SAMA sudah tercatat pada pesanan ini
+    -- (20261113140800, putaran 2): uang yang sama, bukan uang kedua. Webhook
+    -- dan Check Status punya sidik berbeda untuk satu pembayaran, jadi tanpa
+    -- pemeriksaan ini sapuan Lapis 3 yang menemukan SUCCESS yang sudah
+    -- dikirim webhook — dan sudah ditinjau staf — menyalakan tanda lagi:
+    -- `uang_sudah_masuk_permintaan` kembali benar dan staf membaca
+    -- "diterima Y" kedua (refund manual ganda). Cerminan baris 1 §5.5
+    -- "percobaan sama: tanpa efek"; jejak `notifikasi` di langkah 5 sudah
+    -- mencatatnya. TIDAK membandingkan `transaksi_id` (R-F3, K4). Pembayaran
+    -- lewat percobaan LAIN tetap ditandai di bawah.
+    if exists (
+      select 1
+        from public.notifikasi_pesanan n
+       where n.pesanan_id = v_pesanan_id
+         and n.id <> v_notif_id
+         and n.percobaan = v_percobaan
+         and n.status_gateway = 'SUCCESS'
+    ) then
+      return 'tanpa_efek';
+    end if;
+
     insert into public.jejak_pesanan (pesanan_id, padma_id, kejadian, keterangan)
     values (v_pesanan_id, v_padma_id, 'lunas_setelah_tutup',
             format('%s mendarat pada pesanan %s; ditagih %s, diterima %s',
