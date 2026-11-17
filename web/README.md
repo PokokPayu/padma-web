@@ -190,7 +190,7 @@ didaftarkan di sini juga, bukan hanya halaman yang punya tampilan:
 | `/api/produk/materi/[id]/video` | Pemilik aktif / pratinjau | Alih ke presigned R2 untuk satu materi video; tanpa hak menerima 404 |
 | `/api/produk/materi/[id]/halaman/[n]` | Pemilik aktif / pratinjau | Satu halaman PDF materi, ber-watermark identitas pembaca |
 | `/api/produk/materi/[id]/unduh` | Pemilik aktif | Unduhan bertanda tangan 15 menit; PDF dicap nama + email pembeli sekali, lalu disimpan |
-| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3: menanyakan Check Status DOKU untuk pesanan terbuka yang paling lama tidak diperiksa, lalu menjalankan jawabannya lewat jalur yang sama dengan webhook. Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
+| `/api/cron/pesanan` | Mesin | POST penyapu Lapis 3, dua antrean dalam satu panggilan: (1) pesanan **terbuka** yang paling lama tidak diperiksa — sebelum menutupnya sebagai kedaluwarsa, percobaan lamanya ikut ditanyakan; (2) pesanan **yang kita tutup** (`dibatalkan`) yang pernah bertautan DOKU, setiap percobaannya, selama tautannya hidup dan sekali lagi sesudah tautan pasti mati (lalu ditandai `rekonsiliasi_tutup_pada`). Jawabannya dijalankan lewat jalur yang sama dengan webhook; uang di pesanan tertutup menjadi `lunas_setelah_tutup` + tinjauan. Durasi dibatasi tenggat dinding-jam (≈165 s terburuk, `maxDuration` 240). Dijaga `CRON_SECRET`, fail-closed. **Belum terjadwal:** `.github/workflows/rekonsiliasi-pesanan.yml` sudah ada tetapi blok `schedule`-nya lahir dikomentari — ia akan dipanggil tiap 15 menit begitu dihidupkan sebagai langkah terakhir go-live pembayaran (sesudah deploy + `CRON_SECRET` terpasang di GitHub Secrets dan Vercel). Sampai saat itu hanya bisa dijalankan manual lewat `workflow_dispatch`. GitHub Actions, bukan Vercel Cron (paket Hobby hanya mengizinkan cron harian) |
 
 Tidak ada satu pun nominal uang di rute `/admin/*` maupun `/passport/*`:
 `service_rates` menjawab admin dengan HTTP 200 + `[]` (kosong senyap, bukan
@@ -525,11 +525,20 @@ kebetulan membuka halamannya lagi (Lapis 1b). Sumbernya spec DOKU §8
         lama kembali nonaktif di `/admin/mitra`.
       - Tidak ada SQL di langkah ini. Mengubah `partner_id` baris warisan yang
         beruang memang ditolak untuk semua peran, dan penolakan itu disengaja.
-7. **Penjadwal:** pasang `CRON_SECRET` yang sama sebagai GitHub Secret, buka
-   komentar blok `schedule:` di `.github/workflows/rekonsiliasi-pesanan.yml`,
-   lalu **hapus** `it("blok schedule LAHIR DIKOMENTARI")` di
+7. **Penjadwal — langkah tangan manusia, dan WAJIB untuk rilis:** pasang
+   `CRON_SECRET` yang sama sebagai GitHub Secret, **hidupkan jadwal
+   `rekonsiliasi-pesanan.yml`** dengan membuka komentar blok `schedule:` di
+   `.github/workflows/rekonsiliasi-pesanan.yml` (baris 22-23), lalu **hapus**
+   `it("blok schedule LAHIR DIKOMENTARI")` di
    `tests/pesanan-jadwal-actions.test.ts`. Uji itu memang ada untuk merah pada
    hari ini, dan membiarkannya berarti langkah ini tidak pernah selesai.
+   **Sampai jadwal itu hidup, pesanan yang kita tutup tidak punya rekonsiliasi
+   sama sekali:** sapuan pesanan tertutup hanya berjalan di Lapis 3 (Lapis 1b
+   sengaja tidak menjalankannya), jadi uang yang mendarat pada pesanan
+   `dibatalkan` dengan webhook yang hilang — misalnya klien membayar tautan
+   lama sesaat sebelum admin menerbitkan ulang — tidak terlihat di mana pun.
+   Pesanan terbuka masih tertolong Lapis 1b, tetapi hanya bila kliennya
+   kembali membuka halamannya.
 8. **Teks hukum:** review hukum selesai (S&K dan Kebijakan Privasi kini
    menyebut DOKU sebagai pemroses pembayaran), dan pemilik memutuskan kenaikan
    `VERSI_DOKUMEN`.

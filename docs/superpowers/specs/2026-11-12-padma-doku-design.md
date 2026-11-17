@@ -490,6 +490,33 @@ Tiga lapis P1 tetap ada, dan hanya sumber jawabannya yang berganti:
     tidak menjalankannya (lintas klien, menahan render). Pemeriksaan di dalam
     aksi staf (terbit ulang, batal) sengaja tidak dibuat (R-F4): yang
     tertangkap sesudahnya bertanda, tidak senyap.
+  - *Putaran 2 (17 Nov).* EXPIRED dari percobaan **lama** tidak pernah
+    dikirim ke mesin: mesin mencari pesanan lewat `kode` saja, jadi EXPIRED
+    `…1` menutup pesanan di percobaan 3 seluruhnya sebelum percobaan lain
+    terjawab. Yang boleh menutup hanya vonis tutup sesudah semua percobaan
+    terjawab, dan galat mesin saat menerapkan jawaban percobaan lama
+    membatalkan vonis putaran itu. SUCCESS yang ditemukan sapuan untuk
+    percobaan yang SUCCESS-nya sudah tercatat (mis. webhook terlambat yang
+    sudah ditinjau staf) tidak lagi menyalakan `lunas_setelah_tutup` kedua
+    (`notifikasi_pesanan.percobaan`, langkah 9a mesin); percobaan seperti itu
+    juga tidak ditanyakan lagi. Pesanan ber-`kode` cacat ditandai selesai
+    karena tidak pernah bisa ditanyakan.
+- **Celah yang diketahui dan belum ditutup** (dicatat 17 Nov, review putaran 2):
+  - **M1.** Pesanan percobaan 1 yang `catat_tautan_gateway`-nya GAGAL tidak
+    pernah disapu sebagai pesanan tertutup, karena `tautan_terbit_pada`-nya
+    kosong. `src/lib/doku/tautan.ts:94-101` tetap mengalihkan pembeli ke
+    tautan DOKU walau pencatatan gagal. Penyebab yang terjangkau: balapan
+    P0002 dengan terbit ulang staf (pesanan sudah tertutup saat dicatat), dan
+    penolakan tautan non-https yang baru. Bila pesanan itu lalu dibatalkan dan
+    webhook-nya hilang, uangnya senyap.
+  - **M2.** Pesanan `lunas` tidak disapu. Pembayaran kedua lewat tautan
+    percobaan LAIN yang webhook-nya hilang tetap senyap; tanda bayar ganda
+    (§5.5 baris 1) hanya menyala bila jawabannya sampai. Sudah ada sebelum
+    branch ini.
+  - **M4.** EXPIRED yang datang lewat **webhook** tidak melewati pemeriksaan
+    percobaan lama (yang berlaku hanya di jalur Check Status). Itu aman hanya
+    selama notifikasi kedaluwarsa Checkout DOKU tetap mati (K10, README Fase 3
+    butir 3).
 
 ### 5.7 Migrasi maju (strategi (a) brief: nama netral-gateway)
 
