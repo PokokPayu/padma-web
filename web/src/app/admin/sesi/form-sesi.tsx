@@ -114,6 +114,10 @@ export function FormJadwalSesi({
 
   const kosong =
     klien.length === 0 || layanan.length === 0 || varian.length === 0 || mitra.length === 0;
+  // Per LAYANAN TERPILIH, bukan seluruh daftar: layanan yang semua variannya
+  // nonaktif membuat pemilih varian nonaktif, `variant_id` tidak terkirim, dan
+  // server hanya bisa menjawab "wajib dipilih" tanpa menyebut sebabnya.
+  const layananTanpaVarian = !kosong && varianLayanan.length === 0;
 
   return (
     <form
@@ -318,12 +322,18 @@ export function FormJadwalSesi({
           sebelum sesi bisa dijadwalkan.
         </p>
       )}
+      {layananTanpaVarian && (
+        <p className="text-[12.5px] font-semibold text-clay">
+          Layanan ini belum punya varian aktif. Aktifkan variannya di menu Layanan,
+          atau pilih layanan lain.
+        </p>
+      )}
       {pesan && <p className="text-[13px] font-semibold text-clay">{pesan}</p>}
 
       <div className="flex gap-2.5">
         <button
           type="submit"
-          disabled={pending || kosong}
+          disabled={pending || kosong || layananTanpaVarian}
           className="rounded-lg bg-panel-ink px-4 py-2.5 text-[13px] font-bold text-panel-surface disabled:opacity-60"
         >
           {pending ? "Menyimpan…" : "Simpan jadwal"}
