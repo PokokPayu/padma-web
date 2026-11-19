@@ -144,21 +144,6 @@ describe(".github/workflows/rekonsiliasi-pesanan.yml", () => {
     expect(typeof maksFungsi, "rute tidak mengekspor maxDuration").toBe("number");
     expect(maksCurl).toBeGreaterThan(maksFungsi as number);
   });
-
-  it("blok schedule LAHIR DIKOMENTARI", () => {
-    // Mengikuti backup-db.yml. Jadwal yang aktif sebelum sasarannya ada gagal
-    // setiap kali jalan, dan alarm yang berbunyi terus adalah alarm yang
-    // berhenti dibaca.
-    //
-    // KETIKA JADWALNYA DIHIDUPKAN di langkah terakhir go-live: HAPUS `it` ini,
-    // jangan dilonggarkan. Ia ada supaya blok jadwal tidak menyala tanpa
-    // sengaja ikut commit lain — menghapusnya adalah satu baris yang sadar dan
-    // tercatat di git, yang memang bentuk keputusan yang diinginkan.
-    const isi = yml();
-    expect(isi).toMatch(/^\s*#\s*schedule:/m);
-    expect(isi).toMatch(/^\s*#\s*-\s*cron:\s*"\*\/15 \* \* \* \*"/m);
-    expect(isi, "blok schedule sudah aktif").not.toMatch(/^\s{2}schedule:/m);
-  });
 });
 
 // ---------------------------------------------------------------------------

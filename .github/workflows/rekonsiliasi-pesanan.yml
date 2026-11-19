@@ -3,7 +3,7 @@ name: Rekonsiliasi pesanan
 on:
   workflow_dispatch:
 
-  # ===== JADWAL TIAP 15 MENIT — SENGAJA MASIH MATI =====
+  # ===== JADWAL TIAP 15 MENIT — HIDUP SEJAK GO-LIVE 19 NOV 2026 =====
   # Dihidupkan sebagai LANGKAH TERAKHIR go-live pembayaran, sesudah aplikasi
   # ter-deploy dan CRON_SECRET terpasang DI DUA TEMPAT: sebagai GitHub Secret
   # di repo ini, dan sebagai env di proyek Vercel. Alasannya sama persis dengan
@@ -19,8 +19,8 @@ on:
   # batas menit untuk repo publik. Vercel paket Hobby hanya mengizinkan cron
   # SEKALI SEHARI dan ekspresi yang lebih sering menggagalkan deploy — itulah
   # kenapa penjadwalnya bukan Vercel Cron.
-  # schedule:
-  #   - cron: "*/15 * * * *"
+  schedule:
+    - cron: "*/15 * * * *"
 
 # Satu jalan pada satu waktu. Dua sapuan yang tumpang tindih akan menanyakan
 # pesanan yang sama ke DOKU dua kali: `orders.diperiksa_pada` dicap sebelum
