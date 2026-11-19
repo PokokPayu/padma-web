@@ -165,7 +165,46 @@ Yang terbukti:
 - **Akses tercatat** `sumber = beli`, `berlaku_sampai` kosong (produk tanpa
   masa berlaku).
 
-### Skenario B dan C: belum dijalankan
+### Skenario B, tagihan sesi (P3), QRIS: LULUS (19 Nov 2026)
+
+Pelaksanaannya:
+- Langkah persiapan dijalankan agen sebagai pengguna sungguhan, lewat login
+  `@supabase/ssr` ke dev. Skrip ada di scratchpad sesi dan tidak di-commit.
+- Skrining: `POST /api/skrining/akun` sebagai Ananda, hasil hijau.
+- Pengajuan: insert yang sama dengan `ajukanJadwal()`, sebagai Ananda, untuk
+  Baby Massage Class, 22 Nov 09:00.
+- Langkah admin: update dan RPC yang sama dengan `cariMitra`, `pilihMitra`,
+  dan `terbitkanTagihan`, sebagai admin. Email tagihan tidak terkirim karena
+  aksinya tidak lewat server action.
+- Tombol Bayar: `POST /api/pesanan/sesi/<id>/bayar` sebagai Ananda.
+- Pembayaran di Simulator oleh pemilik.
+
+Pesanan `PSN-261119-E17882`. Waktu dalam UTC:
+
+| Waktu | Kejadian |
+|---|---|
+| 02:05:06 | `dibuat`: tagihan sesi, dua item beku: "Sesi kunjungan PADMA" Rp300.000 dan "Biaya transport" Rp10.000 (bidan 5,9 km, jenjang 5–10) |
+| 02:05:07 | `token_terbit` |
+| 02:24:41 | `notifikasi` SUCCESS, `lunas`, dan `sesi_terkonfirmasi`, dengan satu cap waktu |
+
+Yang terbukti:
+- **Nominal cocok:** `nominal_diterima` 310000.00 sama dengan jumlah item beku.
+- **Judul item tanpa nama layanan**, sesuai spec §5.3.
+- **Pengajuan berubah** dari `menunggu_bayar`/`belum` menjadi
+  `dikonfirmasi`/`lunas`.
+- **Sesi tersalur otomatis** dalam transaksi yang sama: `terjadwal`, `lunas`,
+  22 Nov 09:00, Bidan Contoh Lowokwaru, `jenjang = 5_10` (otomatis).
+- **Alamat dan pin pengajuan tersalin ke sesi**, jadi Passport tidak lagi
+  menampilkan "Tempat: —".
+
+### Skenario C, Lapis 3: sebagian
+
+- Rute menjawab 200 dengan rahasia dan 401 tanpa rahasia.
+- Lapis 3 hanya memeriksa pesanan yang berumur lebih dari `MENIT_JEDA_PERIKSA`
+  (5 menit). Dua pesanan di atas keburu lunas lewat webhook sebelum
+  rekonsiliasi dijalankan pada pesanan terbuka yang cukup umur.
+- Yang belum diuji: pesanan terbuka berumur lebih dari 5 menit, dan kasus
+  webhook hilang yang diselamatkan Lapis 3.
 
 ## Data master dummy (`npm run seed:master`)
 
