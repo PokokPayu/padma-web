@@ -197,14 +197,27 @@ Yang terbukti:
 - **Alamat dan pin pengajuan tersalin ke sesi**, jadi Passport tidak lagi
   menampilkan "Tempat: —".
 
-### Skenario C, Lapis 3: sebagian
+### Skenario C, Lapis 3 pada pesanan terbuka: LULUS (19 Nov 2026)
 
-- Rute menjawab 200 dengan rahasia dan 401 tanpa rahasia.
-- Lapis 3 hanya memeriksa pesanan yang berumur lebih dari `MENIT_JEDA_PERIKSA`
-  (5 menit). Dua pesanan di atas keburu lunas lewat webhook sebelum
-  rekonsiliasi dijalankan pada pesanan terbuka yang cukup umur.
-- Yang belum diuji: pesanan terbuka berumur lebih dari 5 menit, dan kasus
-  webhook hilang yang diselamatkan Lapis 3.
+Langkahnya:
+- Ananda membuat pesanan `PSN-261119-C97083` (Kelas Pijat Bayi, Rp25.000)
+  lewat `POST /api/pesanan/checkout` dan tidak membayarnya. Pesanan dibuat
+  02:26:49 UTC.
+- Sesudah lewat `MENIT_JEDA_PERIKSA`, rekonsiliasi dijalankan 02:32:42 UTC dan
+  menjawab `{"diperiksa":1,"dilewati":0}`.
+
+Yang terbukti:
+- **Pesanan ditanyakan ke Check Status DOKU,** yang menjawab `PENDING`.
+  Artinya tanda tangan permintaan keluar ke API status juga lolos.
+- **Pesanan tetap `menunggu_bayar`,** dan `diperiksa_pada` dicap 02:32:44.
+  Tidak ada tanda tinjauan.
+- Rute menolak tanpa rahasia (401).
+
+**Belum diuji:** uang yang masuk tanpa webhook, lalu diselamatkan Lapis 3.
+Caranya: pesanan ini dibayar saat Notification URL QRIS sandbox dicopot
+sementara, lalu rekonsiliasi harus menjadikannya `lunas`. Pesanan ini masih
+terbuka sampai kedaluwarsa (24 jam), dan selama itu Ananda tidak bisa membuat
+pesanan produk lain.
 
 ## Data master dummy (`npm run seed:master`)
 
