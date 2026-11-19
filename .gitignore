@@ -18,3 +18,6 @@ node_modules/
 # Tidak memuat baris data, tetapi memuat peta lengkap skema produksi berikut
 # seluruh policy-nya; repo ini publik.
 web/prod-skema.sql
+
+# Backup produksi terenkripsi (age) — JANGAN pernah di-commit; repo ini publik.
+/backups/
