@@ -41,6 +41,7 @@ import { pesanTagihan, tautanWaTagihan, tautanWaPercakapan } from "@/lib/tagihan
 import { urutkanMitraMenurutJarak, labelJarak } from "@/lib/jadwal/urutan-mitra";
 import { bacaPengaturan } from "@/lib/settings";
 import { nomorWaKlien } from "@/lib/pengaturan/bentuk";
+import { basisUrlSitus } from "@/lib/basis-url";
 
 // Judul mengandalkan template `%s · PADMA` di root layout.
 export const metadata = { title: "Sesi" };
@@ -162,7 +163,7 @@ export default async function SesiPage({
   // Tautan Passport dirangkai dari `NEXT_PUBLIC_BASIS_URL`; kosong berarti
   // tautan relatif yang mati di WhatsApp klien, jadi tombolnya dihilangkan dan
   // kalimatnya menyebut sebabnya.
-  const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
+  const basisUrl = basisUrlSitus() ?? "";
   const nomorTagihan = barisLihat ? nomorWaKlien(barisLihat.noHpKlien) : "";
   const bolehWa = barisLihat ? tombolUntuk(barisLihat.keadaanTagihan.kode).wa : false;
   const tautanWaUntukLihat =
@@ -181,7 +182,7 @@ export default async function SesiPage({
       : "";
   const kalimatTanpaWaUntukLihat = !nomorTagihan
     ? "Nomor WhatsApp klien belum sah — lengkapi di menu Klien."
-    : "Alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum terpasang, jadi tautan Passport tidak bisa dirangkai. Laporkan ke teknis.";
+    : "Alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum terpasang atau tidak diawali https://, jadi tautan Passport tidak bisa dirangkai. Laporkan ke teknis.";
 
   // Tersedia di SEMUA status, termasuk permintaan yang sudah batal — menghubungi
   // klien tidak pernah berbahaya, dan justru permintaan yang batal karena tenggat

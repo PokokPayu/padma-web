@@ -1275,7 +1275,7 @@ describe("bentuk berkas modul sesi setelah ditambah dua action", () => {
     // sama seperti tiga baris lainnya. Jumlahnya tetap empat.
     const KONSOL_SAH = [
       'console.error("[tagihan] terbitkan_tagihan_sesi gagal:", error);',
-      'console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");',
+      'console.warn("[email] NEXT_PUBLIC_BASIS_URL kosong atau salah bentuk — tidak mengirim.");',
       'console.error("[email] email terkirim tapi gagal menulis email_tagihan_pada:", error);',
       'console.error("[email] kirimEmailTagihan gagal tak terduga:", e);',
     ];

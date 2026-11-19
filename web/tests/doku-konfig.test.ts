@@ -89,8 +89,10 @@ describe("urlKembali", () => {
     // Bentuk yang paling mudah diketik di panel env Vercel. `//passport/...`
     // adalah URL lain bagi sebagian server, dan pembeli yang kembali dari
     // DOKU bisa mendarat di 404 sesudah membayar.
-    vi.stubEnv("NEXT_PUBLIC_BASIS_URL", "http://x.test/");
-    expect(urlKembali("/passport/produk")).toBe("http://x.test/passport/produk");
+    // https: sejak `basisUrlSitus()` (tests/basis-url.test.ts), http publik
+    // ditolak; yang diuji di sini garis miring akhirnya, bukan skemanya.
+    vi.stubEnv("NEXT_PUBLIC_BASIS_URL", "https://x.test/");
+    expect(urlKembali("/passport/produk")).toBe("https://x.test/passport/produk");
     vi.stubEnv("NEXT_PUBLIC_BASIS_URL", " https://uji.padma.test/// ");
     expect(urlKembali("/passport/bayar/abc")).toBe("https://uji.padma.test/passport/bayar/abc");
   });

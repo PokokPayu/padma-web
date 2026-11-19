@@ -1,3 +1,5 @@
+import { basisUrlSitus } from "@/lib/basis-url";
+
 /**
  * Pemilihan lingkungan dan alamat DOKU — satu tempat, dan hanya satu.
  *
@@ -46,14 +48,11 @@ export function pathStatusDoku(invoice: string): string {
 
 /**
  * URL absolut tujuan kembali pembeli. `null` bila `NEXT_PUBLIC_BASIS_URL`
- * kosong atau hanya spasi — penelepon yang memutuskan, bukan menebak host.
- *
- * Garis miring akhir dibuang: `https://padma.id/` + `/passport/...` akan
- * melahirkan `//passport/...`, dan bentuk itulah yang paling mudah diketik
- * di panel env Vercel.
+ * kosong ATAU salah bentuk (lihat `basisUrlSitus()`): penelepon yang
+ * memutuskan, bukan menebak host. Basisnya sudah berupa origin tanpa garis
+ * miring akhir, jadi `//passport/...` tidak mungkin lahir.
  */
 export function urlKembali(path: string): string | null {
-  const basis = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim().replace(/\/+$/, "");
-  if (basis === "") return null;
-  return `${basis}${path}`;
+  const basis = basisUrlSitus();
+  return basis === null ? null : `${basis}${path}`;
 }

@@ -22,6 +22,7 @@ import { formatJam, jamDariDb } from "@/lib/jadwal/jam";
 import { formatRupiah } from "@/lib/rupiah-publik";
 import { formatTanggalID } from "@/lib/passport/waktu";
 import { PESANAN_TERBUKA } from "@/lib/pesanan/status";
+import { basisUrlSitus } from "@/lib/basis-url";
 
 /**
  * Jalur tulis panel admin untuk antrean permintaan jadwal.
@@ -276,14 +277,15 @@ async function kirimEmailTagihan(permintaanId: string): Promise<HasilKirimEmail>
     // lolos. Diperiksa di sini, SEBELUM email dirakit, supaya env yang lupa
     // diisi (atau salah diisi) gagal sejelas `RESEND_API_KEY`/`EMAIL_PENGIRIM`
     // kosong — bukan gagal senyap sebagai "berhasil".
-    const basisUrl = (process.env.NEXT_PUBLIC_BASIS_URL ?? "").trim();
+    const basisUrl = basisUrlSitus();
     if (!basisUrl) {
-      console.warn("[email] NEXT_PUBLIC_BASIS_URL belum terpasang — tidak mengirim.");
+      console.warn("[email] NEXT_PUBLIC_BASIS_URL kosong atau salah bentuk — tidak mengirim.");
       return {
         ok: false,
         pesan:
           "Email tidak dikirim: alamat dasar situs (NEXT_PUBLIC_BASIS_URL) belum " +
-          "terpasang di server, jadi tautan bayar di badan email akan patah. Ini " +
+          "terpasang di server atau tidak diawali https://, jadi tautan bayar di " +
+          "badan email akan patah. Ini " +
           "setelan environment — bukan data klien. Laporkan ke teknis; sementara " +
           "itu kirimkan tagihannya lewat WhatsApp.",
       };
