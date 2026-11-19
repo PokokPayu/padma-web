@@ -100,6 +100,30 @@ sungguhan):
 **Belum selesai:** enkripsi `age` dengan kunci publik pemilik, lalu hapus
 salinan polos (menunggu kunci).
 
+## 0c. Pembersihan data produksi, 19 Nov 2026: SELESAI
+
+Keputusan pemilik: data produksi adalah data uji coba, dan dibersihkan sebelum
+rilis. Langkahnya:
+1. Backup penuh (§0b) disimpan terenkripsi di `backups/` (diabaikan git).
+2. Skrip `docs/superpowers/ops/2026-11-19-bersihkan-data-produksi.sql` diuji
+   dulu pada dump produksi segar yang dipulihkan ke instans lokal (lulus),
+   lalu dijalankan di produksi.
+
+| Langkah di produksi | Hasil |
+|---|---|
+| SQL (satu transaksi; pagar "data tidak berubah sejak backup" dan "master utuh") | Klien, skrining, pengajuan, sesi, sertifikat, jejak, dan cache geocode kini 0 |
+| Auth Admin API | 12 akun klien dihapus; tersisa 2 (owner, admin) |
+| Storage API | 7 bukti bayar dan 2 sertifikat dihapus; tersisa 66 halaman materi |
+
+**Dipertahankan:** 15 layanan, 46 varian, 32 tarif varian, 5 tarif transport,
+11 mitra, 10 materi, 66 halaman, 2 video, dan pengaturan aplikasi.
+
+**Akibatnya bagi hari rilis:**
+- Tidak ada lagi baris QRIS warisan, jadi langkah 2.10 (peralihan) tidak
+  diperlukan.
+- Tidak ada klien yang perlu diberi tahu soal layar persetujuan (2.1).
+- `honor_marks` = 0.
+
 ## 1. Kerjakan SEKARANG, tanpa menunggu hari rilis
 
 1. **Satu klien sudah membayar tetapi jadwalnya belum dikonfirmasi.**
