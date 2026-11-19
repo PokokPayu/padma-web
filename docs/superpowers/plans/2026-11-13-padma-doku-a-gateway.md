@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- **Jangan `supabase db push`.** Repo ter-link ke produksi. Semua perintah Supabase memakai instans lokal `web-doku` (port 547xx). Jangan query/menulis Supabase produksi.
+- **Jangan `supabase db push`.** Repo tertaut ke proyek dev `mdtzrzwapuaalmsxomkm`, bukan produksi (koreksi 19 Nov), dan larangannya tetap. Semua perintah Supabase memakai instans lokal `web-doku` (port 547xx). Jangan query/menulis Supabase produksi.
 - **Jangan `git push`, jangan merge ke `development`/`main`.** Commit lokal di `feat/doku` saja.
 - **Kredensial DOKU hanya di `web/.env.local`.** Tidak pernah di-commit, di-log, atau masuk uji. Uji memakai `kunci-uji-doku` / `klien-uji-doku` dan klien sintetis (`ananda@padma.test`).
 - Migrasi lama tidak disunting. Cap waktu migrasi baru `> 20261113100000`; bila `development` mendapat migrasi lebih baru sebelum tugas dieksekusi, `git mv` ke cap waktu sesudahnya.

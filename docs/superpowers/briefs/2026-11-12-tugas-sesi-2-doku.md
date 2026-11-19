@@ -140,8 +140,9 @@ jaminannya.
 
 ## 7. Larangan
 
-- **Jangan `supabase db push`.** Repo ter-link ke project PRODUKSI
-  (`supabase/.temp/project-ref`). Selalu pakai `--local`.
+- **Jangan `supabase db push`.** Selalu pakai `--local`. (Koreksi 19 Nov:
+  `supabase/.temp/project-ref` ternyata menunjuk ke proyek **dev**
+  `mdtzrzwapuaalmsxomkm`, bukan produksi `vtprvvwslclyqlunzuvj`. Larangannya tetap.)
 - Jangan query atau menulis ke Supabase produksi. Datanya data kesehatan klien
   sungguhan.
 - Jangan `git push` dan jangan merge ke `development` atau `main`. **Sesi utama
