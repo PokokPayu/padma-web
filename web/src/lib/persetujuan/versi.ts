@@ -13,4 +13,4 @@
  * Versi SELALU dicap server dari konstanta ini. Peramban tidak pernah
  * mengirim nomor versi yang dipercaya.
  */
-export const VERSI_DOKUMEN = "2026-10-06";
+export const VERSI_DOKUMEN = "2026-11-19";

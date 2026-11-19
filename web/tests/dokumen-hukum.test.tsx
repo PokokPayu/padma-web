@@ -245,8 +245,12 @@ describe("pembayaran lewat DOKU (spec DOKU §5.9)", () => {
     }
   });
 
-  it("VERSI_DOKUMEN tidak dinaikkan (keputusan pemilik repo, spec §5.9)", () => {
-    expect(VERSI_DOKUMEN).toBe("2026-10-06");
+  it("VERSI_DOKUMEN = tanggal rilis final yang diputuskan pemilik repo (19 Nov 2026)", () => {
+    // Spec DOKU §5.9 menahan kenaikan versi sampai pemilik memutuskan saat
+    // rilis. Keputusannya 19 Nov 2026: teks S&K & Kebijakan Privasi final hari
+    // itu. Mengubah tanggal ini memaksa SEMUA klien menyetujui ulang — harus
+    // keputusan yang sama sadarnya, bukan efek samping commit lain.
+    expect(VERSI_DOKUMEN).toBe("2026-11-19");
   });
 });
 
