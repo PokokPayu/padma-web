@@ -40,6 +40,66 @@ mengevaluasi baris lama saat diterapkan hanya tiga:
 
 Sisanya menambah objek baru.
 
+## 0b. Hasil 19 Nov 2026: backup sekali, bukti pulih, dan gladi bersih migrasi
+
+**Pemakaian produksi** (agregat, dengan izin pemilik):
+- akun: 14 (1 owner, 1 admin, 12 klien);
+- klien: 12;
+- skrining: 28;
+- pengajuan: 17 (4 `diminta`, 3 `menunggu_bayar`, 5 `dikonfirmasi`, 5 batal
+  klien);
+- sesi: 9 (6 selesai, 2 masih `terjadwal` dengan tanggal yang sudah lewat);
+- objek Storage: 75;
+- aktivitas terakhir 25 Okt.
+
+Apakah ini akun uji tim klien atau pasien sungguhan **belum dipastikan**.
+
+**Backup sekali, diambil agen:**
+- Dump: `supabase db dump` dari folder sementara yang ditautkan ke produksi
+  (login role, lewat pooler IPv4), menghasilkan `roles.sql`, `skema.sql`, dan
+  `data.sql` (skema `auth`, `public`, `storage`).
+- Ditambah ke-75 objek Storage beserta `manifest.json` (SHA-256; ukuran cocok
+  dengan metadata).
+- **Objek Storage tidak tercakup `backup-db.yml`** (spec B3), jadi backup
+  terjadwal tetap butuh pelengkap untuk berkas.
+
+**Bukti pulih: LULUS.**
+- Dipulihkan dalam satu transaksi ke instans lokal kosong.
+- 34 tabel dan 465 baris, semuanya sama dengan hitungan produksi.
+
+**Gladi bersih migrasi: LULUS.**
+- `db push --db-url <salinan pulihan> --dry-run` mendaftar persis 41 migrasi
+  Lampiran A, dengan isi dan urutan yang identik.
+- `db push` menerapkan ke-41 migrasi sebagai peran `postgres`.
+- Tidak ada tabel lama yang hilang, dan tidak ada jumlah baris lama yang
+  berubah.
+- `storage.buckets` 3 → 6 (bucket produk baru).
+- Migrasi `20261001100000` menerbitkan 5 artikel milik owner (konten
+  sungguhan, sesuai rencana).
+
+**Jebakan saat memulihkan dump ini** (berlaku bila suatu hari harus dipulihkan
+sungguhan):
+1. `roles.sql` memuat `GRANT SET ON PARAMETER "log_min_messages"` untuk peran
+   realtime internal. Pengguna `postgres` di instans lokal menolaknya. Lewati
+   baris itu; isinya bukan data aplikasi.
+2. Auth dan Storage produksi lebih baru daripada instans lokal CLI 2.116.
+   - Ada 6 blok tabel kosong yang tidak dikenal versi lokal.
+   - Ada 3 tabel dengan kolom tambahan: `auth.one_time_tokens`,
+     `auth.saml_providers`, dan `storage.buckets`.
+   - Untuk pemulihan ke versi lama, pangkas kolom itu. Ke proyek Supabase
+     sungguhan (versi sama), tidak perlu.
+3. Pulihkan sebagai superuser lokal (`supabase_admin`). `postgres` lokal tidak
+   boleh menulis tabel internal Storage.
+4. Riwayat `supabase_migrations` tidak ikut dump. Tulis ulang versinya, dengan
+   skema dan tabel itu dimiliki `postgres`, sebelum `db push`.
+5. `--db-url` ke instans lokal butuh `?sslmode=disable`. Ke pooler produksi
+   tidak.
+6. Instans pulihan berisi data sungguhan. Hentikan dengan
+   `supabase stop --no-backup` dan pastikan volumenya hilang.
+
+**Belum selesai:** enkripsi `age` dengan kunci publik pemilik, lalu hapus
+salinan polos (menunggu kunci).
+
 ## 1. Kerjakan SEKARANG, tanpa menunggu hari rilis
 
 1. **Satu klien sudah membayar tetapi jadwalnya belum dikonfirmasi.**
@@ -48,8 +108,8 @@ Sisanya menambah objek baru.
    - Admin membukanya di `/admin` produksi hari ini dan menekan "Konfirmasi
      jadwal", atau menghubungi kliennya bila tanggalnya sudah lewat.
    - Ini uang klien yang sudah masuk; jangan dibiarkan menunggu rilis.
-2. **Backup produksi: data kesehatan sungguhan sejak sekitar 21 Sep, dan
-   kemungkinan belum pernah di-backup.** Selesaikan empat langkah backup
+2. **Backup produksi.** Backup sekali sudah diambil 19 Nov (lihat §0b), tapi
+   jadwal backup harian belum hidup. Selesaikan empat langkah backup
    mandiri (memori `padma-backup-mandiri`, `docs/runbook-pemulihan.md`):
    1. secret `SUPABASE_DB_URL` (session pooler);
    2. token R2 berlingkup `padma-backup`;
