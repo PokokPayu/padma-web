@@ -131,12 +131,27 @@ Akun dan sandinya ada di `web/.env.akun-dev`.
 
 | Skenario | Langkah | Yang dibuktikan |
 |---|---|---|
-| A. Produk digital | Seed tidak membuat produk digital, jadi buat dulu satu: `admin@padma.test` di `/admin/produk`, harga ditetapkan `owner@padma.test` di `/owner/produk`, lalu tayangkan. Sebagai `ananda@padma.test`: setujui S&K, buka `/produk/<slug>`, Beli, bayar di simulator DOKU sandbox | Checkout menerbitkan tautan; webhook mengubah pesanan menjadi lunas; akses terbit di `/passport/produk`; `/admin/penjualan` mencatatnya |
+| A. Produk digital | Produk dummy sudah ada (`npm run seed:master`, lihat "Data master dummy"). Sebagai `ananda@padma.test`: setujui S&K, buka `/produk/panduan-menyusui-minggu-pertama` (Rp10.000), Beli, pilih **QRIS**, lalu bayar di Simulator | Checkout menerbitkan tautan; webhook mengubah pesanan menjadi lunas; akses terbit di `/passport/produk`; `/admin/penjualan` mencatatnya |
 | B. Tagihan sesi (P3) | `ananda@` mengajukan jadwal; admin menerbitkan tagihan di `/admin/sesi`; klien membayar dari `/passport/bayar/[id]` lewat simulator | Webhook mengubah pesanan sesi; sesi tersalur; status di Passport dan panel admin berubah sendiri |
 | C. Lapis 3 | `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://padma-web-16ot.vercel.app/api/cron/pesanan`. Rute ini hanya menerima POST; GET dijawab 405 | Rekonsiliasi berjalan dan menjawab ringkasan |
 
 Agen memeriksa hasilnya langsung di database dev (`db query --linked`, data
 sintetis).
+
+## Data master dummy (`npm run seed:master`)
+
+Ditanam 19 Nov ke dev. Idempoten, dan ditolak untuk target selain instans
+lokal atau proyek dev (`scripts/dummy-master/target.ts`).
+
+| Data | Isi |
+|---|---|
+| Produk | `panduan-menyusui-minggu-pertama` (Rp10.000, coret Rp25.000, 2 bab), `kelas-pijat-bayi-ayah-bunda` (Rp25.000, akses 6 bulan), `checklist-persiapan-persalinan` (GRATIS, untuk jalur "Ambil gratis" dan gerbang S&K), `nutrisi-ibu-hamil-trimester-ketiga` (DRAF, tidak tayang). Semua materi PDF berhalaman `.webp` dan bersampul; produk berbayar punya satu materi pratinjau |
+| Mitra | Bidan Contoh Lowokwaru (5,9 km), Singosari (10,4 km), Lawang (17,6 km), dan Turen (21,8 km) dari alamat Ananda: satu per jenjang di atas 5 km. Dua mitra seed sudah di 0–5 km |
+| Klien | Ananda mendapat alamat berpin di Malang, syarat terbitnya tagihan pengajuan sesi |
+| Testimoni | 2 draf, tidak terbit, karena terbit menuntut video R2 |
+
+Menjalankan ulang `seed:users` tidak menghapus data ini, tetapi mengembalikan
+sandi akun uji ke nilai publik.
 
 ## Sesudah uji
 
