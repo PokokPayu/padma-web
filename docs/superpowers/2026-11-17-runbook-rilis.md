@@ -124,6 +124,29 @@ rilis. Langkahnya:
 - Tidak ada klien yang perlu diberi tahu soal layar persetujuan (2.1).
 - `honor_marks` = 0.
 
+## 0d. Rilis 19 Nov 2026: status
+
+| Langkah | Status |
+|---|---|
+| `VERSI_DOKUMEN` = `2026-11-19` (teks hukum final, keputusan pemilik) | Selesai (`801729f`) |
+| Backup pra-migrasi terenkripsi (`backups/…-pra-migrasi.tar.age`) | Selesai |
+| Uji kepemilikan objek lewat login role CLI (di dev): objek milik `postgres` | Lulus |
+| 41 migrasi ke produksi (`db push --linked` dari folder sementara; dry-run identik Lampiran A) | Selesai: 116 migrasi, semua tabel milik `postgres`, master utuh |
+| Hak `anon`: 11 objek, semuanya SELECT atas konten publik (katalog, produk, harga publik, artikel, testimoni) | Diperiksa |
+| `main` = `development` (`801729f`), dipush, build Vercel produksi READY | Selesai |
+| Uji asap tanpa uang: halaman publik 200, halaman terlindung 307, S&K "Berlaku sejak 19 November 2026", webhook hidup, cron 401 | Lulus |
+| Env produksi: `DOKU_PRODUKSI=true` dan `CRON_SECRET` (salinan di `web/.env.rilis-produksi`) | Selesai |
+| **Kunci DOKU produksi di Vercel**, lalu redeploy | MENUNGGU pemilik. Sampai saat itu webhook menjawab 503 dan checkout "belum aktif" |
+| **Back Office DOKU produksi:** Notification URL per channel, Recover Abandoned Cart mati | MENUNGGU pemilik |
+| **GitHub Secret `CRON_SECRET`**, lalu commit penghidup jadwal rekonsiliasi | MENUNGGU pemilik |
+| Transaksi asli bernominal kecil | Sesudah tiga baris di atas |
+
+**Temuan:** env produksi `padma-web` juga terpasang di scope **Preview**,
+termasuk `SUPABASE_SERVICE_ROLE_KEY` dan URL produksi. Ini bertentangan dengan
+spec deploy §6. Preview `development` di proyek itu selama ini gagal build,
+jadi tidak pernah ada preview yang hidup dengan kunci produksi. Saran:
+lepaskan target Preview dari env produksi.
+
 ## 1. Kerjakan SEKARANG, tanpa menunggu hari rilis
 
 1. **Satu klien sudah membayar tetapi jadwalnya belum dikonfirmasi.**
