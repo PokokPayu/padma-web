@@ -138,6 +138,35 @@ Akun dan sandinya ada di `web/.env.akun-dev`.
 Agen memeriksa hasilnya langsung di database dev (`db query --linked`, data
 sintetis).
 
+## Hasil uji
+
+### Skenario A, produk digital, QRIS: LULUS (19 Nov 2026)
+
+Pesanan `PSN-261119-251CEC`, Panduan Menyusui Minggu Pertama, Rp10.000,
+dibeli `ananda@padma.test`. Waktu dalam UTC:
+
+| Waktu | Kejadian (`jejak_pesanan`) |
+|---|---|
+| 01:41:16.66 | `dibuat`: checkout produk digital |
+| 01:41:17.05 | `token_terbit`: tautan gateway dicatat (0,4 detik sesudahnya) |
+| 01:44:23.52 | `notifikasi` SUCCESS, `lunas`, dan `akses_terbit`, dengan cap waktu yang sama |
+
+Yang terbukti:
+- **Simulator sandbox memicu notifikasi HTTP ke Notification URL.** Ini tadinya
+  tidak dijelaskan dokumentasi DOKU.
+- **Tanda tangan webhook lolos dengan `Request-Target` berupa path tetap**
+  `/api/pembayaran/doku`, tanpa query.
+- **Checkout sandbox menawarkan dan menerima QRIS.** Notifikasi membawa
+  `kanal = QRIS_DOKU`. Ini menjawab K1/K2 untuk **sandbox**; akun produksi
+  tetap harus dipastikan sendiri.
+- **Nominal cocok:** `nominal_diterima` 10000.00 sama dengan `harga_beku` 10000.
+- **Invarian P1 #1 bertahan:** notifikasi, lunas, dan terbitnya akses berbagi
+  satu cap waktu, artinya terjadi dalam satu transaksi RPC.
+- **Akses tercatat** `sumber = beli`, `berlaku_sampai` kosong (produk tanpa
+  masa berlaku).
+
+### Skenario B dan C: belum dijalankan
+
 ## Data master dummy (`npm run seed:master`)
 
 Ditanam 19 Nov ke dev. Idempoten, dan ditolak untuk target selain instans
